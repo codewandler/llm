@@ -442,7 +442,7 @@ Contributions welcome! Please ensure:
 
 ## License
 
-[Add your license here]
+MIT License - see [LICENSE](LICENSE) file for details
 
 ## See Also
 
