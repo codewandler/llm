@@ -17,7 +17,7 @@ func TestNewDefault(t *testing.T) {
 	os.Unsetenv("OPENROUTER_API_KEY")
 	os.Unsetenv("OLLAMA_BASE_URL")
 
-	reg := newRegWithAll()
+	reg := NewDefaultRegistry()
 	require.NotNil(t, reg)
 
 	// Should have Claude Code and Ollama providers (no OpenRouter without API key)
@@ -42,7 +42,7 @@ func TestNewDefaultWithOpenRouter(t *testing.T) {
 	os.Setenv("OPENROUTER_API_KEY", "test-key")
 	defer os.Unsetenv("OPENROUTER_API_KEY")
 
-	reg := newRegWithAll()
+	reg := NewDefaultRegistry()
 	require.NotNil(t, reg)
 
 	// Should have all three providers
@@ -66,7 +66,7 @@ func TestNewDefaultWithCustomOllamaURL(t *testing.T) {
 	os.Setenv("OLLAMA_BASE_URL", customURL)
 	defer os.Unsetenv("OLLAMA_BASE_URL")
 
-	reg := newRegWithAll()
+	reg := NewDefaultRegistry()
 	require.NotNil(t, reg)
 
 	ollamaProvider, err := reg.Provider("ollama")
@@ -77,7 +77,7 @@ func TestNewDefaultWithCustomOllamaURL(t *testing.T) {
 func TestResolveModel(t *testing.T) {
 	t.Parallel()
 
-	reg := newRegWithAll()
+	reg := NewDefaultRegistry()
 
 	tests := []struct {
 		name      string
@@ -127,7 +127,7 @@ func TestResolveModel(t *testing.T) {
 func TestAllModels(t *testing.T) {
 	t.Parallel()
 
-	reg := newRegWithAll()
+	reg := NewDefaultRegistry()
 	models := reg.AllModels()
 
 	// Should have models from Claude Code (3) and Ollama (11)
@@ -151,7 +151,7 @@ func TestAllModels(t *testing.T) {
 func TestSendMessage(t *testing.T) {
 	t.Parallel()
 
-	reg := newRegWithAll()
+	reg := NewDefaultRegistry()
 
 	// Test that SendMessage correctly resolves model reference
 	// We won't actually send a message, just verify the resolution works

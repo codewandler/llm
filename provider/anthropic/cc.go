@@ -101,12 +101,12 @@ func (p *ClaudeCodeProvider) SendMessage(ctx context.Context, opts llm.SendOptio
 
 	// Create event channel and spawn goroutine to convert OAI stream to our events
 	events := make(chan llm.StreamEvent, 64)
-	go p.streamEvents(stream, events)
+	go p.streamEvents(ctx, stream, events)
 
 	return events, nil
 }
 
-func (p *ClaudeCodeProvider) streamEvents(stream *oai.ChatCompletionStream, events chan<- llm.StreamEvent) {
+func (p *ClaudeCodeProvider) streamEvents(ctx context.Context, stream *oai.ChatCompletionStream, events chan<- llm.StreamEvent) {
 	defer close(events)
 	defer stream.Close()
 
@@ -114,6 +114,17 @@ func (p *ClaudeCodeProvider) streamEvents(stream *oai.ChatCompletionStream, even
 	var toolCalls []oai.ToolCall
 
 	for {
+		// Check for context cancellation
+		select {
+		case <-ctx.Done():
+			events <- llm.StreamEvent{
+				Type:  llm.StreamEventError,
+				Error: ctx.Err(),
+			}
+			return
+		default:
+		}
+
 		chunk, err := stream.Recv()
 		if err == io.EOF {
 			// Send final done event

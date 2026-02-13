@@ -70,7 +70,7 @@ func (p *Provider) FetchModels(ctx context.Context) ([]llm.Model, error) {
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		panic(fmt.Sprintf("openrouter models API failed (HTTP %d): %s", resp.StatusCode, string(body)))
+		return nil, fmt.Errorf("openrouter models API failed (HTTP %d): %s", resp.StatusCode, string(body))
 	}
 
 	var result struct {
@@ -115,11 +115,11 @@ func (p *Provider) SendMessage(ctx context.Context, opts llm.SendOptions) (<-cha
 	if resp.StatusCode != http.StatusOK {
 		defer resp.Body.Close()
 		errBody, _ := io.ReadAll(resp.Body)
-		panic(fmt.Sprintf("openrouter API request failed (HTTP %d): %s", resp.StatusCode, string(errBody)))
+		return nil, fmt.Errorf("openrouter API request failed (HTTP %d): %s", resp.StatusCode, string(errBody))
 	}
 
 	events := make(chan llm.StreamEvent, 64)
-	go parseStream(resp.Body, events)
+	go parseStream(ctx, resp.Body, events)
 	return events, nil
 }
 
@@ -301,7 +301,7 @@ type toolAccum struct {
 	argsBuf strings.Builder
 }
 
-func parseStream(body io.ReadCloser, events chan<- llm.StreamEvent) {
+func parseStream(ctx context.Context, body io.ReadCloser, events chan<- llm.StreamEvent) {
 	defer close(events)
 	defer body.Close()
 
@@ -313,6 +313,16 @@ func parseStream(body io.ReadCloser, events chan<- llm.StreamEvent) {
 	var usage *llm.Usage
 
 	for scanner.Scan() {
+		// Check for context cancellation
+		select {
+		case <-ctx.Done():
+			events <- llm.StreamEvent{
+				Type:  llm.StreamEventError,
+				Error: ctx.Err(),
+			}
+			return
+		default:
+		}
 		line := scanner.Text()
 		if !strings.HasPrefix(line, "data: ") {
 			continue

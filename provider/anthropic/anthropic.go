@@ -171,7 +171,7 @@ func (p *Provider) SendMessage(ctx context.Context, opts llm.SendOptions) (<-cha
 	}
 
 	events := make(chan llm.StreamEvent, 64)
-	go parseStream(resp.Body, events, oauth)
+	go parseStream(ctx, resp.Body, events, oauth)
 	return events, nil
 }
 
@@ -482,7 +482,7 @@ type contentBlockDeltaEvent struct {
 	} `json:"delta"`
 }
 
-func parseStream(body io.ReadCloser, events chan<- llm.StreamEvent, oauth bool) {
+func parseStream(ctx context.Context, body io.ReadCloser, events chan<- llm.StreamEvent, oauth bool) {
 	defer close(events)
 	defer body.Close()
 
@@ -498,6 +498,16 @@ func parseStream(body io.ReadCloser, events chan<- llm.StreamEvent, oauth bool) 
 	var usage llm.Usage
 
 	for scanner.Scan() {
+		// Check for context cancellation
+		select {
+		case <-ctx.Done():
+			events <- llm.StreamEvent{
+				Type:  llm.StreamEventError,
+				Error: ctx.Err(),
+			}
+			return
+		default:
+		}
 		line := scanner.Text()
 		if !strings.HasPrefix(line, "data: ") {
 			continue
