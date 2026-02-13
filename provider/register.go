@@ -10,13 +10,13 @@ import (
 	"github.com/codewandler/llm/provider/openrouter"
 )
 
-// newRegWithAll creates a registry with all available providers pre-registered.
+// NewDefaultRegistry creates a registry with all available providers pre-registered.
 // Providers are configured using environment variables:
 //   - OPENROUTER_API_KEY for OpenRouter
 //   - OLLAMA_BASE_URL for Ollama (optional, defaults to http://localhost:11434)
 //
 // Claude Code provider is always registered (uses local claude CLI).
-func newRegWithAll() *llm.Registry {
+func NewDefaultRegistry() *llm.Registry {
 	reg := llm.NewRegistry()
 
 	// Register Claude Code provider (uses local claude CLI)
@@ -37,7 +37,7 @@ func newRegWithAll() *llm.Registry {
 	return reg
 }
 
-var defaultRegistry = newRegWithAll()
+var defaultRegistry = NewDefaultRegistry()
 
 func Provider(name string) (llm.Provider, error) {
 	return defaultRegistry.Provider(name)
