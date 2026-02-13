@@ -54,8 +54,8 @@ type StreamEvent struct {
 	Usage     *Usage
 }
 
-// SendOptions configures a provider SendMessage call.
-type SendOptions struct {
+// StreamOptions configures a provider CreateStream call.
+type StreamOptions struct {
 	Model    string
 	Messages []Message
 	Tools    []ToolDefinition
@@ -65,7 +65,7 @@ type SendOptions struct {
 type Provider interface {
 	Name() string
 	Models() []Model
-	SendMessage(ctx context.Context, opts SendOptions) (<-chan StreamEvent, error)
+	CreateStream(ctx context.Context, opts StreamOptions) (<-chan StreamEvent, error)
 }
 
 // ModelFetcher is an optional interface providers can implement to list

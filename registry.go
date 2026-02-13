@@ -68,12 +68,12 @@ func (r *Registry) FetchModels(ctx context.Context, name string) ([]Model, error
 	return p.Models(), nil
 }
 
-// SendMessage is a convenience that resolves a model ref and delegates to the provider.
-func (r *Registry) SendMessage(ctx context.Context, opts SendOptions) (<-chan StreamEvent, error) {
+// CreateStream is a convenience that resolves a model ref and delegates to the provider.
+func (r *Registry) CreateStream(ctx context.Context, opts StreamOptions) (<-chan StreamEvent, error) {
 	p, modelID, err := r.ResolveModel(opts.Model)
 	if err != nil {
 		return nil, err
 	}
 	opts.Model = modelID
-	return p.SendMessage(ctx, opts)
+	return p.CreateStream(ctx, opts)
 }

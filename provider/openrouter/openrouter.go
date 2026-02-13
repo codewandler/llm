@@ -94,7 +94,7 @@ func (p *Provider) FetchModels(ctx context.Context) ([]llm.Model, error) {
 	return models, nil
 }
 
-func (p *Provider) SendMessage(ctx context.Context, opts llm.SendOptions) (<-chan llm.StreamEvent, error) {
+func (p *Provider) CreateStream(ctx context.Context, opts llm.StreamOptions) (<-chan llm.StreamEvent, error) {
 	body, err := buildRequest(opts)
 	if err != nil {
 		return nil, fmt.Errorf("build request: %w", err)
@@ -162,7 +162,7 @@ type functionPayload struct {
 	Parameters  map[string]any `json:"parameters"`
 }
 
-func buildRequest(opts llm.SendOptions) ([]byte, error) {
+func buildRequest(opts llm.StreamOptions) ([]byte, error) {
 	r := request{
 		Model:            opts.Model,
 		Stream:           true,

@@ -50,8 +50,8 @@ func main() {
     
     ctx := context.Background()
     
-    // Send a message using provider/model format
-    events, err := provider.SendMessage(ctx, llm.SendOptions{
+    // Create a stream using provider/model format
+    events, err := provider.CreateStream(ctx, llm.StreamOptions{
         Model: "ollama/glm-4.7-flash",
         Messages: []llm.Message{
             {Role: llm.RoleUser, Content: "What is the capital of France?"},
@@ -98,7 +98,7 @@ reg.Register(ollama.New("http://localhost:11434"))
 reg.Register(openrouter.New("your-api-key"))
 
 // Use the registry
-events, err := reg.SendMessage(ctx, llm.SendOptions{
+events, err := reg.CreateStream(ctx, llm.StreamOptions{
     Model: "openrouter/anthropic/claude-sonnet-4.5",
     Messages: []llm.Message{
         {Role: llm.RoleUser, Content: "Hello!"},
@@ -117,7 +117,7 @@ import "github.com/codewandler/llm/provider/anthropic"
 
 provider := anthropic.NewClaudeCodeProvider()
 
-events, err := provider.SendMessage(ctx, llm.SendOptions{
+events, err := provider.CreateStream(ctx, llm.StreamOptions{
     Model: "sonnet",  // or "opus", "haiku"
     Messages: []llm.Message{
         {Role: llm.RoleUser, Content: "Explain Go channels"},
@@ -138,7 +138,7 @@ provider := anthropic.New(&anthropic.Config{
     RefreshToken: "your-refresh-token",
 })
 
-events, err := provider.SendMessage(ctx, llm.SendOptions{
+events, err := provider.CreateStream(ctx, llm.StreamOptions{
     Model: "claude-3-5-sonnet-20241022",
     Messages: []llm.Message{
         {Role: llm.RoleUser, Content: "Hello!"},
@@ -159,7 +159,7 @@ if err := provider.Download(ctx, "llama3.2:1b"); err != nil {
 }
 
 // Use the model
-events, err := provider.SendMessage(ctx, llm.SendOptions{
+events, err := provider.CreateStream(ctx, llm.StreamOptions{
     Model: "llama3.2:1b",
     Messages: []llm.Message{
         {Role: llm.RoleUser, Content: "Hello!"},
@@ -185,7 +185,7 @@ import "github.com/codewandler/llm/provider/openrouter"
 
 provider := openrouter.New("your-api-key")
 
-events, err := provider.SendMessage(ctx, llm.SendOptions{
+events, err := provider.CreateStream(ctx, llm.StreamOptions{
     Model: "anthropic/claude-sonnet-4.5",
     Messages: []llm.Message{
         {Role: llm.RoleUser, Content: "Hello!"},
@@ -224,8 +224,8 @@ tools := []llm.ToolDefinition{
     },
 }
 
-// Send message with tools
-events, err := provider.SendMessage(ctx, llm.SendOptions{
+// Create stream with tools
+events, err := provider.CreateStream(ctx, llm.StreamOptions{
     Model:    "ollama/glm-4.7-flash",
     Messages: []llm.Message{
         {Role: llm.RoleUser, Content: "What's the weather in Paris?"},
@@ -243,7 +243,7 @@ for event := range events {
         result := executeWeatherTool(event.ToolCall.Arguments)
         
         // Continue conversation with tool result
-        events2, _ := provider.SendMessage(ctx, llm.SendOptions{
+        events2, _ := provider.CreateStream(ctx, llm.StreamOptions{
             Model: "ollama/glm-4.7-flash",
             Messages: []llm.Message{
                 {Role: llm.RoleUser, Content: "What's the weather in Paris?"},
@@ -273,7 +273,7 @@ messages := []llm.Message{
 }
 
 // First turn
-events, _ := provider.SendMessage(ctx, llm.SendOptions{
+events, _ := provider.CreateStream(ctx, llm.StreamOptions{
     Model:    "ollama/glm-4.7-flash",
     Messages: messages,
 })
@@ -297,7 +297,7 @@ messages = append(messages, llm.Message{
     Content: "Tell me more about that",
 })
 
-events, _ = provider.SendMessage(ctx, llm.SendOptions{
+events, _ = provider.CreateStream(ctx, llm.StreamOptions{
     Model:    "ollama/glm-4.7-flash",
     Messages: messages,
 })
@@ -311,7 +311,7 @@ All stream parsers support context cancellation:
 ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 defer cancel()
 
-events, err := provider.SendMessage(ctx, llm.SendOptions{
+events, err := provider.CreateStream(ctx, llm.StreamOptions{
     Model: "ollama/glm-4.7-flash",
     Messages: []llm.Message{
         {Role: llm.RoleUser, Content: "Write a very long essay"},
@@ -381,10 +381,10 @@ const (
 ## Error Handling
 
 ```go
-events, err := provider.SendMessage(ctx, opts)
+events, err := provider.CreateStream(ctx, opts)
 if err != nil {
     // Initial request failed (invalid params, auth error, etc.)
-    return fmt.Errorf("send message: %w", err)
+    return fmt.Errorf("create stream: %w", err)
 }
 
 for event := range events {
@@ -418,7 +418,7 @@ go test -v ./... -run TestOllamaModels
 ```
 llm/
 ├── api.go              # Core types: Message, Model, Role, ToolCall
-├── provider.go         # Provider interface, StreamEvent, SendOptions
+├── provider.go         # Provider interface, StreamEvent, StreamOptions
 ├── registry.go         # Provider registry, model resolution
 ├── tool.go             # ToolDefinition
 │

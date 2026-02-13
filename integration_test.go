@@ -110,7 +110,7 @@ func TestProviders(t *testing.T) {
 
 			// Test 2: Basic streaming
 			t.Run("streaming", func(t *testing.T) {
-				stream, err := tt.provider.SendMessage(ctx, llm.SendOptions{
+				stream, err := tt.provider.CreateStream(ctx, llm.StreamOptions{
 					Model: getModelID(),
 					Messages: []llm.Message{
 						{Role: llm.RoleUser, Content: "Hello"},
@@ -176,7 +176,7 @@ func TestProviders(t *testing.T) {
 					},
 				}
 
-				stream, err := tt.provider.SendMessage(ctx, llm.SendOptions{
+				stream, err := tt.provider.CreateStream(ctx, llm.StreamOptions{
 					Model: getModelID(),
 					Messages: []llm.Message{
 						{Role: llm.RoleUser, Content: "What's the weather?"},
@@ -206,7 +206,7 @@ func TestProviders(t *testing.T) {
 					{Role: llm.RoleUser, Content: "How are you?"},
 				}
 
-				stream, err := tt.provider.SendMessage(ctx, llm.SendOptions{
+				stream, err := tt.provider.CreateStream(ctx, llm.StreamOptions{
 					Model:    getModelID(),
 					Messages: messages,
 				})
@@ -285,7 +285,7 @@ func TestOllamaModels(t *testing.T) {
 			// Test 1: Basic streaming
 			t.Run("streaming", func(t *testing.T) {
 				t.Parallel()
-				stream, err := p.SendMessage(ctx, llm.SendOptions{
+				stream, err := p.CreateStream(ctx, llm.StreamOptions{
 					Model: modelID,
 					Messages: []llm.Message{
 						{Role: llm.RoleUser, Content: "Say hello"},
@@ -327,7 +327,7 @@ func TestOllamaModels(t *testing.T) {
 			// Test 2: Tool calling
 			t.Run("tools", func(t *testing.T) {
 				t.Parallel()
-				stream, err := p.SendMessage(ctx, llm.SendOptions{
+				stream, err := p.CreateStream(ctx, llm.StreamOptions{
 					Model: modelID,
 					Messages: []llm.Message{
 						{Role: llm.RoleUser, Content: "What's the weather in Paris? Use the get_weather tool."},
@@ -378,7 +378,7 @@ func TestOllamaModels(t *testing.T) {
 					{Role: llm.RoleUser, Content: "What's 2+2?"},
 				}
 
-				stream, err := p.SendMessage(ctx, llm.SendOptions{
+				stream, err := p.CreateStream(ctx, llm.StreamOptions{
 					Model:    modelID,
 					Messages: messages,
 				})

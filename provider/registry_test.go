@@ -148,15 +148,15 @@ func TestAllModels(t *testing.T) {
 	assert.True(t, hasOllama)
 }
 
-func TestSendMessage(t *testing.T) {
+func TestCreateStream(t *testing.T) {
 	t.Parallel()
 
 	reg := NewDefaultRegistry()
 
-	// Test that SendMessage correctly resolves model reference
+	// Test that CreateStream correctly resolves model reference
 	// We won't actually send a message, just verify the resolution works
 	ctx := context.Background()
-	opts := llm.SendOptions{
+	opts := llm.StreamOptions{
 		Model: "anthropic:claude-code/sonnet",
 		Messages: []llm.Message{
 			{Role: llm.RoleUser, Content: "test"},
@@ -165,7 +165,7 @@ func TestSendMessage(t *testing.T) {
 
 	// This will fail because claude CLI likely isn't authenticated in CI,
 	// but we can verify the model reference resolution works by checking the error
-	_, err := reg.SendMessage(ctx, opts)
+	_, err := reg.CreateStream(ctx, opts)
 	// Either succeeds (if claude is set up) or fails with claude-specific error (not resolution error)
 	if err != nil {
 		assert.NotErrorIs(t, err, llm.ErrNotFound, "should not fail with NotFound - provider resolved correctly")

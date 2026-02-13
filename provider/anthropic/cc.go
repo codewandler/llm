@@ -45,7 +45,7 @@ func (p *ClaudeCodeProvider) Models() []llm.Model {
 	}
 }
 
-func (p *ClaudeCodeProvider) SendMessage(ctx context.Context, opts llm.SendOptions) (<-chan llm.StreamEvent, error) {
+func (p *ClaudeCodeProvider) CreateStream(ctx context.Context, opts llm.StreamOptions) (<-chan llm.StreamEvent, error) {
 	// Convert our types to OAI types
 	req := oai.ChatCompletionRequest{
 		Model:  opts.Model,

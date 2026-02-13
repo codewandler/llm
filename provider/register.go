@@ -43,8 +43,8 @@ func Provider(name string) (llm.Provider, error) {
 	return defaultRegistry.Provider(name)
 }
 
-func SendMessage(ctx context.Context, opts llm.SendOptions) (<-chan llm.StreamEvent, error) {
-	return defaultRegistry.SendMessage(ctx, opts)
+func CreateStream(ctx context.Context, opts llm.StreamOptions) (<-chan llm.StreamEvent, error) {
+	return defaultRegistry.CreateStream(ctx, opts)
 }
 
 func AllModels() []llm.Model {

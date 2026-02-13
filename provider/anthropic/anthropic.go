@@ -133,7 +133,7 @@ func (p *Provider) refreshToken(ctx context.Context) error {
 	return nil
 }
 
-func (p *Provider) SendMessage(ctx context.Context, opts llm.SendOptions) (<-chan llm.StreamEvent, error) {
+func (p *Provider) CreateStream(ctx context.Context, opts llm.StreamOptions) (<-chan llm.StreamEvent, error) {
 	oauth := p.isOAuth()
 
 	token, err := p.getAccessToken(ctx)
@@ -353,7 +353,7 @@ func stainlessArch() string {
 	}
 }
 
-func (p *Provider) buildRequest(opts llm.SendOptions, oauth bool) ([]byte, error) {
+func (p *Provider) buildRequest(opts llm.StreamOptions, oauth bool) ([]byte, error) {
 	r := request{
 		Model:     opts.Model,
 		MaxTokens: 16384,
