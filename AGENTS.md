@@ -4,9 +4,6 @@ This guide is for AI coding agents working in this repository. Follow these conv
 
 ## Communication Guidelines
 
-- **Be concise in summaries** - Keep summaries brief and to the point. Avoid excessive detail.
-- **Focus on actions taken** - What was done, not how to use it (unless specifically asked).
-- **Use bullet points** - Not lengthy paragraphs.
 - **DO NOT provide status summaries after completing tasks** - No "Summary", "Status", "Changes Made", or similar sections after every turn. Just do the work and move on. The user can see what was done from git/output.
 
 ---
