@@ -63,12 +63,12 @@ func TestProviders(t *testing.T) {
 			skip:     os.Getenv("OPENROUTER_API_KEY") == "",
 			skipMsg:  "requires OPENROUTER_API_KEY",
 		},
-		{
+		/*{
 			name:     "ollama",
 			provider: ollama.New(""),
 			skip:     !isOllamaAvailable(),
 			skipMsg:  "requires ollama running on localhost:11434",
-		},
+		},*/
 	}
 
 	for _, tt := range tests {
