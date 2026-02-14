@@ -317,21 +317,44 @@ for scanner.Scan() {
 
 ### Tool Definition Pattern
 
-Use `ToolDefinitionFor[T]()` for type-safe tool definitions:
+**Recommended: Use `ToolSpec` + `ToolSet` for type-safe dispatch:**
 ```go
 type GetWeatherParams struct {
     Location string `json:"location" jsonschema:"description=City name,required"`
     Unit     string `json:"unit" jsonschema:"description=Temperature unit,enum=celsius,enum=fahrenheit"`
 }
 
-tool := llm.ToolDefinitionFor[GetWeatherParams]("get_weather", "Get current weather")
+tools := llm.NewToolSet(
+    llm.NewToolSpec[GetWeatherParams]("get_weather", "Get weather"),
+)
+
+// Send to provider
+stream, _ := provider.CreateStream(ctx, llm.StreamOptions{
+    Tools: tools.Definitions(),
+})
+
+// Parse with validation
+calls, err := tools.Parse(rawToolCalls)
+for _, call := range calls {
+    switch c := call.(type) {
+    case *llm.TypedToolCall[GetWeatherParams]:
+        // c.Params.Location is strongly typed
+    }
+}
 ```
 
-This generates JSON Schema automatically from struct tags. Use:
+**Alternative: `ToolDefinitionFor[T]()` for simple cases:**
+```go
+tool := llm.ToolDefinitionFor[GetWeatherParams]("get_weather", "Get weather")
+// Returns ToolDefinition, no parsing/validation
+```
+
+**Struct tags:**
 - `json:"fieldName"` - parameter name
 - `jsonschema:"description=..."` - parameter description
 - `jsonschema:"required"` - mark as required
 - `jsonschema:"enum=val1,enum=val2"` - restrict values
+- `jsonschema:"minimum=X,maximum=Y"` - numeric constraints
 
 ### Tool Call Accumulation
 

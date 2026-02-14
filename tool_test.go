@@ -287,3 +287,338 @@ func TestToolDefinitionFor_CompatibleWithProviders(t *testing.T) {
 	required := tool.Parameters["required"].([]any)
 	assert.Contains(t, required, "query")
 }
+
+// --- ToolSpec Tests ---
+
+func TestNewToolSpec_Definition(t *testing.T) {
+	type TestParams struct {
+		Name string `json:"name" jsonschema:"description=A name,required"`
+	}
+
+	spec := NewToolSpec[TestParams]("test_tool", "A test tool")
+
+	def := spec.Definition()
+	assert.Equal(t, "test_tool", def.Name)
+	assert.Equal(t, "A test tool", def.Description)
+	assert.NotNil(t, def.Parameters)
+
+	// Should match ToolDefinitionFor output
+	expectedDef := ToolDefinitionFor[TestParams]("test_tool", "A test tool")
+	assert.Equal(t, expectedDef, def)
+}
+
+func TestToolSpec_ParseValid(t *testing.T) {
+	type GetWeatherParams struct {
+		Location string `json:"location" jsonschema:"required"`
+		Unit     string `json:"unit"`
+	}
+
+	spec := NewToolSpec[GetWeatherParams]("get_weather", "Get weather")
+
+	rawCall := ToolCall{
+		ID:   "call_123",
+		Name: "get_weather",
+		Arguments: map[string]any{
+			"location": "Paris",
+			"unit":     "celsius",
+		},
+	}
+
+	parsed, err := spec.parse(rawCall)
+	require.NoError(t, err)
+	require.NotNil(t, parsed)
+
+	typedCall, ok := parsed.(*TypedToolCall[GetWeatherParams])
+	require.True(t, ok, "should be TypedToolCall[GetWeatherParams]")
+
+	assert.Equal(t, "call_123", typedCall.ID)
+	assert.Equal(t, "get_weather", typedCall.Name)
+	assert.Equal(t, "Paris", typedCall.Params.Location)
+	assert.Equal(t, "celsius", typedCall.Params.Unit)
+}
+
+func TestToolSpec_ParseValidation_MissingRequired(t *testing.T) {
+	type Params struct {
+		Required string `json:"required" jsonschema:"required"`
+		Optional string `json:"optional"`
+	}
+
+	spec := NewToolSpec[Params]("test", "test")
+
+	rawCall := ToolCall{
+		ID:        "call_123",
+		Name:      "test",
+		Arguments: map[string]any{"optional": "value"},
+	}
+
+	_, err := spec.parse(rawCall)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "validate")
+}
+
+func TestToolSpec_ParseValidation_WrongType(t *testing.T) {
+	type Params struct {
+		Count int `json:"count" jsonschema:"required"`
+	}
+
+	spec := NewToolSpec[Params]("test", "test")
+
+	rawCall := ToolCall{
+		ID:        "call_123",
+		Name:      "test",
+		Arguments: map[string]any{"count": "not a number"},
+	}
+
+	_, err := spec.parse(rawCall)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "validate")
+}
+
+func TestToolSpec_ParseValidation_InvalidEnum(t *testing.T) {
+	type Params struct {
+		Unit string `json:"unit" jsonschema:"required,enum=celsius,enum=fahrenheit"`
+	}
+
+	spec := NewToolSpec[Params]("test", "test")
+
+	rawCall := ToolCall{
+		ID:        "call_123",
+		Name:      "test",
+		Arguments: map[string]any{"unit": "kelvin"},
+	}
+
+	_, err := spec.parse(rawCall)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "validate")
+}
+
+func TestToolSpec_ParseValidation_NumericRange(t *testing.T) {
+	type Params struct {
+		Age int `json:"age" jsonschema:"required,minimum=0,maximum=120"`
+	}
+
+	spec := NewToolSpec[Params]("test", "test")
+
+	// Test below minimum
+	rawCall := ToolCall{
+		ID:        "call_123",
+		Name:      "test",
+		Arguments: map[string]any{"age": -1},
+	}
+
+	_, err := spec.parse(rawCall)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "validate")
+
+	// Test above maximum
+	rawCall.Arguments = map[string]any{"age": 150}
+	_, err = spec.parse(rawCall)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "validate")
+
+	// Test valid range
+	rawCall.Arguments = map[string]any{"age": 25}
+	parsed, err := spec.parse(rawCall)
+	require.NoError(t, err)
+	typedCall := parsed.(*TypedToolCall[Params])
+	assert.Equal(t, 25, typedCall.Params.Age)
+}
+
+func TestToolSpec_ParseEmptyArgs(t *testing.T) {
+	type EmptyParams struct{}
+
+	spec := NewToolSpec[EmptyParams]("test", "test")
+
+	rawCall := ToolCall{
+		ID:        "call_123",
+		Name:      "test",
+		Arguments: map[string]any{},
+	}
+
+	parsed, err := spec.parse(rawCall)
+	require.NoError(t, err)
+
+	typedCall := parsed.(*TypedToolCall[EmptyParams])
+	assert.Equal(t, "call_123", typedCall.ID)
+}
+
+// --- ToolSet Tests ---
+
+func TestToolSet_Definitions(t *testing.T) {
+	type Params1 struct {
+		Field1 string `json:"field1"`
+	}
+	type Params2 struct {
+		Field2 int `json:"field2"`
+	}
+
+	spec1 := NewToolSpec[Params1]("tool1", "First tool")
+	spec2 := NewToolSpec[Params2]("tool2", "Second tool")
+
+	toolSet := NewToolSet(spec1, spec2)
+
+	defs := toolSet.Definitions()
+	require.Len(t, defs, 2)
+
+	assert.Equal(t, "tool1", defs[0].Name)
+	assert.Equal(t, "First tool", defs[0].Description)
+
+	assert.Equal(t, "tool2", defs[1].Name)
+	assert.Equal(t, "Second tool", defs[1].Description)
+}
+
+func TestToolSet_Parse_SingleTool(t *testing.T) {
+	type GetWeatherParams struct {
+		Location string `json:"location" jsonschema:"required"`
+	}
+
+	spec := NewToolSpec[GetWeatherParams]("get_weather", "Get weather")
+	toolSet := NewToolSet(spec)
+
+	rawCalls := []ToolCall{
+		{
+			ID:        "call_123",
+			Name:      "get_weather",
+			Arguments: map[string]any{"location": "Paris"},
+		},
+	}
+
+	parsed, err := toolSet.Parse(rawCalls)
+	require.NoError(t, err)
+	require.Len(t, parsed, 1)
+
+	call := parsed[0]
+	assert.Equal(t, "get_weather", call.ToolName())
+	assert.Equal(t, "call_123", call.ToolCallID())
+
+	typedCall, ok := call.(*TypedToolCall[GetWeatherParams])
+	require.True(t, ok)
+	assert.Equal(t, "Paris", typedCall.Params.Location)
+}
+
+func TestToolSet_Parse_MultipleTools(t *testing.T) {
+	type GetWeatherParams struct {
+		Location string `json:"location" jsonschema:"required"`
+	}
+	type SearchParams struct {
+		Query string `json:"query" jsonschema:"required"`
+	}
+
+	weatherSpec := NewToolSpec[GetWeatherParams]("get_weather", "Get weather")
+	searchSpec := NewToolSpec[SearchParams]("search", "Search")
+	toolSet := NewToolSet(weatherSpec, searchSpec)
+
+	rawCalls := []ToolCall{
+		{
+			ID:        "call_1",
+			Name:      "get_weather",
+			Arguments: map[string]any{"location": "London"},
+		},
+		{
+			ID:        "call_2",
+			Name:      "search",
+			Arguments: map[string]any{"query": "golang"},
+		},
+	}
+
+	parsed, err := toolSet.Parse(rawCalls)
+	require.NoError(t, err)
+	require.Len(t, parsed, 2)
+
+	// Test type switching
+	for _, call := range parsed {
+		switch c := call.(type) {
+		case *TypedToolCall[GetWeatherParams]:
+			assert.Equal(t, "call_1", c.ID)
+			assert.Equal(t, "London", c.Params.Location)
+		case *TypedToolCall[SearchParams]:
+			assert.Equal(t, "call_2", c.ID)
+			assert.Equal(t, "golang", c.Params.Query)
+		default:
+			t.Fatalf("unexpected type: %T", call)
+		}
+	}
+}
+
+func TestToolSet_Parse_UnknownTool(t *testing.T) {
+	type Params struct {
+		Value string `json:"value"`
+	}
+
+	spec := NewToolSpec[Params]("known", "Known tool")
+	toolSet := NewToolSet(spec)
+
+	rawCalls := []ToolCall{
+		{ID: "call_1", Name: "known", Arguments: map[string]any{"value": "ok"}},
+		{ID: "call_2", Name: "unknown", Arguments: map[string]any{"value": "bad"}},
+	}
+
+	parsed, err := toolSet.Parse(rawCalls)
+
+	// Should return the successfully parsed call
+	require.Len(t, parsed, 1)
+	assert.Equal(t, "call_1", parsed[0].ToolCallID())
+
+	// Should return error for unknown tool
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unknown tool: unknown")
+}
+
+func TestToolSet_Parse_ValidationError(t *testing.T) {
+	type Params struct {
+		Required string `json:"required" jsonschema:"required"`
+	}
+
+	spec := NewToolSpec[Params]("test", "test")
+	toolSet := NewToolSet(spec)
+
+	rawCalls := []ToolCall{
+		{ID: "call_1", Name: "test", Arguments: map[string]any{"required": "ok"}},
+		{ID: "call_2", Name: "test", Arguments: map[string]any{}}, // missing required
+	}
+
+	parsed, err := toolSet.Parse(rawCalls)
+
+	// Should return the valid call
+	require.Len(t, parsed, 1)
+	assert.Equal(t, "call_1", parsed[0].ToolCallID())
+
+	// Should return error for invalid args
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "validate")
+}
+
+func TestToolSet_Parse_EmptyCalls(t *testing.T) {
+	type Params struct{}
+
+	spec := NewToolSpec[Params]("test", "test")
+	toolSet := NewToolSet(spec)
+
+	parsed, err := toolSet.Parse(nil)
+	assert.NoError(t, err)
+	assert.Empty(t, parsed)
+
+	parsed, err = toolSet.Parse([]ToolCall{})
+	assert.NoError(t, err)
+	assert.Empty(t, parsed)
+}
+
+// --- TypedToolCall Tests ---
+
+func TestTypedToolCall_Interface(t *testing.T) {
+	type Params struct {
+		Value string `json:"value"`
+	}
+
+	call := &TypedToolCall[Params]{
+		ID:     "call_123",
+		Name:   "test_tool",
+		Params: Params{Value: "test"},
+	}
+
+	// Verify it implements ParsedToolCall
+	var _ ParsedToolCall = call
+
+	assert.Equal(t, "test_tool", call.ToolName())
+	assert.Equal(t, "call_123", call.ToolCallID())
+}

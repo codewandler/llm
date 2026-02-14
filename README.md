@@ -205,6 +205,85 @@ See [provider/openrouter/README.md](provider/openrouter/README.md) for full mode
 
 All providers support tool/function calling with automatic tool call ID tracking.
 
+### Type-Safe Tool Dispatch (Recommended)
+
+The best way to work with tools is using `ToolSpec` and `ToolSet`, which provide:
+- Automatic JSON Schema generation from Go structs
+- Runtime validation of tool arguments
+- Type-safe parameter access via generics
+- Clean type-switch dispatch
+
+```go
+// 1. Define parameter structs
+type GetWeatherParams struct {
+    Location string `json:"location" jsonschema:"description=City name,required"`
+    Unit     string `json:"unit" jsonschema:"description=Temperature unit,enum=celsius,enum=fahrenheit"`
+}
+
+type SearchParams struct {
+    Query string `json:"query" jsonschema:"description=Search query,required"`
+    Limit int    `json:"limit" jsonschema:"description=Max results,minimum=1,maximum=100"`
+}
+
+// 2. Create ToolSet
+tools := llm.NewToolSet(
+    llm.NewToolSpec[GetWeatherParams]("get_weather", "Get weather for a location"),
+    llm.NewToolSpec[SearchParams]("search", "Search the web"),
+)
+
+// 3. Send to LLM
+stream, _ := provider.CreateStream(ctx, llm.StreamOptions{
+    Model:    "openrouter/moonshotai/kimi-k2-0905",
+    Messages: messages,
+    Tools:    tools.Definitions(),  // Returns []ToolDefinition
+})
+
+// 4. Collect tool calls from stream
+var rawCalls []llm.ToolCall
+for event := range stream {
+    if event.Type == llm.StreamEventToolCall {
+        rawCalls = append(rawCalls, *event.ToolCall)
+    }
+}
+
+// 5. Parse with validation
+calls, err := tools.Parse(rawCalls)
+if err != nil {
+    log.Printf("parse warnings: %v", err)  // Non-fatal: you still get valid calls
+}
+
+// 6. Type-safe dispatch
+for _, call := range calls {
+    switch c := call.(type) {
+    case *llm.TypedToolCall[GetWeatherParams]:
+        // c.Params is strongly typed!
+        fmt.Printf("Weather for: %s (unit: %s)\n", c.Params.Location, c.Params.Unit)
+        result := getWeather(c.Params.Location, c.Params.Unit)
+        
+        // Send result back
+        messages = append(messages,
+            llm.Message{Role: llm.RoleAssistant, ToolCalls: []llm.ToolCall{{
+                ID: c.ID, Name: c.Name, Arguments: map[string]any{
+                    "location": c.Params.Location,
+                    "unit": c.Params.Unit,
+                },
+            }}},
+            llm.Message{Role: llm.RoleTool, Content: result, ToolCallID: c.ID},
+        )
+        
+    case *llm.TypedToolCall[SearchParams]:
+        fmt.Printf("Search: %s (limit: %d)\n", c.Params.Query, c.Params.Limit)
+        // ... handle search
+    }
+}
+```
+
+**Benefits:**
+- Arguments are validated against JSON Schema (required fields, types, enums, ranges)
+- Type-safe access: `c.Params.Location` instead of `c.Arguments["location"].(string)`
+- Compile-time checking of parameter struct fields
+- Parse errors are non-fatal - you get all successfully parsed calls
+
 ### Quick Example (Type-Safe with Generics)
 
 The recommended way is using `ToolDefinitionFor[T]()` which generates JSON Schema from Go structs:
