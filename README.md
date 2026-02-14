@@ -203,25 +203,22 @@ See [provider/openrouter/README.md](provider/openrouter/README.md) for full mode
 
 ## Tool Calling
 
-All providers support tool/function calling with automatic tool call ID tracking:
+All providers support tool/function calling with automatic tool call ID tracking.
+
+### Quick Example (Type-Safe with Generics)
+
+The recommended way is using `ToolDefinitionFor[T]()` which generates JSON Schema from Go structs:
 
 ```go
-// Define tools
+// Define parameter struct with struct tags
+type GetWeatherParams struct {
+    Location string `json:"location" jsonschema:"description=City name or coordinates,required"`
+    Unit     string `json:"unit" jsonschema:"description=Temperature unit,enum=celsius,enum=fahrenheit"`
+}
+
+// Create tool definition from struct
 tools := []llm.ToolDefinition{
-    {
-        Name:        "get_weather",
-        Description: "Get current weather for a location",
-        Parameters: map[string]any{
-            "type": "object",
-            "properties": map[string]any{
-                "location": map[string]any{
-                    "type":        "string",
-                    "description": "City name",
-                },
-            },
-            "required": []string{"location"},
-        },
-    },
+    llm.ToolDefinitionFor[GetWeatherParams]("get_weather", "Get current weather for a location"),
 }
 
 // Step 1: Send initial request with tools
@@ -233,20 +230,21 @@ events, err := provider.CreateStream(ctx, llm.StreamOptions{
     Tools: tools,
 })
 
-// Step 2: Process tool calls and execute them
+// Step 2: Process tool calls
 var toolCall *llm.ToolCall
 for event := range events {
     if event.Type == llm.StreamEventToolCall {
         toolCall = event.ToolCall
+        // Arguments are automatically parsed into map[string]any
         fmt.Printf("Tool: %s\n", toolCall.Name)
-        fmt.Printf("Args: %+v\n", toolCall.Arguments)
+        fmt.Printf("Location: %s\n", toolCall.Arguments["location"])
     }
 }
 
 // Step 3: Execute the tool
-result := executeWeatherTool(toolCall.Arguments)
+result := fmt.Sprintf(`{"temp": 22, "conditions": "sunny"}`)
 
-// Step 4: Send tool result back with ToolCallID
+// Step 4: Send tool result back
 events2, _ := provider.CreateStream(ctx, llm.StreamOptions{
     Model: "ollama/glm-4.7-flash",
     Messages: []llm.Message{
@@ -272,7 +270,41 @@ for event := range events2 {
 }
 ```
 
-**Important:** Tool result messages must include `ToolCallID` to link them to the original tool call. This ensures providers can correctly associate results with their corresponding tool invocations.
+### Struct Tag Reference
+
+The `ToolDefinitionFor[T]()` function uses these tags:
+
+- `json:"fieldName"` - Parameter name (required)
+- `jsonschema:"description=..."` - Parameter description
+- `jsonschema:"required"` - Mark parameter as required
+- `jsonschema:"enum=val1,enum=val2"` - Restrict to specific values
+- `jsonschema:"minimum=1,maximum=10"` - Numeric constraints
+- `jsonschema:"pattern=^[a-z]+$"` - String pattern (regex)
+
+### Manual Tool Definition
+
+You can also define tools manually:
+
+```go
+tools := []llm.ToolDefinition{
+    {
+        Name:        "get_weather",
+        Description: "Get current weather for a location",
+        Parameters: map[string]any{
+            "type": "object",
+            "properties": map[string]any{
+                "location": map[string]any{
+                    "type":        "string",
+                    "description": "City name",
+                },
+            },
+            "required": []string{"location"},
+        },
+    },
+}
+```
+
+**Important:** Tool result messages must include `ToolCallID` to link them to the original tool call.
 
 ## Multi-Turn Conversations
 

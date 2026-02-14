@@ -17,26 +17,17 @@ import (
 // --- Unit tests for buildRequest ---
 
 func TestBuildRequest_ToolDefinitions(t *testing.T) {
+	type GetWeatherParams struct {
+		Location string `json:"location" jsonschema:"description=City name,required"`
+	}
+
 	opts := llm.StreamOptions{
 		Model: "test/model",
 		Messages: []llm.Message{
 			{Role: llm.RoleUser, Content: "test"},
 		},
 		Tools: []llm.ToolDefinition{
-			{
-				Name:        "get_weather",
-				Description: "Get weather for a location",
-				Parameters: map[string]any{
-					"type": "object",
-					"properties": map[string]any{
-						"location": map[string]any{
-							"type":        "string",
-							"description": "City name",
-						},
-					},
-					"required": []string{"location"},
-				},
-			},
+			llm.ToolDefinitionFor[GetWeatherParams]("get_weather", "Get weather for a location"),
 		},
 	}
 
@@ -474,24 +465,15 @@ func TestOpenRouter_ToolCallRoundTrip(t *testing.T) {
 		t.Skip("OPENROUTER_API_KEY not set")
 	}
 
+	type GetWeatherParams struct {
+		Location string `json:"location" jsonschema:"description=City name,required"`
+	}
+
 	provider := New(apiKey)
 	ctx := context.Background()
 
 	tools := []llm.ToolDefinition{
-		{
-			Name:        "get_weather",
-			Description: "Get the current weather for a location",
-			Parameters: map[string]any{
-				"type": "object",
-				"properties": map[string]any{
-					"location": map[string]any{
-						"type":        "string",
-						"description": "City name",
-					},
-				},
-				"required": []string{"location"},
-			},
-		},
+		llm.ToolDefinitionFor[GetWeatherParams]("get_weather", "Get the current weather for a location"),
 	}
 
 	// First request: model should call the tool
@@ -585,32 +567,16 @@ func TestOpenRouter_MultipleToolCalls(t *testing.T) {
 		t.Skip("OPENROUTER_API_KEY not set")
 	}
 
+	type LocationParams struct {
+		Location string `json:"location" jsonschema:"description=Location name,required"`
+	}
+
 	provider := New(apiKey)
 	ctx := context.Background()
 
 	tools := []llm.ToolDefinition{
-		{
-			Name:        "get_weather",
-			Description: "Get weather for a location",
-			Parameters: map[string]any{
-				"type": "object",
-				"properties": map[string]any{
-					"location": map[string]any{"type": "string"},
-				},
-				"required": []string{"location"},
-			},
-		},
-		{
-			Name:        "get_time",
-			Description: "Get current time for a location",
-			Parameters: map[string]any{
-				"type": "object",
-				"properties": map[string]any{
-					"location": map[string]any{"type": "string"},
-				},
-				"required": []string{"location"},
-			},
-		},
+		llm.ToolDefinitionFor[LocationParams]("get_weather", "Get weather for a location"),
+		llm.ToolDefinitionFor[LocationParams]("get_time", "Get current time for a location"),
 	}
 
 	stream, err := provider.CreateStream(ctx, llm.StreamOptions{

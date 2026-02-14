@@ -315,6 +315,24 @@ for scanner.Scan() {
 }
 ```
 
+### Tool Definition Pattern
+
+Use `ToolDefinitionFor[T]()` for type-safe tool definitions:
+```go
+type GetWeatherParams struct {
+    Location string `json:"location" jsonschema:"description=City name,required"`
+    Unit     string `json:"unit" jsonschema:"description=Temperature unit,enum=celsius,enum=fahrenheit"`
+}
+
+tool := llm.ToolDefinitionFor[GetWeatherParams]("get_weather", "Get current weather")
+```
+
+This generates JSON Schema automatically from struct tags. Use:
+- `json:"fieldName"` - parameter name
+- `jsonschema:"description=..."` - parameter description
+- `jsonschema:"required"` - mark as required
+- `jsonschema:"enum=val1,enum=val2"` - restrict values
+
 ### Tool Call Accumulation
 
 For streaming APIs that send tool call data incrementally:
