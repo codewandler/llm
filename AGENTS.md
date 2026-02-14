@@ -414,7 +414,6 @@ func TestProvider(t *testing.T) {
 
 ## Git Workflow
 
-Per `/home/timo/.claude/CLAUDE.md`:
 - **NEVER commit without explicit user instruction**
 - Check git history before committing: `git log --oneline -10`
 - Ticket references go in `Refs:` tagline at end of commit body, NOT in title

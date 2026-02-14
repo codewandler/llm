@@ -213,54 +213,15 @@ func buildRequest(opts llm.StreamOptions) ([]byte, error) {
 			r.Messages = append(r.Messages, m)
 
 		case llm.RoleTool:
-			content := msg.Content
-			if content == "" {
-				content = "<empty>"
-			}
 			r.Messages = append(r.Messages, messagePayload{
 				Role:       "tool",
-				Content:    content,
-				ToolCallID: toolCallIDFromPreceding(opts.Messages, msg),
+				Content:    msg.Content,
+				ToolCallID: msg.ToolCallID,
 			})
 		}
 	}
 
 	return json.Marshal(r)
-}
-
-// toolCallIDFromPreceding finds the tool_call_id for a tool result message
-// by looking at the preceding assistant message's tool calls.
-func toolCallIDFromPreceding(messages []llm.Message, toolMsg llm.Message) string {
-	// Walk backwards from this tool message to find the assistant message,
-	// then match by position.
-	toolIdx := -1
-	for i, m := range messages {
-		if m.ID == toolMsg.ID {
-			toolIdx = i
-			break
-		}
-	}
-	if toolIdx < 0 {
-		return ""
-	}
-
-	// Count how many consecutive tool messages precede this one (to get position).
-	pos := 0
-	for j := toolIdx - 1; j >= 0; j-- {
-		if messages[j].Role == llm.RoleTool {
-			pos++
-		} else {
-			break
-		}
-	}
-
-	// Find the preceding assistant message.
-	for j := toolIdx - 1 - pos; j >= 0; j-- {
-		if messages[j].Role == llm.RoleAssistant && pos < len(messages[j].ToolCalls) {
-			return messages[j].ToolCalls[pos].ID
-		}
-	}
-	return ""
 }
 
 // --- SSE stream parsing ---

@@ -27,10 +27,11 @@ type Model struct {
 
 // Message represents a single message in a conversation.
 type Message struct {
-	ID        string     `json:"id,omitempty"`
-	Role      Role       `json:"role"`
-	Content   string     `json:"content"`
-	ToolCalls []ToolCall `json:"tool_calls,omitempty"`
+	ID         string     `json:"id,omitempty"`
+	Role       Role       `json:"role"`
+	Content    string     `json:"content"`
+	ToolCalls  []ToolCall `json:"tool_calls,omitempty"`
+	ToolCallID string     `json:"tool_call_id,omitempty"`
 }
 
 // ToolCall represents a request from the LLM to invoke a tool.

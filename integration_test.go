@@ -218,6 +218,100 @@ func TestProviders(t *testing.T) {
 						"Unexpected error event: %v", event.Error)
 				}
 			})
+
+			// Test 5: Tool call round-trip
+			t.Run("tool_roundtrip", func(t *testing.T) {
+				// Skip for providers that don't reliably support tool calling
+				if tt.name == "ollama" {
+					t.Skip("Ollama tool support is model-dependent")
+				}
+				if tt.name == "fake" {
+					t.Skip("Fake provider doesn't consume tool results")
+				}
+
+				tools := []llm.ToolDefinition{
+					{
+						Name:        "get_weather",
+						Description: "Get the current weather for a location",
+						Parameters: map[string]any{
+							"type": "object",
+							"properties": map[string]any{
+								"location": map[string]any{
+									"type":        "string",
+									"description": "City name",
+								},
+							},
+							"required": []string{"location"},
+						},
+					},
+				}
+
+				// First request: try to get a tool call
+				stream, err := tt.provider.CreateStream(ctx, llm.StreamOptions{
+					Model: getModelID(),
+					Messages: []llm.Message{
+						{Role: llm.RoleUser, Content: "What's the weather in Paris? Use the get_weather tool."},
+					},
+					Tools: tools,
+				})
+				require.NoError(t, err)
+
+				var toolCall *llm.ToolCall
+				for event := range stream {
+					if event.Type == llm.StreamEventError {
+						t.Fatalf("Error in first request: %v", event.Error)
+					}
+					if event.Type == llm.StreamEventToolCall {
+						toolCall = event.ToolCall
+						t.Logf("Received tool call: %s(%+v)", toolCall.Name, toolCall.Arguments)
+					}
+				}
+
+				// Tool calling is not guaranteed, so skip if no tool call
+				if toolCall == nil {
+					t.Skip("Model did not call tool (not guaranteed)")
+				}
+
+				require.NotEmpty(t, toolCall.ID, "Tool call must have an ID")
+
+				// Second request: send tool result back
+				toolResult := `{"temperature": 22, "conditions": "sunny"}`
+				stream2, err := tt.provider.CreateStream(ctx, llm.StreamOptions{
+					Model: getModelID(),
+					Messages: []llm.Message{
+						{Role: llm.RoleUser, Content: "What's the weather in Paris? Use the get_weather tool."},
+						{
+							Role: llm.RoleAssistant,
+							ToolCalls: []llm.ToolCall{
+								{
+									ID:        toolCall.ID,
+									Name:      toolCall.Name,
+									Arguments: toolCall.Arguments,
+								},
+							},
+						},
+						{
+							Role:       llm.RoleTool,
+							Content:    toolResult,
+							ToolCallID: toolCall.ID,
+						},
+					},
+					Tools: tools,
+				})
+				require.NoError(t, err)
+
+				var gotResponse bool
+				for event := range stream2 {
+					if event.Type == llm.StreamEventError {
+						t.Fatalf("Error in second request: %v", event.Error)
+					}
+					if event.Type == llm.StreamEventDelta {
+						gotResponse = true
+					}
+				}
+
+				assert.True(t, gotResponse, "Should get a response after tool result")
+			})
 		})
 	}
 }

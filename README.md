@@ -203,7 +203,7 @@ See [provider/openrouter/README.md](provider/openrouter/README.md) for full mode
 
 ## Tool Calling
 
-All providers support tool/function calling:
+All providers support tool/function calling with automatic tool call ID tracking:
 
 ```go
 // Define tools
@@ -224,7 +224,7 @@ tools := []llm.ToolDefinition{
     },
 }
 
-// Create stream with tools
+// Step 1: Send initial request with tools
 events, err := provider.CreateStream(ctx, llm.StreamOptions{
     Model:    "ollama/glm-4.7-flash",
     Messages: []llm.Message{
@@ -233,35 +233,46 @@ events, err := provider.CreateStream(ctx, llm.StreamOptions{
     Tools: tools,
 })
 
-// Process tool calls
+// Step 2: Process tool calls and execute them
+var toolCall *llm.ToolCall
 for event := range events {
     if event.Type == llm.StreamEventToolCall {
-        fmt.Printf("Tool: %s\n", event.ToolCall.Name)
-        fmt.Printf("Args: %+v\n", event.ToolCall.Arguments)
-        
-        // Execute tool and send result back
-        result := executeWeatherTool(event.ToolCall.Arguments)
-        
-        // Continue conversation with tool result
-        events2, _ := provider.CreateStream(ctx, llm.StreamOptions{
-            Model: "ollama/glm-4.7-flash",
-            Messages: []llm.Message{
-                {Role: llm.RoleUser, Content: "What's the weather in Paris?"},
-                {
-                    Role: llm.RoleAssistant,
-                    ToolCalls: []llm.ToolCall{*event.ToolCall},
-                },
-                {
-                    Role:       llm.RoleTool,
-                    Content:    result,
-                    ToolCallID: event.ToolCall.ID,
-                },
-            },
-            Tools: tools,
-        })
+        toolCall = event.ToolCall
+        fmt.Printf("Tool: %s\n", toolCall.Name)
+        fmt.Printf("Args: %+v\n", toolCall.Arguments)
+    }
+}
+
+// Step 3: Execute the tool
+result := executeWeatherTool(toolCall.Arguments)
+
+// Step 4: Send tool result back with ToolCallID
+events2, _ := provider.CreateStream(ctx, llm.StreamOptions{
+    Model: "ollama/glm-4.7-flash",
+    Messages: []llm.Message{
+        {Role: llm.RoleUser, Content: "What's the weather in Paris?"},
+        {
+            Role:      llm.RoleAssistant,
+            ToolCalls: []llm.ToolCall{*toolCall},
+        },
+        {
+            Role:       llm.RoleTool,
+            Content:    result,
+            ToolCallID: toolCall.ID,  // Link result to original call
+        },
+    },
+    Tools: tools,
+})
+
+// Step 5: Get final response
+for event := range events2 {
+    if event.Type == llm.StreamEventDelta {
+        fmt.Print(event.Delta)
     }
 }
 ```
+
+**Important:** Tool result messages must include `ToolCallID` to link them to the original tool call. This ensures providers can correctly associate results with their corresponding tool invocations.
 
 ## Multi-Turn Conversations
 
