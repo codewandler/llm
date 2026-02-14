@@ -152,7 +152,7 @@ events, err := provider.CreateStream(ctx, llm.StreamOptions{
 
 ### OpenAI
 
-Access OpenAI models including GPT-4o, GPT-4, and GPT-3.5:
+Access OpenAI models including GPT-5, GPT-4o, and reasoning models:
 
 ```go
 import "github.com/codewandler/llm/provider/openai"
@@ -168,11 +168,11 @@ events, err := provider.CreateStream(ctx, llm.StreamOptions{
 ```
 
 Popular OpenAI models:
-- `gpt-4o` - Most capable model (multimodal)
-- `gpt-4o-mini` - Fast and affordable (default)
-- `gpt-4-turbo` - Previous generation
-- `o1` - Advanced reasoning model
-- `o1-mini` - Faster reasoning model
+- **GPT-5 series** - `gpt-5`, `gpt-5.2`, `gpt-5.2-pro`, `gpt-5-mini`, `gpt-5-nano`
+- **GPT-4.1 series** - `gpt-4.1`, `gpt-4.1-mini`, `gpt-4.1-nano`
+- **GPT-4o series** - `gpt-4o`, `gpt-4o-mini` (default), `gpt-4-turbo`
+- **Reasoning models** - `o3`, `o3-mini`, `o3-pro`, `o1`, `o1-pro`
+- **Specialized** - `gpt-5.1-codex`, `gpt-5.2-codex` (code generation)
 
 ### Ollama (Local Models)
 

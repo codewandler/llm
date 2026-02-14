@@ -17,8 +17,8 @@ const (
 	baseURL      = "https://api.openai.com"
 	providerName = "openai"
 
-	// DefaultModel is the recommended default model
-	DefaultModel = "gpt-4o"
+	// DefaultModel is the recommended default model (fast and capable)
+	DefaultModel = "gpt-4o-mini"
 )
 
 // Provider implements the OpenAI LLM backend.
@@ -50,15 +50,42 @@ func (p *Provider) DefaultModel() string {
 
 func (p *Provider) Name() string { return providerName }
 
-// Models returns a curated list of OpenAI models.
+// Models returns a curated list of popular OpenAI models.
 func (p *Provider) Models() []llm.Model {
 	return []llm.Model{
+		// GPT-4o series (latest, most capable)
 		{ID: "gpt-4o", Name: "GPT-4o", Provider: providerName},
 		{ID: "gpt-4o-mini", Name: "GPT-4o Mini", Provider: providerName},
+
+		// GPT-5 series (newest generation)
+		{ID: "gpt-5", Name: "GPT-5", Provider: providerName},
+		{ID: "gpt-5.2", Name: "GPT-5.2", Provider: providerName},
+		{ID: "gpt-5.2-pro", Name: "GPT-5.2 Pro", Provider: providerName},
+		{ID: "gpt-5.1", Name: "GPT-5.1", Provider: providerName},
+		{ID: "gpt-5-pro", Name: "GPT-5 Pro", Provider: providerName},
+		{ID: "gpt-5-mini", Name: "GPT-5 Mini", Provider: providerName},
+		{ID: "gpt-5-nano", Name: "GPT-5 Nano", Provider: providerName},
+		{ID: "gpt-5.1-codex", Name: "GPT-5.1 Codex", Provider: providerName},
+		{ID: "gpt-5.2-codex", Name: "GPT-5.2 Codex", Provider: providerName},
+
+		// GPT-4.1 series
+		{ID: "gpt-4.1", Name: "GPT-4.1", Provider: providerName},
+		{ID: "gpt-4.1-mini", Name: "GPT-4.1 Mini", Provider: providerName},
+		{ID: "gpt-4.1-nano", Name: "GPT-4.1 Nano", Provider: providerName},
+
+		// GPT-4 series (previous generation)
 		{ID: "gpt-4-turbo", Name: "GPT-4 Turbo", Provider: providerName},
+		{ID: "gpt-4", Name: "GPT-4", Provider: providerName},
+
+		// GPT-3.5 series (legacy)
 		{ID: "gpt-3.5-turbo", Name: "GPT-3.5 Turbo", Provider: providerName},
+
+		// o-series (reasoning models)
+		{ID: "o3", Name: "o3", Provider: providerName},
+		{ID: "o3-mini", Name: "o3 Mini", Provider: providerName},
+		{ID: "o3-pro", Name: "o3 Pro", Provider: providerName},
 		{ID: "o1", Name: "o1", Provider: providerName},
-		{ID: "o1-mini", Name: "o1 Mini", Provider: providerName},
+		{ID: "o1-pro", Name: "o1 Pro", Provider: providerName},
 	}
 }
 
