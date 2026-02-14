@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/codewandler/llm/provider/openai"
 	"github.com/codewandler/llm/provider/openrouter"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -56,6 +57,12 @@ func TestProviders(t *testing.T) {
 			provider: anthropic.NewClaudeCodeProvider(),
 			skip:     !isClaudeAvailable(),
 			skipMsg:  "requires claude CLI in PATH",
+		},
+		{
+			name:     "openai",
+			provider: openai.New(os.Getenv("OPENAI_KEY")),
+			skip:     os.Getenv("OPENAI_KEY") == "",
+			skipMsg:  "requires OPENAI_KEY",
 		},
 		{
 			name:     "openrouter",

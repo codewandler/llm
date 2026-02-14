@@ -17,6 +17,7 @@ A unified Go library for interacting with multiple LLM providers through a consi
 |----------|------|-------------|
 | Claude Code | `anthropic:claude-code` | Local Claude CLI wrapper (requires `claude` in PATH) |
 | Anthropic API | `anthropic` | Direct Anthropic API with OAuth support |
+| OpenAI | `openai` | OpenAI GPT models (GPT-4, GPT-4o, etc.) |
 | Ollama | `ollama` | Local Ollama models (11 curated defaults) |
 | OpenRouter | `openrouter` | 229 tool-enabled models via OpenRouter proxy |
 
@@ -46,6 +47,7 @@ import (
 
 func main() {
     // Set environment variables for providers
+    os.Setenv("OPENAI_KEY", "your-api-key")
     os.Setenv("OPENROUTER_API_KEY", "your-api-key")
     
     ctx := context.Background()
@@ -87,6 +89,7 @@ For more control, create your own registry:
 import (
     "github.com/codewandler/llm/provider"
     "github.com/codewandler/llm/provider/ollama"
+    "github.com/codewandler/llm/provider/openai"
     "github.com/codewandler/llm/provider/openrouter"
 )
 
@@ -95,6 +98,7 @@ reg := llm.NewRegistry()
 
 // Register specific providers
 reg.Register(ollama.New("http://localhost:11434"))
+reg.Register(openai.New("your-api-key"))
 reg.Register(openrouter.New("your-api-key"))
 
 // Use the registry
@@ -145,6 +149,30 @@ events, err := provider.CreateStream(ctx, llm.StreamOptions{
     },
 })
 ```
+
+### OpenAI
+
+Access OpenAI models including GPT-4o, GPT-4, and GPT-3.5:
+
+```go
+import "github.com/codewandler/llm/provider/openai"
+
+provider := openai.New("your-api-key")
+
+events, err := provider.CreateStream(ctx, llm.StreamOptions{
+    Model: "gpt-4o-mini",
+    Messages: []llm.Message{
+        {Role: llm.RoleUser, Content: "Hello!"},
+    },
+})
+```
+
+Popular OpenAI models:
+- `gpt-4o` - Most capable model (multimodal)
+- `gpt-4o-mini` - Fast and affordable (default)
+- `gpt-4-turbo` - Previous generation
+- `o1` - Advanced reasoning model
+- `o1-mini` - Faster reasoning model
 
 ### Ollama (Local Models)
 
@@ -454,6 +482,9 @@ for event := range events {
 Configure providers via environment variables:
 
 ```bash
+# OpenAI
+export OPENAI_KEY="your-api-key"
+
 # OpenRouter
 export OPENROUTER_API_KEY="your-api-key"
 
@@ -474,6 +505,8 @@ Use the `provider/model` format with the registry:
 anthropic:claude-code/sonnet     # Claude Code CLI
 anthropic:claude-code/opus       # Claude Code CLI
 anthropic/claude-3-5-sonnet-20241022  # Direct Anthropic API
+openai/gpt-4o                   # OpenAI
+openai/gpt-4o-mini              # OpenAI
 ollama/glm-4.7-flash            # Local Ollama
 ollama/llama3.2:1b              # Local Ollama
 openrouter/anthropic/claude-sonnet-4.5  # OpenRouter proxy
@@ -547,6 +580,7 @@ llm/
 ├── provider/
 │   ├── register.go     # Default registry with env-based config
 │   ├── anthropic/      # Claude Code CLI + Direct API
+│   ├── openai/         # OpenAI API
 │   ├── ollama/         # Local Ollama integration
 │   ├── openrouter/     # OpenRouter proxy (229 models)
 │   └── fake/           # Test provider

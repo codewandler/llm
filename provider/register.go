@@ -7,11 +7,13 @@ import (
 	"github.com/codewandler/llm"
 	"github.com/codewandler/llm/provider/anthropic"
 	"github.com/codewandler/llm/provider/ollama"
+	"github.com/codewandler/llm/provider/openai"
 	"github.com/codewandler/llm/provider/openrouter"
 )
 
 // NewDefaultRegistry creates a registry with all available providers pre-registered.
 // Providers are configured using environment variables:
+//   - OPENAI_KEY for OpenAI
 //   - OPENROUTER_API_KEY for OpenRouter
 //   - OLLAMA_BASE_URL for Ollama (optional, defaults to http://localhost:11434)
 //
@@ -28,6 +30,11 @@ func NewDefaultRegistry() *llm.Registry {
 		ollamaURL = "http://localhost:11434"
 	}
 	reg.Register(ollama.New(ollamaURL))
+
+	// Register OpenAI provider if API key is available
+	if apiKey := os.Getenv("OPENAI_KEY"); apiKey != "" {
+		reg.Register(openai.New(apiKey))
+	}
 
 	// Register OpenRouter provider if API key is available
 	if apiKey := os.Getenv("OPENROUTER_API_KEY"); apiKey != "" {

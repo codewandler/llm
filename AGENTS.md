@@ -78,10 +78,10 @@ llm/                          # Root package - core domain types
     ├── registry.go           # Provider registry and model resolution
     └── {provider}/           # Individual provider implementations
         ├── anthropic/        # Anthropic Claude (API + CLI wrapper)
+        ├── openai/           # OpenAI GPT models
         ├── openrouter/       # OpenRouter proxy
-        ├── openai/           # OpenAI (stub)
         ├── google/           # Google Gemini (stub)
-        ├── ollama/           # Ollama local (stub)
+        ├── ollama/           # Ollama local models
         └── fake/             # Test provider
 ```
 
