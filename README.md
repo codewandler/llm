@@ -471,6 +471,55 @@ opts := llm.StreamOptions{
 err := opts.Validate()  // Error: ToolChoiceTool references unknown tool "unknown_tool"
 ```
 
+## Reasoning Effort
+
+Control how many reasoning tokens OpenAI models generate before producing a response. Lower reasoning effort means faster responses and fewer tokens used.
+
+```go
+// Use minimal reasoning for faster responses (OpenAI default in this library)
+stream, _ := provider.CreateStream(ctx, llm.StreamOptions{
+    Model:           "openai/gpt-5",
+    Messages:        messages,
+    ReasoningEffort: llm.ReasoningEffortMinimal,
+})
+
+// Use high reasoning for complex tasks
+stream, _ := provider.CreateStream(ctx, llm.StreamOptions{
+    Model:           "openai/o3",
+    Messages:        messages,
+    ReasoningEffort: llm.ReasoningEffortHigh,
+})
+
+// Disable reasoning entirely (GPT-5.1+ only)
+stream, _ := provider.CreateStream(ctx, llm.StreamOptions{
+    Model:           "openai/gpt-5.1",
+    Messages:        messages,
+    ReasoningEffort: llm.ReasoningEffortNone,
+})
+```
+
+### ReasoningEffort Values
+
+| Value | Constant | Description |
+|-------|----------|-------------|
+| `"none"` | `ReasoningEffortNone` | No reasoning (GPT-5.1+ only) |
+| `"minimal"` | `ReasoningEffortMinimal` | Minimal reasoning (fastest) |
+| `"low"` | `ReasoningEffortLow` | Low reasoning |
+| `"medium"` | `ReasoningEffortMedium` | Medium reasoning (OpenAI API default) |
+| `"high"` | `ReasoningEffortHigh` | High reasoning |
+| `"xhigh"` | `ReasoningEffortXHigh` | Maximum reasoning (codex-max+ only) |
+
+### Provider Support
+
+| Provider | Behavior |
+|----------|----------|
+| **OpenAI** | Supported. Defaults to `"minimal"` if not specified |
+| **OpenRouter** | Passed through if specified, no default |
+| **Anthropic** | Ignored (uses different `thinking.budget_tokens` approach) |
+| **Ollama** | Ignored |
+
+**Note:** This library defaults to `"minimal"` for OpenAI to optimize for speed. Set `ReasoningEffortMedium` explicitly if you need the OpenAI API's default behavior.
+
 ## Multi-Turn Conversations
 
 Build conversations by appending messages:

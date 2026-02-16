@@ -136,3 +136,25 @@ func TestToolChoice_Interface(t *testing.T) {
 	var _ ToolChoice = ToolChoiceNone{}
 	var _ ToolChoice = ToolChoiceTool{Name: "test"}
 }
+
+func TestReasoningEffort_Constants(t *testing.T) {
+	// Verify constant values match OpenAI API expectations
+	assert.Equal(t, ReasoningEffort("none"), ReasoningEffortNone)
+	assert.Equal(t, ReasoningEffort("minimal"), ReasoningEffortMinimal)
+	assert.Equal(t, ReasoningEffort("low"), ReasoningEffortLow)
+	assert.Equal(t, ReasoningEffort("medium"), ReasoningEffortMedium)
+	assert.Equal(t, ReasoningEffort("high"), ReasoningEffortHigh)
+	assert.Equal(t, ReasoningEffort("xhigh"), ReasoningEffortXHigh)
+}
+
+func TestStreamOptions_WithReasoningEffort(t *testing.T) {
+	opts := StreamOptions{
+		Model:           "gpt-5",
+		Messages:        Messages{&UserMsg{Content: "Hello"}},
+		ReasoningEffort: ReasoningEffortLow,
+	}
+
+	err := opts.Validate()
+	require.NoError(t, err)
+	assert.Equal(t, ReasoningEffortLow, opts.ReasoningEffort)
+}

@@ -58,10 +58,11 @@ type StreamEvent struct {
 
 // StreamOptions configures a provider CreateStream call.
 type StreamOptions struct {
-	Model      string
-	Messages   Messages
-	Tools      []ToolDefinition
-	ToolChoice ToolChoice // nil defaults to Auto when Tools provided
+	Model           string
+	Messages        Messages
+	Tools           []ToolDefinition
+	ToolChoice      ToolChoice      // nil defaults to Auto when Tools provided
+	ReasoningEffort ReasoningEffort // Controls reasoning for reasoning models (OpenAI)
 }
 
 // Validate checks that the options are valid.

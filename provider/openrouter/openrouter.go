@@ -130,6 +130,7 @@ type request struct {
 	Messages         []messagePayload `json:"messages"`
 	Tools            []toolPayload    `json:"tools,omitempty"`
 	ToolChoice       any              `json:"tool_choice,omitempty"`
+	ReasoningEffort  string           `json:"reasoning_effort,omitempty"`
 	Stream           bool             `json:"stream"`
 	IncludeReasoning bool             `json:"include_reasoning,omitempty"`
 }
@@ -198,6 +199,11 @@ func buildRequest(opts llm.StreamOptions) ([]byte, error) {
 				},
 			}
 		}
+	}
+
+	// Set reasoning_effort if specified (OpenAI-compatible)
+	if opts.ReasoningEffort != "" {
+		r.ReasoningEffort = string(opts.ReasoningEffort)
 	}
 
 	for _, msg := range opts.Messages {

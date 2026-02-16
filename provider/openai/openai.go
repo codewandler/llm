@@ -122,11 +122,12 @@ func (p *Provider) CreateStream(ctx context.Context, opts llm.StreamOptions) (<-
 // --- Request building ---
 
 type request struct {
-	Model      string           `json:"model"`
-	Messages   []messagePayload `json:"messages"`
-	Tools      []toolPayload    `json:"tools,omitempty"`
-	ToolChoice any              `json:"tool_choice,omitempty"`
-	Stream     bool             `json:"stream"`
+	Model           string           `json:"model"`
+	Messages        []messagePayload `json:"messages"`
+	Tools           []toolPayload    `json:"tools,omitempty"`
+	ToolChoice      any              `json:"tool_choice,omitempty"`
+	ReasoningEffort string           `json:"reasoning_effort,omitempty"`
+	Stream          bool             `json:"stream"`
 }
 
 type messagePayload struct {
@@ -192,6 +193,13 @@ func buildRequest(opts llm.StreamOptions) ([]byte, error) {
 				},
 			}
 		}
+	}
+
+	// Set reasoning_effort - default to "minimal" for faster responses
+	if opts.ReasoningEffort != "" {
+		r.ReasoningEffort = string(opts.ReasoningEffort)
+	} else {
+		r.ReasoningEffort = "minimal"
 	}
 
 	for _, msg := range opts.Messages {
