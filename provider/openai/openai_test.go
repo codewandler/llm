@@ -149,7 +149,7 @@ data: [DONE]
 `
 
 	events := make(chan llm.StreamEvent, 64)
-	go parseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), events)
+	go parseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), events, "gpt-4o")
 
 	var deltas []string
 	var gotDone bool
@@ -178,7 +178,7 @@ data: [DONE]
 `
 
 	events := make(chan llm.StreamEvent, 64)
-	go parseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), events)
+	go parseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), events, "gpt-4o")
 
 	var toolCalls []*llm.ToolCall
 	for event := range events {
@@ -201,7 +201,7 @@ data: [DONE]
 `
 
 	events := make(chan llm.StreamEvent, 64)
-	go parseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), events)
+	go parseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), events, "gpt-4o")
 
 	var usage *llm.Usage
 	for event := range events {
@@ -223,7 +223,7 @@ data: [DONE]
 `
 
 	events := make(chan llm.StreamEvent, 64)
-	go parseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), events)
+	go parseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), events, "gpt-5")
 
 	var usage *llm.Usage
 	for event := range events {
@@ -238,6 +238,83 @@ data: [DONE]
 	assert.Equal(t, 150, usage.TotalTokens)
 	assert.Equal(t, 80, usage.CachedTokens)
 	assert.Equal(t, 30, usage.ReasoningTokens)
+
+	// gpt-5: $1.25/1M input, $0.125/1M cached, $10.00/1M output
+	// Cost = (20 regular input * 1.25/1M) + (80 cached * 0.125/1M) + (50 output * 10.00/1M)
+	// Cost = 0.000025 + 0.00001 + 0.0005 = 0.000535
+	expectedCost := (20.0/1_000_000)*1.25 + (80.0/1_000_000)*0.125 + (50.0/1_000_000)*10.00
+	assert.InDelta(t, expectedCost, usage.Cost, 0.0000001, "cost should be calculated correctly")
+}
+
+func TestCalculateCost(t *testing.T) {
+	tests := []struct {
+		name     string
+		model    string
+		usage    *llm.Usage
+		wantCost float64
+	}{
+		{
+			name:  "gpt-4o basic",
+			model: "gpt-4o",
+			usage: &llm.Usage{
+				InputTokens:  1_000_000,
+				OutputTokens: 1_000_000,
+			},
+			// $2.50/1M input + $10.00/1M output = $12.50
+			wantCost: 12.50,
+		},
+		{
+			name:  "gpt-4o with cache",
+			model: "gpt-4o",
+			usage: &llm.Usage{
+				InputTokens:  1_000_000,
+				OutputTokens: 500_000,
+				CachedTokens: 800_000, // 80% cached
+			},
+			// (200k regular * $2.50/1M) + (800k cached * $1.25/1M) + (500k output * $10.00/1M)
+			// = $0.50 + $1.00 + $5.00 = $6.50
+			wantCost: 6.50,
+		},
+		{
+			name:  "gpt-4o-mini cheap",
+			model: "gpt-4o-mini",
+			usage: &llm.Usage{
+				InputTokens:  1_000_000,
+				OutputTokens: 1_000_000,
+			},
+			// $0.15/1M input + $0.60/1M output = $0.75
+			wantCost: 0.75,
+		},
+		{
+			name:  "o1-pro expensive",
+			model: "o1-pro",
+			usage: &llm.Usage{
+				InputTokens:  1_000_000,
+				OutputTokens: 1_000_000,
+			},
+			// $150/1M input + $600/1M output = $750
+			wantCost: 750.0,
+		},
+		{
+			name:     "unknown model returns zero",
+			model:    "unknown-model",
+			usage:    &llm.Usage{InputTokens: 1000, OutputTokens: 1000},
+			wantCost: 0,
+		},
+		{
+			name:     "nil usage returns zero",
+			model:    "gpt-4o",
+			usage:    nil,
+			wantCost: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := calculateCost(tt.model, tt.usage)
+			assert.InDelta(t, tt.wantCost, got, 0.001, "cost mismatch")
+		})
+	}
 }
 
 // --- Integration tests (require OPENAI_KEY) ---
@@ -414,12 +491,33 @@ func TestOpenAI_Conversation(t *testing.T) {
 	assert.True(t, gotResponse, "Should get a response")
 }
 
-// --- Unit tests for model classification and reasoning effort mapping ---
+// --- Unit tests for model registry and reasoning effort mapping ---
 
-func TestClassifyModel(t *testing.T) {
+func TestGetModelInfo(t *testing.T) {
+	// Test that all models in modelOrder are in the registry
+	for _, id := range modelOrder {
+		t.Run(id, func(t *testing.T) {
+			info, err := getModelInfo(id)
+			require.NoError(t, err, "model %s should be in registry", id)
+			assert.Equal(t, id, info.ID)
+			assert.NotEmpty(t, info.Name)
+			assert.Greater(t, info.InputPrice, 0.0, "model %s should have input price", id)
+			assert.Greater(t, info.OutputPrice, 0.0, "model %s should have output price", id)
+		})
+	}
+
+	// Test unknown model returns error
+	t.Run("unknown_model", func(t *testing.T) {
+		_, err := getModelInfo("unknown-model-xyz")
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrUnknownModel)
+	})
+}
+
+func TestGetModelInfo_Categories(t *testing.T) {
 	tests := []struct {
 		model    string
-		expected modelCategory
+		category modelCategory
 	}{
 		// Non-reasoning models
 		{"gpt-4o", categoryNonReasoning},
@@ -440,26 +538,30 @@ func TestClassifyModel(t *testing.T) {
 		{"o1-mini", categoryPreGPT51},
 		{"o3", categoryPreGPT51},
 		{"o3-mini", categoryPreGPT51},
+		{"o4-mini", categoryPreGPT51},
 
 		// GPT-5.1 (supports none, but not minimal)
 		{"gpt-5.1", categoryGPT51},
 
 		// Pro models (only support high)
-		{"gpt-5-pro", categoryGPT5Pro},
-		{"gpt-5.2-pro", categoryGPT5Pro},
-		{"o1-pro", categoryGPT5Pro},
-		{"o3-pro", categoryGPT5Pro},
+		{"gpt-5-pro", categoryPro},
+		{"gpt-5.2-pro", categoryPro},
+		{"o1-pro", categoryPro},
+		{"o3-pro", categoryPro},
 
-		// Codex-max models (support xhigh)
-		{"gpt-5.1-codex", categoryCodexMax},
-		{"gpt-5.2-codex", categoryCodexMax},
-		{"gpt-5.1-codex-max", categoryCodexMax},
+		// Codex models (support xhigh)
+		{"gpt-5-codex", categoryCodex},
+		{"gpt-5.1-codex", categoryCodex},
+		{"gpt-5.2-codex", categoryCodex},
+		{"gpt-5.1-codex-max", categoryCodex},
+		{"gpt-5.1-codex-mini", categoryCodex},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.model, func(t *testing.T) {
-			got := classifyModel(tt.model)
-			assert.Equal(t, tt.expected, got, "model %s should be category %d", tt.model, tt.expected)
+			info, err := getModelInfo(tt.model)
+			require.NoError(t, err)
+			assert.Equal(t, tt.category, info.Category, "model %s should be category %d", tt.model, tt.category)
 		})
 	}
 }
