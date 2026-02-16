@@ -776,3 +776,68 @@ func TestBuildRequest_ReasoningEffortError(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "must be")
 }
+
+// --- Unit tests for prompt cache retention ---
+
+func TestBuildRequest_PromptCacheRetention_ExtendedSupported(t *testing.T) {
+	// Models that support extended cache should have prompt_cache_retention set to "24h"
+	models := []string{
+		"gpt-5", "gpt-5-mini", "gpt-5-nano", "gpt-5.1", "gpt-5.2",
+		"gpt-5-codex", "gpt-5.1-codex", "gpt-5.1-codex-max", "gpt-5.1-codex-mini", "gpt-5.2-codex",
+		"gpt-4.1", "gpt-4.1-mini", "gpt-4.1-nano",
+	}
+
+	for _, model := range models {
+		t.Run(model, func(t *testing.T) {
+			opts := llm.StreamOptions{
+				Model: model,
+				Messages: llm.Messages{
+					&llm.UserMsg{Content: "Hello"},
+				},
+			}
+
+			body, err := buildRequest(opts)
+			require.NoError(t, err)
+
+			var req map[string]any
+			err = json.Unmarshal(body, &req)
+			require.NoError(t, err)
+
+			assert.Equal(t, "24h", req["prompt_cache_retention"], "model %s should have extended cache enabled", model)
+		})
+	}
+}
+
+func TestBuildRequest_PromptCacheRetention_NotSupported(t *testing.T) {
+	// Models that don't support extended cache should not have the field set
+	models := []string{
+		"gpt-4o", "gpt-4o-mini",
+		"gpt-4", "gpt-4-turbo",
+		"gpt-3.5-turbo",
+		"o1", "o1-mini", "o1-pro",
+		"o3", "o3-mini", "o3-pro",
+		"o4-mini",
+		"gpt-5-pro", "gpt-5.2-pro",
+	}
+
+	for _, model := range models {
+		t.Run(model, func(t *testing.T) {
+			opts := llm.StreamOptions{
+				Model: model,
+				Messages: llm.Messages{
+					&llm.UserMsg{Content: "Hello"},
+				},
+			}
+
+			body, err := buildRequest(opts)
+			require.NoError(t, err)
+
+			var req map[string]any
+			err = json.Unmarshal(body, &req)
+			require.NoError(t, err)
+
+			_, exists := req["prompt_cache_retention"]
+			assert.False(t, exists, "model %s should not have prompt_cache_retention set", model)
+		})
+	}
+}

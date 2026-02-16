@@ -101,13 +101,14 @@ func (p *Provider) CreateStream(ctx context.Context, opts llm.StreamOptions) (<-
 // --- Request building ---
 
 type request struct {
-	Model           string           `json:"model"`
-	Messages        []messagePayload `json:"messages"`
-	Tools           []toolPayload    `json:"tools,omitempty"`
-	ToolChoice      any              `json:"tool_choice,omitempty"`
-	ReasoningEffort string           `json:"reasoning_effort,omitempty"`
-	Stream          bool             `json:"stream"`
-	StreamOptions   *streamOptions   `json:"stream_options,omitempty"`
+	Model                string           `json:"model"`
+	Messages             []messagePayload `json:"messages"`
+	Tools                []toolPayload    `json:"tools,omitempty"`
+	ToolChoice           any              `json:"tool_choice,omitempty"`
+	ReasoningEffort      string           `json:"reasoning_effort,omitempty"`
+	PromptCacheRetention string           `json:"prompt_cache_retention,omitempty"`
+	Stream               bool             `json:"stream"`
+	StreamOptions        *streamOptions   `json:"stream_options,omitempty"`
 }
 
 type streamOptions struct {
@@ -187,6 +188,11 @@ func buildRequest(opts llm.StreamOptions) ([]byte, error) {
 	}
 	if reasoningEffort != "" {
 		r.ReasoningEffort = reasoningEffort
+	}
+
+	// Set extended prompt cache retention for supported models
+	if info, err := getModelInfo(opts.Model); err == nil && info.SupportsExtendedCache {
+		r.PromptCacheRetention = "24h"
 	}
 
 	for _, msg := range opts.Messages {

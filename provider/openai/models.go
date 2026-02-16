@@ -19,61 +19,63 @@ const (
 
 // modelInfo contains metadata, pricing, and reasoning support for a model.
 type modelInfo struct {
-	ID               string        // API model ID
-	Name             string        // Human-readable name
-	InputPrice       float64       // USD per 1M input tokens
-	OutputPrice      float64       // USD per 1M output tokens
-	CachedInputPrice float64       // USD per 1M cached input tokens (0 if not supported)
-	Category         modelCategory // Reasoning support category
+	ID                    string        // API model ID
+	Name                  string        // Human-readable name
+	InputPrice            float64       // USD per 1M input tokens
+	OutputPrice           float64       // USD per 1M output tokens
+	CachedInputPrice      float64       // USD per 1M cached input tokens (0 if not supported)
+	Category              modelCategory // Reasoning support category
+	SupportsExtendedCache bool          // True if model supports 24h prompt cache retention
 }
 
 // modelRegistry maps model IDs to their info.
 // Pricing data sourced from LiteLLM: https://github.com/BerriAI/litellm
+// Extended cache support per OpenAI docs: gpt-5.2, gpt-5.1, gpt-5, gpt-4.1, and codex models
 var modelRegistry = map[string]modelInfo{
-	// GPT-4o series
+	// GPT-4o series (no extended cache support)
 	"gpt-4o":      {ID: "gpt-4o", Name: "GPT-4o", InputPrice: 2.50, OutputPrice: 10.00, CachedInputPrice: 1.25, Category: categoryNonReasoning},
 	"gpt-4o-mini": {ID: "gpt-4o-mini", Name: "GPT-4o Mini", InputPrice: 0.15, OutputPrice: 0.60, CachedInputPrice: 0.075, Category: categoryNonReasoning},
 
-	// GPT-4.1 series
-	"gpt-4.1":      {ID: "gpt-4.1", Name: "GPT-4.1", InputPrice: 2.00, OutputPrice: 8.00, CachedInputPrice: 0.50, Category: categoryNonReasoning},
-	"gpt-4.1-mini": {ID: "gpt-4.1-mini", Name: "GPT-4.1 Mini", InputPrice: 0.40, OutputPrice: 1.60, CachedInputPrice: 0.10, Category: categoryNonReasoning},
-	"gpt-4.1-nano": {ID: "gpt-4.1-nano", Name: "GPT-4.1 Nano", InputPrice: 0.10, OutputPrice: 0.40, CachedInputPrice: 0.025, Category: categoryNonReasoning},
+	// GPT-4.1 series (extended cache supported)
+	"gpt-4.1":      {ID: "gpt-4.1", Name: "GPT-4.1", InputPrice: 2.00, OutputPrice: 8.00, CachedInputPrice: 0.50, Category: categoryNonReasoning, SupportsExtendedCache: true},
+	"gpt-4.1-mini": {ID: "gpt-4.1-mini", Name: "GPT-4.1 Mini", InputPrice: 0.40, OutputPrice: 1.60, CachedInputPrice: 0.10, Category: categoryNonReasoning, SupportsExtendedCache: true},
+	"gpt-4.1-nano": {ID: "gpt-4.1-nano", Name: "GPT-4.1 Nano", InputPrice: 0.10, OutputPrice: 0.40, CachedInputPrice: 0.025, Category: categoryNonReasoning, SupportsExtendedCache: true},
 
-	// GPT-4 series (legacy)
+	// GPT-4 series (legacy, no extended cache support)
 	"gpt-4-turbo": {ID: "gpt-4-turbo", Name: "GPT-4 Turbo", InputPrice: 10.00, OutputPrice: 30.00, CachedInputPrice: 0, Category: categoryNonReasoning},
 	"gpt-4":       {ID: "gpt-4", Name: "GPT-4", InputPrice: 30.00, OutputPrice: 60.00, CachedInputPrice: 0, Category: categoryNonReasoning},
 
-	// GPT-3.5 series (legacy)
+	// GPT-3.5 series (legacy, no extended cache support)
 	"gpt-3.5-turbo": {ID: "gpt-3.5-turbo", Name: "GPT-3.5 Turbo", InputPrice: 0.50, OutputPrice: 1.50, CachedInputPrice: 0, Category: categoryNonReasoning},
 
-	// GPT-5 series (pre-5.1 reasoning: supports minimal, low, medium, high)
-	"gpt-5":      {ID: "gpt-5", Name: "GPT-5", InputPrice: 1.25, OutputPrice: 10.00, CachedInputPrice: 0.125, Category: categoryPreGPT51},
-	"gpt-5-mini": {ID: "gpt-5-mini", Name: "GPT-5 Mini", InputPrice: 0.25, OutputPrice: 2.00, CachedInputPrice: 0.025, Category: categoryPreGPT51},
-	"gpt-5-nano": {ID: "gpt-5-nano", Name: "GPT-5 Nano", InputPrice: 0.05, OutputPrice: 0.40, CachedInputPrice: 0.005, Category: categoryPreGPT51},
-	"gpt-5.2":    {ID: "gpt-5.2", Name: "GPT-5.2", InputPrice: 1.75, OutputPrice: 14.00, CachedInputPrice: 0.175, Category: categoryPreGPT51},
+	// GPT-5 series (extended cache supported)
+	"gpt-5":      {ID: "gpt-5", Name: "GPT-5", InputPrice: 1.25, OutputPrice: 10.00, CachedInputPrice: 0.125, Category: categoryPreGPT51, SupportsExtendedCache: true},
+	"gpt-5-mini": {ID: "gpt-5-mini", Name: "GPT-5 Mini", InputPrice: 0.25, OutputPrice: 2.00, CachedInputPrice: 0.025, Category: categoryPreGPT51, SupportsExtendedCache: true},
+	"gpt-5-nano": {ID: "gpt-5-nano", Name: "GPT-5 Nano", InputPrice: 0.05, OutputPrice: 0.40, CachedInputPrice: 0.005, Category: categoryPreGPT51, SupportsExtendedCache: true},
+	"gpt-5.2":    {ID: "gpt-5.2", Name: "GPT-5.2", InputPrice: 1.75, OutputPrice: 14.00, CachedInputPrice: 0.175, Category: categoryPreGPT51, SupportsExtendedCache: true},
 
-	// GPT-5.1 (supports none, low, medium, high - NOT minimal)
-	"gpt-5.1": {ID: "gpt-5.1", Name: "GPT-5.1", InputPrice: 1.25, OutputPrice: 10.00, CachedInputPrice: 0.125, Category: categoryGPT51},
+	// GPT-5.1 (extended cache supported)
+	"gpt-5.1": {ID: "gpt-5.1", Name: "GPT-5.1", InputPrice: 1.25, OutputPrice: 10.00, CachedInputPrice: 0.125, Category: categoryGPT51, SupportsExtendedCache: true},
 
-	// GPT-5 Pro models (only support high)
+	// GPT-5 Pro models (no extended cache support per docs)
 	"gpt-5-pro":   {ID: "gpt-5-pro", Name: "GPT-5 Pro", InputPrice: 15.00, OutputPrice: 120.00, CachedInputPrice: 0, Category: categoryPro},
 	"gpt-5.2-pro": {ID: "gpt-5.2-pro", Name: "GPT-5.2 Pro", InputPrice: 21.00, OutputPrice: 168.00, CachedInputPrice: 0, Category: categoryPro},
 
-	// Codex models (support xhigh)
-	"gpt-5-codex":        {ID: "gpt-5-codex", Name: "GPT-5 Codex", InputPrice: 1.25, OutputPrice: 10.00, CachedInputPrice: 0.125, Category: categoryCodex},
-	"gpt-5.1-codex":      {ID: "gpt-5.1-codex", Name: "GPT-5.1 Codex", InputPrice: 1.25, OutputPrice: 10.00, CachedInputPrice: 0.125, Category: categoryCodex},
-	"gpt-5.1-codex-max":  {ID: "gpt-5.1-codex-max", Name: "GPT-5.1 Codex Max", InputPrice: 1.25, OutputPrice: 10.00, CachedInputPrice: 0.125, Category: categoryCodex},
-	"gpt-5.1-codex-mini": {ID: "gpt-5.1-codex-mini", Name: "GPT-5.1 Codex Mini", InputPrice: 0.25, OutputPrice: 2.00, CachedInputPrice: 0.025, Category: categoryCodex},
-	"gpt-5.2-codex":      {ID: "gpt-5.2-codex", Name: "GPT-5.2 Codex", InputPrice: 1.75, OutputPrice: 14.00, CachedInputPrice: 0.175, Category: categoryCodex},
+	// Codex models (extended cache supported)
+	"gpt-5-codex":        {ID: "gpt-5-codex", Name: "GPT-5 Codex", InputPrice: 1.25, OutputPrice: 10.00, CachedInputPrice: 0.125, Category: categoryCodex, SupportsExtendedCache: true},
+	"gpt-5.1-codex":      {ID: "gpt-5.1-codex", Name: "GPT-5.1 Codex", InputPrice: 1.25, OutputPrice: 10.00, CachedInputPrice: 0.125, Category: categoryCodex, SupportsExtendedCache: true},
+	"gpt-5.1-codex-max":  {ID: "gpt-5.1-codex-max", Name: "GPT-5.1 Codex Max", InputPrice: 1.25, OutputPrice: 10.00, CachedInputPrice: 0.125, Category: categoryCodex, SupportsExtendedCache: true},
+	"gpt-5.1-codex-mini": {ID: "gpt-5.1-codex-mini", Name: "GPT-5.1 Codex Mini", InputPrice: 0.25, OutputPrice: 2.00, CachedInputPrice: 0.025, Category: categoryCodex, SupportsExtendedCache: true},
+	"gpt-5.2-codex":      {ID: "gpt-5.2-codex", Name: "GPT-5.2 Codex", InputPrice: 1.75, OutputPrice: 14.00, CachedInputPrice: 0.175, Category: categoryCodex, SupportsExtendedCache: true},
 
-	// o-series reasoning models
+	// o-series reasoning models (no extended cache support)
 	"o1":      {ID: "o1", Name: "o1", InputPrice: 15.00, OutputPrice: 60.00, CachedInputPrice: 7.50, Category: categoryPreGPT51},
 	"o1-mini": {ID: "o1-mini", Name: "o1 Mini", InputPrice: 1.10, OutputPrice: 4.40, CachedInputPrice: 0.55, Category: categoryPreGPT51},
 	"o3":      {ID: "o3", Name: "o3", InputPrice: 2.00, OutputPrice: 8.00, CachedInputPrice: 0.50, Category: categoryPreGPT51},
 	"o3-mini": {ID: "o3-mini", Name: "o3 Mini", InputPrice: 1.10, OutputPrice: 4.40, CachedInputPrice: 0.55, Category: categoryPreGPT51},
 	"o4-mini": {ID: "o4-mini", Name: "o4 Mini", InputPrice: 1.10, OutputPrice: 4.40, CachedInputPrice: 0.275, Category: categoryPreGPT51},
 
-	// o-series Pro models (only support high)
+	// o-series Pro models (no extended cache support)
 	"o1-pro": {ID: "o1-pro", Name: "o1 Pro", InputPrice: 150.00, OutputPrice: 600.00, CachedInputPrice: 0, Category: categoryPro},
 	"o3-pro": {ID: "o3-pro", Name: "o3 Pro", InputPrice: 20.00, OutputPrice: 80.00, CachedInputPrice: 0, Category: categoryPro},
 }
