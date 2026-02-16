@@ -17,6 +17,22 @@ type ToolDefinition struct {
 	Parameters  map[string]any `json:"parameters"`
 }
 
+// Validate checks that the tool definition is valid.
+func (t ToolDefinition) Validate() error {
+	if t.Name == "" {
+		return errors.New("tool definition: name is required")
+	}
+	if t.Parameters != nil {
+		// Parameters must have "type": "object" if present
+		if typ, ok := t.Parameters["type"]; ok {
+			if typ != "object" {
+				return fmt.Errorf("tool definition %q: parameters type must be \"object\", got %q", t.Name, typ)
+			}
+		}
+	}
+	return nil
+}
+
 // ToolDefinitionFor creates a ToolDefinition from a Go struct type using reflection.
 // The struct's fields are converted to a JSON Schema that describes the tool's parameters.
 //

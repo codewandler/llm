@@ -9,8 +9,8 @@ import (
 
 func TestStreamOptions_Validate(t *testing.T) {
 	validTools := []ToolDefinition{
-		{Name: "get_weather", Description: "Get weather", Parameters: map[string]any{}},
-		{Name: "send_email", Description: "Send email", Parameters: map[string]any{}},
+		{Name: "get_weather", Description: "Get weather", Parameters: map[string]any{"type": "object"}},
+		{Name: "send_email", Description: "Send email", Parameters: map[string]any{"type": "object"}},
 	}
 
 	tests := []struct {
@@ -23,6 +23,59 @@ func TestStreamOptions_Validate(t *testing.T) {
 			opts: StreamOptions{
 				Model:    "gpt-4",
 				Messages: Messages{&UserMsg{Content: "Hello"}},
+			},
+			wantErr: "",
+		},
+		{
+			name: "invalid - empty model",
+			opts: StreamOptions{
+				Model:    "",
+				Messages: Messages{&UserMsg{Content: "Hello"}},
+			},
+			wantErr: "Model is required",
+		},
+		{
+			name: "invalid - bad ReasoningEffort",
+			opts: StreamOptions{
+				Model:           "gpt-4",
+				Messages:        Messages{&UserMsg{Content: "Hello"}},
+				ReasoningEffort: "invalid_value",
+			},
+			wantErr: `invalid ReasoningEffort "invalid_value"`,
+		},
+		{
+			name: "valid - ReasoningEffort empty (default)",
+			opts: StreamOptions{
+				Model:           "gpt-4",
+				Messages:        Messages{&UserMsg{Content: "Hello"}},
+				ReasoningEffort: "",
+			},
+			wantErr: "",
+		},
+		{
+			name: "invalid - tool without name",
+			opts: StreamOptions{
+				Model:    "gpt-4",
+				Messages: Messages{&UserMsg{Content: "Hello"}},
+				Tools:    []ToolDefinition{{Name: "", Description: "No name"}},
+			},
+			wantErr: "tools[0]: tool definition: name is required",
+		},
+		{
+			name: "invalid - tool parameters not object type",
+			opts: StreamOptions{
+				Model:    "gpt-4",
+				Messages: Messages{&UserMsg{Content: "Hello"}},
+				Tools:    []ToolDefinition{{Name: "bad_tool", Parameters: map[string]any{"type": "string"}}},
+			},
+			wantErr: `tool definition "bad_tool": parameters type must be "object"`,
+		},
+		{
+			name: "valid - tool with nil parameters",
+			opts: StreamOptions{
+				Model:    "gpt-4",
+				Messages: Messages{&UserMsg{Content: "Hello"}},
+				Tools:    []ToolDefinition{{Name: "simple_tool", Description: "No params"}},
 			},
 			wantErr: "",
 		},
@@ -157,4 +210,74 @@ func TestStreamOptions_WithReasoningEffort(t *testing.T) {
 	err := opts.Validate()
 	require.NoError(t, err)
 	assert.Equal(t, ReasoningEffortLow, opts.ReasoningEffort)
+}
+
+func TestReasoningEffort_Valid(t *testing.T) {
+	tests := []struct {
+		effort ReasoningEffort
+		want   bool
+	}{
+		{"", true},
+		{ReasoningEffortNone, true},
+		{ReasoningEffortMinimal, true},
+		{ReasoningEffortLow, true},
+		{ReasoningEffortMedium, true},
+		{ReasoningEffortHigh, true},
+		{ReasoningEffortXHigh, true},
+		{"invalid", false},
+		{"MEDIUM", false}, // case sensitive
+		{"max", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(string(tt.effort), func(t *testing.T) {
+			assert.Equal(t, tt.want, tt.effort.Valid())
+		})
+	}
+}
+
+func TestToolDefinition_Validate(t *testing.T) {
+	tests := []struct {
+		name    string
+		tool    ToolDefinition
+		wantErr string
+	}{
+		{
+			name:    "valid - with parameters",
+			tool:    ToolDefinition{Name: "get_weather", Parameters: map[string]any{"type": "object"}},
+			wantErr: "",
+		},
+		{
+			name:    "valid - nil parameters",
+			tool:    ToolDefinition{Name: "simple_tool"},
+			wantErr: "",
+		},
+		{
+			name:    "valid - empty parameters map",
+			tool:    ToolDefinition{Name: "empty_params", Parameters: map[string]any{}},
+			wantErr: "",
+		},
+		{
+			name:    "invalid - empty name",
+			tool:    ToolDefinition{Name: ""},
+			wantErr: "name is required",
+		},
+		{
+			name:    "invalid - parameters type not object",
+			tool:    ToolDefinition{Name: "bad_tool", Parameters: map[string]any{"type": "array"}},
+			wantErr: `parameters type must be "object"`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.tool.Validate()
+			if tt.wantErr == "" {
+				require.NoError(t, err)
+			} else {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tt.wantErr)
+			}
+		})
+	}
 }

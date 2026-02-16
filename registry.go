@@ -70,6 +70,9 @@ func (r *Registry) FetchModels(ctx context.Context, name string) ([]Model, error
 
 // CreateStream is a convenience that resolves a model ref and delegates to the provider.
 func (r *Registry) CreateStream(ctx context.Context, opts StreamOptions) (<-chan StreamEvent, error) {
+	if err := opts.Validate(); err != nil {
+		return nil, fmt.Errorf("invalid options: %w", err)
+	}
 	p, modelID, err := r.ResolveModel(opts.Model)
 	if err != nil {
 		return nil, err

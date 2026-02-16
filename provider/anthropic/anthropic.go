@@ -134,6 +134,9 @@ func (p *Provider) refreshToken(ctx context.Context) error {
 }
 
 func (p *Provider) CreateStream(ctx context.Context, opts llm.StreamOptions) (<-chan llm.StreamEvent, error) {
+	if err := opts.Validate(); err != nil {
+		return nil, fmt.Errorf("invalid options: %w", err)
+	}
 	oauth := p.isOAuth()
 
 	token, err := p.getAccessToken(ctx)

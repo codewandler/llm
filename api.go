@@ -245,6 +245,17 @@ const (
 	ReasoningEffortXHigh ReasoningEffort = "xhigh"
 )
 
+// Valid returns true if the ReasoningEffort is a known valid value or empty.
+func (r ReasoningEffort) Valid() bool {
+	switch r {
+	case "", ReasoningEffortNone, ReasoningEffortMinimal, ReasoningEffortLow,
+		ReasoningEffortMedium, ReasoningEffortHigh, ReasoningEffortXHigh:
+		return true
+	default:
+		return false
+	}
+}
+
 // --- Messages Wrapper ---
 
 // Messages is a slice of Message with JSON unmarshal support.

@@ -90,6 +90,9 @@ func (p *Provider) Models() []llm.Model {
 }
 
 func (p *Provider) CreateStream(ctx context.Context, opts llm.StreamOptions) (<-chan llm.StreamEvent, error) {
+	if err := opts.Validate(); err != nil {
+		return nil, fmt.Errorf("invalid options: %w", err)
+	}
 	body, err := buildRequest(opts)
 	if err != nil {
 		return nil, fmt.Errorf("build request: %w", err)

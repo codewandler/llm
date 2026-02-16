@@ -67,6 +67,23 @@ type StreamOptions struct {
 
 // Validate checks that the options are valid.
 func (o StreamOptions) Validate() error {
+	// Validate Model
+	if o.Model == "" {
+		return errors.New("Model is required")
+	}
+
+	// Validate ReasoningEffort
+	if !o.ReasoningEffort.Valid() {
+		return fmt.Errorf("invalid ReasoningEffort %q", o.ReasoningEffort)
+	}
+
+	// Validate Tools
+	for i, tool := range o.Tools {
+		if err := tool.Validate(); err != nil {
+			return fmt.Errorf("tools[%d]: %w", i, err)
+		}
+	}
+
 	// Validate messages
 	for i, msg := range o.Messages {
 		if err := msg.Validate(); err != nil {
