@@ -36,6 +36,10 @@ func TestBuildRequest_Basic(t *testing.T) {
 	require.Len(t, req.Messages, 1)
 	assert.Equal(t, "user", req.Messages[0].Role)
 	assert.Equal(t, "Hello", req.Messages[0].Content)
+
+	// Verify stream_options is set for usage
+	require.NotNil(t, req.StreamOptions)
+	assert.True(t, req.StreamOptions.IncludeUsage)
 }
 
 func TestBuildRequest_WithTools(t *testing.T) {
@@ -210,6 +214,30 @@ data: [DONE]
 	assert.Equal(t, 10, usage.InputTokens)
 	assert.Equal(t, 5, usage.OutputTokens)
 	assert.Equal(t, 15, usage.TotalTokens)
+}
+
+func TestParseStream_UsageWithDetails(t *testing.T) {
+	sseData := `data: {"choices":[{"delta":{"content":"test"}}]}
+data: {"choices":[],"usage":{"prompt_tokens":100,"completion_tokens":50,"total_tokens":150,"prompt_tokens_details":{"cached_tokens":80},"completion_tokens_details":{"reasoning_tokens":30}}}
+data: [DONE]
+`
+
+	events := make(chan llm.StreamEvent, 64)
+	go parseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), events)
+
+	var usage *llm.Usage
+	for event := range events {
+		if event.Type == llm.StreamEventDone && event.Usage != nil {
+			usage = event.Usage
+		}
+	}
+
+	require.NotNil(t, usage)
+	assert.Equal(t, 100, usage.InputTokens)
+	assert.Equal(t, 50, usage.OutputTokens)
+	assert.Equal(t, 150, usage.TotalTokens)
+	assert.Equal(t, 80, usage.CachedTokens)
+	assert.Equal(t, 30, usage.ReasoningTokens)
 }
 
 // --- Integration tests (require OPENAI_KEY) ---

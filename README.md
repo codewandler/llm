@@ -646,6 +646,50 @@ const (
 )
 ```
 
+### Usage Information
+
+The `Usage` struct provides token counts and detailed breakdown:
+
+```go
+type Usage struct {
+    InputTokens     int     // Prompt tokens
+    OutputTokens    int     // Completion tokens
+    TotalTokens     int     // Total tokens
+    Cost            float64 // Cost in USD (OpenRouter only)
+
+    // Detailed breakdown (provider-specific, may be zero)
+    CachedTokens    int // Prompt tokens served from cache
+    ReasoningTokens int // Tokens used for model reasoning
+}
+```
+
+**Usage in streaming:**
+
+```go
+for event := range stream {
+    if event.Type == llm.StreamEventDone && event.Usage != nil {
+        fmt.Printf("Tokens: %d in, %d out\n",
+            event.Usage.InputTokens, event.Usage.OutputTokens)
+
+        if event.Usage.CachedTokens > 0 {
+            fmt.Printf("Cache hit: %d tokens\n", event.Usage.CachedTokens)
+        }
+        if event.Usage.ReasoningTokens > 0 {
+            fmt.Printf("Reasoning: %d tokens\n", event.Usage.ReasoningTokens)
+        }
+    }
+}
+```
+
+| Field | Description | Providers |
+|-------|-------------|-----------|
+| `InputTokens` | Prompt tokens | All |
+| `OutputTokens` | Completion tokens | All |
+| `TotalTokens` | Total tokens | All |
+| `Cost` | Cost in USD | OpenRouter |
+| `CachedTokens` | Tokens served from prompt cache | OpenAI, OpenRouter |
+| `ReasoningTokens` | Tokens used for reasoning | OpenAI, OpenRouter (reasoning models) |
+
 ## Error Handling
 
 ```go

@@ -236,6 +236,11 @@ type request struct {
 	ToolChoice      any              `json:"tool_choice,omitempty"`
 	ReasoningEffort string           `json:"reasoning_effort,omitempty"`
 	Stream          bool             `json:"stream"`
+	StreamOptions   *streamOptions   `json:"stream_options,omitempty"`
+}
+
+type streamOptions struct {
+	IncludeUsage bool `json:"include_usage"`
 }
 
 type messagePayload struct {
@@ -269,8 +274,9 @@ type functionPayload struct {
 
 func buildRequest(opts llm.StreamOptions) ([]byte, error) {
 	r := request{
-		Model:  opts.Model,
-		Stream: true,
+		Model:         opts.Model,
+		Stream:        true,
+		StreamOptions: &streamOptions{IncludeUsage: true},
 	}
 
 	for _, t := range opts.Tools {
@@ -375,9 +381,15 @@ type streamChunk struct {
 		FinishReason *string `json:"finish_reason"`
 	} `json:"choices"`
 	Usage *struct {
-		PromptTokens     int `json:"prompt_tokens"`
-		CompletionTokens int `json:"completion_tokens"`
-		TotalTokens      int `json:"total_tokens"`
+		PromptTokens        int `json:"prompt_tokens"`
+		CompletionTokens    int `json:"completion_tokens"`
+		TotalTokens         int `json:"total_tokens"`
+		PromptTokensDetails *struct {
+			CachedTokens int `json:"cached_tokens"`
+		} `json:"prompt_tokens_details,omitempty"`
+		CompletionTokensDetails *struct {
+			ReasoningTokens int `json:"reasoning_tokens"`
+		} `json:"completion_tokens_details,omitempty"`
 	} `json:"usage,omitempty"`
 }
 
@@ -434,6 +446,12 @@ func parseStream(ctx context.Context, body io.ReadCloser, events chan<- llm.Stre
 				InputTokens:  chunk.Usage.PromptTokens,
 				OutputTokens: chunk.Usage.CompletionTokens,
 				TotalTokens:  chunk.Usage.TotalTokens,
+			}
+			if chunk.Usage.PromptTokensDetails != nil {
+				finalUsage.CachedTokens = chunk.Usage.PromptTokensDetails.CachedTokens
+			}
+			if chunk.Usage.CompletionTokensDetails != nil {
+				finalUsage.ReasoningTokens = chunk.Usage.CompletionTokensDetails.ReasoningTokens
 			}
 		}
 

@@ -135,7 +135,12 @@ type request struct {
 	ToolChoice       any              `json:"tool_choice,omitempty"`
 	ReasoningEffort  string           `json:"reasoning_effort,omitempty"`
 	Stream           bool             `json:"stream"`
+	StreamOptions    *streamOptions   `json:"stream_options,omitempty"`
 	IncludeReasoning bool             `json:"include_reasoning,omitempty"`
+}
+
+type streamOptions struct {
+	IncludeUsage bool `json:"include_usage"`
 }
 
 type messagePayload struct {
@@ -171,6 +176,7 @@ func buildRequest(opts llm.StreamOptions) ([]byte, error) {
 	r := request{
 		Model:            opts.Model,
 		Stream:           true,
+		StreamOptions:    &streamOptions{IncludeUsage: true},
 		IncludeReasoning: true,
 	}
 
@@ -265,10 +271,16 @@ type streamChunk struct {
 		FinishReason *string `json:"finish_reason,omitempty"`
 	} `json:"choices"`
 	Usage *struct {
-		PromptTokens     int     `json:"prompt_tokens"`
-		CompletionTokens int     `json:"completion_tokens"`
-		TotalTokens      int     `json:"total_tokens"`
-		Cost             float64 `json:"cost"`
+		PromptTokens        int     `json:"prompt_tokens"`
+		CompletionTokens    int     `json:"completion_tokens"`
+		TotalTokens         int     `json:"total_tokens"`
+		Cost                float64 `json:"cost"`
+		PromptTokensDetails *struct {
+			CachedTokens int `json:"cached_tokens"`
+		} `json:"prompt_tokens_details,omitempty"`
+		CompletionTokensDetails *struct {
+			ReasoningTokens int `json:"reasoning_tokens"`
+		} `json:"completion_tokens_details,omitempty"`
 	} `json:"usage,omitempty"`
 	Error *struct {
 		Message string `json:"message"`
@@ -347,6 +359,12 @@ func parseStream(ctx context.Context, body io.ReadCloser, events chan<- llm.Stre
 				OutputTokens: chunk.Usage.CompletionTokens,
 				TotalTokens:  chunk.Usage.TotalTokens,
 				Cost:         chunk.Usage.Cost,
+			}
+			if chunk.Usage.PromptTokensDetails != nil {
+				usage.CachedTokens = chunk.Usage.PromptTokensDetails.CachedTokens
+			}
+			if chunk.Usage.CompletionTokensDetails != nil {
+				usage.ReasoningTokens = chunk.Usage.CompletionTokensDetails.ReasoningTokens
 			}
 		}
 

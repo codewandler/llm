@@ -44,6 +44,10 @@ type Usage struct {
 	OutputTokens int
 	TotalTokens  int
 	Cost         float64
+
+	// Detailed breakdown (provider-specific, may be zero)
+	CachedTokens    int // Prompt tokens served from cache
+	ReasoningTokens int // Tokens used for model reasoning
 }
 
 // StreamEvent is a single event emitted by a provider during streaming.

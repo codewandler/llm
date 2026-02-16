@@ -41,6 +41,8 @@ func TestBuildRequest_ToolDefinitions(t *testing.T) {
 	assert.Equal(t, "test/model", req.Model)
 	assert.True(t, req.Stream)
 	assert.True(t, req.IncludeReasoning)
+	require.NotNil(t, req.StreamOptions)
+	assert.True(t, req.StreamOptions.IncludeUsage)
 	require.Len(t, req.Tools, 1)
 
 	tool := req.Tools[0]
@@ -364,6 +366,31 @@ data: [DONE]
 	assert.Equal(t, 5, usage.OutputTokens)
 	assert.Equal(t, 15, usage.TotalTokens)
 	assert.Equal(t, 0.001, usage.Cost)
+}
+
+func TestParseStream_UsageWithDetails(t *testing.T) {
+	sseData := `data: {"choices":[{"delta":{"content":"test"}}]}
+data: {"choices":[],"usage":{"prompt_tokens":100,"completion_tokens":50,"total_tokens":150,"cost":0.005,"prompt_tokens_details":{"cached_tokens":80},"completion_tokens_details":{"reasoning_tokens":30}}}
+data: [DONE]
+`
+
+	events := make(chan llm.StreamEvent, 64)
+	go parseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), events)
+
+	var usage *llm.Usage
+	for event := range events {
+		if event.Type == llm.StreamEventDone && event.Usage != nil {
+			usage = event.Usage
+		}
+	}
+
+	require.NotNil(t, usage)
+	assert.Equal(t, 100, usage.InputTokens)
+	assert.Equal(t, 50, usage.OutputTokens)
+	assert.Equal(t, 150, usage.TotalTokens)
+	assert.Equal(t, 0.005, usage.Cost)
+	assert.Equal(t, 80, usage.CachedTokens)
+	assert.Equal(t, 30, usage.ReasoningTokens)
 }
 
 func TestParseStream_ErrorHandling(t *testing.T) {
