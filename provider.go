@@ -2,6 +2,8 @@ package llm
 
 import (
 	"context"
+	"errors"
+	"fmt"
 )
 
 // ProviderConfig holds authentication and configuration for a provider.
@@ -56,9 +58,43 @@ type StreamEvent struct {
 
 // StreamOptions configures a provider CreateStream call.
 type StreamOptions struct {
-	Model    string
-	Messages Messages
-	Tools    []ToolDefinition
+	Model      string
+	Messages   Messages
+	Tools      []ToolDefinition
+	ToolChoice ToolChoice // nil defaults to Auto when Tools provided
+}
+
+// Validate checks that the options are valid.
+func (o StreamOptions) Validate() error {
+	// Validate messages
+	for i, msg := range o.Messages {
+		if err := msg.Validate(); err != nil {
+			return fmt.Errorf("messages[%d]: %w", i, err)
+		}
+	}
+
+	// Validate ToolChoice
+	if o.ToolChoice != nil && len(o.Tools) == 0 {
+		return errors.New("ToolChoice set but no Tools provided")
+	}
+
+	if tc, ok := o.ToolChoice.(ToolChoiceTool); ok {
+		if tc.Name == "" {
+			return errors.New("ToolChoiceTool.Name is required")
+		}
+		found := false
+		for _, t := range o.Tools {
+			if t.Name == tc.Name {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return fmt.Errorf("ToolChoiceTool references unknown tool %q", tc.Name)
+		}
+	}
+
+	return nil
 }
 
 // Provider is the interface each LLM backend must implement.

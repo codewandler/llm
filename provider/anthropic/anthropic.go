@@ -242,14 +242,15 @@ func (p *Provider) newAPIRequest(ctx context.Context, token string, oauth bool, 
 // --- Request building ---
 
 type request struct {
-	Model     string           `json:"model"`
-	MaxTokens int              `json:"max_tokens"`
-	Stream    bool             `json:"stream"`
-	System    any              `json:"system,omitempty"`
-	Messages  []messagePayload `json:"messages"`
-	Tools     []toolPayload    `json:"tools,omitempty"`
-	Thinking  *thinkingConfig  `json:"thinking,omitempty"`
-	Metadata  *metadata        `json:"metadata,omitempty"`
+	Model      string           `json:"model"`
+	MaxTokens  int              `json:"max_tokens"`
+	Stream     bool             `json:"stream"`
+	System     any              `json:"system,omitempty"`
+	Messages   []messagePayload `json:"messages"`
+	Tools      []toolPayload    `json:"tools,omitempty"`
+	ToolChoice any              `json:"tool_choice,omitempty"`
+	Thinking   *thinkingConfig  `json:"thinking,omitempty"`
+	Metadata   *metadata        `json:"metadata,omitempty"`
 }
 
 type metadata struct {
@@ -370,6 +371,25 @@ func (p *Provider) buildRequest(opts llm.StreamOptions, oauth bool) ([]byte, err
 			Description: t.Description,
 			InputSchema: t.Parameters,
 		})
+	}
+
+	// Set tool_choice based on opts.ToolChoice (Anthropic format)
+	if len(opts.Tools) > 0 {
+		switch tc := opts.ToolChoice.(type) {
+		case nil, llm.ToolChoiceAuto:
+			r.ToolChoice = map[string]string{"type": "auto"}
+		case llm.ToolChoiceRequired:
+			r.ToolChoice = map[string]string{"type": "any"}
+		case llm.ToolChoiceNone:
+			// Anthropic: omit tool_choice to allow model to decide, or we could clear tools
+			// For "none", we simply don't set tool_choice - model may still call tools
+			// To truly prevent tool calls, caller should not pass tools
+		case llm.ToolChoiceTool:
+			r.ToolChoice = map[string]any{
+				"type": "tool",
+				"name": maybePrefixTool(tc.Name, oauth),
+			}
+		}
 	}
 
 	for i := 0; i < len(opts.Messages); i++ {

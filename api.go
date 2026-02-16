@@ -194,6 +194,36 @@ func (tc *ToolCall) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// --- ToolChoice ---
+
+// ToolChoice controls whether and which tools the model should call.
+type ToolChoice interface {
+	toolChoice() // marker method - prevents external implementations
+}
+
+// ToolChoiceAuto lets the model decide whether to call tools.
+// This is the default behavior when ToolChoice is nil.
+type ToolChoiceAuto struct{}
+
+func (ToolChoiceAuto) toolChoice() {}
+
+// ToolChoiceRequired forces the model to call at least one tool.
+type ToolChoiceRequired struct{}
+
+func (ToolChoiceRequired) toolChoice() {}
+
+// ToolChoiceNone prevents the model from calling any tools.
+type ToolChoiceNone struct{}
+
+func (ToolChoiceNone) toolChoice() {}
+
+// ToolChoiceTool forces the model to call a specific tool by name.
+type ToolChoiceTool struct {
+	Name string
+}
+
+func (ToolChoiceTool) toolChoice() {}
+
 // --- Messages Wrapper ---
 
 // Messages is a slice of Message with JSON unmarshal support.

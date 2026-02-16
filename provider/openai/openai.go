@@ -122,10 +122,11 @@ func (p *Provider) CreateStream(ctx context.Context, opts llm.StreamOptions) (<-
 // --- Request building ---
 
 type request struct {
-	Model    string           `json:"model"`
-	Messages []messagePayload `json:"messages"`
-	Tools    []toolPayload    `json:"tools,omitempty"`
-	Stream   bool             `json:"stream"`
+	Model      string           `json:"model"`
+	Messages   []messagePayload `json:"messages"`
+	Tools      []toolPayload    `json:"tools,omitempty"`
+	ToolChoice any              `json:"tool_choice,omitempty"`
+	Stream     bool             `json:"stream"`
 }
 
 type messagePayload struct {
@@ -172,6 +173,25 @@ func buildRequest(opts llm.StreamOptions) ([]byte, error) {
 				Parameters:  t.Parameters,
 			},
 		})
+	}
+
+	// Set tool_choice based on opts.ToolChoice
+	if len(opts.Tools) > 0 {
+		switch tc := opts.ToolChoice.(type) {
+		case nil, llm.ToolChoiceAuto:
+			r.ToolChoice = "auto"
+		case llm.ToolChoiceRequired:
+			r.ToolChoice = "required"
+		case llm.ToolChoiceNone:
+			r.ToolChoice = "none"
+		case llm.ToolChoiceTool:
+			r.ToolChoice = map[string]any{
+				"type": "function",
+				"function": map[string]string{
+					"name": tc.Name,
+				},
+			}
+		}
 	}
 
 	for _, msg := range opts.Messages {

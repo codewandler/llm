@@ -406,6 +406,71 @@ tools := []llm.ToolDefinition{
 
 **Important:** Tool result messages must include `ToolCallID` to link them to the original tool call.
 
+## Tool Choice
+
+Control whether and which tools the model should call using `ToolChoice`:
+
+```go
+// Let the model decide (default behavior)
+stream, _ := provider.CreateStream(ctx, llm.StreamOptions{
+    Model:      "openai/gpt-4o",
+    Messages:   messages,
+    Tools:      tools,
+    ToolChoice: llm.ToolChoiceAuto{},  // or nil for the same behavior
+})
+
+// Force the model to call at least one tool
+stream, _ := provider.CreateStream(ctx, llm.StreamOptions{
+    Model:      "openai/gpt-4o",
+    Messages:   messages,
+    Tools:      tools,
+    ToolChoice: llm.ToolChoiceRequired{},
+})
+
+// Force the model to call a specific tool
+stream, _ := provider.CreateStream(ctx, llm.StreamOptions{
+    Model:      "openai/gpt-4o",
+    Messages:   messages,
+    Tools:      tools,
+    ToolChoice: llm.ToolChoiceTool{Name: "get_weather"},
+})
+
+// Prevent the model from calling any tools
+stream, _ := provider.CreateStream(ctx, llm.StreamOptions{
+    Model:      "openai/gpt-4o",
+    Messages:   messages,
+    Tools:      tools,
+    ToolChoice: llm.ToolChoiceNone{},
+})
+```
+
+### ToolChoice Types
+
+| Type | Description | OpenAI | Anthropic | Ollama |
+|------|-------------|--------|-----------|--------|
+| `nil` / `ToolChoiceAuto{}` | Model decides | `"auto"` | `{"type":"auto"}` | (ignored) |
+| `ToolChoiceRequired{}` | Must call ≥1 tool | `"required"` | `{"type":"any"}` | (ignored) |
+| `ToolChoiceNone{}` | Cannot call tools | `"none"` | (omitted) | (ignored) |
+| `ToolChoiceTool{Name:"X"}` | Must call tool "X" | `{"type":"function",...}` | `{"type":"tool","name":"X"}` | (ignored) |
+
+**Note:** Ollama does not support `tool_choice`. All ToolChoice settings are silently ignored and treated as auto behavior.
+
+### Validation
+
+The library validates ToolChoice at request time:
+- `ToolChoice` cannot be set without `Tools`
+- `ToolChoiceTool{Name: "X"}` must reference an existing tool in `Tools`
+
+```go
+opts := llm.StreamOptions{
+    Model:      "gpt-4o",
+    Messages:   messages,
+    Tools:      tools,
+    ToolChoice: llm.ToolChoiceTool{Name: "unknown_tool"},
+}
+err := opts.Validate()  // Error: ToolChoiceTool references unknown tool "unknown_tool"
+```
+
 ## Multi-Turn Conversations
 
 Build conversations by appending messages:

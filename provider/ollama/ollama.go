@@ -285,6 +285,9 @@ func buildRequest(opts llm.StreamOptions) ([]byte, error) {
 		Stream: true,
 	}
 
+	// Note: Ollama does not support tool_choice parameter.
+	// All ToolChoice settings are silently ignored (treated as auto).
+
 	for _, t := range opts.Tools {
 		r.Tools = append(r.Tools, toolPayload{
 			Type: "function",
