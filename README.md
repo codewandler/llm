@@ -55,8 +55,8 @@ func main() {
     // Create a stream using provider/model format
     events, err := provider.CreateStream(ctx, llm.StreamOptions{
         Model: "ollama/glm-4.7-flash",
-        Messages: []llm.Message{
-            {Role: llm.RoleUser, Content: "What is the capital of France?"},
+        Messages: llm.Messages{
+            &llm.UserMsg{Content: "What is the capital of France?"},
         },
     })
     if err != nil {
@@ -104,8 +104,8 @@ reg.Register(openrouter.New("your-api-key"))
 // Use the registry
 events, err := reg.CreateStream(ctx, llm.StreamOptions{
     Model: "openrouter/anthropic/claude-sonnet-4.5",
-    Messages: []llm.Message{
-        {Role: llm.RoleUser, Content: "Hello!"},
+    Messages: llm.Messages{
+        &llm.UserMsg{Content: "Hello!"},
     },
 })
 ```
@@ -123,8 +123,8 @@ provider := anthropic.NewClaudeCodeProvider()
 
 events, err := provider.CreateStream(ctx, llm.StreamOptions{
     Model: "sonnet",  // or "opus", "haiku"
-    Messages: []llm.Message{
-        {Role: llm.RoleUser, Content: "Explain Go channels"},
+    Messages: llm.Messages{
+        &llm.UserMsg{Content: "Explain Go channels"},
     },
 })
 ```
@@ -144,8 +144,8 @@ provider := anthropic.New(&anthropic.Config{
 
 events, err := provider.CreateStream(ctx, llm.StreamOptions{
     Model: "claude-3-5-sonnet-20241022",
-    Messages: []llm.Message{
-        {Role: llm.RoleUser, Content: "Hello!"},
+    Messages: llm.Messages{
+        &llm.UserMsg{Content: "Hello!"},
     },
 })
 ```
@@ -161,8 +161,8 @@ provider := openai.New("your-api-key")
 
 events, err := provider.CreateStream(ctx, llm.StreamOptions{
     Model: "gpt-4o-mini",
-    Messages: []llm.Message{
-        {Role: llm.RoleUser, Content: "Hello!"},
+    Messages: llm.Messages{
+        &llm.UserMsg{Content: "Hello!"},
     },
 })
 ```
@@ -189,8 +189,8 @@ if err := provider.Download(ctx, "llama3.2:1b"); err != nil {
 // Use the model
 events, err := provider.CreateStream(ctx, llm.StreamOptions{
     Model: "llama3.2:1b",
-    Messages: []llm.Message{
-        {Role: llm.RoleUser, Content: "Hello!"},
+    Messages: llm.Messages{
+        &llm.UserMsg{Content: "Hello!"},
     },
 })
 ```
@@ -215,8 +215,8 @@ provider := openrouter.New("your-api-key")
 
 events, err := provider.CreateStream(ctx, llm.StreamOptions{
     Model: "anthropic/claude-sonnet-4.5",
-    Messages: []llm.Message{
-        {Role: llm.RoleUser, Content: "Hello!"},
+    Messages: llm.Messages{
+        &llm.UserMsg{Content: "Hello!"},
     },
 })
 ```
@@ -290,13 +290,13 @@ for _, call := range calls {
         
         // Send result back
         messages = append(messages,
-            llm.Message{Role: llm.RoleAssistant, ToolCalls: []llm.ToolCall{{
+            &llm.AssistantMsg{ToolCalls: []llm.ToolCall{{
                 ID: c.ID, Name: c.Name, Arguments: map[string]any{
                     "location": c.Params.Location,
                     "unit": c.Params.Unit,
                 },
             }}},
-            llm.Message{Role: llm.RoleTool, Content: result, ToolCallID: c.ID},
+            &llm.ToolCallResult{ToolCallID: c.ID, Output: result},
         )
         
     case *llm.TypedToolCall[SearchParams]:
@@ -331,8 +331,8 @@ tools := []llm.ToolDefinition{
 // Step 1: Send initial request with tools
 events, err := provider.CreateStream(ctx, llm.StreamOptions{
     Model:    "ollama/glm-4.7-flash",
-    Messages: []llm.Message{
-        {Role: llm.RoleUser, Content: "What's the weather in Paris?"},
+    Messages: llm.Messages{
+        &llm.UserMsg{Content: "What's the weather in Paris?"},
     },
     Tools: tools,
 })
@@ -354,17 +354,10 @@ result := fmt.Sprintf(`{"temp": 22, "conditions": "sunny"}`)
 // Step 4: Send tool result back
 events2, _ := provider.CreateStream(ctx, llm.StreamOptions{
     Model: "ollama/glm-4.7-flash",
-    Messages: []llm.Message{
-        {Role: llm.RoleUser, Content: "What's the weather in Paris?"},
-        {
-            Role:      llm.RoleAssistant,
-            ToolCalls: []llm.ToolCall{*toolCall},
-        },
-        {
-            Role:       llm.RoleTool,
-            Content:    result,
-            ToolCallID: toolCall.ID,  // Link result to original call
-        },
+    Messages: llm.Messages{
+        &llm.UserMsg{Content: "What's the weather in Paris?"},
+        &llm.AssistantMsg{ToolCalls: []llm.ToolCall{*toolCall}},
+        &llm.ToolCallResult{ToolCallID: toolCall.ID, Output: result},
     },
     Tools: tools,
 })
@@ -418,8 +411,8 @@ tools := []llm.ToolDefinition{
 Build conversations by appending messages:
 
 ```go
-messages := []llm.Message{
-    {Role: llm.RoleUser, Content: "Hello!"},
+messages := llm.Messages{
+    &llm.UserMsg{Content: "Hello!"},
 }
 
 // First turn
@@ -436,16 +429,10 @@ for event := range events {
 }
 
 // Add assistant response to history
-messages = append(messages, llm.Message{
-    Role:    llm.RoleAssistant,
-    Content: response,
-})
+messages = append(messages, &llm.AssistantMsg{Content: response})
 
 // Second turn
-messages = append(messages, llm.Message{
-    Role:    llm.RoleUser,
-    Content: "Tell me more about that",
-})
+messages = append(messages, &llm.UserMsg{Content: "Tell me more about that"})
 
 events, _ = provider.CreateStream(ctx, llm.StreamOptions{
     Model:    "ollama/glm-4.7-flash",
@@ -463,8 +450,8 @@ defer cancel()
 
 events, err := provider.CreateStream(ctx, llm.StreamOptions{
     Model: "ollama/glm-4.7-flash",
-    Messages: []llm.Message{
-        {Role: llm.RoleUser, Content: "Write a very long essay"},
+    Messages: llm.Messages{
+        &llm.UserMsg{Content: "Write a very long essay"},
     },
 })
 

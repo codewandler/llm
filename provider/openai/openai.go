@@ -175,27 +175,27 @@ func buildRequest(opts llm.StreamOptions) ([]byte, error) {
 	}
 
 	for _, msg := range opts.Messages {
-		switch msg.Role {
-		case llm.RoleSystem:
+		switch m := msg.(type) {
+		case *llm.SystemMsg:
 			r.Messages = append(r.Messages, messagePayload{
 				Role:    "system",
-				Content: msg.Content,
+				Content: m.Content,
 			})
 
-		case llm.RoleUser:
+		case *llm.UserMsg:
 			r.Messages = append(r.Messages, messagePayload{
 				Role:    "user",
-				Content: msg.Content,
+				Content: m.Content,
 			})
 
-		case llm.RoleAssistant:
-			m := messagePayload{
+		case *llm.AssistantMsg:
+			mp := messagePayload{
 				Role:    "assistant",
-				Content: msg.Content,
+				Content: m.Content,
 			}
-			for _, tc := range msg.ToolCalls {
+			for _, tc := range m.ToolCalls {
 				argsJSON, _ := json.Marshal(tc.Arguments)
-				m.ToolCalls = append(m.ToolCalls, toolCallItem{
+				mp.ToolCalls = append(mp.ToolCalls, toolCallItem{
 					ID:   tc.ID,
 					Type: "function",
 					Function: functionCall{
@@ -204,13 +204,13 @@ func buildRequest(opts llm.StreamOptions) ([]byte, error) {
 					},
 				})
 			}
-			r.Messages = append(r.Messages, m)
+			r.Messages = append(r.Messages, mp)
 
-		case llm.RoleTool:
+		case *llm.ToolCallResult:
 			r.Messages = append(r.Messages, messagePayload{
 				Role:       "tool",
-				Content:    msg.Content,
-				ToolCallID: msg.ToolCallID,
+				Content:    m.Output,
+				ToolCallID: m.ToolCallID,
 			})
 		}
 	}

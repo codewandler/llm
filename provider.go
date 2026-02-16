@@ -57,7 +57,7 @@ type StreamEvent struct {
 // StreamOptions configures a provider CreateStream call.
 type StreamOptions struct {
 	Model    string
-	Messages []Message
+	Messages Messages
 	Tools    []ToolDefinition
 }
 

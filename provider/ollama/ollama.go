@@ -297,24 +297,44 @@ func buildRequest(opts llm.StreamOptions) ([]byte, error) {
 	}
 
 	for _, msg := range opts.Messages {
-		m := messagePayload{
-			Role:    string(msg.Role),
-			Content: msg.Content,
-		}
+		var mp messagePayload
 
-		// Convert tool calls if present
-		if len(msg.ToolCalls) > 0 {
-			for _, tc := range msg.ToolCalls {
-				m.ToolCalls = append(m.ToolCalls, toolCallItem{
+		switch m := msg.(type) {
+		case *llm.SystemMsg:
+			mp = messagePayload{
+				Role:    "system",
+				Content: m.Content,
+			}
+
+		case *llm.UserMsg:
+			mp = messagePayload{
+				Role:    "user",
+				Content: m.Content,
+			}
+
+		case *llm.AssistantMsg:
+			mp = messagePayload{
+				Role:    "assistant",
+				Content: m.Content,
+			}
+			// Convert tool calls if present
+			for _, tc := range m.ToolCalls {
+				mp.ToolCalls = append(mp.ToolCalls, toolCallItem{
 					Function: functionCall{
 						Name:      tc.Name,
 						Arguments: tc.Arguments,
 					},
 				})
 			}
+
+		case *llm.ToolCallResult:
+			mp = messagePayload{
+				Role:    "tool",
+				Content: m.Output,
+			}
 		}
 
-		r.Messages = append(r.Messages, m)
+		r.Messages = append(r.Messages, mp)
 	}
 
 	return json.Marshal(r)

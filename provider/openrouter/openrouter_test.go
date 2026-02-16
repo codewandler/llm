@@ -23,8 +23,8 @@ func TestBuildRequest_ToolDefinitions(t *testing.T) {
 
 	opts := llm.StreamOptions{
 		Model: "test/model",
-		Messages: []llm.Message{
-			{Role: llm.RoleUser, Content: "test"},
+		Messages: llm.Messages{
+			&llm.UserMsg{Content: "test"},
 		},
 		Tools: []llm.ToolDefinition{
 			llm.ToolDefinitionFor[GetWeatherParams]("get_weather", "Get weather for a location"),
@@ -54,10 +54,9 @@ func TestBuildRequest_ToolDefinitions(t *testing.T) {
 func TestBuildRequest_AssistantWithToolCalls(t *testing.T) {
 	opts := llm.StreamOptions{
 		Model: "test/model",
-		Messages: []llm.Message{
-			{Role: llm.RoleUser, Content: "What's the weather?"},
-			{
-				Role: llm.RoleAssistant,
+		Messages: llm.Messages{
+			&llm.UserMsg{Content: "What's the weather?"},
+			&llm.AssistantMsg{
 				ToolCalls: []llm.ToolCall{
 					{
 						ID:   "call_123",
@@ -100,18 +99,16 @@ func TestBuildRequest_AssistantWithToolCalls(t *testing.T) {
 func TestBuildRequest_ToolResults(t *testing.T) {
 	opts := llm.StreamOptions{
 		Model: "test/model",
-		Messages: []llm.Message{
-			{Role: llm.RoleUser, Content: "What's the weather?"},
-			{
-				Role: llm.RoleAssistant,
+		Messages: llm.Messages{
+			&llm.UserMsg{Content: "What's the weather?"},
+			&llm.AssistantMsg{
 				ToolCalls: []llm.ToolCall{
 					{ID: "call_123", Name: "get_weather", Arguments: map[string]any{"location": "Paris"}},
 				},
 			},
-			{
-				Role:       llm.RoleTool,
-				Content:    `{"temp": 72, "conditions": "sunny"}`,
+			&llm.ToolCallResult{
 				ToolCallID: "call_123",
+				Output:     `{"temp": 72, "conditions": "sunny"}`,
 			},
 		},
 	}
@@ -135,18 +132,16 @@ func TestBuildRequest_ToolResults(t *testing.T) {
 func TestBuildRequest_ToolResultEmptyContent(t *testing.T) {
 	opts := llm.StreamOptions{
 		Model: "test/model",
-		Messages: []llm.Message{
-			{Role: llm.RoleUser, Content: "test"},
-			{
-				Role: llm.RoleAssistant,
+		Messages: llm.Messages{
+			&llm.UserMsg{Content: "test"},
+			&llm.AssistantMsg{
 				ToolCalls: []llm.ToolCall{
 					{ID: "call_123", Name: "test_tool", Arguments: map[string]any{}},
 				},
 			},
-			{
-				Role:       llm.RoleTool,
-				Content:    "",
+			&llm.ToolCallResult{
 				ToolCallID: "call_123",
+				Output:     "",
 			},
 		},
 	}
@@ -168,17 +163,16 @@ func TestBuildRequest_ToolResultEmptyContent(t *testing.T) {
 func TestBuildRequest_MultipleToolResults(t *testing.T) {
 	opts := llm.StreamOptions{
 		Model: "test/model",
-		Messages: []llm.Message{
-			{Role: llm.RoleUser, Content: "test"},
-			{
-				Role: llm.RoleAssistant,
+		Messages: llm.Messages{
+			&llm.UserMsg{Content: "test"},
+			&llm.AssistantMsg{
 				ToolCalls: []llm.ToolCall{
 					{ID: "call_1", Name: "tool_a", Arguments: map[string]any{}},
 					{ID: "call_2", Name: "tool_b", Arguments: map[string]any{}},
 				},
 			},
-			{Role: llm.RoleTool, Content: "result_a", ToolCallID: "call_1"},
-			{Role: llm.RoleTool, Content: "result_b", ToolCallID: "call_2"},
+			&llm.ToolCallResult{ToolCallID: "call_1", Output: "result_a"},
+			&llm.ToolCallResult{ToolCallID: "call_2", Output: "result_b"},
 		},
 	}
 
@@ -205,17 +199,16 @@ func TestBuildRequest_MultipleToolResults(t *testing.T) {
 func TestBuildRequest_FullConversationFlow(t *testing.T) {
 	opts := llm.StreamOptions{
 		Model: "test/model",
-		Messages: []llm.Message{
-			{Role: llm.RoleSystem, Content: "You are a helpful assistant."},
-			{Role: llm.RoleUser, Content: "What's the weather in Paris?"},
-			{
-				Role: llm.RoleAssistant,
+		Messages: llm.Messages{
+			&llm.SystemMsg{Content: "You are a helpful assistant."},
+			&llm.UserMsg{Content: "What's the weather in Paris?"},
+			&llm.AssistantMsg{
 				ToolCalls: []llm.ToolCall{
 					{ID: "call_123", Name: "get_weather", Arguments: map[string]any{"location": "Paris"}},
 				},
 			},
-			{Role: llm.RoleTool, Content: `{"temp": 72}`, ToolCallID: "call_123"},
-			{Role: llm.RoleAssistant, Content: "It's 72 degrees in Paris."},
+			&llm.ToolCallResult{ToolCallID: "call_123", Output: `{"temp": 72}`},
+			&llm.AssistantMsg{Content: "It's 72 degrees in Paris."},
 		},
 	}
 
@@ -431,8 +424,8 @@ func TestOpenRouter_BasicStreaming(t *testing.T) {
 
 	stream, err := provider.CreateStream(ctx, llm.StreamOptions{
 		Model: "moonshotai/kimi-k2-0905",
-		Messages: []llm.Message{
-			{Role: llm.RoleUser, Content: "Say 'hello' and nothing else."},
+		Messages: llm.Messages{
+			&llm.UserMsg{Content: "Say 'hello' and nothing else."},
 		},
 	})
 	require.NoError(t, err)
@@ -480,8 +473,8 @@ func TestOpenRouter_ToolCallRoundTrip(t *testing.T) {
 	t.Log("Sending initial request with tool definitions...")
 	stream, err := provider.CreateStream(ctx, llm.StreamOptions{
 		Model: "moonshotai/kimi-k2-0905",
-		Messages: []llm.Message{
-			{Role: llm.RoleUser, Content: "What's the weather in Paris? Use the get_weather tool."},
+		Messages: llm.Messages{
+			&llm.UserMsg{Content: "What's the weather in Paris? Use the get_weather tool."},
 		},
 		Tools: tools,
 	})
@@ -515,10 +508,9 @@ func TestOpenRouter_ToolCallRoundTrip(t *testing.T) {
 	t.Log("Sending tool result back...")
 	stream2, err := provider.CreateStream(ctx, llm.StreamOptions{
 		Model: "moonshotai/kimi-k2-0905",
-		Messages: []llm.Message{
-			{Role: llm.RoleUser, Content: "What's the weather in Paris? Use the get_weather tool."},
-			{
-				Role: llm.RoleAssistant,
+		Messages: llm.Messages{
+			&llm.UserMsg{Content: "What's the weather in Paris? Use the get_weather tool."},
+			&llm.AssistantMsg{
 				ToolCalls: []llm.ToolCall{
 					{
 						ID:        toolCall.ID,
@@ -527,10 +519,9 @@ func TestOpenRouter_ToolCallRoundTrip(t *testing.T) {
 					},
 				},
 			},
-			{
-				Role:       llm.RoleTool,
-				Content:    toolResult,
+			&llm.ToolCallResult{
 				ToolCallID: toolCall.ID,
+				Output:     toolResult,
 			},
 		},
 		Tools: tools,
@@ -581,8 +572,8 @@ func TestOpenRouter_MultipleToolCalls(t *testing.T) {
 
 	stream, err := provider.CreateStream(ctx, llm.StreamOptions{
 		Model: "moonshotai/kimi-k2-0905",
-		Messages: []llm.Message{
-			{Role: llm.RoleUser, Content: "What's the weather AND the time in London? Use both tools."},
+		Messages: llm.Messages{
+			&llm.UserMsg{Content: "What's the weather AND the time in London? Use both tools."},
 		},
 		Tools: tools,
 	})

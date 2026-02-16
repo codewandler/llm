@@ -119,8 +119,8 @@ func TestProviders(t *testing.T) {
 			t.Run("streaming", func(t *testing.T) {
 				stream, err := tt.provider.CreateStream(ctx, llm.StreamOptions{
 					Model: getModelID(),
-					Messages: []llm.Message{
-						{Role: llm.RoleUser, Content: "Hello"},
+					Messages: llm.Messages{
+						&llm.UserMsg{Content: "Hello"},
 					},
 				})
 				require.NoError(t, err)
@@ -176,8 +176,8 @@ func TestProviders(t *testing.T) {
 
 				stream, err := tt.provider.CreateStream(ctx, llm.StreamOptions{
 					Model: getModelID(),
-					Messages: []llm.Message{
-						{Role: llm.RoleUser, Content: "What's the weather?"},
+					Messages: llm.Messages{
+						&llm.UserMsg{Content: "What's the weather?"},
 					},
 					Tools: tools,
 				})
@@ -197,11 +197,11 @@ func TestProviders(t *testing.T) {
 
 			// Test 4: Multiple messages (conversation)
 			t.Run("conversation", func(t *testing.T) {
-				messages := []llm.Message{
-					{Role: llm.RoleSystem, Content: "You are a helpful assistant."},
-					{Role: llm.RoleUser, Content: "Hello"},
-					{Role: llm.RoleAssistant, Content: "Hi there!"},
-					{Role: llm.RoleUser, Content: "How are you?"},
+				messages := llm.Messages{
+					&llm.SystemMsg{Content: "You are a helpful assistant."},
+					&llm.UserMsg{Content: "Hello"},
+					&llm.AssistantMsg{Content: "Hi there!"},
+					&llm.UserMsg{Content: "How are you?"},
 				}
 
 				stream, err := tt.provider.CreateStream(ctx, llm.StreamOptions{
@@ -238,8 +238,8 @@ func TestProviders(t *testing.T) {
 				// First request: try to get a tool call
 				stream, err := tt.provider.CreateStream(ctx, llm.StreamOptions{
 					Model: getModelID(),
-					Messages: []llm.Message{
-						{Role: llm.RoleUser, Content: "What's the weather in Paris? Use the get_weather tool."},
+					Messages: llm.Messages{
+						&llm.UserMsg{Content: "What's the weather in Paris? Use the get_weather tool."},
 					},
 					Tools: tools,
 				})
@@ -267,10 +267,9 @@ func TestProviders(t *testing.T) {
 				toolResult := `{"temperature": 22, "conditions": "sunny"}`
 				stream2, err := tt.provider.CreateStream(ctx, llm.StreamOptions{
 					Model: getModelID(),
-					Messages: []llm.Message{
-						{Role: llm.RoleUser, Content: "What's the weather in Paris? Use the get_weather tool."},
-						{
-							Role: llm.RoleAssistant,
+					Messages: llm.Messages{
+						&llm.UserMsg{Content: "What's the weather in Paris? Use the get_weather tool."},
+						&llm.AssistantMsg{
 							ToolCalls: []llm.ToolCall{
 								{
 									ID:        toolCall.ID,
@@ -279,10 +278,9 @@ func TestProviders(t *testing.T) {
 								},
 							},
 						},
-						{
-							Role:       llm.RoleTool,
-							Content:    toolResult,
+						&llm.ToolCallResult{
 							ToolCallID: toolCall.ID,
+							Output:     toolResult,
 						},
 					},
 					Tools: tools,
@@ -372,8 +370,8 @@ func TestOllamaModels(t *testing.T) {
 				t.Parallel()
 				stream, err := p.CreateStream(ctx, llm.StreamOptions{
 					Model: modelID,
-					Messages: []llm.Message{
-						{Role: llm.RoleUser, Content: "Say hello"},
+					Messages: llm.Messages{
+						&llm.UserMsg{Content: "Say hello"},
 					},
 				})
 
@@ -414,8 +412,8 @@ func TestOllamaModels(t *testing.T) {
 				t.Parallel()
 				stream, err := p.CreateStream(ctx, llm.StreamOptions{
 					Model: modelID,
-					Messages: []llm.Message{
-						{Role: llm.RoleUser, Content: "What's the weather in Paris? Use the get_weather tool."},
+					Messages: llm.Messages{
+						&llm.UserMsg{Content: "What's the weather in Paris? Use the get_weather tool."},
 					},
 					Tools: tools,
 				})
@@ -456,11 +454,11 @@ func TestOllamaModels(t *testing.T) {
 			// Test 3: Conversation
 			t.Run("conversation", func(t *testing.T) {
 				t.Parallel()
-				messages := []llm.Message{
-					{Role: llm.RoleSystem, Content: "You are a helpful assistant."},
-					{Role: llm.RoleUser, Content: "Hi"},
-					{Role: llm.RoleAssistant, Content: "Hello!"},
-					{Role: llm.RoleUser, Content: "What's 2+2?"},
+				messages := llm.Messages{
+					&llm.SystemMsg{Content: "You are a helpful assistant."},
+					&llm.UserMsg{Content: "Hi"},
+					&llm.AssistantMsg{Content: "Hello!"},
+					&llm.UserMsg{Content: "What's 2+2?"},
 				}
 
 				stream, err := p.CreateStream(ctx, llm.StreamOptions{

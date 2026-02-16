@@ -54,24 +54,47 @@ func (p *ClaudeCodeProvider) CreateStream(ctx context.Context, opts llm.StreamOp
 
 	// Convert messages
 	for _, msg := range opts.Messages {
-		oaiMsg := oai.ChatMessage{
-			Role:    string(msg.Role),
-			Content: msg.Content,
-		}
+		var oaiMsg oai.ChatMessage
 
-		// Convert tool calls if present
-		if len(msg.ToolCalls) > 0 {
-			oaiMsg.ToolCalls = make([]oai.ToolCall, len(msg.ToolCalls))
-			for i, tc := range msg.ToolCalls {
-				argsJSON, _ := json.Marshal(tc.Arguments)
-				oaiMsg.ToolCalls[i] = oai.ToolCall{
-					ID:   tc.ID,
-					Type: "function",
-					Function: oai.FunctionCall{
-						Name:      tc.Name,
-						Arguments: string(argsJSON),
-					},
+		switch m := msg.(type) {
+		case *llm.SystemMsg:
+			oaiMsg = oai.ChatMessage{
+				Role:    "system",
+				Content: m.Content,
+			}
+
+		case *llm.UserMsg:
+			oaiMsg = oai.ChatMessage{
+				Role:    "user",
+				Content: m.Content,
+			}
+
+		case *llm.AssistantMsg:
+			oaiMsg = oai.ChatMessage{
+				Role:    "assistant",
+				Content: m.Content,
+			}
+			// Convert tool calls if present
+			if len(m.ToolCalls) > 0 {
+				oaiMsg.ToolCalls = make([]oai.ToolCall, len(m.ToolCalls))
+				for i, tc := range m.ToolCalls {
+					argsJSON, _ := json.Marshal(tc.Arguments)
+					oaiMsg.ToolCalls[i] = oai.ToolCall{
+						ID:   tc.ID,
+						Type: "function",
+						Function: oai.FunctionCall{
+							Name:      tc.Name,
+							Arguments: string(argsJSON),
+						},
+					}
 				}
+			}
+
+		case *llm.ToolCallResult:
+			oaiMsg = oai.ChatMessage{
+				Role:       "tool",
+				Content:    m.Output,
+				ToolCallID: m.ToolCallID,
 			}
 		}
 

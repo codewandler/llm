@@ -158,8 +158,8 @@ func TestCreateStream(t *testing.T) {
 	ctx := context.Background()
 	opts := llm.StreamOptions{
 		Model: "anthropic:claude-code/sonnet",
-		Messages: []llm.Message{
-			{Role: llm.RoleUser, Content: "test"},
+		Messages: llm.Messages{
+			&llm.UserMsg{Content: "test"},
 		},
 	}
 

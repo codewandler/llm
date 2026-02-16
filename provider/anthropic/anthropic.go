@@ -375,34 +375,34 @@ func (p *Provider) buildRequest(opts llm.StreamOptions, oauth bool) ([]byte, err
 	for i := 0; i < len(opts.Messages); i++ {
 		msg := opts.Messages[i]
 
-		switch msg.Role {
-		case llm.RoleSystem:
+		switch m := msg.(type) {
+		case *llm.SystemMsg:
 			if oauth {
 				r.System = []systemBlock{
-					{Type: "text", Text: claudeCodeSystemPrefix + "\n\n" + msg.Content},
+					{Type: "text", Text: claudeCodeSystemPrefix + "\n\n" + m.Content},
 				}
 			} else {
-				r.System = msg.Content
+				r.System = m.Content
 			}
 
-		case llm.RoleUser:
+		case *llm.UserMsg:
 			r.Messages = append(r.Messages, messagePayload{
 				Role:    "user",
-				Content: msg.Content,
+				Content: m.Content,
 			})
 
-		case llm.RoleAssistant:
-			if len(msg.ToolCalls) == 0 {
+		case *llm.AssistantMsg:
+			if len(m.ToolCalls) == 0 {
 				r.Messages = append(r.Messages, messagePayload{
 					Role:    "assistant",
-					Content: msg.Content,
+					Content: m.Content,
 				})
 			} else {
 				var blocks []contentBlock
-				if msg.Content != "" {
-					blocks = append(blocks, contentBlock{Type: "text", Text: msg.Content})
+				if m.Content != "" {
+					blocks = append(blocks, contentBlock{Type: "text", Text: m.Content})
 				}
-				for _, tc := range msg.ToolCalls {
+				for _, tc := range m.ToolCalls {
 					blocks = append(blocks, contentBlock{
 						Type:  "tool_use",
 						ID:    tc.ID,
@@ -416,25 +416,24 @@ func (p *Provider) buildRequest(opts llm.StreamOptions, oauth bool) ([]byte, err
 				})
 			}
 
-		case llm.RoleTool:
+		case *llm.ToolCallResult:
 			var results []contentBlock
 			prevAssistant := findPrecedingAssistant(opts.Messages, i)
 			toolIdx := 0
-			for ; i < len(opts.Messages) && opts.Messages[i].Role == llm.RoleTool; i++ {
-				toolUseID := ""
-				if prevAssistant != nil && toolIdx < len(prevAssistant.ToolCalls) {
+			for ; i < len(opts.Messages); i++ {
+				tr, ok := opts.Messages[i].(*llm.ToolCallResult)
+				if !ok {
+					break
+				}
+				toolUseID := tr.ToolCallID
+				if toolUseID == "" && prevAssistant != nil && toolIdx < len(prevAssistant.ToolCalls) {
 					toolUseID = prevAssistant.ToolCalls[toolIdx].ID
 				}
 				block := contentBlock{
 					Type:      "tool_result",
 					ToolUseID: toolUseID,
-					Content:   opts.Messages[i].Content,
-				}
-				if prevAssistant != nil && toolIdx < len(prevAssistant.ToolCalls) {
-					tc := prevAssistant.ToolCalls[toolIdx]
-					if tc.Result != nil && tc.Result.IsError {
-						block.IsError = true
-					}
+					Content:   tr.Output,
+					IsError:   tr.IsError,
 				}
 				results = append(results, block)
 				toolIdx++
@@ -450,10 +449,10 @@ func (p *Provider) buildRequest(opts llm.StreamOptions, oauth bool) ([]byte, err
 	return json.Marshal(r)
 }
 
-func findPrecedingAssistant(messages []llm.Message, toolIdx int) *llm.Message {
+func findPrecedingAssistant(messages llm.Messages, toolIdx int) *llm.AssistantMsg {
 	for j := toolIdx - 1; j >= 0; j-- {
-		if messages[j].Role == llm.RoleAssistant {
-			return &messages[j]
+		if am, ok := messages[j].(*llm.AssistantMsg); ok {
+			return am
 		}
 	}
 	return nil

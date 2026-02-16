@@ -19,8 +19,8 @@ import (
 func TestBuildRequest_Basic(t *testing.T) {
 	opts := llm.StreamOptions{
 		Model: "gpt-4o",
-		Messages: []llm.Message{
-			{Role: llm.RoleUser, Content: "Hello"},
+		Messages: llm.Messages{
+			&llm.UserMsg{Content: "Hello"},
 		},
 	}
 
@@ -45,8 +45,8 @@ func TestBuildRequest_WithTools(t *testing.T) {
 
 	opts := llm.StreamOptions{
 		Model: "gpt-4o",
-		Messages: []llm.Message{
-			{Role: llm.RoleUser, Content: "test"},
+		Messages: llm.Messages{
+			&llm.UserMsg{Content: "test"},
 		},
 		Tools: []llm.ToolDefinition{
 			llm.ToolDefinitionFor[GetWeatherParams]("get_weather", "Get weather for a location"),
@@ -70,10 +70,9 @@ func TestBuildRequest_WithTools(t *testing.T) {
 func TestBuildRequest_AssistantWithToolCalls(t *testing.T) {
 	opts := llm.StreamOptions{
 		Model: "gpt-4o",
-		Messages: []llm.Message{
-			{Role: llm.RoleUser, Content: "What's the weather?"},
-			{
-				Role: llm.RoleAssistant,
+		Messages: llm.Messages{
+			&llm.UserMsg{Content: "What's the weather?"},
+			&llm.AssistantMsg{
 				ToolCalls: []llm.ToolCall{
 					{
 						ID:   "call_123",
@@ -108,18 +107,16 @@ func TestBuildRequest_AssistantWithToolCalls(t *testing.T) {
 func TestBuildRequest_ToolResults(t *testing.T) {
 	opts := llm.StreamOptions{
 		Model: "gpt-4o",
-		Messages: []llm.Message{
-			{Role: llm.RoleUser, Content: "What's the weather?"},
-			{
-				Role: llm.RoleAssistant,
+		Messages: llm.Messages{
+			&llm.UserMsg{Content: "What's the weather?"},
+			&llm.AssistantMsg{
 				ToolCalls: []llm.ToolCall{
 					{ID: "call_123", Name: "get_weather", Arguments: map[string]any{"location": "Paris"}},
 				},
 			},
-			{
-				Role:       llm.RoleTool,
-				Content:    `{"temp": 72, "conditions": "sunny"}`,
+			&llm.ToolCallResult{
 				ToolCallID: "call_123",
+				Output:     `{"temp": 72, "conditions": "sunny"}`,
 			},
 		},
 	}
@@ -228,8 +225,8 @@ func TestOpenAI_BasicStreaming(t *testing.T) {
 
 	stream, err := provider.CreateStream(ctx, llm.StreamOptions{
 		Model: "gpt-4o-mini",
-		Messages: []llm.Message{
-			{Role: llm.RoleUser, Content: "Say 'hello' and nothing else."},
+		Messages: llm.Messages{
+			&llm.UserMsg{Content: "Say 'hello' and nothing else."},
 		},
 	})
 	require.NoError(t, err)
@@ -277,8 +274,8 @@ func TestOpenAI_ToolCallRoundTrip(t *testing.T) {
 	t.Log("Sending initial request with tool definitions...")
 	stream, err := provider.CreateStream(ctx, llm.StreamOptions{
 		Model: "gpt-4o-mini",
-		Messages: []llm.Message{
-			{Role: llm.RoleUser, Content: "What's the weather in Paris? Use the get_weather tool."},
+		Messages: llm.Messages{
+			&llm.UserMsg{Content: "What's the weather in Paris? Use the get_weather tool."},
 		},
 		Tools: tools,
 	})
@@ -312,10 +309,9 @@ func TestOpenAI_ToolCallRoundTrip(t *testing.T) {
 	t.Log("Sending tool result back...")
 	stream2, err := provider.CreateStream(ctx, llm.StreamOptions{
 		Model: "gpt-4o-mini",
-		Messages: []llm.Message{
-			{Role: llm.RoleUser, Content: "What's the weather in Paris? Use the get_weather tool."},
-			{
-				Role: llm.RoleAssistant,
+		Messages: llm.Messages{
+			&llm.UserMsg{Content: "What's the weather in Paris? Use the get_weather tool."},
+			&llm.AssistantMsg{
 				ToolCalls: []llm.ToolCall{
 					{
 						ID:        toolCall.ID,
@@ -324,10 +320,9 @@ func TestOpenAI_ToolCallRoundTrip(t *testing.T) {
 					},
 				},
 			},
-			{
-				Role:       llm.RoleTool,
-				Content:    toolResult,
+			&llm.ToolCallResult{
 				ToolCallID: toolCall.ID,
+				Output:     toolResult,
 			},
 		},
 		Tools: tools,
@@ -365,11 +360,11 @@ func TestOpenAI_Conversation(t *testing.T) {
 	provider := New(apiKey)
 	ctx := context.Background()
 
-	messages := []llm.Message{
-		{Role: llm.RoleSystem, Content: "You are a helpful assistant."},
-		{Role: llm.RoleUser, Content: "Hello"},
-		{Role: llm.RoleAssistant, Content: "Hi there!"},
-		{Role: llm.RoleUser, Content: "How are you?"},
+	messages := llm.Messages{
+		&llm.SystemMsg{Content: "You are a helpful assistant."},
+		&llm.UserMsg{Content: "Hello"},
+		&llm.AssistantMsg{Content: "Hi there!"},
+		&llm.UserMsg{Content: "How are you?"},
 	}
 
 	stream, err := provider.CreateStream(ctx, llm.StreamOptions{

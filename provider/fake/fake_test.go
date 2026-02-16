@@ -27,8 +27,8 @@ func TestProviderBasicStreaming(t *testing.T) {
 			name: "first call returns tool call",
 			opts: llm.StreamOptions{
 				Model: "fake-model",
-				Messages: []llm.Message{
-					{Role: llm.RoleUser, Content: "test message"},
+				Messages: llm.Messages{
+					&llm.UserMsg{Content: "test message"},
 				},
 			},
 			wantToolCall:  true,
@@ -39,8 +39,8 @@ func TestProviderBasicStreaming(t *testing.T) {
 			name: "second call returns text",
 			opts: llm.StreamOptions{
 				Model: "fake-model",
-				Messages: []llm.Message{
-					{Role: llm.RoleUser, Content: "another message"},
+				Messages: llm.Messages{
+					&llm.UserMsg{Content: "another message"},
 				},
 			},
 			wantToolCall:  false,
@@ -99,7 +99,7 @@ func TestProviderContextCancellation(t *testing.T) {
 
 	stream, err := p.CreateStream(ctx, llm.StreamOptions{
 		Model:    "fake-model",
-		Messages: []llm.Message{{Role: llm.RoleUser, Content: "test"}},
+		Messages: llm.Messages{&llm.UserMsg{Content: "test"}},
 	})
 	require.NoError(t, err)
 
@@ -121,8 +121,8 @@ func TestProviderToolCallStructure(t *testing.T) {
 
 	stream, err := p.CreateStream(ctx, llm.StreamOptions{
 		Model: "fake-model",
-		Messages: []llm.Message{
-			{Role: llm.RoleUser, Content: "test"},
+		Messages: llm.Messages{
+			&llm.UserMsg{Content: "test"},
 		},
 	})
 	require.NoError(t, err)
@@ -171,7 +171,7 @@ func TestProviderWithTools(t *testing.T) {
 
 	stream, err := p.CreateStream(ctx, llm.StreamOptions{
 		Model:    "fake-model",
-		Messages: []llm.Message{{Role: llm.RoleUser, Content: "What's the weather?"}},
+		Messages: llm.Messages{&llm.UserMsg{Content: "What's the weather?"}},
 		Tools:    tools,
 	})
 	require.NoError(t, err)
@@ -193,11 +193,11 @@ func TestProviderMultipleMessages(t *testing.T) {
 	ctx := context.Background()
 	p := NewProvider()
 
-	messages := []llm.Message{
-		{Role: llm.RoleSystem, Content: "You are a helpful assistant."},
-		{Role: llm.RoleUser, Content: "Hello"},
-		{Role: llm.RoleAssistant, Content: "Hi there!"},
-		{Role: llm.RoleUser, Content: "How are you?"},
+	messages := llm.Messages{
+		&llm.SystemMsg{Content: "You are a helpful assistant."},
+		&llm.UserMsg{Content: "Hello"},
+		&llm.AssistantMsg{Content: "Hi there!"},
+		&llm.UserMsg{Content: "How are you?"},
 	}
 
 	stream, err := p.CreateStream(ctx, llm.StreamOptions{
@@ -239,7 +239,7 @@ func BenchmarkProviderStreaming(b *testing.B) {
 
 	opts := llm.StreamOptions{
 		Model:    "fake-model",
-		Messages: []llm.Message{{Role: llm.RoleUser, Content: "benchmark test"}},
+		Messages: llm.Messages{&llm.UserMsg{Content: "benchmark test"}},
 	}
 
 	b.ResetTimer()
@@ -262,7 +262,7 @@ func BenchmarkStreamEventProcessing(b *testing.B) {
 
 	opts := llm.StreamOptions{
 		Model:    "fake-model",
-		Messages: []llm.Message{{Role: llm.RoleUser, Content: "benchmark"}},
+		Messages: llm.Messages{&llm.UserMsg{Content: "benchmark"}},
 	}
 
 	b.ResetTimer()
@@ -291,8 +291,8 @@ func Example() {
 
 	stream, err := p.CreateStream(ctx, llm.StreamOptions{
 		Model: "fake-model",
-		Messages: []llm.Message{
-			{Role: llm.RoleUser, Content: "Hello!"},
+		Messages: llm.Messages{
+			&llm.UserMsg{Content: "Hello!"},
 		},
 	})
 	if err != nil {
