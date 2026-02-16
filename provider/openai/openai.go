@@ -122,6 +122,111 @@ func (p *Provider) CreateStream(ctx context.Context, opts llm.StreamOptions) (<-
 	return events, nil
 }
 
+// --- Model classification for reasoning effort ---
+
+// modelCategory identifies reasoning support level for a model.
+type modelCategory int
+
+const (
+	categoryNonReasoning modelCategory = iota // gpt-4o, gpt-4, gpt-3.5, gpt-4.1
+	categoryPreGPT51                          // gpt-5, gpt-5-mini, gpt-5-nano, o1, o3
+	categoryGPT51                             // gpt-5.1
+	categoryGPT5Pro                           // gpt-5-pro, gpt-5.2-pro, o3-pro, o1-pro
+	categoryCodexMax                          // gpt-5.1-codex-max and later codex models
+)
+
+// classifyModel determines the reasoning category for a model.
+func classifyModel(model string) modelCategory {
+	m := strings.ToLower(model)
+
+	// Pro models: only support "high"
+	if strings.HasSuffix(m, "-pro") {
+		return categoryGPT5Pro
+	}
+
+	// Codex-max models: support xhigh
+	if strings.Contains(m, "codex-max") || strings.Contains(m, "codex") && strings.Contains(m, "5.1") {
+		return categoryCodexMax
+	}
+	if strings.Contains(m, "codex") && strings.Contains(m, "5.2") {
+		return categoryCodexMax
+	}
+
+	// gpt-5.1 (not codex, not pro): supports none, low, medium, high (NOT minimal)
+	if strings.HasPrefix(m, "gpt-5.1") {
+		return categoryGPT51
+	}
+
+	// Pre-5.1 reasoning models: gpt-5, gpt-5-mini, gpt-5-nano, gpt-5.2, o1, o3
+	if strings.HasPrefix(m, "gpt-5") || strings.HasPrefix(m, "o1") || strings.HasPrefix(m, "o3") {
+		return categoryPreGPT51
+	}
+
+	// Everything else: non-reasoning (gpt-4o, gpt-4, gpt-3.5, gpt-4.1, etc.)
+	return categoryNonReasoning
+}
+
+// mapReasoningEffort maps the user-requested reasoning effort to a valid OpenAI API value.
+// Returns empty string if the parameter should be omitted, or an error if the value is invalid.
+func mapReasoningEffort(model string, effort llm.ReasoningEffort) (string, error) {
+	if effort == "" {
+		return "", nil // omit, let API use its default
+	}
+
+	cat := classifyModel(model)
+
+	switch cat {
+	case categoryNonReasoning:
+		// Non-reasoning models ignore reasoning_effort
+		return "", nil
+
+	case categoryPreGPT51:
+		// Supports: minimal, low, medium, high
+		// Does NOT support: none, xhigh
+		switch effort {
+		case llm.ReasoningEffortNone:
+			return "", fmt.Errorf("reasoning_effort %q not supported for model %q (use minimal, low, medium, or high)", effort, model)
+		case llm.ReasoningEffortXHigh:
+			return "", fmt.Errorf("reasoning_effort %q not supported for model %q (use minimal, low, medium, or high)", effort, model)
+		case llm.ReasoningEffortMinimal, llm.ReasoningEffortLow, llm.ReasoningEffortMedium, llm.ReasoningEffortHigh:
+			return string(effort), nil
+		}
+
+	case categoryGPT51:
+		// Supports: none, low, medium, high
+		// Does NOT support: minimal, xhigh
+		// Map minimal -> low
+		switch effort {
+		case llm.ReasoningEffortMinimal:
+			return "low", nil // map minimal -> low
+		case llm.ReasoningEffortXHigh:
+			return "", fmt.Errorf("reasoning_effort %q not supported for model %q (use none, low, medium, or high)", effort, model)
+		case llm.ReasoningEffortNone, llm.ReasoningEffortLow, llm.ReasoningEffortMedium, llm.ReasoningEffortHigh:
+			return string(effort), nil
+		}
+
+	case categoryGPT5Pro:
+		// Only supports: high
+		if effort != llm.ReasoningEffortHigh {
+			return "", fmt.Errorf("reasoning_effort must be %q for model %q", llm.ReasoningEffortHigh, model)
+		}
+		return "high", nil
+
+	case categoryCodexMax:
+		// Supports: none, low, medium, high, xhigh
+		// Map minimal -> low
+		switch effort {
+		case llm.ReasoningEffortMinimal:
+			return "low", nil // map minimal -> low
+		case llm.ReasoningEffortNone, llm.ReasoningEffortLow, llm.ReasoningEffortMedium, llm.ReasoningEffortHigh, llm.ReasoningEffortXHigh:
+			return string(effort), nil
+		}
+	}
+
+	// Unknown effort value - shouldn't happen if Valid() was called
+	return "", fmt.Errorf("unknown reasoning_effort value %q", effort)
+}
+
 // --- Request building ---
 
 type request struct {
@@ -198,11 +303,13 @@ func buildRequest(opts llm.StreamOptions) ([]byte, error) {
 		}
 	}
 
-	// Set reasoning_effort - default to "minimal" for faster responses
-	if opts.ReasoningEffort != "" {
-		r.ReasoningEffort = string(opts.ReasoningEffort)
-	} else {
-		r.ReasoningEffort = "minimal"
+	// Set reasoning_effort based on model category
+	reasoningEffort, err := mapReasoningEffort(opts.Model, opts.ReasoningEffort)
+	if err != nil {
+		return nil, err
+	}
+	if reasoningEffort != "" {
+		r.ReasoningEffort = reasoningEffort
 	}
 
 	for _, msg := range opts.Messages {

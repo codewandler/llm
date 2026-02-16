@@ -476,11 +476,11 @@ err := opts.Validate()  // Error: ToolChoiceTool references unknown tool "unknow
 Control how many reasoning tokens OpenAI models generate before producing a response. Lower reasoning effort means faster responses and fewer tokens used.
 
 ```go
-// Use minimal reasoning for faster responses (OpenAI default in this library)
+// Use low reasoning for faster responses
 stream, _ := provider.CreateStream(ctx, llm.StreamOptions{
     Model:           "openai/gpt-5",
     Messages:        messages,
-    ReasoningEffort: llm.ReasoningEffortMinimal,
+    ReasoningEffort: llm.ReasoningEffortLow,
 })
 
 // Use high reasoning for complex tasks
@@ -503,22 +503,34 @@ stream, _ := provider.CreateStream(ctx, llm.StreamOptions{
 | Value | Constant | Description |
 |-------|----------|-------------|
 | `"none"` | `ReasoningEffortNone` | No reasoning (GPT-5.1+ only) |
-| `"minimal"` | `ReasoningEffortMinimal` | Minimal reasoning (fastest) |
+| `"minimal"` | `ReasoningEffortMinimal` | Minimal reasoning (pre-5.1 models only) |
 | `"low"` | `ReasoningEffortLow` | Low reasoning |
-| `"medium"` | `ReasoningEffortMedium` | Medium reasoning (OpenAI API default) |
+| `"medium"` | `ReasoningEffortMedium` | Medium reasoning (OpenAI API default for pre-5.1) |
 | `"high"` | `ReasoningEffortHigh` | High reasoning |
 | `"xhigh"` | `ReasoningEffortXHigh` | Maximum reasoning (codex-max+ only) |
+
+### Model-Specific Support
+
+The OpenAI provider maps `ReasoningEffort` values to valid API values per model:
+
+| Model Category | Supported Values | Default | Notes |
+|----------------|------------------|---------|-------|
+| Non-reasoning (gpt-4o, gpt-4, gpt-3.5) | N/A | N/A | Parameter ignored |
+| Pre-5.1 reasoning (gpt-5, o1, o3) | minimal, low, medium, high | medium | `none` not supported |
+| gpt-5.1 | none, low, medium, high | none | `minimal` mapped to `low` |
+| Pro models (gpt-5-pro, o3-pro) | high only | high | Other values error |
+| Codex models (gpt-5.1-codex+) | none, low, medium, high, xhigh | varies | `minimal` mapped to `low` |
 
 ### Provider Support
 
 | Provider | Behavior |
 |----------|----------|
-| **OpenAI** | Supported. Defaults to `"minimal"` if not specified |
+| **OpenAI** | Model-specific mapping with validation (see above) |
 | **OpenRouter** | Passed through if specified, no default |
 | **Anthropic** | Ignored (uses different `thinking.budget_tokens` approach) |
 | **Ollama** | Ignored |
 
-**Note:** This library defaults to `"minimal"` for OpenAI to optimize for speed. Set `ReasoningEffortMedium` explicitly if you need the OpenAI API's default behavior.
+**Note:** If not specified, the parameter is omitted and the OpenAI API uses its default for the model.
 
 ## Multi-Turn Conversations
 
