@@ -36,23 +36,42 @@ const (
 	ModelGemma3          = "gemma3"
 )
 
-const ModelDefault = ModelGLM47Flash
+const (
+	ModelDefault   = ModelGLM47Flash
+	defaultBaseURL = "http://localhost:11434"
+)
 
 // Provider implements the Ollama (local) LLM backend.
 type Provider struct {
-	baseURL      string
+	opts         *llm.Options
 	defaultModel string
 	client       *http.Client
 }
 
-// New creates a new Ollama provider.
-// If baseURL is empty, defaults to http://localhost:11434.
-func New(baseURL string) *Provider {
-	if baseURL == "" {
-		baseURL = "http://localhost:11434"
+// DefaultOptions returns the default options for Ollama.
+// Base URL defaults to http://localhost:11434.
+// No API key is required for Ollama.
+func DefaultOptions() []llm.Option {
+	return []llm.Option{
+		llm.WithBaseURL(defaultBaseURL),
 	}
+}
+
+// New creates a new Ollama provider.
+// Options are applied on top of DefaultOptions().
+//
+// Example usage:
+//
+//	// Use defaults (localhost:11434)
+//	p := ollama.New()
+//
+//	// Custom base URL
+//	p := ollama.New(llm.WithBaseURL("http://remote-host:11434"))
+func New(opts ...llm.Option) *Provider {
+	allOpts := append(DefaultOptions(), opts...)
+	cfg := llm.Apply(allOpts...)
 	return &Provider{
-		baseURL:      baseURL,
+		opts:         cfg,
 		defaultModel: ModelDefault,
 		client:       &http.Client{},
 	}
@@ -93,7 +112,7 @@ func (p *Provider) Models() []llm.Model {
 // FetchModels retrieves the list of currently installed models from Ollama.
 // This enumerates ALL models, including ones that may not support chat.
 func (p *Provider) FetchModels(ctx context.Context) ([]llm.Model, error) {
-	req, err := http.NewRequestWithContext(ctx, "GET", p.baseURL+"/api/tags", nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", p.opts.BaseURL+"/api/tags", nil)
 	if err != nil {
 		return nil, err
 	}
@@ -166,7 +185,7 @@ func (p *Provider) downloadModel(ctx context.Context, modelID string) error {
 		return err
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "POST", p.baseURL+"/api/pull", bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, "POST", p.opts.BaseURL+"/api/pull", bytes.NewReader(body))
 	if err != nil {
 		return err
 	}
@@ -225,7 +244,7 @@ func (p *Provider) CreateStream(ctx context.Context, opts llm.StreamOptions) (<-
 		return nil, fmt.Errorf("build request: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "POST", p.baseURL+"/api/chat", bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, "POST", p.opts.BaseURL+"/api/chat", bytes.NewReader(body))
 	if err != nil {
 		return nil, err
 	}

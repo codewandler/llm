@@ -15,6 +15,7 @@ import (
 // Providers are configured using environment variables:
 //   - OPENAI_KEY for OpenAI
 //   - OPENROUTER_API_KEY for OpenRouter
+//   - ANTHROPIC_API_KEY for Anthropic
 //   - OLLAMA_BASE_URL for Ollama (optional, defaults to http://localhost:11434)
 //
 // Claude Code provider is always registered (uses local claude CLI).
@@ -24,21 +25,26 @@ func NewDefaultRegistry() *llm.Registry {
 	// Register Claude Code provider (uses local claude CLI)
 	reg.Register(anthropic.NewClaudeCodeProvider())
 
-	// Register Ollama provider
-	ollamaURL := os.Getenv("OLLAMA_BASE_URL")
-	if ollamaURL == "" {
-		ollamaURL = "http://localhost:11434"
+	// Register Ollama provider (no API key needed, custom base URL optional)
+	var ollamaOpts []llm.Option
+	if ollamaURL := os.Getenv("OLLAMA_BASE_URL"); ollamaURL != "" {
+		ollamaOpts = append(ollamaOpts, llm.WithBaseURL(ollamaURL))
 	}
-	reg.Register(ollama.New(ollamaURL))
+	reg.Register(ollama.New(ollamaOpts...))
 
 	// Register OpenAI provider if API key is available
-	if apiKey := os.Getenv("OPENAI_KEY"); apiKey != "" {
-		reg.Register(openai.New(apiKey))
+	if os.Getenv("OPENAI_KEY") != "" {
+		reg.Register(openai.New(llm.APIKeyFromEnv("OPENAI_KEY")))
 	}
 
 	// Register OpenRouter provider if API key is available
-	if apiKey := os.Getenv("OPENROUTER_API_KEY"); apiKey != "" {
-		reg.Register(openrouter.New(apiKey))
+	if os.Getenv("OPENROUTER_API_KEY") != "" {
+		reg.Register(openrouter.New(llm.APIKeyFromEnv("OPENROUTER_API_KEY")))
+	}
+
+	// Register Anthropic provider if API key is available
+	if os.Getenv("ANTHROPIC_API_KEY") != "" {
+		reg.Register(anthropic.New(llm.APIKeyFromEnv("ANTHROPIC_API_KEY")))
 	}
 
 	return reg

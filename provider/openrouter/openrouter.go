@@ -14,8 +14,8 @@ import (
 )
 
 const (
-	baseURL      = "https://openrouter.ai/api"
-	providerName = "openrouter"
+	defaultBaseURL = "https://openrouter.ai/api"
+	providerName   = "openrouter"
 
 	// DefaultModel is the recommended default model for OpenRouter
 	DefaultModel = "anthropic/claude-sonnet-4.5"
@@ -23,15 +23,40 @@ const (
 
 // Provider implements the OpenRouter LLM backend.
 type Provider struct {
-	apiKey       string
+	opts         *llm.Options
 	defaultModel string
 	client       *http.Client
 }
 
+// DefaultOptions returns the default options for OpenRouter.
+// Base URL defaults to https://openrouter.ai/api.
+// API key should be provided via WithAPIKey() or WithAPIKeyFunc().
+func DefaultOptions() []llm.Option {
+	return []llm.Option{
+		llm.WithBaseURL(defaultBaseURL),
+	}
+}
+
 // New creates a new OpenRouter provider.
-func New(apiKey string) *Provider {
+// Options are applied on top of DefaultOptions().
+//
+// Example usage:
+//
+//	// With API key
+//	p := openrouter.New(llm.WithAPIKey("sk-or-..."))
+//
+//	// With API key from environment
+//	p := openrouter.New(llm.APIKeyFromEnv("OPENROUTER_API_KEY"))
+//
+//	// With dynamic API key resolution
+//	p := openrouter.New(llm.WithAPIKeyFunc(func(ctx context.Context) (string, error) {
+//	    return secretStore.Get(ctx, "openrouter-key")
+//	}))
+func New(opts ...llm.Option) *Provider {
+	allOpts := append(DefaultOptions(), opts...)
+	cfg := llm.Apply(allOpts...)
 	return &Provider{
-		apiKey:       apiKey,
+		opts:         cfg,
 		defaultModel: DefaultModel,
 		client:       &http.Client{},
 	}
@@ -57,7 +82,7 @@ func (p *Provider) Models() []llm.Model {
 }
 
 func (p *Provider) FetchModels(ctx context.Context) ([]llm.Model, error) {
-	req, err := http.NewRequestWithContext(ctx, "GET", baseURL+"/v1/models", nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", p.opts.BaseURL+"/v1/models", nil)
 	if err != nil {
 		return nil, err
 	}
@@ -98,17 +123,27 @@ func (p *Provider) CreateStream(ctx context.Context, opts llm.StreamOptions) (<-
 	if err := opts.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid options: %w", err)
 	}
+
+	// Resolve API key at stream creation time
+	apiKey, err := p.opts.ResolveAPIKey(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("resolve API key: %w", err)
+	}
+	if apiKey == "" {
+		return nil, fmt.Errorf("openrouter: API key required")
+	}
+
 	body, err := buildRequest(opts)
 	if err != nil {
 		return nil, fmt.Errorf("build request: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "POST", baseURL+"/v1/chat/completions", bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, "POST", p.opts.BaseURL+"/v1/chat/completions", bytes.NewReader(body))
 	if err != nil {
 		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+p.apiKey)
+	req.Header.Set("Authorization", "Bearer "+apiKey)
 
 	resp, err := p.client.Do(req)
 	if err != nil {

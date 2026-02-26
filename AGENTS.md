@@ -145,18 +145,29 @@ import (
 
 ### Types and Structs
 
-**Constructor pattern with defaults:**
+**Constructor pattern with functional options:**
 ```go
-func New(cfg *provider.ProviderConfig, baseURL string) *Provider {
-    if baseURL == "" {
-        baseURL = "https://api.anthropic.com"  // Sensible default
-    }
-    return &Provider{
-        config:  cfg,
-        baseURL: baseURL,
-        client:  &http.Client{},
+// Default options exported for visibility/extension
+func DefaultOptions() []llm.Option {
+    return []llm.Option{
+        llm.WithBaseURL(defaultBaseURL),
     }
 }
+
+// New applies defaults then user options
+func New(opts ...llm.Option) *Provider {
+    allOpts := append(DefaultOptions(), opts...)
+    cfg := llm.Apply(allOpts...)
+    return &Provider{
+        opts:   cfg,
+        client: &http.Client{},
+    }
+}
+
+// Usage examples:
+// openai.New(llm.WithAPIKey("sk-..."))
+// openai.New(llm.APIKeyFromEnv("OPENAI_KEY"))
+// openai.New(llm.WithAPIKeyFunc(secretStore.Get))
 ```
 
 **JSON tags:** Use snake_case
@@ -164,14 +175,6 @@ func New(cfg *provider.ProviderConfig, baseURL string) *Provider {
 type Message struct {
     ID        string `json:"id,omitempty"`
     ToolCalls []ToolCall `json:"tool_calls,omitempty"`
-}
-```
-
-**Configuration:** Flat structs with pointers for optional fields
-```go
-type ProviderConfig struct {
-    APIKey string
-    OAuth  *OAuthConfig  // Pointer indicates optional
 }
 ```
 

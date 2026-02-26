@@ -320,12 +320,11 @@ func TestCalculateCost(t *testing.T) {
 // --- Integration tests (require OPENAI_KEY) ---
 
 func TestOpenAI_BasicStreaming(t *testing.T) {
-	apiKey := os.Getenv("OPENAI_KEY")
-	if apiKey == "" {
+	if os.Getenv("OPENAI_KEY") == "" {
 		t.Skip("OPENAI_KEY not set")
 	}
 
-	provider := New(apiKey)
+	provider := New(llm.APIKeyFromEnv("OPENAI_KEY"))
 	ctx := context.Background()
 
 	stream, err := provider.CreateStream(ctx, llm.StreamOptions{
@@ -359,8 +358,7 @@ func TestOpenAI_BasicStreaming(t *testing.T) {
 }
 
 func TestOpenAI_ToolCallRoundTrip(t *testing.T) {
-	apiKey := os.Getenv("OPENAI_KEY")
-	if apiKey == "" {
+	if os.Getenv("OPENAI_KEY") == "" {
 		t.Skip("OPENAI_KEY not set")
 	}
 
@@ -368,7 +366,7 @@ func TestOpenAI_ToolCallRoundTrip(t *testing.T) {
 		Location string `json:"location" jsonschema:"description=City name,required"`
 	}
 
-	provider := New(apiKey)
+	provider := New(llm.APIKeyFromEnv("OPENAI_KEY"))
 	ctx := context.Background()
 
 	tools := []llm.ToolDefinition{
@@ -457,12 +455,11 @@ func TestOpenAI_ToolCallRoundTrip(t *testing.T) {
 }
 
 func TestOpenAI_Conversation(t *testing.T) {
-	apiKey := os.Getenv("OPENAI_KEY")
-	if apiKey == "" {
+	if os.Getenv("OPENAI_KEY") == "" {
 		t.Skip("OPENAI_KEY not set")
 	}
 
-	provider := New(apiKey)
+	provider := New(llm.APIKeyFromEnv("OPENAI_KEY"))
 	ctx := context.Background()
 
 	messages := llm.Messages{

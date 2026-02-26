@@ -6,27 +6,6 @@ import (
 	"fmt"
 )
 
-// ProviderConfig holds authentication and configuration for a provider.
-type ProviderConfig struct {
-	APIKey string
-	OAuth  *OAuthConfig
-}
-
-// OAuthConfig holds OAuth tokens and expiry information.
-type OAuthConfig struct {
-	Access  string `json:"access_token"`
-	Refresh string `json:"refresh_token"`
-	Expires int64  `json:"expires"` // Unix timestamp in milliseconds
-}
-
-// GetAccessToken returns the current access token (OAuth or API key).
-func (c *ProviderConfig) GetAccessToken() string {
-	if c.OAuth != nil && c.OAuth.Access != "" {
-		return c.OAuth.Access
-	}
-	return c.APIKey
-}
-
 // StreamEventType identifies the kind of streaming event from a provider.
 type StreamEventType string
 

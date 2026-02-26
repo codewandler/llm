@@ -441,12 +441,11 @@ func TestParseStream_ContextCancellation(t *testing.T) {
 // --- Integration tests (require OPENROUTER_API_KEY) ---
 
 func TestOpenRouter_BasicStreaming(t *testing.T) {
-	apiKey := os.Getenv("OPENROUTER_API_KEY")
-	if apiKey == "" {
+	if os.Getenv("OPENROUTER_API_KEY") == "" {
 		t.Skip("OPENROUTER_API_KEY not set")
 	}
 
-	provider := New(apiKey).WithDefaultModel("moonshotai/kimi-k2-0905")
+	provider := New(llm.APIKeyFromEnv("OPENROUTER_API_KEY")).WithDefaultModel("moonshotai/kimi-k2-0905")
 	ctx := context.Background()
 
 	stream, err := provider.CreateStream(ctx, llm.StreamOptions{
@@ -480,8 +479,7 @@ func TestOpenRouter_BasicStreaming(t *testing.T) {
 }
 
 func TestOpenRouter_ToolCallRoundTrip(t *testing.T) {
-	apiKey := os.Getenv("OPENROUTER_API_KEY")
-	if apiKey == "" {
+	if os.Getenv("OPENROUTER_API_KEY") == "" {
 		t.Skip("OPENROUTER_API_KEY not set")
 	}
 
@@ -489,7 +487,7 @@ func TestOpenRouter_ToolCallRoundTrip(t *testing.T) {
 		Location string `json:"location" jsonschema:"description=City name,required"`
 	}
 
-	provider := New(apiKey)
+	provider := New(llm.APIKeyFromEnv("OPENROUTER_API_KEY"))
 	ctx := context.Background()
 
 	tools := []llm.ToolDefinition{
@@ -580,8 +578,7 @@ func TestOpenRouter_ToolCallRoundTrip(t *testing.T) {
 }
 
 func TestOpenRouter_MultipleToolCalls(t *testing.T) {
-	apiKey := os.Getenv("OPENROUTER_API_KEY")
-	if apiKey == "" {
+	if os.Getenv("OPENROUTER_API_KEY") == "" {
 		t.Skip("OPENROUTER_API_KEY not set")
 	}
 
@@ -589,7 +586,7 @@ func TestOpenRouter_MultipleToolCalls(t *testing.T) {
 		Location string `json:"location" jsonschema:"description=Location name,required"`
 	}
 
-	provider := New(apiKey)
+	provider := New(llm.APIKeyFromEnv("OPENROUTER_API_KEY"))
 	ctx := context.Background()
 
 	tools := []llm.ToolDefinition{

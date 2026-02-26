@@ -28,12 +28,20 @@ const (
 	stainlessNodeVer       = "v24.3.0"
 	toolPrefix             = "mcp_"
 	tokenRefreshURL        = "https://console.anthropic.com/v1/oauth/token"
+	defaultBaseURL         = "https://api.anthropic.com"
 )
+
+// OAuthConfig holds OAuth token information for Claude Code authentication.
+type OAuthConfig struct {
+	Access  string // Access token (sk-ant-oat-...)
+	Refresh string // Refresh token
+	Expires int64  // Expiry timestamp in milliseconds
+}
 
 // Provider implements the Anthropic (Claude) LLM backend.
 type Provider struct {
-	config       *llm.ProviderConfig
-	baseURL      string
+	opts         *llm.Options
+	oauth        *OAuthConfig // Optional OAuth config for Claude Code
 	client       *http.Client
 	mu           sync.Mutex // protects token refresh
 	userID       string     // compound metadata user_id
@@ -41,18 +49,46 @@ type Provider struct {
 	quotaChecked bool
 }
 
-// New creates a new Anthropic provider.
-func New(cfg *llm.ProviderConfig, baseURL string) *Provider {
-	if baseURL == "" {
-		baseURL = "https://api.anthropic.com"
+// DefaultOptions returns the default options for Anthropic.
+// Base URL defaults to https://api.anthropic.com.
+// API key should be provided via WithAPIKey() or WithAPIKeyFunc().
+func DefaultOptions() []llm.Option {
+	return []llm.Option{
+		llm.WithBaseURL(defaultBaseURL),
 	}
+}
+
+// New creates a new Anthropic provider.
+// Options are applied on top of DefaultOptions().
+//
+// Example usage:
+//
+//	// With API key
+//	p := anthropic.New(llm.WithAPIKey("sk-ant-..."))
+//
+//	// With API key from environment
+//	p := anthropic.New(llm.APIKeyFromEnv("ANTHROPIC_API_KEY"))
+//
+//	// With dynamic API key resolution
+//	p := anthropic.New(llm.WithAPIKeyFunc(func(ctx context.Context) (string, error) {
+//	    return secretStore.Get(ctx, "anthropic-key")
+//	}))
+func New(opts ...llm.Option) *Provider {
+	allOpts := append(DefaultOptions(), opts...)
+	cfg := llm.Apply(allOpts...)
 	p := &Provider{
-		config:    cfg,
-		baseURL:   baseURL,
+		opts:      cfg,
 		client:    &http.Client{},
 		sessionID: randomUUID(),
 	}
 	p.userID = p.buildUserID()
+	return p
+}
+
+// WithOAuth configures the provider to use OAuth authentication.
+// This enables Claude Code-style authentication with automatic token refresh.
+func (p *Provider) WithOAuth(oauth *OAuthConfig) *Provider {
+	p.oauth = oauth
 	return p
 }
 
@@ -66,8 +102,10 @@ func (p *Provider) Models() []llm.Model {
 }
 
 func (p *Provider) isOAuth() bool {
-	token := p.config.GetAccessToken()
-	return strings.HasPrefix(token, "sk-ant-oat")
+	if p.oauth != nil {
+		return strings.HasPrefix(p.oauth.Access, "sk-ant-oat")
+	}
+	return false
 }
 
 func (p *Provider) getAccessToken(ctx context.Context) (string, error) {
@@ -75,28 +113,29 @@ func (p *Provider) getAccessToken(ctx context.Context) (string, error) {
 	defer p.mu.Unlock()
 
 	// If using OAuth, check expiry and refresh if needed.
-	if p.config.OAuth != nil {
+	if p.oauth != nil {
 		now := time.Now().UnixMilli()
 		// Refresh if expired or within 5 minutes of expiry.
-		if now >= p.config.OAuth.Expires-5*60*1000 {
+		if now >= p.oauth.Expires-5*60*1000 {
 			if err := p.refreshToken(ctx); err != nil {
 				return "", fmt.Errorf("token refresh: %w", err)
 			}
 		}
-		return p.config.OAuth.Access, nil
+		return p.oauth.Access, nil
 	}
 
-	return p.config.APIKey, nil
+	// Use the Options API key resolution
+	return p.opts.ResolveAPIKey(ctx)
 }
 
 func (p *Provider) refreshToken(ctx context.Context) error {
-	if p.config.OAuth == nil || p.config.OAuth.Refresh == "" {
+	if p.oauth == nil || p.oauth.Refresh == "" {
 		return fmt.Errorf("no refresh token available")
 	}
 
 	body, _ := json.Marshal(map[string]string{
 		"grant_type":    "refresh_token",
-		"refresh_token": p.config.OAuth.Refresh,
+		"refresh_token": p.oauth.Refresh,
 	})
 
 	req, err := http.NewRequestWithContext(ctx, "POST", tokenRefreshURL, bytes.NewReader(body))
@@ -126,9 +165,9 @@ func (p *Provider) refreshToken(ctx context.Context) error {
 	}
 
 	// Update stored tokens.
-	p.config.OAuth.Access = result.AccessToken
-	p.config.OAuth.Refresh = result.RefreshToken
-	p.config.OAuth.Expires = time.Now().Add(time.Duration(result.ExpiresIn) * time.Second).UnixMilli()
+	p.oauth.Access = result.AccessToken
+	p.oauth.Refresh = result.RefreshToken
+	p.oauth.Expires = time.Now().Add(time.Duration(result.ExpiresIn) * time.Second).UnixMilli()
 
 	return nil
 }
@@ -208,7 +247,7 @@ func (p *Provider) checkQuota(ctx context.Context, token string) error {
 
 // newAPIRequest builds an HTTP request with all Claude Code headers.
 func (p *Provider) newAPIRequest(ctx context.Context, token string, oauth bool, body []byte) (*http.Request, error) {
-	endpoint := p.baseURL + "/v1/messages"
+	endpoint := p.opts.BaseURL + "/v1/messages"
 	if oauth {
 		endpoint += "?beta=true"
 	}

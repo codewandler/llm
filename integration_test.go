@@ -60,19 +60,19 @@ func TestProviders(t *testing.T) {
 		},
 		{
 			name:     "openai",
-			provider: openai.New(os.Getenv("OPENAI_KEY")),
+			provider: openai.New(llm.APIKeyFromEnv("OPENAI_KEY")),
 			skip:     os.Getenv("OPENAI_KEY") == "",
 			skipMsg:  "requires OPENAI_KEY",
 		},
 		{
 			name:     "openrouter",
-			provider: openrouter.New(os.Getenv("OPENROUTER_API_KEY")),
+			provider: openrouter.New(llm.APIKeyFromEnv("OPENROUTER_API_KEY")),
 			skip:     os.Getenv("OPENROUTER_API_KEY") == "",
 			skipMsg:  "requires OPENROUTER_API_KEY",
 		},
 		/*{
 			name:     "ollama",
-			provider: ollama.New(""),
+			provider: ollama.New(),
 			skip:     !isOllamaAvailable(),
 			skipMsg:  "requires ollama running on localhost:11434",
 		},*/
@@ -313,7 +313,7 @@ func TestOllamaModels(t *testing.T) {
 		t.Skip("requires ollama running on localhost:11434")
 	}
 
-	p := ollama.New("")
+	p := ollama.New()
 	ctx := context.Background()
 
 	// Get the curated list of models that should work

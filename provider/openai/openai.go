@@ -14,8 +14,8 @@ import (
 )
 
 const (
-	baseURL      = "https://api.openai.com"
-	providerName = "openai"
+	defaultBaseURL = "https://api.openai.com"
+	providerName   = "openai"
 
 	// DefaultModel is the recommended default model (fast and capable)
 	DefaultModel = "gpt-4o-mini"
@@ -23,15 +23,43 @@ const (
 
 // Provider implements the OpenAI LLM backend.
 type Provider struct {
-	apiKey       string
+	opts         *llm.Options
 	defaultModel string
 	client       *http.Client
 }
 
+// DefaultOptions returns the default options for OpenAI.
+// API key is read from OPENAI_API_KEY or OPENAI_KEY environment variables.
+func DefaultOptions() []llm.Option {
+	return []llm.Option{
+		llm.WithBaseURL(defaultBaseURL),
+		llm.APIKeyFromEnv("OPENAI_API_KEY", "OPENAI_KEY"),
+	}
+}
+
 // New creates a new OpenAI provider.
-func New(apiKey string) *Provider {
+// Options are applied on top of DefaultOptions().
+//
+// Example usage:
+//
+//	// Use defaults (reads from OPENAI_API_KEY or OPENAI_KEY env)
+//	p := openai.New()
+//
+//	// Explicit static key
+//	p := openai.New(llm.WithAPIKey("sk-..."))
+//
+//	// Custom env var
+//	p := openai.New(llm.APIKeyFromEnv("MY_OPENAI_KEY"))
+//
+//	// Dynamic key (e.g., from secret manager)
+//	p := openai.New(llm.WithAPIKeyFunc(func(ctx context.Context) (string, error) {
+//	    return secretManager.Get(ctx, "openai-key")
+//	}))
+func New(opts ...llm.Option) *Provider {
+	allOpts := append(DefaultOptions(), opts...)
+	cfg := llm.Apply(allOpts...)
 	return &Provider{
-		apiKey:       apiKey,
+		opts:         cfg,
 		defaultModel: DefaultModel,
 		client:       &http.Client{},
 	}
@@ -69,18 +97,25 @@ func (p *Provider) CreateStream(ctx context.Context, opts llm.StreamOptions) (<-
 	if err := opts.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid options: %w", err)
 	}
+
+	// Get API key lazily
+	apiKey, err := p.opts.APIKeyFunc(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("get API key: %w", err)
+	}
+
 	body, err := buildRequest(opts)
 	if err != nil {
 		return nil, fmt.Errorf("build request: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "POST", baseURL+"/v1/chat/completions", bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, "POST", p.opts.BaseURL+"/v1/chat/completions", bytes.NewReader(body))
 	if err != nil {
 		return nil, fmt.Errorf("create request: %w", err)
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+p.apiKey)
+	req.Header.Set("Authorization", "Bearer "+apiKey)
 
 	resp, err := p.client.Do(req)
 	if err != nil {
