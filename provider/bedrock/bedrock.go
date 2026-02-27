@@ -367,21 +367,29 @@ func parseStream(ctx context.Context, output *bedrockruntime.ConverseStreamOutpu
 			}
 
 		case *types.ConverseStreamOutputMemberMetadata:
-			// Usage information
+			// Usage information - this comes after MessageStop
 			if e.Value.Usage != nil {
-				usage.InputTokens = int(aws.ToInt32(e.Value.Usage.InputTokens))
-				usage.OutputTokens = int(aws.ToInt32(e.Value.Usage.OutputTokens))
-				usage.TotalTokens = int(aws.ToInt32(e.Value.Usage.TotalTokens))
+				if e.Value.Usage.InputTokens != nil {
+					usage.InputTokens = int(*e.Value.Usage.InputTokens)
+				}
+				if e.Value.Usage.OutputTokens != nil {
+					usage.OutputTokens = int(*e.Value.Usage.OutputTokens)
+				}
+				if e.Value.Usage.TotalTokens != nil {
+					usage.TotalTokens = int(*e.Value.Usage.TotalTokens)
+				}
 				usage.Cost = calculateCost(model, &usage)
 			}
-
-		case *types.ConverseStreamOutputMemberMessageStop:
-			// Message complete
+			// Emit done event with usage after metadata is received
 			events <- llm.StreamEvent{
 				Type:  llm.StreamEventDone,
 				Usage: &usage,
 			}
 			return
+
+		case *types.ConverseStreamOutputMemberMessageStop:
+			// Message complete - but continue to receive metadata event
+			// Don't return here, the metadata event comes after
 		}
 	}
 

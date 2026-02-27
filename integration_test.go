@@ -43,14 +43,22 @@ func isBedrockAvailable() bool {
 	if os.Getenv(bedrock.EnvAWSAccessKeyID) != "" {
 		return true
 	}
-	// Check credentials file
+	// Check for AWS config/credentials files (including SSO)
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return false
 	}
+	// Check credentials file
 	credPath := filepath.Join(home, ".aws", "credentials")
-	_, err = os.Stat(credPath)
-	return err == nil
+	if _, err := os.Stat(credPath); err == nil {
+		return true
+	}
+	// Check config file (may have SSO profiles)
+	configPath := filepath.Join(home, ".aws", "config")
+	if _, err := os.Stat(configPath); err == nil {
+		return true
+	}
+	return false
 }
 
 // getAWSRegion returns the configured AWS region or default.
@@ -128,6 +136,10 @@ func TestProviders(t *testing.T) {
 				// Special handling for Ollama to avoid non-chat models
 				if tt.name == "ollama" {
 					return ollama.ModelDefault
+				}
+				// Special handling for Bedrock - need inference profile IDs
+				if tt.name == "bedrock" {
+					return "us.anthropic.claude-3-5-haiku-20241022-v1:0"
 				}
 				// Fallback to static models
 				return tt.provider.Models()[0].ID
