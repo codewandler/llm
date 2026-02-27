@@ -2,51 +2,33 @@ package provider
 
 import (
 	"context"
-	"os"
 
 	"github.com/codewandler/llm"
 	"github.com/codewandler/llm/provider/anthropic"
+	"github.com/codewandler/llm/provider/bedrock"
 	"github.com/codewandler/llm/provider/ollama"
 	"github.com/codewandler/llm/provider/openai"
 	"github.com/codewandler/llm/provider/openrouter"
 )
 
 // NewDefaultRegistry creates a registry with all available providers pre-registered.
-// Providers are configured using environment variables:
-//   - OPENAI_KEY for OpenAI
-//   - OPENROUTER_API_KEY for OpenRouter
-//   - ANTHROPIC_API_KEY for Anthropic
-//   - OLLAMA_BASE_URL for Ollama (optional, defaults to http://localhost:11434)
+// Each provider checks its own environment variables and registers itself if configured.
 //
-// Claude Code provider is always registered (uses local claude CLI).
+// Provider configuration:
+//   - Anthropic: ANTHROPIC_API_KEY, or claude CLI in PATH for Claude Code
+//   - OpenAI: OPENAI_API_KEY or OPENAI_KEY
+//   - OpenRouter: OPENROUTER_API_KEY
+//   - Bedrock: AWS_ACCESS_KEY_ID or ~/.aws/credentials, AWS_REGION
+//   - Ollama: Always registered, OLLAMA_BASE_URL (optional)
 func NewDefaultRegistry() *llm.Registry {
 	reg := llm.NewRegistry()
-
-	// Register Claude Code provider (uses local claude CLI)
-	reg.Register(anthropic.NewClaudeCodeProvider())
-
-	// Register Ollama provider (no API key needed, custom base URL optional)
-	var ollamaOpts []llm.Option
-	if ollamaURL := os.Getenv("OLLAMA_BASE_URL"); ollamaURL != "" {
-		ollamaOpts = append(ollamaOpts, llm.WithBaseURL(ollamaURL))
-	}
-	reg.Register(ollama.New(ollamaOpts...))
-
-	// Register OpenAI provider if API key is available
-	if os.Getenv("OPENAI_KEY") != "" {
-		reg.Register(openai.New(llm.APIKeyFromEnv("OPENAI_KEY")))
-	}
-
-	// Register OpenRouter provider if API key is available
-	if os.Getenv("OPENROUTER_API_KEY") != "" {
-		reg.Register(openrouter.New(llm.APIKeyFromEnv("OPENROUTER_API_KEY")))
-	}
-
-	// Register Anthropic provider if API key is available
-	if os.Getenv("ANTHROPIC_API_KEY") != "" {
-		reg.Register(anthropic.New(llm.APIKeyFromEnv("ANTHROPIC_API_KEY")))
-	}
-
+	reg.RegisterAll(
+		anthropic.MaybeRegister,
+		ollama.MaybeRegister,
+		openai.MaybeRegister,
+		openrouter.MaybeRegister,
+		bedrock.MaybeRegister,
+	)
 	return reg
 }
 

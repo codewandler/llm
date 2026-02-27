@@ -80,3 +80,14 @@ func (r *Registry) CreateStream(ctx context.Context, opts StreamOptions) (<-chan
 	opts.Model = modelID
 	return p.CreateStream(ctx, opts)
 }
+
+// RegisterFunc is a function that conditionally registers a provider with a registry.
+// Each provider package exports a MaybeRegister function of this type.
+type RegisterFunc func(*Registry)
+
+// RegisterAll calls all provided registration functions.
+func (r *Registry) RegisterAll(fns ...RegisterFunc) {
+	for _, fn := range fns {
+		fn(r)
+	}
+}

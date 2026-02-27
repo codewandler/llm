@@ -5,9 +5,11 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/codewandler/llm/provider/bedrock"
 	"github.com/codewandler/llm/provider/openai"
 	"github.com/codewandler/llm/provider/openrouter"
 	"github.com/stretchr/testify/assert"
@@ -33,6 +35,33 @@ func isOllamaAvailable() bool {
 	}
 	defer resp.Body.Close()
 	return resp.StatusCode == http.StatusOK
+}
+
+// isBedrockAvailable checks if AWS credentials are configured for Bedrock.
+func isBedrockAvailable() bool {
+	// Check environment variables
+	if os.Getenv(bedrock.EnvAWSAccessKeyID) != "" {
+		return true
+	}
+	// Check credentials file
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return false
+	}
+	credPath := filepath.Join(home, ".aws", "credentials")
+	_, err = os.Stat(credPath)
+	return err == nil
+}
+
+// getAWSRegion returns the configured AWS region or default.
+func getAWSRegion() string {
+	if region := os.Getenv(bedrock.EnvAWSRegion); region != "" {
+		return region
+	}
+	if region := os.Getenv(bedrock.EnvAWSDefaultRegion); region != "" {
+		return region
+	}
+	return "us-east-1"
 }
 
 // TestProviders is a comprehensive integration test that verifies all providers
@@ -69,6 +98,12 @@ func TestProviders(t *testing.T) {
 			provider: openrouter.New(llm.APIKeyFromEnv("OPENROUTER_API_KEY")),
 			skip:     os.Getenv("OPENROUTER_API_KEY") == "",
 			skipMsg:  "requires OPENROUTER_API_KEY",
+		},
+		{
+			name:     "bedrock",
+			provider: bedrock.New(bedrock.WithRegion(getAWSRegion())),
+			skip:     !isBedrockAvailable(),
+			skipMsg:  "requires AWS credentials (AWS_ACCESS_KEY_ID or ~/.aws/credentials)",
 		},
 		/*{
 			name:     "ollama",
