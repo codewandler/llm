@@ -11,10 +11,12 @@ import (
 )
 
 func TestNewDefault(t *testing.T) {
-	t.Parallel()
+	// NOTE: Cannot use t.Parallel() - these tests modify shared environment variables
 
 	// Clear env vars to test defaults
 	os.Unsetenv("OPENROUTER_API_KEY")
+	os.Unsetenv("OPENAI_API_KEY")
+	os.Unsetenv("OPENAI_KEY")
 	os.Unsetenv("OLLAMA_BASE_URL")
 
 	reg := NewDefaultRegistry()
@@ -36,7 +38,7 @@ func TestNewDefault(t *testing.T) {
 }
 
 func TestNewDefaultWithOpenRouter(t *testing.T) {
-	t.Parallel()
+	// NOTE: Cannot use t.Parallel() - these tests modify shared environment variables
 
 	// Set OpenRouter API key
 	os.Setenv("OPENROUTER_API_KEY", "test-key")
@@ -60,7 +62,7 @@ func TestNewDefaultWithOpenRouter(t *testing.T) {
 }
 
 func TestNewDefaultWithCustomOllamaURL(t *testing.T) {
-	t.Parallel()
+	// NOTE: Cannot use t.Parallel() - these tests modify shared environment variables
 
 	customURL := "http://custom:11434"
 	os.Setenv("OLLAMA_BASE_URL", customURL)

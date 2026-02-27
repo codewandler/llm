@@ -54,8 +54,8 @@ func testBasicStreaming(ctx context.Context, p *bedrock.Provider) error {
 		case llm.StreamEventDelta:
 			fmt.Print(event.Delta)
 		case llm.StreamEventDone:
-			fmt.Printf("\nTokens: %d in, %d out\n",
-				event.Usage.InputTokens, event.Usage.OutputTokens)
+			fmt.Printf("\nTokens: %d in, %d out (cost: $%.6f)\n",
+				event.Usage.InputTokens, event.Usage.OutputTokens, event.Usage.Cost)
 		case llm.StreamEventError:
 			return event.Error
 		}
@@ -91,8 +91,8 @@ func testToolCalling(ctx context.Context, p *bedrock.Provider) error {
 			toolCall = event.ToolCall
 			fmt.Printf("Tool call: %s(location=%v)\n", toolCall.Name, toolCall.Arguments["location"])
 		case llm.StreamEventDone:
-			fmt.Printf("Tokens: %d in, %d out\n",
-				event.Usage.InputTokens, event.Usage.OutputTokens)
+			fmt.Printf("Tokens: %d in, %d out (cost: $%.6f)\n",
+				event.Usage.InputTokens, event.Usage.OutputTokens, event.Usage.Cost)
 		case llm.StreamEventError:
 			return event.Error
 		}
