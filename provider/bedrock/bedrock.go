@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -24,10 +25,13 @@ const (
 
 // Provider implements the AWS Bedrock LLM backend.
 type Provider struct {
-	region       string
-	defaultModel string
-	client       *bedrockruntime.Client
-	clientErr    error // deferred client creation error
+	region              string
+	defaultModel        string
+	credentialsProvider aws.CredentialsProvider
+
+	mu        sync.Mutex // protects client initialization
+	client    *bedrockruntime.Client
+	clientErr error // deferred client creation error
 }
 
 // Option configures a Bedrock provider.
@@ -48,12 +52,26 @@ func WithDefaultModel(model string) Option {
 	}
 }
 
+// WithCredentialsProvider sets a custom AWS credentials provider.
+// When set, the AWS client is created lazily on first use, allowing
+// credentials to be fetched at request time rather than at construction.
+// This enables integration with external secret managers or dynamic
+// credential sources.
+func WithCredentialsProvider(cp aws.CredentialsProvider) Option {
+	return func(p *Provider) {
+		p.credentialsProvider = cp
+	}
+}
+
 // New creates a new AWS Bedrock provider.
 // The provider uses the AWS SDK's default credential chain:
 //   - Environment variables (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY)
 //   - Shared credentials file (~/.aws/credentials)
 //   - IAM role (for EC2/ECS/Lambda)
 //   - SSO credentials
+//
+// When WithCredentialsProvider is used, client creation is deferred until
+// the first CreateStream call, allowing credentials to be fetched lazily.
 //
 // Example usage:
 //
@@ -65,6 +83,9 @@ func WithDefaultModel(model string) Option {
 //
 //	// Specify default model
 //	p := bedrock.New(bedrock.WithDefaultModel("anthropic.claude-3-5-haiku-20241022-v1:0"))
+//
+//	// Use custom credentials provider (lazy initialization)
+//	p := bedrock.New(bedrock.WithCredentialsProvider(myProvider))
 func New(opts ...Option) *Provider {
 	p := &Provider{
 		region:       "us-east-1",
@@ -75,7 +96,13 @@ func New(opts ...Option) *Provider {
 		opt(p)
 	}
 
-	// Create AWS SDK client
+	// If custom credentials provider is set, defer client creation
+	// to first use (lazy initialization)
+	if p.credentialsProvider != nil {
+		return p
+	}
+
+	// Create AWS SDK client immediately using default credential chain
 	// We defer errors to CreateStream so New() never fails
 	cfg, err := config.LoadDefaultConfig(context.Background(),
 		config.WithRegion(p.region),
@@ -111,10 +138,39 @@ func (p *Provider) Models() []llm.Model {
 	return models
 }
 
+// initClient creates the AWS client lazily if not already initialized.
+// Thread-safe: uses mutex to ensure only one goroutine creates the client.
+func (p *Provider) initClient(ctx context.Context) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	// Already initialized (success or failure)?
+	if p.client != nil || p.clientErr != nil {
+		return p.clientErr
+	}
+
+	// Build config options
+	configOpts := []func(*config.LoadOptions) error{
+		config.WithRegion(p.region),
+	}
+	if p.credentialsProvider != nil {
+		configOpts = append(configOpts, config.WithCredentialsProvider(p.credentialsProvider))
+	}
+
+	cfg, err := config.LoadDefaultConfig(ctx, configOpts...)
+	if err != nil {
+		p.clientErr = fmt.Errorf("load AWS config: %w", err)
+		return p.clientErr
+	}
+
+	p.client = bedrockruntime.NewFromConfig(cfg)
+	return nil
+}
+
 func (p *Provider) CreateStream(ctx context.Context, opts llm.StreamOptions) (<-chan llm.StreamEvent, error) {
-	// Check for deferred client creation error
-	if p.clientErr != nil {
-		return nil, p.clientErr
+	// Lazy client initialization (thread-safe)
+	if err := p.initClient(ctx); err != nil {
+		return nil, err
 	}
 
 	if err := opts.Validate(); err != nil {
