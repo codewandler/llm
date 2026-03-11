@@ -11,10 +11,12 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 	"sync"
 
 	"github.com/codewandler/llm"
+	"github.com/codewandler/llm/modeldb"
 )
 
 const (
@@ -69,11 +71,73 @@ func NewClaudeCodeProvider(opts ...llm.Option) *ClaudeProvider {
 func (p *ClaudeProvider) Name() string { return claudeCodeProviderName }
 
 func (p *ClaudeProvider) Models() []llm.Model {
+	models := claudeCodeModelsFromDB()
+	if len(models) > 0 {
+		return models
+	}
+
 	return []llm.Model{
 		{ID: claudeCodeModelSonnet, Name: "Claude Sonnet 4.6", Provider: claudeCodeProviderName},
 		{ID: claudeCodeModelOpus, Name: "Claude Opus 4.6", Provider: claudeCodeProviderName},
 		{ID: claudeCodeModelHaiku, Name: "Claude Haiku 4.5", Provider: claudeCodeProviderName},
 	}
+}
+
+// claudeCodeSupportedModels is the allowlist of model IDs that work with Claude Code API.
+// These were extracted from the Claude CLI binary and verified via API testing.
+// Older 3.x models return 404 errors via the Claude Code endpoint.
+var claudeCodeSupportedModels = map[string]bool{
+	// Claude 4.6 (current default)
+	"claude-sonnet-4-6": true,
+	"claude-opus-4-6":   true,
+
+	// Claude 4.5
+	"claude-sonnet-4-5":          true,
+	"claude-sonnet-4-5-20250929": true,
+	"claude-opus-4-5":            true,
+	"claude-opus-4-5-20251101":   true,
+	"claude-haiku-4-5":           true,
+	"claude-haiku-4-5-20251001":  true,
+
+	// Claude 4.1
+	"claude-opus-4-1":          true,
+	"claude-opus-4-1-20250805": true,
+
+	// Claude 4.0
+	"claude-sonnet-4":          true,
+	"claude-sonnet-4-20250514": true,
+	"claude-opus-4":            true,
+	"claude-opus-4-20250514":   true,
+}
+
+func claudeCodeModelsFromDB() []llm.Model {
+	provider, ok := modeldb.GetProvider("anthropic")
+	if !ok || len(provider.Models) == 0 {
+		return nil
+	}
+
+	ids := make([]string, 0, len(claudeCodeSupportedModels))
+	for id := range provider.Models {
+		if claudeCodeSupportedModels[id] {
+			ids = append(ids, id)
+		}
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+
+	sort.Strings(ids)
+	out := make([]llm.Model, 0, len(ids))
+	for _, id := range ids {
+		m := provider.Models[id]
+		name := m.Name
+		if name == "" {
+			name = id
+		}
+		out = append(out, llm.Model{ID: id, Name: name, Provider: claudeCodeProviderName})
+	}
+
+	return out
 }
 
 func normalizeClaudeCodeModel(model string) string {

@@ -2,6 +2,7 @@ package anthropic
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"strings"
 	"testing"
@@ -143,4 +144,74 @@ func TestClaudeCodeProvider_RealAPI_TextAndToolRoundtrip(t *testing.T) {
 		assert.Greater(t, doneUsage.OutputTokens, 0)
 		assert.Greater(t, doneUsage.TotalTokens, 0)
 	})
+}
+
+func TestClaudeCodeProvider_RealAPI_ModelMatrix(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping real API test in short mode")
+	}
+	if os.Getenv("LLM_CLAUDE_MODEL_MATRIX") != "1" {
+		t.Skip("set LLM_CLAUDE_MODEL_MATRIX=1 to run model matrix test")
+	}
+
+	path := defaultClaudeCredentialsPath()
+	if path == "" {
+		t.Skip("HOME not set for Claude Code credentials")
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Skipf("Claude Code credentials not found at %s", path)
+	}
+
+	p := NewClaudeCodeProvider()
+	models := p.Models()
+	require.NotEmpty(t, models)
+
+	var failures []string
+	for _, model := range models {
+		ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+		stream, err := p.CreateStream(ctx, llm.StreamOptions{
+			Model: model.ID,
+			Messages: llm.Messages{
+				&llm.UserMsg{Content: "Reply with OK"},
+			},
+		})
+		if err != nil {
+			cancel()
+			failures = append(failures, fmt.Sprintf("%s: create stream error: %v", model.ID, err))
+			continue
+		}
+
+		gotDone := false
+		gotUsage := false
+		gotDelta := false
+		for evt := range stream {
+			switch evt.Type {
+			case llm.StreamEventDelta:
+				if strings.TrimSpace(evt.Delta) != "" {
+					gotDelta = true
+				}
+			case llm.StreamEventDone:
+				gotDone = true
+				gotUsage = evt.Usage != nil && evt.Usage.TotalTokens > 0
+			case llm.StreamEventError:
+				failures = append(failures, fmt.Sprintf("%s: stream error: %v", model.ID, evt.Error))
+			}
+		}
+		cancel()
+
+		if !gotDone {
+			failures = append(failures, fmt.Sprintf("%s: no done event", model.ID))
+			continue
+		}
+		if !gotUsage {
+			failures = append(failures, fmt.Sprintf("%s: missing usage in done event", model.ID))
+		}
+		if !gotDelta {
+			failures = append(failures, fmt.Sprintf("%s: no text delta received", model.ID))
+		}
+	}
+
+	if len(failures) > 0 {
+		t.Fatalf("model matrix failures:\n%s", strings.Join(failures, "\n"))
+	}
 }

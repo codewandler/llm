@@ -41,8 +41,21 @@ func TestClaudeProviderNameAndModels(t *testing.T) {
 	p := NewClaudeCodeProvider()
 	assert.Equal(t, claudeCodeProviderName, p.Name())
 	models := p.Models()
-	require.Len(t, models, 3)
-	assert.Equal(t, claudeCodeModelSonnet, models[0].ID)
+	require.NotEmpty(t, models)
+
+	ids := make(map[string]struct{}, len(models))
+	for _, m := range models {
+		ids[m.ID] = struct{}{}
+	}
+	_, hasSonnet := ids[claudeCodeModelSonnet]
+	_, hasOpus := ids[claudeCodeModelOpus]
+	_, hasHaiku := ids[claudeCodeModelHaiku]
+	_, hasLatest := ids["claude-sonnet-4-5"]
+
+	assert.True(t, hasSonnet, "expected sonnet concrete model in model list")
+	assert.True(t, hasOpus, "expected opus concrete model in model list")
+	assert.True(t, hasHaiku, "expected haiku concrete model in model list")
+	assert.True(t, hasLatest, "expected -latest style model in model list")
 }
 
 func TestNormalizeClaudeCodeModel(t *testing.T) {
