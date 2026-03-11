@@ -6,7 +6,6 @@ require (
 	github.com/aws/aws-sdk-go-v2 v1.41.2
 	github.com/aws/aws-sdk-go-v2/config v1.32.10
 	github.com/aws/aws-sdk-go-v2/service/bedrockruntime v1.50.0
-	github.com/codewandler/cc-sdk-go v0.5.0
 	github.com/invopop/jsonschema v0.13.0
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2
 	github.com/stretchr/testify v1.11.1
@@ -30,7 +29,6 @@ require (
 	github.com/buger/jsonparser v1.1.1 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/mailru/easyjson v0.7.7 // indirect
-	github.com/matoous/go-nanoid/v2 v2.1.0 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/wk8/go-ordered-map/v2 v2.1.8 // indirect
 	golang.org/x/text v0.14.0 // indirect

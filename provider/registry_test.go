@@ -3,12 +3,27 @@ package provider
 import (
 	"context"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/codewandler/llm"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func withClaudeCredentialsHome(t *testing.T) {
+	t.Helper()
+	dir := t.TempDir()
+	credsDir := filepath.Join(dir, ".claude")
+	require.NoError(t, os.MkdirAll(credsDir, 0o755))
+	creds := `{"claudeAiOauth":{"accessToken":"sk-ant-oat01-test","refreshToken":"sk-ant-ort01-test","expiresAt":4102444800000}}`
+	require.NoError(t, os.WriteFile(filepath.Join(credsDir, ".credentials.json"), []byte(creds), 0o600))
+	originalHome := os.Getenv("HOME")
+	require.NoError(t, os.Setenv("HOME", dir))
+	t.Cleanup(func() {
+		_ = os.Setenv("HOME", originalHome)
+	})
+}
 
 func TestNewDefault(t *testing.T) {
 	// NOTE: Cannot use t.Parallel() - these tests modify shared environment variables
@@ -18,6 +33,7 @@ func TestNewDefault(t *testing.T) {
 	os.Unsetenv("OPENAI_API_KEY")
 	os.Unsetenv("OPENAI_KEY")
 	os.Unsetenv("OLLAMA_BASE_URL")
+	withClaudeCredentialsHome(t)
 
 	reg := NewDefaultRegistry()
 	require.NotNil(t, reg)
@@ -43,6 +59,7 @@ func TestNewDefaultWithOpenRouter(t *testing.T) {
 	// Set OpenRouter API key
 	os.Setenv("OPENROUTER_API_KEY", "test-key")
 	defer os.Unsetenv("OPENROUTER_API_KEY")
+	withClaudeCredentialsHome(t)
 
 	reg := NewDefaultRegistry()
 	require.NotNil(t, reg)
@@ -67,6 +84,7 @@ func TestNewDefaultWithCustomOllamaURL(t *testing.T) {
 	customURL := "http://custom:11434"
 	os.Setenv("OLLAMA_BASE_URL", customURL)
 	defer os.Unsetenv("OLLAMA_BASE_URL")
+	withClaudeCredentialsHome(t)
 
 	reg := NewDefaultRegistry()
 	require.NotNil(t, reg)
@@ -77,7 +95,7 @@ func TestNewDefaultWithCustomOllamaURL(t *testing.T) {
 }
 
 func TestResolveModel(t *testing.T) {
-	t.Parallel()
+	withClaudeCredentialsHome(t)
 
 	reg := NewDefaultRegistry()
 
@@ -127,7 +145,7 @@ func TestResolveModel(t *testing.T) {
 }
 
 func TestAllModels(t *testing.T) {
-	t.Parallel()
+	withClaudeCredentialsHome(t)
 
 	reg := NewDefaultRegistry()
 	models := reg.AllModels()
@@ -151,7 +169,7 @@ func TestAllModels(t *testing.T) {
 }
 
 func TestCreateStream(t *testing.T) {
-	t.Parallel()
+	withClaudeCredentialsHome(t)
 
 	reg := NewDefaultRegistry()
 

@@ -1,0 +1,89 @@
+package anthropic
+
+import (
+	"context"
+	"encoding/json"
+	"os"
+	"path/filepath"
+	"testing"
+	"time"
+
+	"github.com/codewandler/llm"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+func TestLoadOAuthConfigFromPath(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, ".credentials.json")
+	data := `{"claudeAiOauth":{"accessToken":"sk-ant-oat01-test","refreshToken":"sk-ant-ort01-test","expiresAt":4102444800000}}`
+	require.NoError(t, os.WriteFile(path, []byte(data), 0o600))
+
+	oauth, err := loadOAuthConfigFromPath(path)
+	require.NoError(t, err)
+	assert.Equal(t, "sk-ant-oat01-test", oauth.Access)
+	assert.Equal(t, "sk-ant-ort01-test", oauth.Refresh)
+	assert.Equal(t, int64(4102444800000), oauth.Expires)
+}
+
+func TestOAuthConfigIsExpired(t *testing.T) {
+	t.Parallel()
+	expired := &OAuthConfig{Access: "x", Expires: time.Now().Add(-time.Minute).UnixMilli()}
+	valid := &OAuthConfig{Access: "x", Expires: time.Now().Add(time.Hour).UnixMilli()}
+	assert.True(t, expired.IsExpired())
+	assert.False(t, valid.IsExpired())
+}
+
+func TestClaudeProviderNameAndModels(t *testing.T) {
+	t.Parallel()
+	p := NewClaudeCodeProvider()
+	assert.Equal(t, claudeCodeProviderName, p.Name())
+	models := p.Models()
+	require.Len(t, models, 3)
+	assert.Equal(t, claudeCodeModelSonnet, models[0].ID)
+}
+
+func TestNormalizeClaudeCodeModel(t *testing.T) {
+	t.Parallel()
+	assert.Equal(t, claudeCodeModelSonnet, normalizeClaudeCodeModel("sonnet"))
+	assert.Equal(t, claudeCodeModelOpus, normalizeClaudeCodeModel("opus"))
+	assert.Equal(t, claudeCodeModelHaiku, normalizeClaudeCodeModel("haiku"))
+	assert.Equal(t, "claude-sonnet-4-6", normalizeClaudeCodeModel("claude-sonnet-4-6"))
+}
+
+func TestNewClaudeAPIRequestHeaders(t *testing.T) {
+	t.Parallel()
+	p := NewClaudeCodeProvider(llm.WithBaseURL("https://example.test"))
+	req, err := p.newClaudeAPIRequest(context.Background(), "token-123", []byte(`{"ok":true}`))
+	require.NoError(t, err)
+
+	assert.Equal(t, "https://example.test/v1/messages?beta=true", req.URL.String())
+	assert.Equal(t, "Bearer token-123", req.Header.Get("Authorization"))
+	assert.Equal(t, claudeCodeBeta, req.Header.Get("Anthropic-Beta"))
+	assert.Equal(t, claudeCodeUserAgent, req.Header.Get("User-Agent"))
+	assert.Equal(t, "cli", req.Header.Get("X-App"))
+}
+
+func TestBuildClaudeRequestSystemBlocks(t *testing.T) {
+	t.Parallel()
+	p := NewClaudeCodeProvider()
+	body, err := p.buildClaudeRequest(llm.StreamOptions{
+		Model: "sonnet",
+		Messages: llm.Messages{
+			&llm.SystemMsg{Content: "custom system"},
+			&llm.UserMsg{Content: "hello"},
+		},
+	})
+	require.NoError(t, err)
+
+	var req request
+	require.NoError(t, json.Unmarshal(body, &req))
+	system, ok := req.System.([]any)
+	require.True(t, ok)
+	require.Len(t, system, 4)
+	last, ok := system[3].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "custom system", last["text"])
+}

@@ -4,199 +4,70 @@ import (
 	"bufio"
 	"bytes"
 	"context"
-	"crypto/rand"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
-	"os"
-	"path/filepath"
-	"runtime"
 	"strings"
-	"sync"
-	"time"
 
 	"github.com/codewandler/llm"
 )
 
 const (
-	anthropicVersion       = "2023-06-01"
-	anthropicBeta          = "oauth-2025-04-20,interleaved-thinking-2025-05-14,context-management-2025-06-27,prompt-caching-scope-2026-01-05"
-	claudeCodeSystemPrefix = "You are Claude Code, Anthropic's official CLI for Claude."
-	claudeCodeUserAgent    = "claude-cli/2.1.38 (external, cli)"
-	stainlessPackageVer    = "0.73.0"
-	stainlessNodeVer       = "v24.3.0"
-	toolPrefix             = "mcp_"
-	tokenRefreshURL        = "https://console.anthropic.com/v1/oauth/token"
-	defaultBaseURL         = "https://api.anthropic.com"
+	providerName     = "anthropic"
+	defaultBaseURL   = "https://api.anthropic.com"
+	anthropicVersion = "2023-06-01"
 )
 
-// OAuthConfig holds OAuth token information for Claude Code authentication.
-type OAuthConfig struct {
-	Access  string // Access token (sk-ant-oat-...)
-	Refresh string // Refresh token
-	Expires int64  // Expiry timestamp in milliseconds
-}
-
-// Provider implements the Anthropic (Claude) LLM backend.
+// Provider implements the direct Anthropic API backend.
 type Provider struct {
-	opts         *llm.Options
-	oauth        *OAuthConfig // Optional OAuth config for Claude Code
-	client       *http.Client
-	mu           sync.Mutex // protects token refresh
-	userID       string     // compound metadata user_id
-	sessionID    string     // random per-instance session UUID
-	quotaChecked bool
+	opts   *llm.Options
+	client *http.Client
 }
 
 // DefaultOptions returns the default options for Anthropic.
-// Base URL defaults to https://api.anthropic.com.
-// API key should be provided via WithAPIKey() or WithAPIKeyFunc().
 func DefaultOptions() []llm.Option {
 	return []llm.Option{
 		llm.WithBaseURL(defaultBaseURL),
+		llm.APIKeyFromEnv("ANTHROPIC_API_KEY"),
 	}
 }
 
 // New creates a new Anthropic provider.
-// Options are applied on top of DefaultOptions().
-//
-// Example usage:
-//
-//	// With API key
-//	p := anthropic.New(llm.WithAPIKey("sk-ant-..."))
-//
-//	// With API key from environment
-//	p := anthropic.New(llm.APIKeyFromEnv("ANTHROPIC_API_KEY"))
-//
-//	// With dynamic API key resolution
-//	p := anthropic.New(llm.WithAPIKeyFunc(func(ctx context.Context) (string, error) {
-//	    return secretStore.Get(ctx, "anthropic-key")
-//	}))
 func New(opts ...llm.Option) *Provider {
 	allOpts := append(DefaultOptions(), opts...)
 	cfg := llm.Apply(allOpts...)
-	p := &Provider{
-		opts:      cfg,
-		client:    &http.Client{},
-		sessionID: randomUUID(),
-	}
-	p.userID = p.buildUserID()
-	return p
+	return &Provider{opts: cfg, client: &http.Client{}}
 }
 
-// WithOAuth configures the provider to use OAuth authentication.
-// This enables Claude Code-style authentication with automatic token refresh.
-func (p *Provider) WithOAuth(oauth *OAuthConfig) *Provider {
-	p.oauth = oauth
-	return p
-}
-
-func (p *Provider) Name() string { return "anthropic" }
+func (p *Provider) Name() string { return providerName }
 
 func (p *Provider) Models() []llm.Model {
 	return []llm.Model{
-		{ID: "claude-sonnet-4-5-20250929", Name: "Claude Sonnet 4.5", Provider: "anthropic"},
-		{ID: "claude-haiku-4-5-20251001", Name: "Claude Haiku 4.5", Provider: "anthropic"},
+		{ID: "claude-sonnet-4-5-20250929", Name: "Claude Sonnet 4.5", Provider: providerName},
+		{ID: "claude-haiku-4-5-20251001", Name: "Claude Haiku 4.5", Provider: providerName},
 	}
-}
-
-func (p *Provider) isOAuth() bool {
-	if p.oauth != nil {
-		return strings.HasPrefix(p.oauth.Access, "sk-ant-oat")
-	}
-	return false
-}
-
-func (p *Provider) getAccessToken(ctx context.Context) (string, error) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-
-	// If using OAuth, check expiry and refresh if needed.
-	if p.oauth != nil {
-		now := time.Now().UnixMilli()
-		// Refresh if expired or within 5 minutes of expiry.
-		if now >= p.oauth.Expires-5*60*1000 {
-			if err := p.refreshToken(ctx); err != nil {
-				return "", fmt.Errorf("token refresh: %w", err)
-			}
-		}
-		return p.oauth.Access, nil
-	}
-
-	// Use the Options API key resolution
-	return p.opts.ResolveAPIKey(ctx)
-}
-
-func (p *Provider) refreshToken(ctx context.Context) error {
-	if p.oauth == nil || p.oauth.Refresh == "" {
-		return fmt.Errorf("no refresh token available")
-	}
-
-	body, _ := json.Marshal(map[string]string{
-		"grant_type":    "refresh_token",
-		"refresh_token": p.oauth.Refresh,
-	})
-
-	req, err := http.NewRequestWithContext(ctx, "POST", tokenRefreshURL, bytes.NewReader(body))
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := p.client.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		respBody, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("token refresh failed (HTTP %d): %s", resp.StatusCode, string(respBody))
-	}
-
-	var result struct {
-		AccessToken  string `json:"access_token"`
-		RefreshToken string `json:"refresh_token"`
-		ExpiresIn    int    `json:"expires_in"` // seconds
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return err
-	}
-
-	// Update stored tokens.
-	p.oauth.Access = result.AccessToken
-	p.oauth.Refresh = result.RefreshToken
-	p.oauth.Expires = time.Now().Add(time.Duration(result.ExpiresIn) * time.Second).UnixMilli()
-
-	return nil
 }
 
 func (p *Provider) CreateStream(ctx context.Context, opts llm.StreamOptions) (<-chan llm.StreamEvent, error) {
 	if err := opts.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid options: %w", err)
 	}
-	oauth := p.isOAuth()
 
-	token, err := p.getAccessToken(ctx)
+	apiKey, err := p.opts.ResolveAPIKey(ctx)
 	if err != nil {
 		return nil, err
 	}
-
-	// Quota check: Claude Code sends a lightweight request first.
-	if oauth && !p.quotaChecked {
-		p.quotaChecked = true
-		if err := p.checkQuota(ctx, token); err != nil {
-			return nil, fmt.Errorf("quota check: %w", err)
-		}
+	if apiKey == "" {
+		return nil, fmt.Errorf("anthropic API key is not configured")
 	}
 
-	body, err := p.buildRequest(opts, oauth)
+	body, err := buildAnthropicRequest(opts)
 	if err != nil {
 		return nil, fmt.Errorf("build request: %w", err)
 	}
 
-	req, err := p.newAPIRequest(ctx, token, oauth, body)
+	req, err := p.newAPIRequest(ctx, apiKey, body)
 	if err != nil {
 		return nil, err
 	}
@@ -213,46 +84,12 @@ func (p *Provider) CreateStream(ctx context.Context, opts llm.StreamOptions) (<-
 	}
 
 	events := make(chan llm.StreamEvent, 64)
-	go parseStream(ctx, resp.Body, events, oauth)
+	go parseStream(ctx, resp.Body, events)
 	return events, nil
 }
 
-// checkQuota sends the initial lightweight request that Claude Code sends
-// to verify quota/access before the real conversation.
-func (p *Provider) checkQuota(ctx context.Context, token string) error {
-	body, _ := json.Marshal(map[string]any{
-		"model":      "claude-haiku-4-5-20251001",
-		"max_tokens": 1,
-		"messages":   []map[string]string{{"role": "user", "content": "quota"}},
-		"metadata":   map[string]string{"user_id": p.userID},
-	})
-
-	req, err := p.newAPIRequest(ctx, token, true, body)
-	if err != nil {
-		return err
-	}
-
-	resp, err := p.client.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		respBody, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("quota check failed (HTTP %d): %s", resp.StatusCode, string(respBody))
-	}
-	return nil
-}
-
-// newAPIRequest builds an HTTP request with all Claude Code headers.
-func (p *Provider) newAPIRequest(ctx context.Context, token string, oauth bool, body []byte) (*http.Request, error) {
-	endpoint := p.opts.BaseURL + "/v1/messages"
-	if oauth {
-		endpoint += "?beta=true"
-	}
-
-	req, err := http.NewRequestWithContext(ctx, "POST", endpoint, bytes.NewReader(body))
+func (p *Provider) newAPIRequest(ctx context.Context, apiKey string, body []byte) (*http.Request, error) {
+	req, err := http.NewRequestWithContext(ctx, "POST", p.opts.BaseURL+"/v1/messages", bytes.NewReader(body))
 	if err != nil {
 		return nil, err
 	}
@@ -260,28 +97,9 @@ func (p *Provider) newAPIRequest(ctx context.Context, token string, oauth bool, 
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Anthropic-Version", anthropicVersion)
-	if oauth {
-		req.Header.Set("Authorization", "Bearer "+token)
-		req.Header.Set("Anthropic-Beta", anthropicBeta)
-		req.Header.Set("Anthropic-Dangerous-Direct-Browser-Access", "true")
-		req.Header.Set("User-Agent", claudeCodeUserAgent)
-		req.Header.Set("X-App", "cli")
-		req.Header.Set("X-Stainless-Lang", "js")
-		req.Header.Set("X-Stainless-Os", stainlessOS())
-		req.Header.Set("X-Stainless-Arch", stainlessArch())
-		req.Header.Set("X-Stainless-Package-Version", stainlessPackageVer)
-		req.Header.Set("X-Stainless-Retry-Count", "0")
-		req.Header.Set("X-Stainless-Runtime", "node")
-		req.Header.Set("X-Stainless-Runtime-Version", stainlessNodeVer)
-		req.Header.Set("X-Stainless-Timeout", "600")
-	} else {
-		req.Header.Set("x-api-key", token)
-	}
-
+	req.Header.Set("x-api-key", apiKey)
 	return req, nil
 }
-
-// --- Request building ---
 
 type request struct {
 	Model      string           `json:"model"`
@@ -291,7 +109,6 @@ type request struct {
 	Messages   []messagePayload `json:"messages"`
 	Tools      []toolPayload    `json:"tools,omitempty"`
 	ToolChoice any              `json:"tool_choice,omitempty"`
-	Thinking   *thinkingConfig  `json:"thinking,omitempty"`
 	Metadata   *metadata        `json:"metadata,omitempty"`
 }
 
@@ -299,19 +116,14 @@ type metadata struct {
 	UserID string `json:"user_id"`
 }
 
-type thinkingConfig struct {
-	Type        string `json:"type"`
-	BudgetToken int    `json:"budget_tokens"`
+type messagePayload struct {
+	Role    string `json:"role"`
+	Content any    `json:"content"`
 }
 
 type systemBlock struct {
 	Type string `json:"type"`
 	Text string `json:"text"`
-}
-
-type messagePayload struct {
-	Role    string `json:"role"`
-	Content any    `json:"content"`
 }
 
 type contentBlock struct {
@@ -331,91 +143,13 @@ type toolPayload struct {
 	InputSchema map[string]any `json:"input_schema"`
 }
 
-func maybePrefixTool(name string, oauth bool) string {
-	if oauth {
-		return toolPrefix + name
-	}
-	return name
-}
-
-func maybeStripToolPrefix(name string) string {
-	return strings.TrimPrefix(name, toolPrefix)
-}
-
-func randomUUID() string {
-	var b [16]byte
-	_, _ = rand.Read(b[:])
-	b[6] = (b[6] & 0x0f) | 0x40 // version 4
-	b[8] = (b[8] & 0x3f) | 0x80 // variant 1
-	return fmt.Sprintf("%08x-%04x-%04x-%04x-%012x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:16])
-}
-
-func (p *Provider) buildUserID() string {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return ""
-	}
-	data, err := os.ReadFile(filepath.Join(home, ".claude.json"))
-	if err != nil {
-		return ""
-	}
-	var cfg struct {
-		UserID       string `json:"userID"`
-		OAuthAccount struct {
-			AccountUUID string `json:"accountUuid"`
-		} `json:"oauthAccount"`
-	}
-	if json.Unmarshal(data, &cfg) != nil || cfg.UserID == "" {
-		return ""
-	}
-	id := "user_" + cfg.UserID
-	if cfg.OAuthAccount.AccountUUID != "" {
-		id += "_account_" + cfg.OAuthAccount.AccountUUID
-	}
-	id += "_session_" + p.sessionID
-	return id
-}
-
-func stainlessOS() string {
-	switch runtime.GOOS {
-	case "darwin":
-		return "MacOS"
-	case "windows":
-		return "Windows"
-	default:
-		return "Linux"
-	}
-}
-
-func stainlessArch() string {
-	switch runtime.GOARCH {
-	case "arm64":
-		return "arm64"
-	default:
-		return "x64"
-	}
-}
-
-func (p *Provider) buildRequest(opts llm.StreamOptions, oauth bool) ([]byte, error) {
-	r := request{
-		Model:     opts.Model,
-		MaxTokens: 16384,
-		Stream:    true,
-	}
-
-	if oauth && p.userID != "" {
-		r.Metadata = &metadata{UserID: p.userID}
-	}
+func buildAnthropicRequest(opts llm.StreamOptions) ([]byte, error) {
+	r := request{Model: opts.Model, MaxTokens: 16384, Stream: true}
 
 	for _, t := range opts.Tools {
-		r.Tools = append(r.Tools, toolPayload{
-			Name:        maybePrefixTool(t.Name, oauth),
-			Description: t.Description,
-			InputSchema: t.Parameters,
-		})
+		r.Tools = append(r.Tools, toolPayload{Name: t.Name, Description: t.Description, InputSchema: t.Parameters})
 	}
 
-	// Set tool_choice based on opts.ToolChoice (Anthropic format)
 	if len(opts.Tools) > 0 {
 		switch tc := opts.ToolChoice.(type) {
 		case nil, llm.ToolChoiceAuto:
@@ -423,61 +157,30 @@ func (p *Provider) buildRequest(opts llm.StreamOptions, oauth bool) ([]byte, err
 		case llm.ToolChoiceRequired:
 			r.ToolChoice = map[string]string{"type": "any"}
 		case llm.ToolChoiceNone:
-			// Anthropic: omit tool_choice to allow model to decide, or we could clear tools
-			// For "none", we simply don't set tool_choice - model may still call tools
-			// To truly prevent tool calls, caller should not pass tools
 		case llm.ToolChoiceTool:
-			r.ToolChoice = map[string]any{
-				"type": "tool",
-				"name": maybePrefixTool(tc.Name, oauth),
-			}
+			r.ToolChoice = map[string]any{"type": "tool", "name": tc.Name}
 		}
 	}
 
 	for i := 0; i < len(opts.Messages); i++ {
-		msg := opts.Messages[i]
-
-		switch m := msg.(type) {
+		switch m := opts.Messages[i].(type) {
 		case *llm.SystemMsg:
-			if oauth {
-				r.System = []systemBlock{
-					{Type: "text", Text: claudeCodeSystemPrefix + "\n\n" + m.Content},
-				}
-			} else {
-				r.System = m.Content
-			}
-
+			r.System = m.Content
 		case *llm.UserMsg:
-			r.Messages = append(r.Messages, messagePayload{
-				Role:    "user",
-				Content: m.Content,
-			})
-
+			r.Messages = append(r.Messages, messagePayload{Role: "user", Content: m.Content})
 		case *llm.AssistantMsg:
 			if len(m.ToolCalls) == 0 {
-				r.Messages = append(r.Messages, messagePayload{
-					Role:    "assistant",
-					Content: m.Content,
-				})
-			} else {
-				var blocks []contentBlock
-				if m.Content != "" {
-					blocks = append(blocks, contentBlock{Type: "text", Text: m.Content})
-				}
-				for _, tc := range m.ToolCalls {
-					blocks = append(blocks, contentBlock{
-						Type:  "tool_use",
-						ID:    tc.ID,
-						Name:  maybePrefixTool(tc.Name, oauth),
-						Input: tc.Arguments,
-					})
-				}
-				r.Messages = append(r.Messages, messagePayload{
-					Role:    "assistant",
-					Content: blocks,
-				})
+				r.Messages = append(r.Messages, messagePayload{Role: "assistant", Content: m.Content})
+				continue
 			}
-
+			var blocks []contentBlock
+			if m.Content != "" {
+				blocks = append(blocks, contentBlock{Type: "text", Text: m.Content})
+			}
+			for _, tc := range m.ToolCalls {
+				blocks = append(blocks, contentBlock{Type: "tool_use", ID: tc.ID, Name: tc.Name, Input: tc.Arguments})
+			}
+			r.Messages = append(r.Messages, messagePayload{Role: "assistant", Content: blocks})
 		case *llm.ToolCallResult:
 			var results []contentBlock
 			prevAssistant := findPrecedingAssistant(opts.Messages, i)
@@ -491,20 +194,11 @@ func (p *Provider) buildRequest(opts llm.StreamOptions, oauth bool) ([]byte, err
 				if toolUseID == "" && prevAssistant != nil && toolIdx < len(prevAssistant.ToolCalls) {
 					toolUseID = prevAssistant.ToolCalls[toolIdx].ID
 				}
-				block := contentBlock{
-					Type:      "tool_result",
-					ToolUseID: toolUseID,
-					Content:   tr.Output,
-					IsError:   tr.IsError,
-				}
-				results = append(results, block)
+				results = append(results, contentBlock{Type: "tool_result", ToolUseID: toolUseID, Content: tr.Output, IsError: tr.IsError})
 				toolIdx++
 			}
 			i--
-			r.Messages = append(r.Messages, messagePayload{
-				Role:    "user",
-				Content: results,
-			})
+			r.Messages = append(r.Messages, messagePayload{Role: "user", Content: results})
 		}
 	}
 
@@ -519,8 +213,6 @@ func findPrecedingAssistant(messages llm.Messages, toolIdx int) *llm.AssistantMs
 	}
 	return nil
 }
-
-// --- SSE stream parsing ---
 
 type contentBlockStartEvent struct {
 	Type         string `json:"type"`
@@ -543,7 +235,7 @@ type contentBlockDeltaEvent struct {
 	} `json:"delta"`
 }
 
-func parseStream(ctx context.Context, body io.ReadCloser, events chan<- llm.StreamEvent, oauth bool) {
+func parseStream(ctx context.Context, body io.ReadCloser, events chan<- llm.StreamEvent) {
 	defer close(events)
 	defer body.Close()
 
@@ -559,16 +251,13 @@ func parseStream(ctx context.Context, body io.ReadCloser, events chan<- llm.Stre
 	var usage llm.Usage
 
 	for scanner.Scan() {
-		// Check for context cancellation
 		select {
 		case <-ctx.Done():
-			events <- llm.StreamEvent{
-				Type:  llm.StreamEventError,
-				Error: ctx.Err(),
-			}
+			events <- llm.StreamEvent{Type: llm.StreamEventError, Error: ctx.Err()}
 			return
 		default:
 		}
+
 		line := scanner.Text()
 		if !strings.HasPrefix(line, "data: ") {
 			continue
@@ -612,14 +301,7 @@ func parseStream(ctx context.Context, body io.ReadCloser, events chan<- llm.Stre
 				continue
 			}
 			if evt.ContentBlock.Type == "tool_use" {
-				name := evt.ContentBlock.Name
-				if oauth {
-					name = maybeStripToolPrefix(name)
-				}
-				activeTools[evt.Index] = &toolBlock{
-					id:   evt.ContentBlock.ID,
-					name: name,
-				}
+				activeTools[evt.Index] = &toolBlock{id: evt.ContentBlock.ID, name: evt.ContentBlock.Name}
 			}
 
 		case "content_block_delta":
@@ -629,10 +311,7 @@ func parseStream(ctx context.Context, body io.ReadCloser, events chan<- llm.Stre
 			}
 			switch evt.Delta.Type {
 			case "text_delta":
-				events <- llm.StreamEvent{
-					Type:  llm.StreamEventDelta,
-					Delta: evt.Delta.Text,
-				}
+				events <- llm.StreamEvent{Type: llm.StreamEventDelta, Delta: evt.Delta.Text}
 			case "input_json_delta":
 				if tb, ok := activeTools[evt.Index]; ok {
 					tb.jsonBuf.WriteString(evt.Delta.PartialJSON)
@@ -651,14 +330,7 @@ func parseStream(ctx context.Context, body io.ReadCloser, events chan<- llm.Stre
 				if tb.jsonBuf.Len() > 0 {
 					_ = json.Unmarshal([]byte(tb.jsonBuf.String()), &args)
 				}
-				events <- llm.StreamEvent{
-					Type: llm.StreamEventToolCall,
-					ToolCall: &llm.ToolCall{
-						ID:        tb.id,
-						Name:      tb.name,
-						Arguments: args,
-					},
-				}
+				events <- llm.StreamEvent{Type: llm.StreamEventToolCall, ToolCall: &llm.ToolCall{ID: tb.id, Name: tb.name, Arguments: args}}
 				delete(activeTools, evt.Index)
 			}
 
@@ -673,10 +345,7 @@ func parseStream(ctx context.Context, body io.ReadCloser, events chan<- llm.Stre
 				} `json:"error"`
 			}
 			if err := json.Unmarshal([]byte(data), &errEvt); err == nil {
-				events <- llm.StreamEvent{
-					Type:  llm.StreamEventError,
-					Error: fmt.Errorf("anthropic: %s", errEvt.Error.Message),
-				}
+				events <- llm.StreamEvent{Type: llm.StreamEventError, Error: fmt.Errorf("anthropic: %s", errEvt.Error.Message)}
 			}
 			return
 		}

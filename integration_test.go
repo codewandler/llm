@@ -4,7 +4,6 @@ import (
 	"context"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -21,9 +20,13 @@ import (
 	"github.com/codewandler/llm/provider/ollama"
 )
 
-// isClaudeAvailable checks if the claude CLI is available in PATH.
+// isClaudeAvailable checks if Claude Code credentials are available.
 func isClaudeAvailable() bool {
-	_, err := exec.LookPath("claude")
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return false
+	}
+	_, err = os.Stat(filepath.Join(home, ".claude", ".credentials.json"))
 	return err == nil
 }
 
