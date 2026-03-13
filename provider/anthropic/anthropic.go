@@ -137,6 +137,15 @@ type contentBlock struct {
 	IsError   bool           `json:"is_error,omitempty"`
 }
 
+// toolUseBlock is a specialized content block for tool_use that always includes the input field.
+// Anthropic API requires the "input" field to be present in tool_use blocks, even if empty.
+type toolUseBlock struct {
+	Type  string         `json:"type"`
+	ID    string         `json:"id"`
+	Name  string         `json:"name"`
+	Input map[string]any `json:"input"` // No omitempty - must always be present
+}
+
 type toolPayload struct {
 	Name        string         `json:"name"`
 	Description string         `json:"description"`
@@ -173,12 +182,12 @@ func buildAnthropicRequest(opts llm.StreamOptions) ([]byte, error) {
 				r.Messages = append(r.Messages, messagePayload{Role: "assistant", Content: m.Content})
 				continue
 			}
-			var blocks []contentBlock
+			var blocks []any
 			if m.Content != "" {
 				blocks = append(blocks, contentBlock{Type: "text", Text: m.Content})
 			}
 			for _, tc := range m.ToolCalls {
-				blocks = append(blocks, contentBlock{Type: "tool_use", ID: tc.ID, Name: tc.Name, Input: tc.Arguments})
+				blocks = append(blocks, toolUseBlock{Type: "tool_use", ID: tc.ID, Name: tc.Name, Input: ensureInputMap(tc.Arguments)})
 			}
 			r.Messages = append(r.Messages, messagePayload{Role: "assistant", Content: blocks})
 		case *llm.ToolCallResult:
@@ -212,6 +221,15 @@ func findPrecedingAssistant(messages llm.Messages, toolIdx int) *llm.AssistantMs
 		}
 	}
 	return nil
+}
+
+// ensureInputMap ensures the input map is never nil.
+// Anthropic API requires the "input" field to always be present in tool_use blocks.
+func ensureInputMap(m map[string]any) map[string]any {
+	if m == nil {
+		return map[string]any{}
+	}
+	return m
 }
 
 type contentBlockStartEvent struct {

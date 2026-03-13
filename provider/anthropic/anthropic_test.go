@@ -58,3 +58,68 @@ func TestBuildAnthropicRequest_SystemAndTools(t *testing.T) {
 	assert.Equal(t, "get_weather", req.Tools[0].Name)
 	require.NotNil(t, req.ToolChoice)
 }
+
+func TestBuildAnthropicRequest_ToolCallWithNilArguments(t *testing.T) {
+	t.Parallel()
+
+	// This tests the fix for: "messages.N.content.0.tool_use.input: Field required"
+	// When a tool call has nil Arguments, the serialized JSON must still include
+	// the "input" field (as an empty object) because Anthropic API requires it.
+	body, err := buildAnthropicRequest(llm.StreamOptions{
+		Model: "claude-sonnet-4-5-20250929",
+		Messages: llm.Messages{
+			&llm.UserMsg{Content: "hello"},
+			&llm.AssistantMsg{
+				Content: "",
+				ToolCalls: []llm.ToolCall{
+					{ID: "call_123", Name: "get_time", Arguments: nil}, // nil arguments
+				},
+			},
+			&llm.ToolCallResult{ToolCallID: "call_123", Output: "12:00"},
+		},
+	})
+	require.NoError(t, err)
+
+	// Parse the JSON and verify the tool_use block has "input" field
+	var req map[string]any
+	require.NoError(t, json.Unmarshal(body, &req))
+
+	messages := req["messages"].([]any)
+	require.Len(t, messages, 3) // user, assistant (with tool_use), user (with tool_result)
+
+	// Second message should be the assistant message with tool_use
+	assistantMsg := messages[1].(map[string]any)
+	assert.Equal(t, "assistant", assistantMsg["role"])
+
+	content := assistantMsg["content"].([]any)
+	require.Len(t, content, 1)
+
+	toolUse := content[0].(map[string]any)
+	assert.Equal(t, "tool_use", toolUse["type"])
+	assert.Equal(t, "call_123", toolUse["id"])
+	assert.Equal(t, "get_time", toolUse["name"])
+
+	// Critical: "input" must be present and be an empty object, not nil/missing
+	input, exists := toolUse["input"]
+	require.True(t, exists, "input field must be present in tool_use block")
+	require.NotNil(t, input, "input field must not be nil")
+	inputMap, ok := input.(map[string]any)
+	require.True(t, ok, "input must be an object")
+	assert.Empty(t, inputMap, "input should be an empty object for nil arguments")
+}
+
+func TestEnsureInputMap(t *testing.T) {
+	t.Parallel()
+
+	t.Run("nil input returns empty map", func(t *testing.T) {
+		result := ensureInputMap(nil)
+		require.NotNil(t, result)
+		assert.Empty(t, result)
+	})
+
+	t.Run("non-nil input returned as-is", func(t *testing.T) {
+		input := map[string]any{"key": "value"}
+		result := ensureInputMap(input)
+		assert.Equal(t, input, result)
+	})
+}

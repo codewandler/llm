@@ -272,12 +272,12 @@ func (p *ClaudeProvider) buildClaudeRequest(opts llm.StreamOptions) ([]byte, err
 				r.Messages = append(r.Messages, messagePayload{Role: "assistant", Content: m.Content})
 				continue
 			}
-			var blocks []contentBlock
+			var blocks []any
 			if m.Content != "" {
 				blocks = append(blocks, contentBlock{Type: "text", Text: m.Content})
 			}
 			for _, tc := range m.ToolCalls {
-				blocks = append(blocks, contentBlock{Type: "tool_use", ID: tc.ID, Name: tc.Name, Input: tc.Arguments})
+				blocks = append(blocks, toolUseBlock{Type: "tool_use", ID: tc.ID, Name: tc.Name, Input: ensureInputMap(tc.Arguments)})
 			}
 			r.Messages = append(r.Messages, messagePayload{Role: "assistant", Content: blocks})
 		case *llm.ToolCallResult:
