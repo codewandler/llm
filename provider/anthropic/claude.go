@@ -240,7 +240,7 @@ func (p *ClaudeProvider) newClaudeAPIRequest(ctx context.Context, token string, 
 
 func (p *ClaudeProvider) buildClaudeRequest(opts llm.StreamOptions) ([]byte, error) {
 	r := request{Model: opts.Model, MaxTokens: 16384, Stream: true}
-	r.System = claudeCodeSystemBlocks("")
+	r.System = claudeCodeSystemBlocks(collectSystemBlocks(opts.Messages))
 	if p.userID != "" {
 		r.Metadata = &metadata{UserID: p.userID}
 	}
@@ -264,7 +264,7 @@ func (p *ClaudeProvider) buildClaudeRequest(opts llm.StreamOptions) ([]byte, err
 	for i := 0; i < len(opts.Messages); i++ {
 		switch m := opts.Messages[i].(type) {
 		case *llm.SystemMsg:
-			r.System = claudeCodeSystemBlocks(m.Content)
+			// Handled by collectSystemBlocks above
 		case *llm.UserMsg:
 			r.Messages = append(r.Messages, messagePayload{Role: "user", Content: m.Content})
 		case *llm.AssistantMsg:
@@ -304,15 +304,13 @@ func (p *ClaudeProvider) buildClaudeRequest(opts llm.StreamOptions) ([]byte, err
 	return json.Marshal(r)
 }
 
-func claudeCodeSystemBlocks(userSystem string) []systemBlock {
+func claudeCodeSystemBlocks(userBlocks []systemBlock) []systemBlock {
 	blocks := []systemBlock{
 		{Type: "text", Text: ccBillingHeader},
 		{Type: "text", Text: ccSystemCore},
 		{Type: "text", Text: ccSystemIdentity},
 	}
-	if strings.TrimSpace(userSystem) != "" {
-		blocks = append(blocks, systemBlock{Type: "text", Text: userSystem})
-	}
+	blocks = append(blocks, userBlocks...)
 	return blocks
 }
 

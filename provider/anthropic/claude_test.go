@@ -95,8 +95,81 @@ func TestBuildClaudeRequestSystemBlocks(t *testing.T) {
 	require.NoError(t, json.Unmarshal(body, &req))
 	system, ok := req.System.([]any)
 	require.True(t, ok)
-	require.Len(t, system, 4)
+	require.Len(t, system, 4) // 3 CC blocks + 1 user block
 	last, ok := system[3].(map[string]any)
 	require.True(t, ok)
 	assert.Equal(t, "custom system", last["text"])
+}
+
+func TestBuildClaudeRequestMultipleSystemMessages(t *testing.T) {
+	t.Parallel()
+
+	t.Run("multiple system messages are accumulated", func(t *testing.T) {
+		p := NewClaudeCodeProvider()
+		body, err := p.buildClaudeRequest(llm.StreamOptions{
+			Model: "sonnet",
+			Messages: llm.Messages{
+				&llm.SystemMsg{Content: "first instruction"},
+				&llm.SystemMsg{Content: "second instruction"},
+				&llm.UserMsg{Content: "hello"},
+			},
+		})
+		require.NoError(t, err)
+
+		var req request
+		require.NoError(t, json.Unmarshal(body, &req))
+		system, ok := req.System.([]any)
+		require.True(t, ok)
+		require.Len(t, system, 5) // 3 CC blocks + 2 user blocks
+
+		// First 3 are CC system blocks
+		fourth, ok := system[3].(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, "first instruction", fourth["text"])
+
+		fifth, ok := system[4].(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, "second instruction", fifth["text"])
+	})
+
+	t.Run("no user system messages results in only CC blocks", func(t *testing.T) {
+		p := NewClaudeCodeProvider()
+		body, err := p.buildClaudeRequest(llm.StreamOptions{
+			Model: "sonnet",
+			Messages: llm.Messages{
+				&llm.UserMsg{Content: "hello"},
+			},
+		})
+		require.NoError(t, err)
+
+		var req request
+		require.NoError(t, json.Unmarshal(body, &req))
+		system, ok := req.System.([]any)
+		require.True(t, ok)
+		require.Len(t, system, 3) // Only the 3 CC system blocks
+	})
+
+	t.Run("empty system messages are filtered out", func(t *testing.T) {
+		p := NewClaudeCodeProvider()
+		body, err := p.buildClaudeRequest(llm.StreamOptions{
+			Model: "sonnet",
+			Messages: llm.Messages{
+				&llm.SystemMsg{Content: "keep this"},
+				&llm.SystemMsg{Content: "   "}, // whitespace only
+				&llm.SystemMsg{Content: ""},    // empty
+				&llm.UserMsg{Content: "hello"},
+			},
+		})
+		require.NoError(t, err)
+
+		var req request
+		require.NoError(t, json.Unmarshal(body, &req))
+		system, ok := req.System.([]any)
+		require.True(t, ok)
+		require.Len(t, system, 4) // 3 CC blocks + 1 user block
+
+		last, ok := system[3].(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, "keep this", last["text"])
+	})
 }

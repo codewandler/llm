@@ -51,12 +51,108 @@ func TestBuildAnthropicRequest_SystemAndTools(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	var req request
+	var req map[string]any
 	require.NoError(t, json.Unmarshal(body, &req))
-	assert.Equal(t, "system prompt", req.System)
-	require.Len(t, req.Tools, 1)
-	assert.Equal(t, "get_weather", req.Tools[0].Name)
-	require.NotNil(t, req.ToolChoice)
+
+	// System should now be an array of text blocks
+	system, ok := req["system"].([]any)
+	require.True(t, ok, "system should be an array")
+	require.Len(t, system, 1)
+	block := system[0].(map[string]any)
+	assert.Equal(t, "text", block["type"])
+	assert.Equal(t, "system prompt", block["text"])
+
+	tools := req["tools"].([]any)
+	require.Len(t, tools, 1)
+	assert.Equal(t, "get_weather", tools[0].(map[string]any)["name"])
+	require.NotNil(t, req["tool_choice"])
+}
+
+func TestBuildAnthropicRequest_MultipleSystemMessages(t *testing.T) {
+	t.Parallel()
+
+	t.Run("consecutive system messages are accumulated", func(t *testing.T) {
+		body, err := buildAnthropicRequest(llm.StreamOptions{
+			Model: "claude-sonnet-4-5-20250929",
+			Messages: llm.Messages{
+				&llm.SystemMsg{Content: "first instruction"},
+				&llm.SystemMsg{Content: "second instruction"},
+				&llm.UserMsg{Content: "hello"},
+			},
+		})
+		require.NoError(t, err)
+
+		var req map[string]any
+		require.NoError(t, json.Unmarshal(body, &req))
+
+		system, ok := req["system"].([]any)
+		require.True(t, ok, "system should be an array")
+		require.Len(t, system, 2)
+
+		assert.Equal(t, "first instruction", system[0].(map[string]any)["text"])
+		assert.Equal(t, "second instruction", system[1].(map[string]any)["text"])
+	})
+
+	t.Run("mid-conversation system messages are accumulated", func(t *testing.T) {
+		body, err := buildAnthropicRequest(llm.StreamOptions{
+			Model: "claude-sonnet-4-5-20250929",
+			Messages: llm.Messages{
+				&llm.SystemMsg{Content: "initial system"},
+				&llm.UserMsg{Content: "hello"},
+				&llm.AssistantMsg{Content: "hi there"},
+				&llm.SystemMsg{Content: "additional context"},
+				&llm.UserMsg{Content: "continue"},
+			},
+		})
+		require.NoError(t, err)
+
+		var req map[string]any
+		require.NoError(t, json.Unmarshal(body, &req))
+
+		system, ok := req["system"].([]any)
+		require.True(t, ok, "system should be an array")
+		require.Len(t, system, 2)
+
+		assert.Equal(t, "initial system", system[0].(map[string]any)["text"])
+		assert.Equal(t, "additional context", system[1].(map[string]any)["text"])
+	})
+
+	t.Run("empty system messages are filtered out", func(t *testing.T) {
+		body, err := buildAnthropicRequest(llm.StreamOptions{
+			Model: "claude-sonnet-4-5-20250929",
+			Messages: llm.Messages{
+				&llm.SystemMsg{Content: "keep this"},
+				&llm.SystemMsg{Content: "   "}, // whitespace only
+				&llm.SystemMsg{Content: ""},    // empty
+				&llm.UserMsg{Content: "hello"},
+			},
+		})
+		require.NoError(t, err)
+
+		var req map[string]any
+		require.NoError(t, json.Unmarshal(body, &req))
+
+		system, ok := req["system"].([]any)
+		require.True(t, ok, "system should be an array")
+		require.Len(t, system, 1)
+		assert.Equal(t, "keep this", system[0].(map[string]any)["text"])
+	})
+
+	t.Run("no system messages results in nil system field", func(t *testing.T) {
+		body, err := buildAnthropicRequest(llm.StreamOptions{
+			Model: "claude-sonnet-4-5-20250929",
+			Messages: llm.Messages{
+				&llm.UserMsg{Content: "hello"},
+			},
+		})
+		require.NoError(t, err)
+
+		var req map[string]any
+		require.NoError(t, json.Unmarshal(body, &req))
+
+		_, exists := req["system"]
+		assert.False(t, exists, "system field should not exist when no system messages")
+	})
 }
 
 func TestBuildAnthropicRequest_ToolCallWithNilArguments(t *testing.T) {

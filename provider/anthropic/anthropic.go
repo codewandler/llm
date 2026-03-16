@@ -171,10 +171,14 @@ func buildAnthropicRequest(opts llm.StreamOptions) ([]byte, error) {
 		}
 	}
 
+	if sysBlocks := collectSystemBlocks(opts.Messages); len(sysBlocks) > 0 {
+		r.System = sysBlocks
+	}
+
 	for i := 0; i < len(opts.Messages); i++ {
 		switch m := opts.Messages[i].(type) {
 		case *llm.SystemMsg:
-			r.System = m.Content
+			// Handled by collectSystemBlocks above
 		case *llm.UserMsg:
 			r.Messages = append(r.Messages, messagePayload{Role: "user", Content: m.Content})
 		case *llm.AssistantMsg:
@@ -221,6 +225,21 @@ func findPrecedingAssistant(messages llm.Messages, toolIdx int) *llm.AssistantMs
 		}
 	}
 	return nil
+}
+
+// collectSystemBlocks extracts all SystemMsg from messages and returns them as systemBlocks.
+// It filters out empty content. This allows multiple system messages to be accumulated
+// into an array format as supported by the Anthropic API.
+func collectSystemBlocks(messages llm.Messages) []systemBlock {
+	var blocks []systemBlock
+	for _, msg := range messages {
+		if sm, ok := msg.(*llm.SystemMsg); ok {
+			if strings.TrimSpace(sm.Content) != "" {
+				blocks = append(blocks, systemBlock{Type: "text", Text: sm.Content})
+			}
+		}
+	}
+	return blocks
 }
 
 // ensureInputMap ensures the input map is never nil.
