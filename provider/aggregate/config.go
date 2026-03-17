@@ -10,7 +10,7 @@ type ProviderInstanceConfig struct {
 	ModelAliases map[string]string // Local aliases: "sonnet" -> "claude-sonnet-4-5"
 }
 
-// AliasTarget points to a specific model on a provider instance.
+// AliasTarget points to a provider instance and model.
 type AliasTarget struct {
 	Provider string // Provider instance name
 	Model    string // Model ID or local alias for that provider

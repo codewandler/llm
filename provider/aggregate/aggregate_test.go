@@ -45,7 +45,10 @@ func mockFactory(prov *mockProvider) Factory {
 
 func TestNew(t *testing.T) {
 	t.Run("valid config", func(t *testing.T) {
-		prov1 := &mockProvider{name: "prov1", models: []llm.Model{{ID: "model-a", Name: "ModelA", Provider: "prov1"}}}
+		prov1 := &mockProvider{
+			name:   "prov1",
+			models: []llm.Model{{ID: "model-a", Name: "ModelA", Provider: "prov1"}},
+		}
 
 		cfg := Config{
 			Name: "my-aggregate",
@@ -53,9 +56,7 @@ func TestNew(t *testing.T) {
 				{Name: "prov1", Type: "mock"},
 			},
 			Aliases: map[string][]AliasTarget{
-				"smart": {
-					{Provider: "prov1", Model: "model-a"},
-				},
+				"smart": {{Provider: "prov1", Model: "model-a"}},
 			},
 		}
 
@@ -69,7 +70,10 @@ func TestNew(t *testing.T) {
 	})
 
 	t.Run("default name", func(t *testing.T) {
-		prov := &mockProvider{name: "prov"}
+		prov := &mockProvider{
+			name:   "prov",
+			models: []llm.Model{{ID: "model", Name: "Model", Provider: "prov"}},
+		}
 		cfg := Config{
 			Providers: []ProviderInstanceConfig{
 				{Name: "prov", Type: "mock"},
@@ -107,78 +111,147 @@ func TestNew(t *testing.T) {
 	})
 }
 
-func TestResolveTarget(t *testing.T) {
-	prov1 := &mockProvider{name: "prov1"}
-	prov2 := &mockProvider{name: "prov2"}
+func TestModels(t *testing.T) {
+	t.Run("collects models from providers", func(t *testing.T) {
+		prov1 := &mockProvider{
+			name: "prov1",
+			models: []llm.Model{
+				{ID: "model-a", Name: "Model A", Provider: "mock"},
+			},
+		}
+		prov2 := &mockProvider{
+			name: "prov2",
+			models: []llm.Model{
+				{ID: "model-b", Name: "Model B", Provider: "mock"},
+			},
+		}
 
-	agg := &Provider{
-		name: "test",
-		providers: map[string]llm.Provider{
-			"prov1": prov1,
-			"prov2": prov2,
-		},
-		localAliases: map[string]map[string]string{
-			"prov1": {"alias-a": "model-1"},
-		},
-	}
+		cfg := Config{
+			Providers: []ProviderInstanceConfig{
+				{Name: "prov1", Type: "type1"},
+				{Name: "prov2", Type: "type2"},
+			},
+		}
 
-	t.Run("direct model ID", func(t *testing.T) {
-		p, modelID, err := agg.resolveTarget(AliasTarget{Provider: "prov1", Model: "gpt-4"})
+		factories := map[string]Factory{
+			"type1": mockFactory(prov1),
+			"type2": mockFactory(prov2),
+		}
+
+		agg, err := New(cfg, factories)
 		require.NoError(t, err)
-		assert.Equal(t, prov1, p)
-		assert.Equal(t, "gpt-4", modelID)
+
+		models := agg.Models()
+		require.Len(t, models, 2)
+
+		// Check that full IDs are constructed
+		var foundProv1, foundProv2 bool
+		for _, m := range models {
+			if m.ID == "prov1/type1/model-a" {
+				foundProv1 = true
+				assert.Equal(t, "Model A", m.Name)
+				assert.Equal(t, "prov1/type1", m.Provider)
+			}
+			if m.ID == "prov2/type2/model-b" {
+				foundProv2 = true
+				assert.Equal(t, "Model B", m.Name)
+				assert.Equal(t, "prov2/type2", m.Provider)
+			}
+		}
+		assert.True(t, foundProv1, "should have prov1/model-a")
+		assert.True(t, foundProv2, "should have prov2/model-b")
 	})
 
-	t.Run("local alias", func(t *testing.T) {
-		p, modelID, err := agg.resolveTarget(AliasTarget{Provider: "prov1", Model: "alias-a"})
-		require.NoError(t, err)
-		assert.Equal(t, prov1, p)
-		assert.Equal(t, "model-1", modelID)
-	})
+	t.Run("adds aliases to models", func(t *testing.T) {
+		prov := &mockProvider{
+			name: "prov",
+			models: []llm.Model{
+				{ID: "claude-sonnet", Name: "Claude Sonnet", Provider: "anthropic"},
+			},
+		}
 
-	t.Run("unknown provider", func(t *testing.T) {
-		_, _, err := agg.resolveTarget(AliasTarget{Provider: "unknown", Model: "model"})
-		require.Error(t, err)
-		assert.ErrorIs(t, err, ErrProviderNotFound)
+		cfg := Config{
+			Providers: []ProviderInstanceConfig{
+				{
+					Name:         "work-claude",
+					Type:         "anthropic",
+					ModelAliases: map[string]string{"sonnet": "claude-sonnet"},
+				},
+			},
+			Aliases: map[string][]AliasTarget{
+				"smart": {{Provider: "work-claude", Model: "sonnet"}},
+			},
+		}
+
+		factories := map[string]Factory{"anthropic": mockFactory(prov)}
+		agg, err := New(cfg, factories)
+		require.NoError(t, err)
+
+		models := agg.Models()
+		require.Len(t, models, 1)
+
+		model := models[0]
+		assert.Equal(t, "work-claude/anthropic/claude-sonnet", model.ID)
+		assert.Contains(t, model.Aliases, "smart")
+		assert.Contains(t, model.Aliases, "sonnet")
+		assert.Contains(t, model.Aliases, "work-claude/anthropic/smart")
+		assert.Contains(t, model.Aliases, "work-claude/anthropic/sonnet")
+		assert.Contains(t, model.Aliases, "anthropic/smart")
+		assert.Contains(t, model.Aliases, "anthropic/sonnet")
 	})
 }
 
-func TestResolveAllTargets(t *testing.T) {
-	prov1 := &mockProvider{name: "prov1"}
-	prov2 := &mockProvider{name: "prov2"}
-
-	agg := &Provider{
-		name: "test",
-		providers: map[string]llm.Provider{
-			"prov1": prov1,
-			"prov2": prov2,
-		},
-		aliases: map[string][]AliasTarget{
-			"multi": {
-				{Provider: "prov1", Model: "model-a"},
-				{Provider: "prov2", Model: "model-b"},
-			},
-		},
-		localAliases: map[string]map[string]string{
-			"prov1": {"model-a": "actual-model-a"},
+func TestResolve(t *testing.T) {
+	prov := &mockProvider{
+		name: "prov",
+		models: []llm.Model{
+			{ID: "claude-sonnet", Name: "Claude Sonnet", Provider: "anthropic"},
 		},
 	}
 
-	t.Run("single target", func(t *testing.T) {
-		targets, err := agg.resolveAllTargets("multi")
-		require.NoError(t, err)
-		require.Len(t, targets, 2)
-		assert.Equal(t, prov1, targets[0].provider)
-		assert.Equal(t, "actual-model-a", targets[0].modelID)
-		assert.Equal(t, prov2, targets[1].provider)
-		assert.Equal(t, "model-b", targets[1].modelID)
-	})
+	cfg := Config{
+		Providers: []ProviderInstanceConfig{
+			{
+				Name:         "work-claude",
+				Type:         "anthropic",
+				ModelAliases: map[string]string{"sonnet": "claude-sonnet"},
+			},
+		},
+		Aliases: map[string][]AliasTarget{
+			"smart": {{Provider: "work-claude", Model: "sonnet"}},
+		},
+	}
 
-	t.Run("unknown alias", func(t *testing.T) {
-		_, err := agg.resolveAllTargets("unknown")
-		require.Error(t, err)
-		assert.ErrorIs(t, err, ErrUnknownAlias)
-	})
+	factories := map[string]Factory{"anthropic": mockFactory(prov)}
+	agg, err := New(cfg, factories)
+	require.NoError(t, err)
+
+	tests := []struct {
+		input   string
+		wantID  string
+		wantErr bool
+	}{
+		{"smart", "work-claude/anthropic/claude-sonnet", false},
+		{"sonnet", "work-claude/anthropic/claude-sonnet", false},
+		{"claude-sonnet", "work-claude/anthropic/claude-sonnet", false},
+		{"anthropic/claude-sonnet", "work-claude/anthropic/claude-sonnet", false},
+		{"work-claude/anthropic/claude-sonnet", "work-claude/anthropic/claude-sonnet", false},
+		{"work-claude/anthropic/sonnet", "work-claude/anthropic/claude-sonnet", false},
+		{"unknown", "", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			model, err := agg.Resolve(tt.input)
+			if tt.wantErr {
+				require.Error(t, err)
+				assert.ErrorIs(t, err, ErrUnknownModel)
+			} else {
+				require.NoError(t, err)
+				assert.Equal(t, tt.wantID, model.ID)
+			}
+		})
+	}
 }
 
 func TestCreateStream(t *testing.T) {
@@ -194,19 +267,21 @@ func TestCreateStream(t *testing.T) {
 				}()
 				return ch, nil
 			},
+			models: []llm.Model{{ID: "gpt-4", Name: "GPT-4", Provider: "openai"}},
 		}
 
-		agg := &Provider{
-			name:      "test",
-			providers: map[string]llm.Provider{"prov1": prov},
-			aliases: map[string][]AliasTarget{
-				"smart": {{Provider: "prov1", Model: "gpt-4"}},
+		cfg := Config{
+			Providers: []ProviderInstanceConfig{
+				{Name: "prov1", Type: "openai"},
 			},
-			localAliases: map[string]map[string]string{},
 		}
+
+		factories := map[string]Factory{"openai": mockFactory(prov)}
+		agg, err := New(cfg, factories)
+		require.NoError(t, err)
 
 		stream, err := agg.CreateStream(context.Background(), llm.StreamOptions{
-			Model:    "smart",
+			Model:    "gpt-4",
 			Messages: llm.Messages{&llm.UserMsg{Content: "hi"}},
 		})
 		require.NoError(t, err)
@@ -222,6 +297,7 @@ func TestCreateStream(t *testing.T) {
 		prov1 := &mockProvider{
 			name:      "prov1",
 			returnErr: errors.New("HTTP429: rate limit exceeded"),
+			models:    []llm.Model{{ID: "gpt-4", Name: "GPT-4", Provider: "openai"}},
 		}
 		prov2 := &mockProvider{
 			name: "prov2",
@@ -233,22 +309,28 @@ func TestCreateStream(t *testing.T) {
 				}()
 				return ch, nil
 			},
+			models: []llm.Model{{ID: "claude", Name: "Claude", Provider: "anthropic"}},
 		}
 
-		agg := &Provider{
-			name: "test",
-			providers: map[string]llm.Provider{
-				"prov1": prov1,
-				"prov2": prov2,
+		cfg := Config{
+			Providers: []ProviderInstanceConfig{
+				{Name: "prov1", Type: "openai"},
+				{Name: "prov2", Type: "anthropic"},
 			},
-			aliases: map[string][]AliasTarget{
+			Aliases: map[string][]AliasTarget{
 				"smart": {
 					{Provider: "prov1", Model: "gpt-4"},
 					{Provider: "prov2", Model: "claude"},
 				},
 			},
-			localAliases: map[string]map[string]string{},
 		}
+
+		factories := map[string]Factory{
+			"openai":    mockFactory(prov1),
+			"anthropic": mockFactory(prov2),
+		}
+		agg, err := New(cfg, factories)
+		require.NoError(t, err)
 
 		stream, err := agg.CreateStream(context.Background(), llm.StreamOptions{
 			Model:    "smart",
@@ -262,25 +344,34 @@ func TestCreateStream(t *testing.T) {
 		prov1 := &mockProvider{
 			name:      "prov1",
 			returnErr: errors.New("authentication failed"),
+			models:    []llm.Model{{ID: "gpt-4", Name: "GPT-4", Provider: "openai"}},
 		}
-		prov2 := &mockProvider{name: "prov2"}
+		prov2 := &mockProvider{
+			name:   "prov2",
+			models: []llm.Model{{ID: "claude", Name: "Claude", Provider: "anthropic"}},
+		}
 
-		agg := &Provider{
-			name: "test",
-			providers: map[string]llm.Provider{
-				"prov1": prov1,
-				"prov2": prov2,
+		cfg := Config{
+			Providers: []ProviderInstanceConfig{
+				{Name: "prov1", Type: "openai"},
+				{Name: "prov2", Type: "anthropic"},
 			},
-			aliases: map[string][]AliasTarget{
+			Aliases: map[string][]AliasTarget{
 				"smart": {
 					{Provider: "prov1", Model: "gpt-4"},
 					{Provider: "prov2", Model: "claude"},
 				},
 			},
-			localAliases: map[string]map[string]string{},
 		}
 
-		_, err := agg.CreateStream(context.Background(), llm.StreamOptions{
+		factories := map[string]Factory{
+			"openai":    mockFactory(prov1),
+			"anthropic": mockFactory(prov2),
+		}
+		agg, err := New(cfg, factories)
+		require.NoError(t, err)
+
+		_, err = agg.CreateStream(context.Background(), llm.StreamOptions{
 			Model:    "smart",
 			Messages: llm.Messages{&llm.UserMsg{Content: "hi"}},
 		})
@@ -292,28 +383,35 @@ func TestCreateStream(t *testing.T) {
 		prov1 := &mockProvider{
 			name:      "prov1",
 			returnErr: errors.New("HTTP429: rate limit"),
+			models:    []llm.Model{{ID: "gpt-4", Name: "GPT-4", Provider: "openai"}},
 		}
 		prov2 := &mockProvider{
 			name:      "prov2",
 			returnErr: errors.New("HTTP 503: service unavailable"),
+			models:    []llm.Model{{ID: "claude", Name: "Claude", Provider: "anthropic"}},
 		}
 
-		agg := &Provider{
-			name: "test",
-			providers: map[string]llm.Provider{
-				"prov1": prov1,
-				"prov2": prov2,
+		cfg := Config{
+			Providers: []ProviderInstanceConfig{
+				{Name: "prov1", Type: "openai"},
+				{Name: "prov2", Type: "anthropic"},
 			},
-			aliases: map[string][]AliasTarget{
+			Aliases: map[string][]AliasTarget{
 				"smart": {
 					{Provider: "prov1", Model: "gpt-4"},
 					{Provider: "prov2", Model: "claude"},
 				},
 			},
-			localAliases: map[string]map[string]string{},
 		}
 
-		_, err := agg.CreateStream(context.Background(), llm.StreamOptions{
+		factories := map[string]Factory{
+			"openai":    mockFactory(prov1),
+			"anthropic": mockFactory(prov2),
+		}
+		agg, err := New(cfg, factories)
+		require.NoError(t, err)
+
+		_, err = agg.CreateStream(context.Background(), llm.StreamOptions{
 			Model:    "smart",
 			Messages: llm.Messages{&llm.UserMsg{Content: "hi"}},
 		})
@@ -321,20 +419,28 @@ func TestCreateStream(t *testing.T) {
 		assert.Contains(t, err.Error(), "all targets failed")
 	})
 
-	t.Run("unknown alias", func(t *testing.T) {
-		agg := &Provider{
-			name:         "test",
-			providers:    map[string]llm.Provider{},
-			aliases:      map[string][]AliasTarget{},
-			localAliases: map[string]map[string]string{},
+	t.Run("unknown model", func(t *testing.T) {
+		prov := &mockProvider{
+			name:   "prov",
+			models: []llm.Model{{ID: "model", Name: "Model", Provider: "type"}},
 		}
 
-		_, err := agg.CreateStream(context.Background(), llm.StreamOptions{
+		cfg := Config{
+			Providers: []ProviderInstanceConfig{
+				{Name: "prov", Type: "type"},
+			},
+		}
+
+		factories := map[string]Factory{"type": mockFactory(prov)}
+		agg, err := New(cfg, factories)
+		require.NoError(t, err)
+
+		_, err = agg.CreateStream(context.Background(), llm.StreamOptions{
 			Model:    "unknown",
 			Messages: llm.Messages{&llm.UserMsg{Content: "hi"}},
 		})
 		require.Error(t, err)
-		assert.ErrorIs(t, err, ErrUnknownAlias)
+		assert.ErrorIs(t, err, ErrUnknownModel)
 	})
 }
 
@@ -363,23 +469,4 @@ func TestIsRetriableError(t *testing.T) {
 			assert.Equal(t, tt.retriable, result)
 		})
 	}
-}
-
-func TestModels(t *testing.T) {
-	prov := &mockProvider{name: "prov"}
-	agg := &Provider{
-		name: "test",
-		models: []llm.Model{
-			{ID: "smart", Name: "smart", Provider: "aggregate"},
-			{ID: "fast", Name: "fast", Provider: "aggregate"},
-		},
-		providers:    map[string]llm.Provider{"prov": prov},
-		aliases:      map[string][]AliasTarget{},
-		localAliases: map[string]map[string]string{},
-	}
-
-	models := agg.Models()
-	require.Len(t, models, 2)
-	assert.Equal(t, "smart", models[0].ID)
-	assert.Equal(t, "fast", models[1].ID)
 }

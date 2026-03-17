@@ -10,60 +10,50 @@ import (
 )
 
 var (
-	// ErrUnknownAlias is returned when a model alias is not found.
-	ErrUnknownAlias = errors.New("unknown model alias")
+	// ErrUnknownModel is returned when a model ID or alias is not found.
+	ErrUnknownModel = errors.New("unknown model")
 	// ErrNoProviders is returned when no providers are configured.
 	ErrNoProviders = errors.New("no providers configured")
 	// ErrProviderNotFound is returned when a referenced provider is not found.
 	ErrProviderNotFound = errors.New("provider not found")
+	// ErrAmbiguousModel is returned when a short model ID matches multiple providers.
+	ErrAmbiguousModel = errors.New("ambiguous model ID")
 )
 
-// resolveTarget resolves a target to (provider, modelID).
-// It handles local alias lookup within the provider instance.
-func (p *Provider) resolveTarget(target AliasTarget) (llm.Provider, string, error) {
+// resolvedTarget represents a fully resolved routing target.
+type resolvedTarget struct {
+	provider     llm.Provider
+	providerName string // instance name, e.g., "work-claude"
+	providerType string // provider type, e.g., "anthropic"
+	modelID      string // underlying model ID, e.g., "claude-sonnet-4-5"
+	fullID       string // fully qualified ID: "work-claude/anthropic/claude-sonnet-4-5"
+}
+
+// resolveTarget resolves an AliasTarget to a resolvedTarget.
+func (p *Provider) resolveTarget(target AliasTarget) (resolvedTarget, error) {
 	prov, ok := p.providers[target.Provider]
 	if !ok {
-		return nil, "", fmt.Errorf("%w: %s", ErrProviderNotFound, target.Provider)
+		return resolvedTarget{}, fmt.Errorf("%w: %s", ErrProviderNotFound, target.Provider)
 	}
 
-	// Check if target.Model is a local alias for this provider
+	// Resolve local alias if present
+	modelID := target.Model
 	if localAliases, ok := p.localAliases[target.Provider]; ok {
-		if modelID, ok := localAliases[target.Model]; ok {
-			return prov, modelID, nil
+		if resolved, ok := localAliases[modelID]; ok {
+			modelID = resolved
 		}
 	}
-	// Not a local alias, use as-is (assume it's a model ID)
-	return prov, target.Model, nil
-}
 
-// resolveAllTargets resolves an alias to all possible (provider, modelID) pairs.
-// Returns targets in priority order for failover.
-func (p *Provider) resolveAllTargets(alias string) ([]resolvedTarget, error) {
-	targets, ok := p.aliases[alias]
-	if !ok {
-		return nil, fmt.Errorf("%w: %s", ErrUnknownAlias, alias)
-	}
+	providerType := p.providerTypes[target.Provider]
+	fullID := fmt.Sprintf("%s/%s/%s", target.Provider, providerType, modelID)
 
-	var resolved []resolvedTarget
-	for _, target := range targets {
-		prov, modelID, err := p.resolveTarget(target)
-		if err != nil {
-			return nil, fmt.Errorf("resolve target %s/%s: %w", target.Provider, target.Model, err)
-		}
-		resolved = append(resolved, resolvedTarget{
-			provider: prov,
-			modelID:  modelID,
-			name:     target.Provider,
-		})
-	}
-
-	return resolved, nil
-}
-
-type resolvedTarget struct {
-	provider llm.Provider
-	modelID  string
-	name     string // provider instance name for error messages
+	return resolvedTarget{
+		provider:     prov,
+		providerName: target.Provider,
+		providerType: providerType,
+		modelID:      modelID,
+		fullID:       fullID,
+	}, nil
 }
 
 // isRetriableError checks if an error should trigger failover to the next target.
