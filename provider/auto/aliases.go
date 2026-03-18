@@ -1,6 +1,9 @@
 package auto
 
-import "github.com/codewandler/llm/provider/aggregate"
+import (
+	"github.com/codewandler/llm/provider/aggregate"
+	"github.com/codewandler/llm/provider/bedrock"
+)
 
 // claudeModelAliases maps short names to full Claude model IDs.
 var claudeModelAliases = map[string]string{
@@ -36,9 +39,9 @@ var providerAliasModels = map[string]aliasModels{
 		powerful: "opus",
 	},
 	ProviderBedrock: {
-		fast:     BedrockHaiku,
-		normal:   BedrockSonnet,
-		powerful: BedrockOpus,
+		fast:     bedrock.ModelHaiku,
+		normal:   bedrock.ModelSonnet,
+		powerful: bedrock.ModelOpus,
 	},
 }
 

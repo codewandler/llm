@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/codewandler/llm/provider/anthropic/claude"
+	"github.com/codewandler/llm/provider/bedrock"
 )
 
 // mockTokenStore implements claude.TokenStore for testing.
@@ -204,7 +205,7 @@ func TestConstants(t *testing.T) {
 	assert.NotEmpty(t, ClaudeSonnet)
 	assert.NotEmpty(t, ClaudeHaiku)
 
-	assert.NotEmpty(t, BedrockOpus)
-	assert.NotEmpty(t, BedrockSonnet)
-	assert.NotEmpty(t, BedrockHaiku)
+	assert.NotEmpty(t, bedrock.ModelOpus)
+	assert.NotEmpty(t, bedrock.ModelSonnet)
+	assert.NotEmpty(t, bedrock.ModelHaiku)
 }

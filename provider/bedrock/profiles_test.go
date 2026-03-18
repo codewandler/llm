@@ -139,7 +139,7 @@ func TestResolveModel(t *testing.T) {
 		{
 			name:        "error - us-only model in eu region",
 			region:      "eu-central-1",
-			model:       "anthropic.claude-opus-4-20250514-v1:0", // Only available in us
+			model:       "meta.llama4-maverick-17b-instruct-v1:0", // Only available in us
 			expectError: true,
 		},
 	}

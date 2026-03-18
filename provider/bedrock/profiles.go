@@ -32,13 +32,6 @@ var inferenceProfiles = map[string]InferenceProfile{
 	"anthropic.claude-haiku-4-5-20251001-v1:0":  {Prefixes: []string{"eu", "us", "global"}},
 
 	// ========================================
-	// Anthropic Claude 4.0 / 4.1
-	// ========================================
-	"anthropic.claude-opus-4-20250514-v1:0":   {Prefixes: []string{"us"}},
-	"anthropic.claude-opus-4-1-20250805-v1:0": {Prefixes: []string{"us"}},
-	"anthropic.claude-sonnet-4-20250514-v1:0": {Prefixes: []string{"eu", "us", "global"}},
-
-	// ========================================
 	// Anthropic Claude 3.7
 	// ========================================
 	"anthropic.claude-3-7-sonnet-20250219-v1:0": {Prefixes: []string{"eu", "us", "apac"}},
@@ -46,16 +39,12 @@ var inferenceProfiles = map[string]InferenceProfile{
 	// ========================================
 	// Anthropic Claude 3.5
 	// ========================================
-	"anthropic.claude-3-5-sonnet-20241022-v2:0": {Prefixes: []string{"us", "apac"}},
 	"anthropic.claude-3-5-sonnet-20240620-v1:0": {Prefixes: []string{"eu", "us", "apac"}},
-	"anthropic.claude-3-5-haiku-20241022-v1:0":  {Prefixes: []string{"us"}},
 
 	// ========================================
 	// Anthropic Claude 3.0
 	// ========================================
-	"anthropic.claude-3-opus-20240229-v1:0":   {Prefixes: []string{"us"}},
-	"anthropic.claude-3-sonnet-20240229-v1:0": {Prefixes: []string{"eu", "us", "apac"}},
-	"anthropic.claude-3-haiku-20240307-v1:0":  {Prefixes: []string{"eu", "us", "apac"}},
+	"anthropic.claude-3-haiku-20240307-v1:0": {Prefixes: []string{"eu", "us", "apac"}},
 
 	// ========================================
 	// Meta Llama 4

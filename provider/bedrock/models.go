@@ -6,6 +6,13 @@ import (
 	"github.com/codewandler/llm"
 )
 
+// Default model IDs for aliases (latest available models).
+const (
+	ModelOpus   = "anthropic.claude-opus-4-6-v1"
+	ModelSonnet = "anthropic.claude-sonnet-4-6"
+	ModelHaiku  = "anthropic.claude-haiku-4-5-20251001-v1:0"
+)
+
 // modelInfo contains metadata and pricing for a Bedrock model.
 type modelInfo struct {
 	ID          string  // Bedrock model ID
@@ -27,17 +34,10 @@ var modelRegistry = map[string]modelInfo{
 	"anthropic.claude-opus-4-5-20251101-v1:0":   {ID: "anthropic.claude-opus-4-5-20251101-v1:0", Name: "Claude Opus 4.5", InputPrice: 5.00, OutputPrice: 25.00},
 	"anthropic.claude-sonnet-4-5-20250929-v1:0": {ID: "anthropic.claude-sonnet-4-5-20250929-v1:0", Name: "Claude Sonnet 4.5", InputPrice: 3.00, OutputPrice: 15.00},
 	"anthropic.claude-haiku-4-5-20251001-v1:0":  {ID: "anthropic.claude-haiku-4-5-20251001-v1:0", Name: "Claude Haiku 4.5", InputPrice: 1.00, OutputPrice: 5.00},
-	"anthropic.claude-opus-4-1-20250805-v1:0":   {ID: "anthropic.claude-opus-4-1-20250805-v1:0", Name: "Claude Opus 4.1", InputPrice: 15.00, OutputPrice: 75.00},
-	"anthropic.claude-opus-4-20250514-v1:0":     {ID: "anthropic.claude-opus-4-20250514-v1:0", Name: "Claude Opus 4", InputPrice: 15.00, OutputPrice: 75.00},
-	"anthropic.claude-sonnet-4-20250514-v1:0":   {ID: "anthropic.claude-sonnet-4-20250514-v1:0", Name: "Claude Sonnet 4", InputPrice: 3.00, OutputPrice: 15.00},
 
 	// Claude 3.x series
 	"anthropic.claude-3-7-sonnet-20250219-v1:0": {ID: "anthropic.claude-3-7-sonnet-20250219-v1:0", Name: "Claude 3.7 Sonnet", InputPrice: 3.00, OutputPrice: 15.00},
-	"anthropic.claude-3-5-sonnet-20241022-v2:0": {ID: "anthropic.claude-3-5-sonnet-20241022-v2:0", Name: "Claude 3.5 Sonnet v2", InputPrice: 3.00, OutputPrice: 15.00},
 	"anthropic.claude-3-5-sonnet-20240620-v1:0": {ID: "anthropic.claude-3-5-sonnet-20240620-v1:0", Name: "Claude 3.5 Sonnet", InputPrice: 3.00, OutputPrice: 15.00},
-	"anthropic.claude-3-5-haiku-20241022-v1:0":  {ID: "anthropic.claude-3-5-haiku-20241022-v1:0", Name: "Claude 3.5 Haiku", InputPrice: 0.80, OutputPrice: 4.00},
-	"anthropic.claude-3-opus-20240229-v1:0":     {ID: "anthropic.claude-3-opus-20240229-v1:0", Name: "Claude 3 Opus", InputPrice: 15.00, OutputPrice: 75.00},
-	"anthropic.claude-3-sonnet-20240229-v1:0":   {ID: "anthropic.claude-3-sonnet-20240229-v1:0", Name: "Claude 3 Sonnet", InputPrice: 3.00, OutputPrice: 15.00},
 	"anthropic.claude-3-haiku-20240307-v1:0":    {ID: "anthropic.claude-3-haiku-20240307-v1:0", Name: "Claude 3 Haiku", InputPrice: 0.25, OutputPrice: 1.25},
 
 	// --- Meta Llama models ---
@@ -101,15 +101,8 @@ var modelOrder = []string{
 	"anthropic.claude-opus-4-5-20251101-v1:0",
 	"anthropic.claude-sonnet-4-5-20250929-v1:0",
 	"anthropic.claude-haiku-4-5-20251001-v1:0",
-	"anthropic.claude-opus-4-1-20250805-v1:0",
-	"anthropic.claude-opus-4-20250514-v1:0",
-	"anthropic.claude-sonnet-4-20250514-v1:0",
 	"anthropic.claude-3-7-sonnet-20250219-v1:0",
-	"anthropic.claude-3-5-sonnet-20241022-v2:0",
 	"anthropic.claude-3-5-sonnet-20240620-v1:0",
-	"anthropic.claude-3-5-haiku-20241022-v1:0",
-	"anthropic.claude-3-opus-20240229-v1:0",
-	"anthropic.claude-3-sonnet-20240229-v1:0",
 	"anthropic.claude-3-haiku-20240307-v1:0",
 
 	// Meta Llama (newest first)
