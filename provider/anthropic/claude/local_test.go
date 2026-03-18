@@ -93,14 +93,12 @@ func TestLocalTokenStore_Save(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, ".credentials.json")
 
-	// Write initial credentials with extra fields
+	// Write initial credentials
 	creds := map[string]any{
 		"claudeAiOauth": map[string]any{
-			"accessToken":      "original-token",
-			"refreshToken":     "original-refresh",
-			"expiresAt":        time.Now().Add(1 * time.Hour).UnixMilli(),
-			"scopes":           []string{"user:inference"},
-			"subscriptionType": "team",
+			"accessToken":  "original-token",
+			"refreshToken": "original-refresh",
+			"expiresAt":    time.Now().Add(1 * time.Hour).UnixMilli(),
 		},
 	}
 	data, _ := json.Marshal(creds)
@@ -128,6 +126,96 @@ func TestLocalTokenStore_Save(t *testing.T) {
 	oauth := saved["claudeAiOauth"].(map[string]any)
 	assert.Equal(t, "new-access-token", oauth["accessToken"])
 	assert.Equal(t, "new-refresh-token", oauth["refreshToken"])
+}
+
+func TestLocalTokenStore_Save_PreservesUnknownFields(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, ".credentials.json")
+
+	// Write initial credentials with extra fields (like Claude Code might store)
+	creds := map[string]any{
+		"claudeAiOauth": map[string]any{
+			"accessToken":      "original-token",
+			"refreshToken":     "original-refresh",
+			"expiresAt":        time.Now().Add(1 * time.Hour).UnixMilli(),
+			"scopes":           []string{"user:inference", "org:create_api_key"},
+			"subscriptionType": "team",
+			"someOtherField":   12345,
+		},
+		"otherTopLevelKey": "should-be-preserved",
+		"anotherKey": map[string]any{
+			"nested": "data",
+		},
+	}
+	data, _ := json.Marshal(creds)
+	_ = os.WriteFile(path, data, 0600)
+
+	store, err := NewLocalTokenStoreWithPath(path)
+	require.NoError(t, err)
+
+	// Save a new token
+	newToken := &Token{
+		AccessToken:  "new-access-token",
+		RefreshToken: "new-refresh-token",
+		ExpiresAt:    time.Now().Add(2 * time.Hour),
+	}
+	err = store.Save(context.Background(), "key", newToken)
+	require.NoError(t, err)
+
+	// Read back and verify ALL fields are preserved
+	data, err = os.ReadFile(path)
+	require.NoError(t, err)
+
+	var saved map[string]any
+	require.NoError(t, json.Unmarshal(data, &saved))
+
+	// Token fields should be updated
+	oauth := saved["claudeAiOauth"].(map[string]any)
+	assert.Equal(t, "new-access-token", oauth["accessToken"])
+	assert.Equal(t, "new-refresh-token", oauth["refreshToken"])
+
+	// Unknown fields within claudeAiOauth should be preserved
+	assert.Equal(t, []any{"user:inference", "org:create_api_key"}, oauth["scopes"])
+	assert.Equal(t, "team", oauth["subscriptionType"])
+	assert.Equal(t, float64(12345), oauth["someOtherField"]) // JSON numbers are float64
+
+	// Top-level unknown fields should be preserved
+	assert.Equal(t, "should-be-preserved", saved["otherTopLevelKey"])
+	anotherKey := saved["anotherKey"].(map[string]any)
+	assert.Equal(t, "data", anotherKey["nested"])
+}
+
+func TestLocalTokenStore_Save_AtomicWrite(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, ".credentials.json")
+
+	// Write initial credentials
+	creds := map[string]any{
+		"claudeAiOauth": map[string]any{
+			"accessToken":  "original-token",
+			"refreshToken": "original-refresh",
+			"expiresAt":    time.Now().Add(1 * time.Hour).UnixMilli(),
+		},
+	}
+	data, _ := json.Marshal(creds)
+	_ = os.WriteFile(path, data, 0600)
+
+	store, err := NewLocalTokenStoreWithPath(path)
+	require.NoError(t, err)
+
+	// Save a new token
+	newToken := &Token{
+		AccessToken:  "new-access-token",
+		RefreshToken: "new-refresh-token",
+		ExpiresAt:    time.Now().Add(2 * time.Hour),
+	}
+	err = store.Save(context.Background(), "key", newToken)
+	require.NoError(t, err)
+
+	// Verify temp file was cleaned up
+	tmpPath := path + ".tmp"
+	_, err = os.Stat(tmpPath)
+	assert.True(t, os.IsNotExist(err), "temp file should be removed after successful save")
 }
 
 func TestLocalTokenStore_List(t *testing.T) {

@@ -164,35 +164,63 @@ func (s *LocalTokenStore) Load(ctx context.Context, key string) (*Token, error) 
 
 // Save persists the token to the credentials file.
 // The key parameter is ignored since the file contains only one token.
+//
+// This method preserves all unknown fields in the JSON file to maintain
+// compatibility with Claude Code and other tools that may store additional data.
+// It uses atomic writes (temp file + rename) to prevent corruption.
 func (s *LocalTokenStore) Save(ctx context.Context, key string, token *Token) error {
-	// Read existing file to preserve other fields
+	// Read existing file to preserve ALL fields (not just the ones we know about)
 	data, err := os.ReadFile(s.path)
 	if err != nil {
 		return fmt.Errorf("read credentials file: %w", err)
 	}
 
-	var creds localCredentials
-	if err := json.Unmarshal(data, &creds); err != nil {
+	// Parse into generic map to preserve unknown top-level fields
+	var root map[string]json.RawMessage
+	if err := json.Unmarshal(data, &root); err != nil {
 		return fmt.Errorf("parse credentials file: %w", err)
 	}
-
-	if creds.ClaudeAiOauth == nil {
-		creds.ClaudeAiOauth = &localOAuthData{}
+	if root == nil {
+		root = make(map[string]json.RawMessage)
 	}
 
-	// Update token fields
-	creds.ClaudeAiOauth.AccessToken = token.AccessToken
-	creds.ClaudeAiOauth.RefreshToken = token.RefreshToken
-	creds.ClaudeAiOauth.ExpiresAt = token.ExpiresAt.UnixMilli()
+	// Parse claudeAiOauth as map to preserve unknown fields within it
+	var oauth map[string]any
+	if raw, ok := root["claudeAiOauth"]; ok {
+		if err := json.Unmarshal(raw, &oauth); err != nil {
+			oauth = make(map[string]any)
+		}
+	}
+	if oauth == nil {
+		oauth = make(map[string]any)
+	}
 
-	// Write back
-	newData, err := json.Marshal(creds)
+	// Update only the token fields we manage
+	oauth["accessToken"] = token.AccessToken
+	oauth["refreshToken"] = token.RefreshToken
+	oauth["expiresAt"] = token.ExpiresAt.UnixMilli()
+
+	// Marshal oauth back into root
+	oauthBytes, err := json.Marshal(oauth)
+	if err != nil {
+		return fmt.Errorf("marshal oauth: %w", err)
+	}
+	root["claudeAiOauth"] = oauthBytes
+
+	// Marshal entire document
+	newData, err := json.Marshal(root)
 	if err != nil {
 		return fmt.Errorf("marshal credentials: %w", err)
 	}
 
-	if err := os.WriteFile(s.path, newData, 0600); err != nil {
-		return fmt.Errorf("write credentials file: %w", err)
+	// Atomic write: temp file + rename
+	tmpPath := s.path + ".tmp"
+	if err := os.WriteFile(tmpPath, newData, 0600); err != nil {
+		return fmt.Errorf("write temp credentials file: %w", err)
+	}
+	if err := os.Rename(tmpPath, s.path); err != nil {
+		os.Remove(tmpPath) // cleanup on failure
+		return fmt.Errorf("rename credentials file: %w", err)
 	}
 
 	return nil
