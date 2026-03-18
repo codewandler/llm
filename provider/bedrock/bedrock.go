@@ -27,6 +27,7 @@ const (
 // Provider implements the AWS Bedrock LLM backend.
 type Provider struct {
 	region              string
+	regionPrefix        string // inference profile prefix: "eu", "us", "apac", or "global"
 	defaultModel        string
 	credentialsProvider aws.CredentialsProvider
 
@@ -96,6 +97,9 @@ func New(opts ...Option) *Provider {
 	for _, opt := range opts {
 		opt(p)
 	}
+
+	// Compute region prefix for inference profiles
+	p.regionPrefix = computeRegionPrefix(p.region)
 
 	// If custom credentials provider is set, defer client creation
 	// to first use (lazy initialization)
@@ -168,6 +172,49 @@ func (p *Provider) initClient(ctx context.Context) error {
 	return nil
 }
 
+// resolveModel resolves a model ID to include the appropriate inference profile prefix.
+//
+// Resolution order:
+//  1. If model already has a region prefix (eu., us., etc.) - passthrough
+//  2. If model is in inference profile registry - apply regional prefix
+//  3. If regional prefix not available - fall back to global
+//  4. If no profile exists - return model unchanged
+//
+// Returns the resolved model ID and any error.
+func (p *Provider) resolveModel(model string) (string, error) {
+	// 1. Already has region prefix - passthrough
+	if hasRegionPrefix(model) {
+		return model, nil
+	}
+
+	// 2. Check if model has inference profile
+	profile, ok := inferenceProfiles[model]
+	if !ok {
+		// No profile - use model as-is (may work for some models)
+		return model, nil
+	}
+
+	// 3. Try region-specific prefix first
+	if containsPrefix(profile.Prefixes, p.regionPrefix) {
+		return p.regionPrefix + "." + model, nil
+	}
+
+	// 4. Fallback to global
+	if containsPrefix(profile.Prefixes, "global") {
+		return "global." + model, nil
+	}
+
+	// 5. No valid prefix available - return error
+	return "", fmt.Errorf("model %q not available in region %s (available: %v)",
+		model, p.region, profile.Prefixes)
+}
+
+// RegionPrefix returns the computed inference profile prefix for this provider's region.
+// Returns "eu", "us", "apac", or "global".
+func (p *Provider) RegionPrefix() string {
+	return p.regionPrefix
+}
+
 func (p *Provider) CreateStream(ctx context.Context, opts llm.StreamOptions) (<-chan llm.StreamEvent, error) {
 	// Lazy client initialization (thread-safe)
 	if err := p.initClient(ctx); err != nil {
@@ -178,7 +225,17 @@ func (p *Provider) CreateStream(ctx context.Context, opts llm.StreamOptions) (<-
 		return nil, fmt.Errorf("invalid options: %w", err)
 	}
 
-	input, err := buildRequest(opts)
+	// Resolve model to include inference profile prefix
+	resolvedModel, err := p.resolveModel(opts.Model)
+	if err != nil {
+		return nil, err
+	}
+
+	// Create a copy of opts with resolved model
+	resolvedOpts := opts
+	resolvedOpts.Model = resolvedModel
+
+	input, err := buildRequest(resolvedOpts)
 	if err != nil {
 		return nil, fmt.Errorf("build request: %w", err)
 	}
@@ -190,8 +247,8 @@ func (p *Provider) CreateStream(ctx context.Context, opts llm.StreamOptions) (<-
 	}
 
 	meta := streamMeta{
-		RequestedModel: opts.Model,
-		ResolvedModel:  opts.Model, // For simple providers, resolved = requested
+		RequestedModel: opts.Model,    // Original user-provided model
+		ResolvedModel:  resolvedModel, // Resolved with inference profile prefix
 		StartTime:      startTime,
 	}
 	events := make(chan llm.StreamEvent, 64)

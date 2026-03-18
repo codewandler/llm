@@ -36,6 +36,7 @@ func TestNew_DefaultCredentials(t *testing.T) {
 func TestNew_WithRegion(t *testing.T) {
 	p := New(WithRegion("eu-west-1"))
 	assert.Equal(t, "eu-west-1", p.region)
+	assert.Equal(t, "eu", p.regionPrefix)
 }
 
 func TestNew_WithDefaultModel(t *testing.T) {
