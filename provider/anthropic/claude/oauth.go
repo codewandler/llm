@@ -126,13 +126,41 @@ func (f *OAuthFlow) Exchange(ctx context.Context, code string) (*Token, error) {
 
 // RefreshToken exchanges a refresh token for new tokens.
 func RefreshToken(ctx context.Context, refreshToken string) (*Token, error) {
+	result, err := RefreshTokenVerbose(ctx, refreshToken)
+	if err != nil {
+		return nil, err
+	}
+	return result.Token, nil
+}
+
+// RefreshResult contains the result of a token refresh operation.
+type RefreshResult struct {
+	Token    *Token
+	Duration time.Duration
+	Endpoint string
+}
+
+// RefreshTokenVerbose exchanges a refresh token for new tokens and returns timing info.
+func RefreshTokenVerbose(ctx context.Context, refreshToken string) (*RefreshResult, error) {
 	body := map[string]string{
 		"grant_type":    "refresh_token",
 		"refresh_token": refreshToken,
 		"client_id":     AnthropicClientID,
 	}
 
-	return exchangeToken(ctx, body)
+	start := time.Now()
+	token, err := exchangeToken(ctx, body)
+	duration := time.Since(start)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &RefreshResult{
+		Token:    token,
+		Duration: duration,
+		Endpoint: tokenEndpoint,
+	}, nil
 }
 
 func exchangeToken(ctx context.Context, body map[string]string) (*Token, error) {

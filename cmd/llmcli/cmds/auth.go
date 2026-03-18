@@ -15,7 +15,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
-const defaultKey = "claude"
+const (
+	defaultKey = "claude"
+	localKey   = "@local"
+)
 
 // NewAuthCmd returns the auth command group.
 func NewAuthCmd() *cobra.Command {
@@ -29,6 +32,7 @@ func NewAuthCmd() *cobra.Command {
 		newStatusCmd(),
 		newLogoutCmd(),
 		newListCmd(),
+		newRefreshCmd(),
 	)
 
 	return cmd
@@ -103,9 +107,136 @@ func newListCmd() *cobra.Command {
 	return cmd
 }
 
+func newRefreshCmd() *cobra.Command {
+	var verbose bool
+
+	cmd := &cobra.Command{
+		Use:   "refresh [key]",
+		Short: "Force refresh a stored token",
+		Long: `Forces a token refresh regardless of expiration.
+Useful for testing that token refresh and persistence work correctly.
+
+Use "@local" to refresh the local Claude credentials (~/.claude/.credentials.json).
+
+Example:
+  llmcli auth refresh           # Refresh default key
+  llmcli auth refresh @local    # Refresh local Claude credentials
+  llmcli auth refresh work      # Refresh specific key`,
+		Args: cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			key := defaultKey
+			if len(args) > 0 {
+				key = args[0]
+			}
+			return runRefresh(cmd.Context(), key, verbose)
+		},
+	}
+
+	cmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "Show detailed refresh information")
+	return cmd
+}
+
+// getStoreAndKey returns the appropriate token store and internal key.
+// For "@local", returns LocalTokenStore with key "default".
+// For other keys, returns FileTokenStore with the given key.
+func getStoreAndKey(key string) (claude.TokenStore, string, error) {
+	if key == localKey {
+		store, err := claude.NewLocalTokenStore()
+		if err != nil {
+			return nil, "", fmt.Errorf("local Claude credentials not found: %w", err)
+		}
+		return store, "default", nil
+	}
+
+	store, err := getTokenStore()
+	if err != nil {
+		return nil, "", err
+	}
+	return store, key, nil
+}
+
 // --- Command implementations ---
 
+func runRefresh(ctx context.Context, key string, verbose bool) error {
+	store, internalKey, err := getStoreAndKey(key)
+	if err != nil {
+		return err
+	}
+
+	// Load current token
+	oldToken, err := store.Load(ctx, internalKey)
+	if err != nil {
+		return fmt.Errorf("load token: %w", err)
+	}
+	if oldToken == nil {
+		return fmt.Errorf("no token found for key %q", key)
+	}
+
+	fmt.Printf("Refreshing token for %s...\n", key)
+	if verbose {
+		fmt.Printf("Before: expires %s (token: %s...)\n",
+			oldToken.ExpiresAt.Format(time.RFC3339),
+			truncateToken(oldToken.AccessToken))
+	} else {
+		fmt.Printf("Before: expires %s\n", oldToken.ExpiresAt.Format(time.RFC3339))
+	}
+
+	// Refresh the token
+	if verbose {
+		fmt.Printf("Calling POST %s\n", "https://console.anthropic.com/v1/oauth/token")
+	}
+
+	result, err := claude.RefreshTokenVerbose(ctx, oldToken.RefreshToken)
+	if err != nil {
+		return fmt.Errorf("refresh failed: %w", err)
+	}
+
+	if verbose {
+		fmt.Printf("Response: 200 OK (took %s)\n", result.Duration.Round(time.Millisecond))
+	}
+
+	// Save the new token
+	if err := store.Save(ctx, internalKey, result.Token); err != nil {
+		return fmt.Errorf("save token: %w", err)
+	}
+
+	if verbose {
+		fmt.Printf("After:  expires %s (token: %s...)\n",
+			result.Token.ExpiresAt.Format(time.RFC3339),
+			truncateToken(result.Token.AccessToken))
+	} else {
+		fmt.Printf("After:  expires %s\n", result.Token.ExpiresAt.Format(time.RFC3339))
+	}
+
+	// Verify by reloading from disk
+	fmt.Print("Verifying persistence... ")
+	reloaded, err := store.Load(ctx, internalKey)
+	if err != nil {
+		fmt.Println("FAILED")
+		return fmt.Errorf("reload after save: %w", err)
+	}
+	if reloaded.AccessToken != result.Token.AccessToken {
+		fmt.Println("FAILED")
+		return fmt.Errorf("token mismatch after reload")
+	}
+	fmt.Println("OK")
+
+	return nil
+}
+
+// truncateToken returns the first 12 characters of a token for display.
+func truncateToken(token string) string {
+	if len(token) <= 12 {
+		return token
+	}
+	return token[:12]
+}
+
 func runLogin(ctx context.Context, key string) error {
+	if key == localKey {
+		return fmt.Errorf("cannot login to @local; use Claude Code CLI to manage local credentials")
+	}
+
 	tokenStore, err := getTokenStore()
 	if err != nil {
 		return err
@@ -165,22 +296,30 @@ func runLogin(ctx context.Context, key string) error {
 }
 
 func runStatus(ctx context.Context, key string) error {
-	tokenStore, err := getTokenStore()
+	store, internalKey, err := getStoreAndKey(key)
 	if err != nil {
 		return err
 	}
 
-	token, err := tokenStore.Load(ctx, key)
+	token, err := store.Load(ctx, internalKey)
 	if err != nil {
 		return fmt.Errorf("load token: %w", err)
 	}
 	if token == nil {
 		fmt.Printf("No credentials found for key %q\n", key)
-		fmt.Printf("Run 'llmcli auth login claude --key=%s' to authenticate\n", key)
+		if key == localKey {
+			fmt.Println("Use Claude Code CLI to authenticate")
+		} else {
+			fmt.Printf("Run 'llmcli auth login claude --key=%s' to authenticate\n", key)
+		}
 		return nil
 	}
 
 	fmt.Printf("Key:         %s\n", key)
+	if key == localKey {
+		dir, _ := claude.DefaultClaudeDir()
+		fmt.Printf("Source:      %s/.credentials.json\n", dir)
+	}
 	fmt.Printf("Expires:     %s\n", token.ExpiresAt.Format(time.RFC3339))
 
 	if token.IsExpired() {
@@ -194,6 +333,10 @@ func runStatus(ctx context.Context, key string) error {
 }
 
 func runLogout(ctx context.Context, key string) error {
+	if key == localKey {
+		return fmt.Errorf("cannot logout @local; use Claude Code CLI to manage local credentials")
+	}
+
 	tokenStore, err := getTokenStore()
 	if err != nil {
 		return err
@@ -227,13 +370,38 @@ func runList(ctx context.Context) error {
 		return fmt.Errorf("list credentials: %w", err)
 	}
 
-	if len(keys) == 0 {
+	// Check for @local credentials
+	var hasLocal bool
+	var localStatus string
+	if claude.LocalTokenProviderAvailable() {
+		localStore, err := claude.NewLocalTokenStore()
+		if err == nil {
+			if token, _ := localStore.Load(ctx, "default"); token != nil {
+				hasLocal = true
+				if token.IsExpired() {
+					localStatus = "expired"
+				} else {
+					localStatus = "valid"
+				}
+			}
+		}
+	}
+
+	if len(keys) == 0 && !hasLocal {
 		fmt.Println("No stored credentials")
 		fmt.Println("Run 'llmcli auth login claude' to authenticate")
 		return nil
 	}
 
 	fmt.Println("Stored credentials:")
+
+	// Show @local first if available
+	if hasLocal {
+		dir, _ := claude.DefaultClaudeDir()
+		fmt.Printf("  @local (%s) - %s/.credentials.json\n", localStatus, dir)
+	}
+
+	// Show other credentials
 	for _, key := range keys {
 		token, _ := tokenStore.Load(ctx, key)
 		status := "valid"
