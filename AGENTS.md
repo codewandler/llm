@@ -63,6 +63,24 @@ go vet ./...
 golangci-lint run
 ```
 
+### Quick Testing with llmcli
+
+The `cmd/llmcli` tool provides quick testing of inference and OAuth:
+
+```bash
+# Check auth status (uses ~/.claude/.credentials.json automatically)
+go run ./cmd/llmcli auth status
+
+# Quick inference test
+go run ./cmd/llmcli infer "Hello"
+
+# Verbose output with model resolution, tokens, cost, and timing
+go run ./cmd/llmcli infer -v -m default "Explain Go channels"
+
+# Model aliases: fast (haiku), default (sonnet), powerful (opus)
+go run ./cmd/llmcli infer -m powerful "Complex task"
+```
+
 ---
 
 ## Project Architecture
@@ -73,16 +91,20 @@ This is a **provider-based LLM abstraction layer** in Go:
 llm/                          # Root package - core domain types
 ├── llm.go                    # Core types: Message, Role, ToolCall, Model
 ├── tool.go                   # Tool definition types
-└── provider/                 # Provider abstraction
-    ├── provider.go           # Provider interface, SendOptions, StreamEvent
-    ├── registry.go           # Provider registry and model resolution
-    └── {provider}/           # Individual provider implementations
-        ├── anthropic/        # Anthropic Claude (API + CLI wrapper)
-        ├── openai/           # OpenAI GPT models
-        ├── openrouter/       # OpenRouter proxy
-        ├── google/           # Google Gemini (stub)
-        ├── ollama/           # Ollama local models
-        └── fake/             # Test provider
+├── provider/                 # Provider abstraction
+│   ├── provider.go           # Provider interface, SendOptions, StreamEvent
+│   ├── registry.go           # Provider registry and model resolution
+│   ├── aggregate/            # Multi-provider aggregation with failover
+│   ├── anthropic/            # Direct Anthropic API
+│   │   └── claude/           # OAuth-based Claude provider (token management)
+│   ├── bedrock/              # AWS Bedrock
+│   ├── openai/               # OpenAI GPT models
+│   ├── openrouter/           # OpenRouter proxy
+│   ├── ollama/               # Ollama local models
+│   └── fake/                 # Test provider
+└── cmd/llmcli/               # CLI tool for testing and OAuth management
+    ├── cmds/                 # Command implementations (auth, infer)
+    └── store/                # Token storage implementation
 ```
 
 **Key concepts:**
@@ -90,6 +112,7 @@ llm/                          # Root package - core domain types
 - Communication happens via streaming channels: `<-chan provider.StreamEvent`
 - Registry pattern for managing multiple providers: `registry.ResolveModel("anthropic/claude-sonnet")`
 - Tool calling support through `llm.ToolDefinition` and `llm.ToolCall`
+- Aggregate provider enables failover routing and model aliases (`fast`, `default`, `powerful`)
 
 ---
 
@@ -375,6 +398,69 @@ activeTools := make(map[int]*toolBlock)
 var args map[string]any
 _ = json.Unmarshal([]byte(tb.jsonBuf.String()), &args)
 ```
+
+### StreamEventStart Pattern
+
+All providers emit `StreamEventStart` as the first event with request metadata:
+```go
+type StreamStart struct {
+    RequestID        string        // Provider request ID
+    RequestedModel   string        // Model requested by caller
+    ResolvedModel    string        // Model after alias resolution
+    ProviderModel    string        // Actual model from API response
+    TimeToFirstToken time.Duration // Time until first content token
+}
+
+// In stream parser, track timing and emit start event:
+streamMeta := &provider.StreamMeta{
+    RequestedModel: opts.Model,
+    StartTime:      time.Now(),
+}
+
+// After receiving first content:
+if !startEventSent {
+    events <- provider.StreamEvent{
+        Type: provider.StreamEventStart,
+        Start: &llm.StreamStart{
+            RequestID:        response.ID,
+            ProviderModel:    response.Model,
+            TimeToFirstToken: time.Since(streamMeta.StartTime),
+        },
+    }
+    startEventSent = true
+}
+```
+
+### Token Management Pattern
+
+OAuth providers use a layered token management architecture:
+```go
+// TokenStore - low-level storage interface
+type TokenStore interface {
+    Get(ctx context.Context, key string) (*Token, error)
+    Save(ctx context.Context, key string, token *Token) error
+}
+
+// TokenProvider - provides valid tokens (may refresh)
+type TokenProvider interface {
+    GetAccessToken(ctx context.Context) (string, error)
+}
+
+// ManagedTokenProvider - wraps TokenStore with auto-refresh
+// Single implementation of cache + refresh + save logic
+type ManagedTokenProvider struct {
+    key        string
+    store      TokenStore
+    onRefresh  func(*Token)  // Optional callback
+    cachedToken *Token
+    mu         sync.Mutex
+}
+```
+
+Key patterns:
+- `LocalTokenStore` implements `TokenStore` for `~/.claude/.credentials.json`
+- `NewLocalTokenProvider()` returns `*ManagedTokenProvider` backed by `LocalTokenStore`
+- No duplication of refresh logic - all refresh happens in `ManagedTokenProvider`
 
 ---
 

@@ -27,17 +27,17 @@ Uses all stored credential accounts, trying each in alphabetical order
 until one succeeds (useful for rate limit fallback).
 
 Examples:
-  llmcli infer "Hello, how are you?"           # Uses default model (fast/haiku)
-  llmcli infer -m sonnet "Explain quantum computing"
-  llmcli infer -m opus "Write a poem about Go"
-  llmcli infer -m work/claude/sonnet "Hello"   # Use specific account`,
+  llmcli infer "Hello, how are you?"              # Uses fast model (haiku)
+  llmcli infer -m default "Explain Go channels"   # Balanced (sonnet)
+  llmcli infer -m powerful "Write a poem about Go" # Most capable (opus)
+  llmcli infer -m work/claude/sonnet "Hello"      # Use specific account`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runInfer(cmd.Context(), args[0], model, verbose)
 		},
 	}
 
-	cmd.Flags().StringVarP(&model, "model", "m", "fast", "Model to use (fast, sonnet, opus, or full path)")
+	cmd.Flags().StringVarP(&model, "model", "m", "fast", "Model to use (fast, default, powerful, or full path)")
 	cmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "Show usage statistics")
 	return cmd
 }
@@ -176,9 +176,9 @@ func buildAggregateProvider(ctx context.Context, tokenStore *store.FileTokenStor
 		Name:      "llmcli",
 		Providers: make([]aggregate.ProviderInstanceConfig, 0, len(keys)),
 		Aliases: map[string][]aggregate.AliasTarget{
-			"fast":   make([]aggregate.AliasTarget, 0, len(keys)),
-			"sonnet": make([]aggregate.AliasTarget, 0, len(keys)),
-			"opus":   make([]aggregate.AliasTarget, 0, len(keys)),
+			"fast":     make([]aggregate.AliasTarget, 0, len(keys)),
+			"default":  make([]aggregate.AliasTarget, 0, len(keys)),
+			"powerful": make([]aggregate.AliasTarget, 0, len(keys)),
 		},
 	}
 
@@ -199,9 +199,9 @@ func buildAggregateProvider(ctx context.Context, tokenStore *store.FileTokenStor
 
 		cfg.Aliases["fast"] = append(cfg.Aliases["fast"],
 			aggregate.AliasTarget{Provider: key, Model: "haiku"})
-		cfg.Aliases["sonnet"] = append(cfg.Aliases["sonnet"],
+		cfg.Aliases["default"] = append(cfg.Aliases["default"],
 			aggregate.AliasTarget{Provider: key, Model: "sonnet"})
-		cfg.Aliases["opus"] = append(cfg.Aliases["opus"],
+		cfg.Aliases["powerful"] = append(cfg.Aliases["powerful"],
 			aggregate.AliasTarget{Provider: key, Model: "opus"})
 
 		factories[factoryKey] = claudeFactory(key, tokenStore)

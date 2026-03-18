@@ -15,11 +15,13 @@ A unified Go library for interacting with multiple LLM providers through a consi
 
 | Provider | Name | Description |
 |----------|------|-------------|
-| Claude Code | `anthropic:claude-code` | Local Claude CLI wrapper (requires `claude` in PATH) |
-| Anthropic API | `anthropic` | Direct Anthropic API with OAuth support |
+| Anthropic API | `anthropic` | Direct Anthropic API with API key |
+| Claude OAuth | `claude` | OAuth-based Claude access (auto-detects local credentials) |
 | OpenAI | `openai` | OpenAI GPT models (GPT-4, GPT-4o, etc.) |
+| AWS Bedrock | `bedrock` | AWS Bedrock models (Claude, Llama, etc.) |
 | Ollama | `ollama` | Local Ollama models (11 curated defaults) |
 | OpenRouter | `openrouter` | 229 tool-enabled models via OpenRouter proxy |
+| Aggregate | `aggregate` | Combines multiple providers with failover and aliases |
 
 ## Installation
 
@@ -112,43 +114,50 @@ events, err := reg.CreateStream(ctx, llm.StreamOptions{
 
 ## Provider-Specific Usage
 
-### Claude Code (CLI Wrapper)
-
-Requires the `claude` CLI tool in your PATH:
-
-```go
-import "github.com/codewandler/llm/provider/anthropic"
-
-provider := anthropic.NewClaudeCodeProvider()
-
-events, err := provider.CreateStream(ctx, llm.StreamOptions{
-    Model: "sonnet",  // or "opus", "haiku"
-    Messages: llm.Messages{
-        &llm.UserMsg{Content: "Explain Go channels"},
-    },
-})
-```
-
 ### Anthropic API (Direct)
 
-Direct API access with OAuth token refresh:
+Direct API access with API key:
 
 ```go
 import "github.com/codewandler/llm/provider/anthropic"
 
-provider := anthropic.New(&anthropic.Config{
-    ClientID:     "your-client-id",
-    ClientSecret: "your-client-secret",
-    RefreshToken: "your-refresh-token",
-})
+provider := anthropic.New(llm.WithAPIKey("your-api-key"))
 
 events, err := provider.CreateStream(ctx, llm.StreamOptions{
-    Model: "claude-3-5-sonnet-20241022",
+    Model: "claude-sonnet-4-6",
     Messages: llm.Messages{
         &llm.UserMsg{Content: "Hello!"},
     },
 })
 ```
+
+### Claude OAuth Provider
+
+OAuth-based access with automatic token refresh. By default, auto-detects credentials from your local Claude installation (`~/.claude/.credentials.json`):
+
+```go
+import "github.com/codewandler/llm/provider/anthropic/claude"
+
+// Auto-detect local Claude credentials (default)
+provider := claude.New()
+
+// Or with explicit token provider
+provider := claude.New(
+    claude.WithManagedTokenProvider("my-key", tokenStore, nil),
+)
+
+events, err := provider.CreateStream(ctx, llm.StreamOptions{
+    Model: "claude-sonnet-4-6",
+    Messages: llm.Messages{
+        &llm.UserMsg{Content: "Hello!"},
+    },
+})
+```
+
+Token management interfaces:
+- `TokenStore` - Stores and retrieves tokens (implement for your storage backend)
+- `LocalTokenStore` - Reads from `~/.claude/.credentials.json`
+- `ManagedTokenProvider` - Wraps a TokenStore with automatic refresh
 
 ### OpenAI
 
@@ -204,6 +213,29 @@ events, err := provider.CreateStream(ctx, llm.StreamOptions{
 - `nemotron-3-nano:30b`
 - `llama3.2:1b`, `qwen3:1.7b`, `qwen3:0.6b`, `granite3.1-moe:1b`, `qwen2.5:0.5b`
 
+### AWS Bedrock
+
+Access AWS Bedrock models with AWS credentials:
+
+```go
+import "github.com/codewandler/llm/provider/bedrock"
+
+// Uses default AWS credential chain (env vars, ~/.aws/credentials, IAM role)
+provider := bedrock.New()
+
+// Or with explicit region
+provider := bedrock.New(bedrock.WithRegion("us-east-1"))
+
+events, err := provider.CreateStream(ctx, llm.StreamOptions{
+    Model: "anthropic.claude-3-5-sonnet-20241022-v2:0",
+    Messages: llm.Messages{
+        &llm.UserMsg{Content: "Hello!"},
+    },
+})
+```
+
+Supported Bedrock models include Claude, Llama, Mistral, and other models available in your AWS region.
+
 ### OpenRouter (Multi-Provider Proxy)
 
 Access 229 tool-enabled models:
@@ -228,6 +260,42 @@ Popular OpenRouter models:
 - `meta-llama/llama-3.1-70b-instruct`
 
 See [provider/openrouter/README.md](provider/openrouter/README.md) for full model list.
+
+### Aggregate Provider
+
+Combine multiple providers with failover routing and model aliases:
+
+```go
+import "github.com/codewandler/llm/provider/aggregate"
+
+cfg := aggregate.Config{
+    Name: "my-aggregate",
+    Providers: []aggregate.ProviderInstanceConfig{
+        {Name: "primary", Type: "anthropic"},
+        {Name: "fallback", Type: "openai"},
+    },
+    Aliases: map[string][]aggregate.AliasTarget{
+        "fast":     {{Provider: "primary", Model: "claude-haiku-4-5"}},
+        "default":  {{Provider: "primary", Model: "claude-sonnet-4-6"}},
+        "powerful": {{Provider: "primary", Model: "claude-opus-4-6"}},
+    },
+}
+
+provider, _ := aggregate.New(cfg, factories)
+
+// Use aliases instead of full model names
+events, _ := provider.CreateStream(ctx, llm.StreamOptions{
+    Model: "default",  // Resolves to claude-sonnet-4-6
+    Messages: messages,
+})
+```
+
+**Standard aliases:**
+- `fast` - Fastest/cheapest model (e.g., Haiku)
+- `default` - Balanced performance (e.g., Sonnet)
+- `powerful` - Most capable model (e.g., Opus)
+
+The aggregate provider tries each target in order until one succeeds, providing automatic failover across accounts or providers.
 
 ## Tool Calling
 
@@ -595,6 +663,9 @@ for event := range events {
 Configure providers via environment variables:
 
 ```bash
+# Anthropic (API key)
+export ANTHROPIC_API_KEY="your-api-key"
+
 # OpenAI
 export OPENAI_KEY="your-api-key"
 
@@ -604,24 +675,26 @@ export OPENROUTER_API_KEY="your-api-key"
 # Ollama (optional, defaults to http://localhost:11434)
 export OLLAMA_BASE_URL="http://localhost:11434"
 
-# Anthropic OAuth (for direct API access)
-export ANTHROPIC_CLIENT_ID="your-client-id"
-export ANTHROPIC_CLIENT_SECRET="your-client-secret"
-export ANTHROPIC_REFRESH_TOKEN="your-refresh-token"
+# AWS Bedrock (uses standard AWS credential chain)
+export AWS_REGION="us-east-1"
+export AWS_ACCESS_KEY_ID="your-access-key"
+export AWS_SECRET_ACCESS_KEY="your-secret-key"
 ```
+
+**Note:** The Claude OAuth provider auto-detects credentials from `~/.claude/.credentials.json` (created by Claude Code CLI).
 
 ## Model Reference Format
 
 Use the `provider/model` format with the registry:
 
 ```
-anthropic:claude-code/sonnet     # Claude Code CLI
-anthropic:claude-code/opus       # Claude Code CLI
-anthropic/claude-3-5-sonnet-20241022  # Direct Anthropic API
-openai/gpt-4o                   # OpenAI
-openai/gpt-4o-mini              # OpenAI
-ollama/glm-4.7-flash            # Local Ollama
-ollama/llama3.2:1b              # Local Ollama
+anthropic/claude-sonnet-4-6           # Direct Anthropic API
+claude/claude-sonnet-4-6              # Claude OAuth provider
+openai/gpt-4o                         # OpenAI
+openai/gpt-4o-mini                    # OpenAI
+bedrock/anthropic.claude-3-5-sonnet   # AWS Bedrock
+ollama/glm-4.7-flash                  # Local Ollama
+ollama/llama3.2:1b                    # Local Ollama
 openrouter/anthropic/claude-sonnet-4.5  # OpenRouter proxy
 openrouter/google/gemini-2.0-flash-001  # OpenRouter proxy
 ```
@@ -631,6 +704,7 @@ openrouter/google/gemini-2.0-flash-001  # OpenRouter proxy
 ```go
 type StreamEvent struct {
     Type     StreamEventType
+    Start    *StreamStart     // For StreamEventStart
     Delta    string           // For StreamEventDelta
     ToolCall *ToolCall        // For StreamEventToolCall
     Usage    *Usage           // For StreamEventDone
@@ -639,11 +713,40 @@ type StreamEvent struct {
 
 // Event types
 const (
+    StreamEventStart    // Stream metadata (first event)
     StreamEventDelta    // Text delta from model
     StreamEventToolCall // Tool call request
     StreamEventDone     // Stream complete (includes usage)
     StreamEventError    // Error occurred
 )
+```
+
+### Stream Start Metadata
+
+The `StreamEventStart` event is emitted first and contains request metadata:
+
+```go
+type StreamStart struct {
+    RequestID        string        // Provider request ID (e.g., "msg_01XFDUDYJgAACzvnptvVoYEL")
+    RequestedModel   string        // Model requested by caller
+    ResolvedModel    string        // Model after alias resolution
+    ProviderModel    string        // Actual model from API response
+    TimeToFirstToken time.Duration // Time until first content token
+}
+```
+
+**Usage:**
+
+```go
+for event := range stream {
+    switch event.Type {
+    case llm.StreamEventStart:
+        fmt.Printf("Request ID: %s\n", event.Start.RequestID)
+        fmt.Printf("Model: %s -> %s\n", event.Start.RequestedModel, event.Start.ProviderModel)
+    case llm.StreamEventDelta:
+        fmt.Print(event.Delta)
+    }
+}
 ```
 
 ### Usage Information
@@ -655,7 +758,7 @@ type Usage struct {
     InputTokens     int     // Prompt tokens
     OutputTokens    int     // Completion tokens
     TotalTokens     int     // Total tokens
-    Cost            float64 // Cost in USD (OpenRouter only)
+    Cost            float64 // Cost in USD (Anthropic, OpenRouter)
 
     // Detailed breakdown (provider-specific, may be zero)
     CachedTokens    int // Prompt tokens served from cache
@@ -686,7 +789,7 @@ for event := range stream {
 | `InputTokens` | Prompt tokens | All |
 | `OutputTokens` | Completion tokens | All |
 | `TotalTokens` | Total tokens | All |
-| `Cost` | Cost in USD | OpenRouter |
+| `Cost` | Cost in USD | Anthropic (calculated), OpenRouter |
 | `CachedTokens` | Tokens served from prompt cache | OpenAI, OpenRouter |
 | `ReasoningTokens` | Tokens used for reasoning | OpenAI, OpenRouter (reasoning models) |
 
@@ -736,13 +839,34 @@ llm/
 │
 ├── provider/
 │   ├── register.go     # Default registry with env-based config
-│   ├── anthropic/      # Claude Code CLI + Direct API
+│   ├── aggregate/      # Multi-provider aggregation with failover
+│   ├── anthropic/      # Direct Anthropic API
+│   │   └── claude/     # OAuth-based Claude provider
+│   ├── bedrock/        # AWS Bedrock
 │   ├── openai/         # OpenAI API
 │   ├── ollama/         # Local Ollama integration
 │   ├── openrouter/     # OpenRouter proxy (229 models)
 │   └── fake/           # Test provider
 │
-└── cmd/llm/            # CLI demo application
+└── cmd/llmcli/         # CLI tool for testing and OAuth management
+```
+
+## CLI Tool
+
+The `llmcli` tool provides quick testing and OAuth credential management:
+
+```bash
+# Check auth status (uses ~/.claude/.credentials.json)
+go run ./cmd/llmcli auth status
+
+# Quick inference
+go run ./cmd/llmcli infer "Hello, how are you?"
+
+# Verbose output with model info, tokens, cost, and timing
+go run ./cmd/llmcli infer -v -m default "Explain Go channels"
+
+# Model aliases: fast (haiku), default (sonnet), powerful (opus)
+go run ./cmd/llmcli infer -m powerful "Complex analysis task"
 ```
 
 ## Contributing
