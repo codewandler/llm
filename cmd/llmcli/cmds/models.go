@@ -3,42 +3,42 @@ package cmds
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/spf13/cobra"
 
 	"github.com/codewandler/llm"
-	"github.com/codewandler/llm/provider/aggregate"
 )
+
+// top-level aliases shown in their own section
+var topLevelAliases = []string{"fast", "default", "powerful"}
 
 // NewModelsCmd returns the models command.
 func NewModelsCmd() *cobra.Command {
-	var verbose bool
 	var filter string
-	var showAliases bool
 
 	cmd := &cobra.Command{
 		Use:   "models",
 		Short: "List available models",
 		Long: `List all models available through configured credentials.
 
+Shows aliases first (top-level and all), then all models.
+When filtering, only the models section is shown.
+
 Examples:
-  llmcli models                    # List all models
-  llmcli models -v                 # Show model aliases
-  llmcli models --show-aliases     # Show aliases section
-  llmcli models -f sonnet          # Filter by substring`,
+  llmcli models              # List aliases and models
+  llmcli models -f sonnet    # Filter models by substring`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runModels(cmd.Context(), verbose, filter, showAliases)
+			return runModels(cmd.Context(), filter)
 		},
 	}
 
-	cmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "Show aliases for each model")
 	cmd.Flags().StringVarP(&filter, "filter", "f", "", "Filter models by substring (matches ID, name, aliases)")
-	cmd.Flags().BoolVar(&showAliases, "show-aliases", false, "Show aliases section")
 	return cmd
 }
 
-func runModels(ctx context.Context, verbose bool, filter string, showAliases bool) error {
+func runModels(ctx context.Context, filter string) error {
 	provider, err := createProvider(ctx)
 	if err != nil {
 		return err
@@ -46,18 +46,16 @@ func runModels(ctx context.Context, verbose bool, filter string, showAliases boo
 
 	models := provider.Models()
 
-	// Filter models
+	// If no filter, show alias sections first
+	if filter == "" {
+		printAliasesSections(models)
+	}
+
+	// Filter and print models
 	if filter != "" {
 		models = filterModels(models, filter)
 	}
-
-	// Print aliases section (if --show-aliases)
-	if showAliases {
-		printAliasesSection(provider, filter)
-	}
-
-	// Print models section
-	printModelsSection(models, verbose)
+	printModelsSection(models)
 
 	return nil
 }
@@ -88,48 +86,69 @@ func matchesFilter(m llm.Model, filter string) bool {
 	return false
 }
 
-func printAliasesSection(provider *aggregate.Provider, filter string) {
-	aliases := []string{"fast", "default", "powerful"}
-	filter = strings.ToLower(filter)
-
-	// Check if any aliases match filter
-	var matchingAliases []struct {
-		alias   string
-		modelID string
+// buildAliasMap builds a map from alias -> []modelID from all models.
+func buildAliasMap(models []llm.Model) map[string][]string {
+	aliasMap := make(map[string][]string)
+	for _, m := range models {
+		for _, alias := range m.Aliases {
+			aliasMap[alias] = append(aliasMap[alias], m.ID)
+		}
 	}
+	return aliasMap
+}
 
-	for _, alias := range aliases {
-		model, err := provider.Resolve(alias)
-		if err != nil {
+// isTopLevelAlias checks if the alias is one of the top-level aliases.
+func isTopLevelAlias(alias string) bool {
+	for _, tl := range topLevelAliases {
+		if alias == tl {
+			return true
+		}
+	}
+	return false
+}
+
+// printAliasesSections prints both top-level and all aliases sections.
+func printAliasesSections(models []llm.Model) {
+	aliasMap := buildAliasMap(models)
+
+	// Print top-level aliases section
+	fmt.Println("ALIASES (top-level)")
+	for _, alias := range topLevelAliases {
+		targets, ok := aliasMap[alias]
+		if !ok || len(targets) == 0 {
 			continue
 		}
+		printAliasEntry(alias, targets)
+	}
+	fmt.Println()
 
-		// Apply filter
-		if filter != "" {
-			if !strings.Contains(alias, filter) &&
-				!strings.Contains(strings.ToLower(model.ID), filter) {
-				continue
-			}
+	// Collect and sort all other aliases
+	var otherAliases []string
+	for alias := range aliasMap {
+		if !isTopLevelAlias(alias) {
+			otherAliases = append(otherAliases, alias)
 		}
-
-		matchingAliases = append(matchingAliases, struct {
-			alias   string
-			modelID string
-		}{alias, model.ID})
 	}
+	sort.Strings(otherAliases)
 
-	if len(matchingAliases) == 0 {
-		return
-	}
-
-	fmt.Println("ALIASES")
-	for _, a := range matchingAliases {
-		fmt.Printf("  %-12s -> %s\n", a.alias, a.modelID)
+	// Print all other aliases section
+	fmt.Println("ALIASES (all)")
+	for _, alias := range otherAliases {
+		targets := aliasMap[alias]
+		printAliasEntry(alias, targets)
 	}
 	fmt.Println()
 }
 
-func printModelsSection(models []llm.Model, verbose bool) {
+// printAliasEntry prints a single alias with its targets in multi-line format.
+func printAliasEntry(alias string, targets []string) {
+	fmt.Printf("  %s:\n", alias)
+	for _, target := range targets {
+		fmt.Printf("    %s\n", target)
+	}
+}
+
+func printModelsSection(models []llm.Model) {
 	if len(models) == 0 {
 		fmt.Println("No models found.")
 		return
@@ -137,23 +156,15 @@ func printModelsSection(models []llm.Model, verbose bool) {
 
 	fmt.Println("MODELS")
 
-	// Calculate column widths
+	// Calculate column width for ID
 	maxID := 0
-	maxName := 0
 	for _, m := range models {
 		if len(m.ID) > maxID {
 			maxID = len(m.ID)
 		}
-		if len(m.Name) > maxName {
-			maxName = len(m.Name)
-		}
 	}
 
 	for _, m := range models {
-		if verbose && len(m.Aliases) > 0 {
-			fmt.Printf("  %-*s  %-*s  [%s]\n", maxID, m.ID, maxName, m.Name, strings.Join(m.Aliases, ", "))
-		} else {
-			fmt.Printf("  %-*s  %s\n", maxID, m.ID, m.Name)
-		}
+		fmt.Printf("  %-*s  %s\n", maxID, m.ID, m.Name)
 	}
 }
