@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -182,13 +183,19 @@ func (p *Provider) CreateStream(ctx context.Context, opts llm.StreamOptions) (<-
 		return nil, fmt.Errorf("build request: %w", err)
 	}
 
+	startTime := time.Now()
 	output, err := p.client.ConverseStream(ctx, input)
 	if err != nil {
 		return nil, fmt.Errorf("bedrock request: %w", err)
 	}
 
+	meta := streamMeta{
+		RequestedModel: opts.Model,
+		ResolvedModel:  opts.Model, // For simple providers, resolved = requested
+		StartTime:      startTime,
+	}
 	events := make(chan llm.StreamEvent, 64)
-	go parseStream(ctx, output, events, opts.Model)
+	go parseStream(ctx, output, events, meta)
 	return events, nil
 }
 
@@ -344,7 +351,14 @@ func toDocument(v any) (document.Interface, error) {
 
 // --- Stream parsing ---
 
-func parseStream(ctx context.Context, output *bedrockruntime.ConverseStreamOutput, events chan<- llm.StreamEvent, model string) {
+// streamMeta passes context into the stream parser for StreamEventStart.
+type streamMeta struct {
+	RequestedModel string
+	ResolvedModel  string
+	StartTime      time.Time
+}
+
+func parseStream(ctx context.Context, output *bedrockruntime.ConverseStreamOutput, events chan<- llm.StreamEvent, meta streamMeta) {
 	defer close(events)
 
 	stream := output.GetStream()
@@ -358,6 +372,7 @@ func parseStream(ctx context.Context, output *bedrockruntime.ConverseStreamOutpu
 	}
 	activeTools := make(map[int]*toolAccum)
 	var usage llm.Usage
+	startEmitted := false
 
 	for event := range stream.Events() {
 		// Check for context cancellation
@@ -369,6 +384,21 @@ func parseStream(ctx context.Context, output *bedrockruntime.ConverseStreamOutpu
 			}
 			return
 		default:
+		}
+
+		// Emit StreamEventStart on first event
+		if !startEmitted {
+			startEmitted = true
+			events <- llm.StreamEvent{
+				Type: llm.StreamEventStart,
+				Start: &llm.StreamStart{
+					RequestedModel:   meta.RequestedModel,
+					ResolvedModel:    meta.ResolvedModel,
+					ProviderModel:    "", // Bedrock doesn't return model in stream
+					RequestID:        "", // Bedrock doesn't return request ID in stream
+					TimeToFirstToken: time.Since(meta.StartTime),
+				},
+			}
 		}
 
 		switch e := event.(type) {
@@ -434,7 +464,7 @@ func parseStream(ctx context.Context, output *bedrockruntime.ConverseStreamOutpu
 				if e.Value.Usage.TotalTokens != nil {
 					usage.TotalTokens = int(*e.Value.Usage.TotalTokens)
 				}
-				usage.Cost = calculateCost(model, &usage)
+				usage.Cost = calculateCost(meta.ResolvedModel, &usage)
 			}
 			// Emit done event with usage after metadata is received
 			events <- llm.StreamEvent{

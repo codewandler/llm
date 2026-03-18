@@ -7,12 +7,22 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/codewandler/llm"
 )
+
+// testMeta returns a streamMeta for testing.
+func testMeta(model string) streamMeta {
+	return streamMeta{
+		RequestedModel: model,
+		ResolvedModel:  model,
+		StartTime:      time.Now(),
+	}
+}
 
 // --- Unit tests for buildRequest ---
 
@@ -239,7 +249,7 @@ data: [DONE]
 `
 
 	events := make(chan llm.StreamEvent, 64)
-	go parseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), events)
+	go parseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), events, testMeta("test/model"))
 
 	var deltas []string
 	var gotDone bool
@@ -268,7 +278,7 @@ data: [DONE]
 `
 
 	events := make(chan llm.StreamEvent, 64)
-	go parseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), events)
+	go parseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), events, testMeta("test/model"))
 
 	var toolCalls []*llm.ToolCall
 	for event := range events {
@@ -294,7 +304,7 @@ data: [DONE]
 `
 
 	events := make(chan llm.StreamEvent, 64)
-	go parseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), events)
+	go parseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), events, testMeta("test/model"))
 
 	var toolCalls []*llm.ToolCall
 	for event := range events {
@@ -327,7 +337,7 @@ data: [DONE]
 `
 
 	events := make(chan llm.StreamEvent, 64)
-	go parseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), events)
+	go parseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), events, testMeta("test/model"))
 
 	var reasoning []string
 	var content []string
@@ -352,7 +362,7 @@ data: [DONE]
 `
 
 	events := make(chan llm.StreamEvent, 64)
-	go parseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), events)
+	go parseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), events, testMeta("test/model"))
 
 	var usage *llm.Usage
 	for event := range events {
@@ -375,7 +385,7 @@ data: [DONE]
 `
 
 	events := make(chan llm.StreamEvent, 64)
-	go parseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), events)
+	go parseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), events, testMeta("test/model"))
 
 	var usage *llm.Usage
 	for event := range events {
@@ -398,7 +408,7 @@ func TestParseStream_ErrorHandling(t *testing.T) {
 `
 
 	events := make(chan llm.StreamEvent, 64)
-	go parseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), events)
+	go parseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), events, testMeta("test/model"))
 
 	var gotError bool
 	var errorMsg string
@@ -422,7 +432,7 @@ func TestParseStream_ContextCancellation(t *testing.T) {
 	defer cancel()
 	events := make(chan llm.StreamEvent, 64)
 
-	go parseStream(ctx, io.NopCloser(strings.NewReader(sseData)), events)
+	go parseStream(ctx, io.NopCloser(strings.NewReader(sseData)), events, testMeta("test/model"))
 
 	// Cancel after receiving a few events
 	eventCount := 0

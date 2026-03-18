@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/codewandler/llm"
 )
@@ -250,6 +251,7 @@ func (p *Provider) CreateStream(ctx context.Context, opts llm.StreamOptions) (<-
 	}
 	req.Header.Set("Content-Type", "application/json")
 
+	startTime := time.Now()
 	resp, err := p.client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("ollama request: %w", err)
@@ -261,8 +263,13 @@ func (p *Provider) CreateStream(ctx context.Context, opts llm.StreamOptions) (<-
 		return nil, fmt.Errorf("ollama API error (HTTP %d): %s", resp.StatusCode, string(errBody))
 	}
 
+	meta := streamMeta{
+		RequestedModel: opts.Model,
+		ResolvedModel:  opts.Model, // For simple providers, resolved = requested
+		StartTime:      startTime,
+	}
 	events := make(chan llm.StreamEvent, 64)
-	go parseStream(ctx, resp.Body, events)
+	go parseStream(ctx, resp.Body, events, meta)
 	return events, nil
 }
 
@@ -367,6 +374,13 @@ func buildRequest(opts llm.StreamOptions) ([]byte, error) {
 
 // --- Stream parsing ---
 
+// streamMeta passes context into the stream parser for StreamEventStart.
+type streamMeta struct {
+	RequestedModel string
+	ResolvedModel  string
+	StartTime      time.Time
+}
+
 type streamChunk struct {
 	Message struct {
 		Role      string `json:"role"`
@@ -381,7 +395,7 @@ type streamChunk struct {
 	Done bool `json:"done"`
 }
 
-func parseStream(ctx context.Context, body io.ReadCloser, events chan<- llm.StreamEvent) {
+func parseStream(ctx context.Context, body io.ReadCloser, events chan<- llm.StreamEvent, meta streamMeta) {
 	defer close(events)
 	defer body.Close()
 
@@ -390,6 +404,7 @@ func parseStream(ctx context.Context, body io.ReadCloser, events chan<- llm.Stre
 
 	var usage llm.Usage
 	toolCallID := 0
+	startEmitted := false
 
 	for scanner.Scan() {
 		// Check for context cancellation
@@ -414,6 +429,21 @@ func parseStream(ctx context.Context, body io.ReadCloser, events chan<- llm.Stre
 				Error: fmt.Errorf("parse chunk: %w", err),
 			}
 			return
+		}
+
+		// Emit StreamEventStart on first chunk
+		if !startEmitted {
+			startEmitted = true
+			events <- llm.StreamEvent{
+				Type: llm.StreamEventStart,
+				Start: &llm.StreamStart{
+					RequestedModel:   meta.RequestedModel,
+					ResolvedModel:    meta.ResolvedModel,
+					ProviderModel:    "", // Ollama doesn't return model in stream
+					RequestID:        "", // Ollama doesn't return request ID
+					TimeToFirstToken: time.Since(meta.StartTime),
+				},
+			}
 		}
 
 		// Handle content delta

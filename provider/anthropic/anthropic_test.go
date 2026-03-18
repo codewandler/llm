@@ -33,21 +33,24 @@ func TestNewAPIRequestHeaders(t *testing.T) {
 	assert.Equal(t, "application/json", req.Header.Get("Content-Type"))
 }
 
-func TestBuildAnthropicRequest_SystemAndTools(t *testing.T) {
+func TestBuildRequest_SystemAndTools(t *testing.T) {
 	t.Parallel()
 
-	body, err := buildAnthropicRequest(llm.StreamOptions{
+	body, err := BuildRequest(RequestOptions{
 		Model: "claude-sonnet-4-5-20250929",
-		Messages: llm.Messages{
-			&llm.SystemMsg{Content: "system prompt"},
-			&llm.UserMsg{Content: "hello"},
+		StreamOptions: llm.StreamOptions{
+			Model: "claude-sonnet-4-5-20250929",
+			Messages: llm.Messages{
+				&llm.SystemMsg{Content: "system prompt"},
+				&llm.UserMsg{Content: "hello"},
+			},
+			Tools: []llm.ToolDefinition{{
+				Name:        "get_weather",
+				Description: "Get weather",
+				Parameters:  map[string]any{"type": "object"},
+			}},
+			ToolChoice: llm.ToolChoiceAuto{},
 		},
-		Tools: []llm.ToolDefinition{{
-			Name:        "get_weather",
-			Description: "Get weather",
-			Parameters:  map[string]any{"type": "object"},
-		}},
-		ToolChoice: llm.ToolChoiceAuto{},
 	})
 	require.NoError(t, err)
 
@@ -68,16 +71,19 @@ func TestBuildAnthropicRequest_SystemAndTools(t *testing.T) {
 	require.NotNil(t, req["tool_choice"])
 }
 
-func TestBuildAnthropicRequest_MultipleSystemMessages(t *testing.T) {
+func TestBuildRequest_MultipleSystemMessages(t *testing.T) {
 	t.Parallel()
 
 	t.Run("consecutive system messages are accumulated", func(t *testing.T) {
-		body, err := buildAnthropicRequest(llm.StreamOptions{
+		body, err := BuildRequest(RequestOptions{
 			Model: "claude-sonnet-4-5-20250929",
-			Messages: llm.Messages{
-				&llm.SystemMsg{Content: "first instruction"},
-				&llm.SystemMsg{Content: "second instruction"},
-				&llm.UserMsg{Content: "hello"},
+			StreamOptions: llm.StreamOptions{
+				Model: "claude-sonnet-4-5-20250929",
+				Messages: llm.Messages{
+					&llm.SystemMsg{Content: "first instruction"},
+					&llm.SystemMsg{Content: "second instruction"},
+					&llm.UserMsg{Content: "hello"},
+				},
 			},
 		})
 		require.NoError(t, err)
@@ -94,14 +100,17 @@ func TestBuildAnthropicRequest_MultipleSystemMessages(t *testing.T) {
 	})
 
 	t.Run("mid-conversation system messages are accumulated", func(t *testing.T) {
-		body, err := buildAnthropicRequest(llm.StreamOptions{
+		body, err := BuildRequest(RequestOptions{
 			Model: "claude-sonnet-4-5-20250929",
-			Messages: llm.Messages{
-				&llm.SystemMsg{Content: "initial system"},
-				&llm.UserMsg{Content: "hello"},
-				&llm.AssistantMsg{Content: "hi there"},
-				&llm.SystemMsg{Content: "additional context"},
-				&llm.UserMsg{Content: "continue"},
+			StreamOptions: llm.StreamOptions{
+				Model: "claude-sonnet-4-5-20250929",
+				Messages: llm.Messages{
+					&llm.SystemMsg{Content: "initial system"},
+					&llm.UserMsg{Content: "hello"},
+					&llm.AssistantMsg{Content: "hi there"},
+					&llm.SystemMsg{Content: "additional context"},
+					&llm.UserMsg{Content: "continue"},
+				},
 			},
 		})
 		require.NoError(t, err)
@@ -118,13 +127,16 @@ func TestBuildAnthropicRequest_MultipleSystemMessages(t *testing.T) {
 	})
 
 	t.Run("empty system messages are filtered out", func(t *testing.T) {
-		body, err := buildAnthropicRequest(llm.StreamOptions{
+		body, err := BuildRequest(RequestOptions{
 			Model: "claude-sonnet-4-5-20250929",
-			Messages: llm.Messages{
-				&llm.SystemMsg{Content: "keep this"},
-				&llm.SystemMsg{Content: "   "}, // whitespace only
-				&llm.SystemMsg{Content: ""},    // empty
-				&llm.UserMsg{Content: "hello"},
+			StreamOptions: llm.StreamOptions{
+				Model: "claude-sonnet-4-5-20250929",
+				Messages: llm.Messages{
+					&llm.SystemMsg{Content: "keep this"},
+					&llm.SystemMsg{Content: "   "}, // whitespace only
+					&llm.SystemMsg{Content: ""},    // empty
+					&llm.UserMsg{Content: "hello"},
+				},
 			},
 		})
 		require.NoError(t, err)
@@ -139,10 +151,13 @@ func TestBuildAnthropicRequest_MultipleSystemMessages(t *testing.T) {
 	})
 
 	t.Run("no system messages results in nil system field", func(t *testing.T) {
-		body, err := buildAnthropicRequest(llm.StreamOptions{
+		body, err := BuildRequest(RequestOptions{
 			Model: "claude-sonnet-4-5-20250929",
-			Messages: llm.Messages{
-				&llm.UserMsg{Content: "hello"},
+			StreamOptions: llm.StreamOptions{
+				Model: "claude-sonnet-4-5-20250929",
+				Messages: llm.Messages{
+					&llm.UserMsg{Content: "hello"},
+				},
 			},
 		})
 		require.NoError(t, err)
@@ -155,23 +170,26 @@ func TestBuildAnthropicRequest_MultipleSystemMessages(t *testing.T) {
 	})
 }
 
-func TestBuildAnthropicRequest_ToolCallWithNilArguments(t *testing.T) {
+func TestBuildRequest_ToolCallWithNilArguments(t *testing.T) {
 	t.Parallel()
 
 	// This tests the fix for: "messages.N.content.0.tool_use.input: Field required"
 	// When a tool call has nil Arguments, the serialized JSON must still include
 	// the "input" field (as an empty object) because Anthropic API requires it.
-	body, err := buildAnthropicRequest(llm.StreamOptions{
+	body, err := BuildRequest(RequestOptions{
 		Model: "claude-sonnet-4-5-20250929",
-		Messages: llm.Messages{
-			&llm.UserMsg{Content: "hello"},
-			&llm.AssistantMsg{
-				Content: "",
-				ToolCalls: []llm.ToolCall{
-					{ID: "call_123", Name: "get_time", Arguments: nil}, // nil arguments
+		StreamOptions: llm.StreamOptions{
+			Model: "claude-sonnet-4-5-20250929",
+			Messages: llm.Messages{
+				&llm.UserMsg{Content: "hello"},
+				&llm.AssistantMsg{
+					Content: "",
+					ToolCalls: []llm.ToolCall{
+						{ID: "call_123", Name: "get_time", Arguments: nil}, // nil arguments
+					},
 				},
+				&llm.ToolCallResult{ToolCallID: "call_123", Output: "12:00"},
 			},
-			&llm.ToolCallResult{ToolCallID: "call_123", Output: "12:00"},
 		},
 	})
 	require.NoError(t, err)

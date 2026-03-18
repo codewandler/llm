@@ -8,16 +8,16 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/codewandler/llm/provider/bedrock"
-	"github.com/codewandler/llm/provider/openai"
-	"github.com/codewandler/llm/provider/openrouter"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/codewandler/llm"
-	"github.com/codewandler/llm/provider/anthropic"
+	"github.com/codewandler/llm/provider/anthropic/claude"
+	"github.com/codewandler/llm/provider/bedrock"
 	"github.com/codewandler/llm/provider/fake"
 	"github.com/codewandler/llm/provider/ollama"
+	"github.com/codewandler/llm/provider/openai"
+	"github.com/codewandler/llm/provider/openrouter"
 )
 
 // isClaudeAvailable checks if Claude Code credentials are available.
@@ -94,9 +94,9 @@ func TestProviders(t *testing.T) {
 		},
 		{
 			name:     "claude",
-			provider: anthropic.NewClaudeCodeProvider(),
+			provider: claude.New(), // Uses local token provider by default
 			skip:     !isClaudeAvailable(),
-			skipMsg:  "requires claude CLI in PATH",
+			skipMsg:  "requires local Claude credentials (~/.claude/.credentials.json)",
 		},
 		{
 			name:     "openai",

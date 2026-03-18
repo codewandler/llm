@@ -3,27 +3,12 @@ package provider
 import (
 	"context"
 	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/codewandler/llm"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
-
-func withClaudeCredentialsHome(t *testing.T) {
-	t.Helper()
-	dir := t.TempDir()
-	credsDir := filepath.Join(dir, ".claude")
-	require.NoError(t, os.MkdirAll(credsDir, 0o755))
-	creds := `{"claudeAiOauth":{"accessToken":"sk-ant-oat01-test","refreshToken":"sk-ant-ort01-test","expiresAt":4102444800000}}`
-	require.NoError(t, os.WriteFile(filepath.Join(credsDir, ".credentials.json"), []byte(creds), 0o600))
-	originalHome := os.Getenv("HOME")
-	require.NoError(t, os.Setenv("HOME", dir))
-	t.Cleanup(func() {
-		_ = os.Setenv("HOME", originalHome)
-	})
-}
 
 func TestNewDefault(t *testing.T) {
 	// NOTE: Cannot use t.Parallel() - these tests modify shared environment variables
@@ -32,25 +17,42 @@ func TestNewDefault(t *testing.T) {
 	os.Unsetenv("OPENROUTER_API_KEY")
 	os.Unsetenv("OPENAI_API_KEY")
 	os.Unsetenv("OPENAI_KEY")
+	os.Unsetenv("ANTHROPIC_API_KEY")
 	os.Unsetenv("OLLAMA_BASE_URL")
-	withClaudeCredentialsHome(t)
 
 	reg := NewDefaultRegistry()
 	require.NotNil(t, reg)
 
-	// Should have Claude Code and Ollama providers (no OpenRouter without API key)
-	ccProvider, err := reg.Provider("anthropic:claude-code")
-	require.NoError(t, err)
-	assert.NotNil(t, ccProvider)
-
+	// Should have Ollama provider (no API key providers without API keys)
 	ollamaProvider, err := reg.Provider("ollama")
 	require.NoError(t, err)
 	assert.NotNil(t, ollamaProvider)
+
+	// Anthropic should not be registered without API key
+	_, err = reg.Provider("anthropic")
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, llm.ErrNotFound)
 
 	// OpenRouter should not be registered without API key
 	_, err = reg.Provider("openrouter")
 	assert.Error(t, err)
 	assert.ErrorIs(t, err, llm.ErrNotFound)
+}
+
+func TestNewDefaultWithAnthropicAPIKey(t *testing.T) {
+	// NOTE: Cannot use t.Parallel() - these tests modify shared environment variables
+
+	// Set Anthropic API key
+	os.Setenv("ANTHROPIC_API_KEY", "test-key")
+	defer os.Unsetenv("ANTHROPIC_API_KEY")
+
+	reg := NewDefaultRegistry()
+	require.NotNil(t, reg)
+
+	// Should have Anthropic provider
+	anthropicProvider, err := reg.Provider("anthropic")
+	require.NoError(t, err)
+	assert.NotNil(t, anthropicProvider)
 }
 
 func TestNewDefaultWithOpenRouter(t *testing.T) {
@@ -59,23 +61,18 @@ func TestNewDefaultWithOpenRouter(t *testing.T) {
 	// Set OpenRouter API key
 	os.Setenv("OPENROUTER_API_KEY", "test-key")
 	defer os.Unsetenv("OPENROUTER_API_KEY")
-	withClaudeCredentialsHome(t)
 
 	reg := NewDefaultRegistry()
 	require.NotNil(t, reg)
 
-	// Should have all three providers
-	ccProvider, err := reg.Provider("anthropic:claude-code")
+	// Should have OpenRouter provider
+	orProvider, err := reg.Provider("openrouter")
 	require.NoError(t, err)
-	assert.NotNil(t, ccProvider)
+	assert.NotNil(t, orProvider)
 
 	ollamaProvider, err := reg.Provider("ollama")
 	require.NoError(t, err)
 	assert.NotNil(t, ollamaProvider)
-
-	orProvider, err := reg.Provider("openrouter")
-	require.NoError(t, err)
-	assert.NotNil(t, orProvider)
 }
 
 func TestNewDefaultWithCustomOllamaURL(t *testing.T) {
@@ -84,7 +81,6 @@ func TestNewDefaultWithCustomOllamaURL(t *testing.T) {
 	customURL := "http://custom:11434"
 	os.Setenv("OLLAMA_BASE_URL", customURL)
 	defer os.Unsetenv("OLLAMA_BASE_URL")
-	withClaudeCredentialsHome(t)
 
 	reg := NewDefaultRegistry()
 	require.NotNil(t, reg)
@@ -95,8 +91,6 @@ func TestNewDefaultWithCustomOllamaURL(t *testing.T) {
 }
 
 func TestResolveModel(t *testing.T) {
-	withClaudeCredentialsHome(t)
-
 	reg := NewDefaultRegistry()
 
 	tests := []struct {
@@ -106,12 +100,6 @@ func TestResolveModel(t *testing.T) {
 		wantModel string
 		wantErr   bool
 	}{
-		{
-			name:      "claude code model",
-			modelRef:  "anthropic:claude-code/sonnet",
-			wantProv:  "anthropic:claude-code",
-			wantModel: "sonnet",
-		},
 		{
 			name:      "ollama model",
 			modelRef:  "ollama/llama3.2:1b",
@@ -145,48 +133,40 @@ func TestResolveModel(t *testing.T) {
 }
 
 func TestAllModels(t *testing.T) {
-	withClaudeCredentialsHome(t)
-
 	reg := NewDefaultRegistry()
 	models := reg.AllModels()
 
-	// Should have models from Claude Code (3) and Ollama (11)
+	// Should have models from Ollama (11+)
 	assert.NotEmpty(t, models)
-	assert.GreaterOrEqual(t, len(models), 14)
+	assert.GreaterOrEqual(t, len(models), 11)
 
 	// Check that models have correct provider names
-	var hasClaude, hasOllama bool
+	var hasOllama bool
 	for _, m := range models {
-		if m.Provider == "anthropic:claude-code" {
-			hasClaude = true
-		}
 		if m.Provider == "ollama" {
 			hasOllama = true
 		}
 	}
-	assert.True(t, hasClaude)
 	assert.True(t, hasOllama)
 }
 
 func TestCreateStream(t *testing.T) {
-	withClaudeCredentialsHome(t)
-
 	reg := NewDefaultRegistry()
 
 	// Test that CreateStream correctly resolves model reference
 	// We won't actually send a message, just verify the resolution works
 	ctx := context.Background()
 	opts := llm.StreamOptions{
-		Model: "anthropic:claude-code/sonnet",
+		Model: "ollama/llama3.2:1b",
 		Messages: llm.Messages{
 			&llm.UserMsg{Content: "test"},
 		},
 	}
 
-	// This will fail because claude CLI likely isn't authenticated in CI,
+	// This will fail because ollama likely isn't running in CI,
 	// but we can verify the model reference resolution works by checking the error
 	_, err := reg.CreateStream(ctx, opts)
-	// Either succeeds (if claude is set up) or fails with claude-specific error (not resolution error)
+	// Either succeeds (if ollama is set up) or fails with ollama-specific error (not resolution error)
 	if err != nil {
 		assert.NotErrorIs(t, err, llm.ErrNotFound, "should not fail with NotFound - provider resolved correctly")
 		assert.NotErrorIs(t, err, llm.ErrBadRequest, "should not fail with BadRequest - model format correct")

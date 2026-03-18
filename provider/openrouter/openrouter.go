@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/codewandler/llm"
 )
@@ -145,6 +146,7 @@ func (p *Provider) CreateStream(ctx context.Context, opts llm.StreamOptions) (<-
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+apiKey)
 
+	startTime := time.Now()
 	resp, err := p.client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("openrouter request: %w", err)
@@ -156,8 +158,13 @@ func (p *Provider) CreateStream(ctx context.Context, opts llm.StreamOptions) (<-
 		return nil, fmt.Errorf("openrouter API request failed (HTTP %d): %s", resp.StatusCode, string(errBody))
 	}
 
+	meta := streamMeta{
+		RequestedModel: opts.Model,
+		ResolvedModel:  opts.Model, // For simple providers, resolved = requested
+		StartTime:      startTime,
+	}
 	events := make(chan llm.StreamEvent, 64)
-	go parseStream(ctx, resp.Body, events)
+	go parseStream(ctx, resp.Body, events, meta)
 	return events, nil
 }
 
@@ -296,7 +303,16 @@ func buildRequest(opts llm.StreamOptions) ([]byte, error) {
 
 // --- SSE stream parsing ---
 
+// streamMeta passes context into the stream parser for StreamEventStart.
+type streamMeta struct {
+	RequestedModel string
+	ResolvedModel  string
+	StartTime      time.Time
+}
+
 type streamChunk struct {
+	ID      string `json:"id"`
+	Model   string `json:"model"`
 	Choices []struct {
 		Delta struct {
 			Content          string            `json:"content,omitempty"`
@@ -338,7 +354,7 @@ type toolAccum struct {
 	argsBuf strings.Builder
 }
 
-func parseStream(ctx context.Context, body io.ReadCloser, events chan<- llm.StreamEvent) {
+func parseStream(ctx context.Context, body io.ReadCloser, events chan<- llm.StreamEvent, meta streamMeta) {
 	defer close(events)
 	defer body.Close()
 
@@ -347,6 +363,7 @@ func parseStream(ctx context.Context, body io.ReadCloser, events chan<- llm.Stre
 
 	activeTools := make(map[int]*toolAccum)
 	doneSent := false
+	startEmitted := false
 	var usage *llm.Usage
 
 	for scanner.Scan() {
@@ -377,6 +394,21 @@ func parseStream(ctx context.Context, body io.ReadCloser, events chan<- llm.Stre
 		var chunk streamChunk
 		if err := json.Unmarshal([]byte(data), &chunk); err != nil {
 			continue
+		}
+
+		// Emit StreamEventStart on first chunk
+		if !startEmitted {
+			startEmitted = true
+			events <- llm.StreamEvent{
+				Type: llm.StreamEventStart,
+				Start: &llm.StreamStart{
+					RequestedModel:   meta.RequestedModel,
+					ResolvedModel:    meta.ResolvedModel,
+					ProviderModel:    chunk.Model,
+					RequestID:        chunk.ID,
+					TimeToFirstToken: time.Since(meta.StartTime),
+				},
+			}
 		}
 
 		if chunk.Error != nil {

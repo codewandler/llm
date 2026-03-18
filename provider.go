@@ -4,12 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 )
 
 // StreamEventType identifies the kind of streaming event from a provider.
 type StreamEventType string
 
 const (
+	StreamEventStart     StreamEventType = "start"
 	StreamEventDelta     StreamEventType = "delta"
 	StreamEventReasoning StreamEventType = "reasoning"
 	StreamEventToolCall  StreamEventType = "tool_call"
@@ -29,6 +31,29 @@ type Usage struct {
 	ReasoningTokens int // Tokens used for model reasoning
 }
 
+// StreamStart contains metadata about the stream, emitted with StreamEventStart.
+type StreamStart struct {
+	// RequestedModel is what the caller passed in StreamOptions.Model.
+	// e.g., "fast", "sonnet", "work/claude/sonnet"
+	RequestedModel string
+
+	// ResolvedModel is the fully qualified model path after resolution.
+	// For aggregate: "instance/type/model" e.g., "work/claude/claude-haiku-4-5-20251001"
+	// For simple providers: same as what was sent to the API.
+	ResolvedModel string
+
+	// ProviderModel is what the underlying API returned in its response.
+	// e.g., "claude-haiku-4-5-20251001". May be empty if API doesn't provide it.
+	ProviderModel string
+
+	// RequestID is the unique identifier returned by the API for this request.
+	// Useful for debugging and support tickets. May be empty.
+	RequestID string
+
+	// TimeToFirstToken is the duration from request start until first response data.
+	TimeToFirstToken time.Duration
+}
+
 // StreamEvent is a single event emitted by a provider during streaming.
 type StreamEvent struct {
 	Type      StreamEventType
@@ -37,6 +62,7 @@ type StreamEvent struct {
 	ToolCall  *ToolCall
 	Error     error
 	Usage     *Usage
+	Start     *StreamStart // Populated for StreamEventStart
 }
 
 // StreamOptions configures a provider CreateStream call.

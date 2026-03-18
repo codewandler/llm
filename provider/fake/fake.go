@@ -2,6 +2,7 @@ package fake
 
 import (
 	"context"
+	"time"
 
 	"github.com/codewandler/llm"
 )
@@ -14,9 +15,21 @@ type Provider struct {
 
 func (f *Provider) Name() string { return "fake" }
 
-func (f *Provider) CreateStream(_ context.Context, _ llm.StreamOptions) (<-chan llm.StreamEvent, error) {
+func (f *Provider) CreateStream(_ context.Context, opts llm.StreamOptions) (<-chan llm.StreamEvent, error) {
 	ch := make(chan llm.StreamEvent, 16)
 	go func() {
+		// Emit start event first
+		ch <- llm.StreamEvent{
+			Type: llm.StreamEventStart,
+			Start: &llm.StreamStart{
+				RequestedModel:   opts.Model,
+				ResolvedModel:    opts.Model,
+				ProviderModel:    "fake-model-v1",
+				RequestID:        "fake-req-123",
+				TimeToFirstToken: 1 * time.Millisecond,
+			},
+		}
+
 		if !f.called {
 			f.called = true
 			ch <- llm.StreamEvent{

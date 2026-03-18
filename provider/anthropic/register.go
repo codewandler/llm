@@ -11,18 +11,13 @@ const (
 	EnvAnthropicAPIKey = "ANTHROPIC_API_KEY"
 )
 
-// MaybeRegister registers available Anthropic providers:
-//   - Anthropic API provider if ANTHROPIC_API_KEY is set
-//   - Claude Code profile provider if $HOME/.claude/.credentials.json exists
+// MaybeRegister registers the Anthropic API provider if ANTHROPIC_API_KEY is set.
+//
+// Note: The Claude OAuth provider (provider/anthropic/claude) is not auto-registered.
+// Use claude.New() with a TokenProvider to create a Claude OAuth provider.
 func MaybeRegister(reg *llm.Registry) {
 	// Register Anthropic API provider if API key is available
 	if os.Getenv(EnvAnthropicAPIKey) != "" {
 		reg.Register(New(llm.APIKeyFromEnv(EnvAnthropicAPIKey)))
-	}
-
-	if path := defaultClaudeCredentialsPath(); path != "" {
-		if _, err := os.Stat(path); err == nil {
-			reg.Register(NewClaudeCodeProvider())
-		}
 	}
 }

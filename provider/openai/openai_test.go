@@ -7,12 +7,22 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/codewandler/llm"
 )
+
+// testMeta returns a streamMeta for testing.
+func testMeta(model string) streamMeta {
+	return streamMeta{
+		RequestedModel: model,
+		ResolvedModel:  model,
+		StartTime:      time.Now(),
+	}
+}
 
 // --- Unit tests for buildRequest ---
 
@@ -149,7 +159,7 @@ data: [DONE]
 `
 
 	events := make(chan llm.StreamEvent, 64)
-	go parseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), events, "gpt-4o")
+	go parseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), events, testMeta("gpt-4o"))
 
 	var deltas []string
 	var gotDone bool
@@ -178,7 +188,7 @@ data: [DONE]
 `
 
 	events := make(chan llm.StreamEvent, 64)
-	go parseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), events, "gpt-4o")
+	go parseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), events, testMeta("gpt-4o"))
 
 	var toolCalls []*llm.ToolCall
 	for event := range events {
@@ -201,7 +211,7 @@ data: [DONE]
 `
 
 	events := make(chan llm.StreamEvent, 64)
-	go parseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), events, "gpt-4o")
+	go parseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), events, testMeta("gpt-4o"))
 
 	var usage *llm.Usage
 	for event := range events {
@@ -223,7 +233,7 @@ data: [DONE]
 `
 
 	events := make(chan llm.StreamEvent, 64)
-	go parseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), events, "gpt-5")
+	go parseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), events, testMeta("gpt-5"))
 
 	var usage *llm.Usage
 	for event := range events {
