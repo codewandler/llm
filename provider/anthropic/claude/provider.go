@@ -90,11 +90,24 @@ func WithManagedTokenProvider(key string, store TokenStore, onRefreshed OnTokenR
 }
 
 // WithLocalTokenProvider sets the local Claude Code token provider.
-// This reads tokens from ~/.claude/.credentials.json and automatically
-// refreshes expired tokens, writing them back to the file.
+// This reads tokens from ~/.claude/.credentials.json (or CLAUDE_CONFIG_DIR)
+// and automatically refreshes expired tokens, writing them back to the file.
 func WithLocalTokenProvider() Option {
 	return func(p *Provider) {
 		tp, err := NewLocalTokenProvider()
+		if err != nil {
+			// Don't fail - let CreateStream report the error
+			return
+		}
+		p.tokenProvider = tp
+	}
+}
+
+// WithClaudeDir sets a custom Claude config directory for local credentials.
+// The directory should contain .credentials.json file.
+func WithClaudeDir(dir string) Option {
+	return func(p *Provider) {
+		tp, err := NewLocalTokenProviderWithDir(dir)
 		if err != nil {
 			// Don't fail - let CreateStream report the error
 			return
