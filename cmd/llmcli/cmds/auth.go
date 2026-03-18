@@ -11,7 +11,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/codewandler/llm/cmd/llmcli/store"
 	"github.com/codewandler/llm/provider/anthropic/claude"
 	"github.com/spf13/cobra"
 )
@@ -247,14 +246,6 @@ func runList(ctx context.Context) error {
 }
 
 // --- Helpers ---
-
-func getTokenStore() (*store.FileTokenStore, error) {
-	dir, err := store.DefaultDir()
-	if err != nil {
-		return nil, err
-	}
-	return store.NewFileTokenStore(dir)
-}
 
 func openBrowser(url string) error {
 	var cmd *exec.Cmd

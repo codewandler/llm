@@ -35,6 +35,7 @@ Currently supports Claude OAuth authentication.`,
 
 	rootCmd.AddCommand(cmds.NewAuthCmd())
 	rootCmd.AddCommand(cmds.NewInferCmd())
+	rootCmd.AddCommand(cmds.NewModelsCmd())
 
 	return rootCmd.ExecuteContext(ctx)
 }

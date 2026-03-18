@@ -3,14 +3,10 @@ package cmds
 import (
 	"context"
 	"fmt"
-	"sort"
 
 	"github.com/spf13/cobra"
 
 	"github.com/codewandler/llm"
-	"github.com/codewandler/llm/cmd/llmcli/store"
-	"github.com/codewandler/llm/provider/aggregate"
-	"github.com/codewandler/llm/provider/anthropic/claude"
 )
 
 // NewInferCmd returns the infer command.
@@ -43,12 +39,7 @@ Examples:
 }
 
 func runInfer(ctx context.Context, message, model string, verbose bool) error {
-	tokenStore, err := getTokenStore()
-	if err != nil {
-		return err
-	}
-
-	provider, err := buildAggregateProvider(ctx, tokenStore)
+	provider, err := createProvider(ctx)
 	if err != nil {
 		return err
 	}
@@ -158,62 +149,5 @@ func formatCost(cost float64) string {
 		return fmt.Sprintf("$%.4f", cost)
 	default:
 		return fmt.Sprintf("$%.2f", cost)
-	}
-}
-
-func buildAggregateProvider(ctx context.Context, tokenStore *store.FileTokenStore) (*aggregate.Provider, error) {
-	keys, err := tokenStore.List(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("list credentials: %w", err)
-	}
-	if len(keys) == 0 {
-		return nil, fmt.Errorf("no credentials found; run 'llmcli auth login claude' first")
-	}
-
-	sort.Strings(keys)
-
-	cfg := aggregate.Config{
-		Name:      "llmcli",
-		Providers: make([]aggregate.ProviderInstanceConfig, 0, len(keys)),
-		Aliases: map[string][]aggregate.AliasTarget{
-			"fast":     make([]aggregate.AliasTarget, 0, len(keys)),
-			"default":  make([]aggregate.AliasTarget, 0, len(keys)),
-			"powerful": make([]aggregate.AliasTarget, 0, len(keys)),
-		},
-	}
-
-	factories := make(map[string]aggregate.Factory)
-
-	for _, key := range keys {
-		factoryKey := "claude-" + key
-
-		cfg.Providers = append(cfg.Providers, aggregate.ProviderInstanceConfig{
-			Name: key,
-			Type: factoryKey,
-			ModelAliases: map[string]string{
-				"sonnet": "claude-sonnet-4-6",
-				"opus":   "claude-opus-4-6",
-				"haiku":  "claude-haiku-4-5-20251001",
-			},
-		})
-
-		cfg.Aliases["fast"] = append(cfg.Aliases["fast"],
-			aggregate.AliasTarget{Provider: key, Model: "haiku"})
-		cfg.Aliases["default"] = append(cfg.Aliases["default"],
-			aggregate.AliasTarget{Provider: key, Model: "sonnet"})
-		cfg.Aliases["powerful"] = append(cfg.Aliases["powerful"],
-			aggregate.AliasTarget{Provider: key, Model: "opus"})
-
-		factories[factoryKey] = claudeFactory(key, tokenStore)
-	}
-
-	return aggregate.New(cfg, factories)
-}
-
-func claudeFactory(key string, tokenStore claude.TokenStore) aggregate.Factory {
-	return func(opts ...llm.Option) llm.Provider {
-		return claude.New(
-			claude.WithManagedTokenProvider(key, tokenStore, nil),
-		)
 	}
 }
