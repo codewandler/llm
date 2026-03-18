@@ -13,25 +13,25 @@ func TestComputeRegionPrefix(t *testing.T) {
 		expected string
 	}{
 		// US regions
-		{"us-east-1", "us"},
-		{"us-west-2", "us"},
-		{"us-gov-west-1", "us"},
+		{RegionUSEast1, PrefixUS},
+		{RegionUSWest2, PrefixUS},
+		{"us-gov-west-1", PrefixUS},
 
 		// EU regions
-		{"eu-central-1", "eu"},
-		{"eu-west-1", "eu"},
-		{"eu-north-1", "eu"},
+		{RegionEUCentral1, PrefixEU},
+		{RegionEUWest1, PrefixEU},
+		{"eu-north-1", PrefixEU},
 
 		// Asia-Pacific regions
-		{"ap-northeast-1", "apac"},
-		{"ap-southeast-1", "apac"},
-		{"ap-south-1", "apac"},
+		{RegionAPNortheast1, PrefixAPAC},
+		{"ap-southeast-1", PrefixAPAC},
+		{"ap-south-1", PrefixAPAC},
 
 		// Unknown regions default to global
-		{"sa-east-1", "global"},
-		{"me-south-1", "global"},
-		{"unknown-region", "global"},
-		{"", "global"},
+		{"sa-east-1", PrefixGlobal},
+		{"me-south-1", PrefixGlobal},
+		{"unknown-region", PrefixGlobal},
+		{"", PrefixGlobal},
 	}
 
 	for _, tt := range tests {
@@ -48,20 +48,20 @@ func TestHasRegionPrefix(t *testing.T) {
 		expected bool
 	}{
 		// With prefix
-		{"us.anthropic.claude-sonnet-4-6", true},
-		{"eu.anthropic.claude-sonnet-4-6", true},
-		{"apac.anthropic.claude-sonnet-4-6", true},
-		{"global.anthropic.claude-sonnet-4-6", true},
+		{PrefixUS + "." + ModelSonnetLatest, true},
+		{PrefixEU + "." + ModelSonnetLatest, true},
+		{PrefixAPAC + "." + ModelSonnetLatest, true},
+		{PrefixGlobal + "." + ModelSonnetLatest, true},
 
 		// Without prefix
-		{"anthropic.claude-sonnet-4-6", false},
-		{"meta.llama3-70b-instruct-v1:0", false},
-		{"amazon.nova-pro-v1:0", false},
+		{ModelSonnetLatest, false},
+		{ModelLlama3_70B, false},
+		{ModelNovaPro, false},
 
 		// Edge cases
 		{"", false},
-		{"us", false}, // Too short
-		{"eu", false},
+		{PrefixUS, false}, // Too short
+		{PrefixEU, false},
 	}
 
 	for _, tt := range tests {
@@ -73,14 +73,14 @@ func TestHasRegionPrefix(t *testing.T) {
 }
 
 func TestContainsPrefix(t *testing.T) {
-	prefixes := []string{"eu", "us", "global"}
+	prefixes := []string{PrefixEU, PrefixUS, PrefixGlobal}
 
-	assert.True(t, containsPrefix(prefixes, "eu"))
-	assert.True(t, containsPrefix(prefixes, "us"))
-	assert.True(t, containsPrefix(prefixes, "global"))
-	assert.False(t, containsPrefix(prefixes, "apac"))
+	assert.True(t, containsPrefix(prefixes, PrefixEU))
+	assert.True(t, containsPrefix(prefixes, PrefixUS))
+	assert.True(t, containsPrefix(prefixes, PrefixGlobal))
+	assert.False(t, containsPrefix(prefixes, PrefixAPAC))
 	assert.False(t, containsPrefix(prefixes, ""))
-	assert.False(t, containsPrefix(nil, "us"))
+	assert.False(t, containsPrefix(nil, PrefixUS))
 }
 
 func TestResolveModel(t *testing.T) {
@@ -94,52 +94,52 @@ func TestResolveModel(t *testing.T) {
 		// Passthrough - already has prefix
 		{
 			name:     "passthrough us prefix",
-			region:   "eu-central-1",
-			model:    "us.anthropic.claude-sonnet-4-6",
-			expected: "us.anthropic.claude-sonnet-4-6",
+			region:   RegionEUCentral1,
+			model:    PrefixUS + "." + ModelSonnetLatest,
+			expected: PrefixUS + "." + ModelSonnetLatest,
 		},
 		{
 			name:     "passthrough eu prefix",
-			region:   "us-east-1",
-			model:    "eu.anthropic.claude-sonnet-4-6",
-			expected: "eu.anthropic.claude-sonnet-4-6",
+			region:   RegionUSEast1,
+			model:    PrefixEU + "." + ModelSonnetLatest,
+			expected: PrefixEU + "." + ModelSonnetLatest,
 		},
 
 		// Regional prefix applied
 		{
 			name:     "us region applies us prefix",
-			region:   "us-east-1",
-			model:    "anthropic.claude-sonnet-4-6",
-			expected: "us.anthropic.claude-sonnet-4-6",
+			region:   RegionUSEast1,
+			model:    ModelSonnetLatest,
+			expected: PrefixUS + "." + ModelSonnetLatest,
 		},
 		{
 			name:     "eu region applies eu prefix",
-			region:   "eu-central-1",
-			model:    "anthropic.claude-sonnet-4-6",
-			expected: "eu.anthropic.claude-sonnet-4-6",
+			region:   RegionEUCentral1,
+			model:    ModelSonnetLatest,
+			expected: PrefixEU + "." + ModelSonnetLatest,
 		},
 
 		// Fallback to global when regional not available
 		{
-			name:     "apac region falls back to global for claude-sonnet-4-6",
-			region:   "ap-northeast-1",
-			model:    "anthropic.claude-sonnet-4-6",
-			expected: "global.anthropic.claude-sonnet-4-6",
+			name:     "apac region falls back to global for ModelSonnetLatest",
+			region:   RegionAPNortheast1,
+			model:    ModelSonnetLatest,
+			expected: PrefixGlobal + "." + ModelSonnetLatest,
 		},
 
 		// No profile - passthrough unchanged
 		{
 			name:     "no profile - passthrough",
-			region:   "us-east-1",
-			model:    "meta.llama3-70b-instruct-v1:0",
-			expected: "meta.llama3-70b-instruct-v1:0",
+			region:   RegionUSEast1,
+			model:    ModelLlama3_70B,
+			expected: ModelLlama3_70B,
 		},
 
 		// Error - model not available in region and no global fallback
 		{
 			name:        "error - us-only model in eu region",
-			region:      "eu-central-1",
-			model:       "meta.llama4-maverick-17b-instruct-v1:0", // Only available in us
+			region:      RegionEUCentral1,
+			model:       ModelLlama4Maverick, // Only available in us
 			expectError: true,
 		},
 	}
@@ -166,10 +166,10 @@ func TestRegionPrefix(t *testing.T) {
 		region   string
 		expected string
 	}{
-		{"us-east-1", "us"},
-		{"eu-central-1", "eu"},
-		{"ap-northeast-1", "apac"},
-		{"sa-east-1", "global"},
+		{RegionUSEast1, PrefixUS},
+		{RegionEUCentral1, PrefixEU},
+		{RegionAPNortheast1, PrefixAPAC},
+		{"sa-east-1", PrefixGlobal},
 	}
 
 	for _, tt := range tests {
@@ -183,10 +183,10 @@ func TestRegionPrefix(t *testing.T) {
 func TestInferenceProfilesRegistry(t *testing.T) {
 	// Verify some key models are in the registry
 	keyModels := []string{
-		"anthropic.claude-sonnet-4-6",
-		"anthropic.claude-opus-4-6-v1",
-		"anthropic.claude-haiku-4-5-20251001-v1:0",
-		"amazon.nova-pro-v1:0",
+		ModelSonnetLatest,
+		ModelOpusLatest,
+		ModelHaikuLatest,
+		ModelNovaPro,
 	}
 
 	for _, model := range keyModels {

@@ -39,9 +39,9 @@ var providerAliasModels = map[string]aliasModels{
 		powerful: "opus",
 	},
 	ProviderBedrock: {
-		fast:     bedrock.ModelHaiku,
-		normal:   bedrock.ModelSonnet,
-		powerful: bedrock.ModelOpus,
+		fast:     bedrock.ModelHaikuLatest,
+		normal:   bedrock.ModelSonnetLatest,
+		powerful: bedrock.ModelOpusLatest,
 	},
 }
 

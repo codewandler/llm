@@ -1,126 +1,61 @@
 package bedrock
 
+// -----------------------------------------------------------------------------
+// AWS Region Constants
+// -----------------------------------------------------------------------------
+
+// Common AWS regions.
+const (
+	RegionUSEast1      = "us-east-1"
+	RegionUSEast2      = "us-east-2"
+	RegionUSWest2      = "us-west-2"
+	RegionEUCentral1   = "eu-central-1"
+	RegionEUWest1      = "eu-west-1"
+	RegionAPNortheast1 = "ap-northeast-1"
+)
+
+// DefaultRegion is the default AWS region for Bedrock.
+const DefaultRegion = RegionUSEast1
+
+// -----------------------------------------------------------------------------
+// Inference Profile Prefix Constants
+// -----------------------------------------------------------------------------
+
+// Inference profile prefixes for cross-region inference.
+const (
+	PrefixEU     = "eu"
+	PrefixUS     = "us"
+	PrefixAPAC   = "apac"
+	PrefixGlobal = "global"
+)
+
+// -----------------------------------------------------------------------------
+// Inference Profile Types and Data
+// -----------------------------------------------------------------------------
+
 // InferenceProfile defines available region prefixes for a model.
 type InferenceProfile struct {
-	Prefixes []string // Available: "eu", "us", "apac", "global"
-}
-
-// inferenceProfiles maps base model IDs to their available inference profiles.
-//
-// To update this list, run the following commands and merge the results:
-//
-//	aws bedrock list-inference-profiles --region us-east-1 --output json | \
-//	  jq -r '.inferenceProfileSummaries[].inferenceProfileId'
-//	aws bedrock list-inference-profiles --region eu-central-1 --output json | \
-//	  jq -r '.inferenceProfileSummaries[].inferenceProfileId'
-//	aws bedrock list-inference-profiles --region ap-northeast-1 --output json | \
-//	  jq -r '.inferenceProfileSummaries[].inferenceProfileId'
-//
-// Last updated: 2026-03-18
-var inferenceProfiles = map[string]InferenceProfile{
-	// ========================================
-	// Anthropic Claude 4.6
-	// ========================================
-	"anthropic.claude-opus-4-6-v1": {Prefixes: []string{"eu", "us", "global"}},
-	"anthropic.claude-sonnet-4-6":  {Prefixes: []string{"eu", "us", "global"}},
-
-	// ========================================
-	// Anthropic Claude 4.5
-	// ========================================
-	"anthropic.claude-opus-4-5-20251101-v1:0":   {Prefixes: []string{"eu", "us", "global"}},
-	"anthropic.claude-sonnet-4-5-20250929-v1:0": {Prefixes: []string{"eu", "us", "global"}},
-	"anthropic.claude-haiku-4-5-20251001-v1:0":  {Prefixes: []string{"eu", "us", "global"}},
-
-	// ========================================
-	// Anthropic Claude 3.7
-	// ========================================
-	"anthropic.claude-3-7-sonnet-20250219-v1:0": {Prefixes: []string{"eu", "us", "apac"}},
-
-	// ========================================
-	// Anthropic Claude 3.5
-	// ========================================
-	"anthropic.claude-3-5-sonnet-20240620-v1:0": {Prefixes: []string{"eu", "us", "apac"}},
-
-	// ========================================
-	// Anthropic Claude 3.0
-	// ========================================
-	"anthropic.claude-3-haiku-20240307-v1:0": {Prefixes: []string{"eu", "us", "apac"}},
-
-	// ========================================
-	// Meta Llama 4
-	// ========================================
-	"meta.llama4-maverick-17b-instruct-v1:0": {Prefixes: []string{"us"}},
-	"meta.llama4-scout-17b-instruct-v1:0":    {Prefixes: []string{"us"}},
-
-	// ========================================
-	// Meta Llama 3.3
-	// ========================================
-	"meta.llama3-3-70b-instruct-v1:0": {Prefixes: []string{"us"}},
-
-	// ========================================
-	// Meta Llama 3.2
-	// ========================================
-	"meta.llama3-2-90b-instruct-v1:0": {Prefixes: []string{"us"}},
-	"meta.llama3-2-11b-instruct-v1:0": {Prefixes: []string{"us"}},
-	"meta.llama3-2-3b-instruct-v1:0":  {Prefixes: []string{"eu", "us"}},
-	"meta.llama3-2-1b-instruct-v1:0":  {Prefixes: []string{"eu", "us"}},
-
-	// ========================================
-	// Meta Llama 3.1
-	// ========================================
-	"meta.llama3-1-70b-instruct-v1:0": {Prefixes: []string{"us"}},
-	"meta.llama3-1-8b-instruct-v1:0":  {Prefixes: []string{"us"}},
-
-	// ========================================
-	// Amazon Nova
-	// ========================================
-	"amazon.nova-premier-v1:0": {Prefixes: []string{"us"}},
-	"amazon.nova-pro-v1:0":     {Prefixes: []string{"eu", "us", "apac"}},
-	"amazon.nova-lite-v1:0":    {Prefixes: []string{"eu", "us", "apac"}},
-	"amazon.nova-micro-v1:0":   {Prefixes: []string{"eu", "us", "apac"}},
-	"amazon.nova-2-lite-v1:0":  {Prefixes: []string{"eu", "us", "global"}},
-
-	// ========================================
-	// Mistral
-	// ========================================
-	"mistral.pixtral-large-2502-v1:0": {Prefixes: []string{"eu", "us"}},
-
-	// ========================================
-	// DeepSeek
-	// ========================================
-	"deepseek.r1-v1:0": {Prefixes: []string{"us"}},
-
-	// ========================================
-	// Cohere
-	// ========================================
-	"cohere.embed-v4:0": {Prefixes: []string{"eu", "us", "global"}},
-
-	// ========================================
-	// TwelveLabs
-	// ========================================
-	"twelvelabs.pegasus-1-2-v1:0":       {Prefixes: []string{"eu", "us", "global"}},
-	"twelvelabs.marengo-embed-2-7-v1:0": {Prefixes: []string{"us"}},
-	"twelvelabs.marengo-embed-3-0-v1:0": {Prefixes: []string{"us"}},
-
-	// ========================================
-	// Writer
-	// ========================================
-	"writer.palmyra-x4-v1:0": {Prefixes: []string{"us"}},
-	"writer.palmyra-x5-v1:0": {Prefixes: []string{"us"}},
+	Prefixes []string // Available: PrefixEU, PrefixUS, PrefixAPAC, PrefixGlobal
 }
 
 // regionPrefixes maps AWS region prefixes to inference profile prefixes.
 var regionPrefixes = map[string]string{
-	"eu-": "eu",
-	"us-": "us",
-	"ap-": "apac",
+	"eu-": PrefixEU,
+	"us-": PrefixUS,
+	"ap-": PrefixAPAC,
 }
 
-// defaultPrefix is used when region doesn't match known patterns.
-const defaultPrefix = "global"
+// validPrefixes lists all valid inference profile prefixes with dot suffix.
+var validPrefixes = []string{
+	PrefixEU + ".",
+	PrefixUS + ".",
+	PrefixAPAC + ".",
+	PrefixGlobal + ".",
+}
 
-// validPrefixes lists all valid inference profile prefixes.
-var validPrefixes = []string{"eu.", "us.", "apac.", "global."}
+// -----------------------------------------------------------------------------
+// Helper Functions
+// -----------------------------------------------------------------------------
 
 // computeRegionPrefix determines the inference profile prefix for an AWS region.
 // Examples: "us-east-1" -> "us", "eu-central-1" -> "eu", "ap-northeast-1" -> "apac"
@@ -130,7 +65,7 @@ func computeRegionPrefix(region string) string {
 			return profilePrefix
 		}
 	}
-	return defaultPrefix
+	return PrefixGlobal
 }
 
 // hasRegionPrefix checks if a model ID already has a region prefix.

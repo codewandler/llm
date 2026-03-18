@@ -2,6 +2,7 @@ package bedrock
 
 import (
 	"context"
+	"os"
 	"sync"
 	"testing"
 
@@ -24,19 +25,29 @@ func (m *mockCredentialsProvider) Retrieve(ctx context.Context) (aws.Credentials
 }
 
 func TestNew_DefaultCredentials(t *testing.T) {
+	// Clear env vars to test default behavior
+	oldRegion := os.Getenv(EnvAWSRegion)
+	oldDefaultRegion := os.Getenv(EnvAWSDefaultRegion)
+	os.Unsetenv(EnvAWSRegion)
+	os.Unsetenv(EnvAWSDefaultRegion)
+	defer func() {
+		os.Setenv(EnvAWSRegion, oldRegion)
+		os.Setenv(EnvAWSDefaultRegion, oldDefaultRegion)
+	}()
+
 	// Without custom credentials provider, client is created immediately
 	p := New()
 
-	assert.Equal(t, "us-east-1", p.region)
+	assert.Equal(t, DefaultRegion, p.region)
 	assert.Equal(t, DefaultModel, p.defaultModel)
 	// Client should be created (or clientErr set if no AWS config available)
 	// We can't assert client != nil because it depends on environment
 }
 
 func TestNew_WithRegion(t *testing.T) {
-	p := New(WithRegion("eu-west-1"))
-	assert.Equal(t, "eu-west-1", p.region)
-	assert.Equal(t, "eu", p.regionPrefix)
+	p := New(WithRegion(RegionEUWest1))
+	assert.Equal(t, RegionEUWest1, p.region)
+	assert.Equal(t, PrefixEU, p.regionPrefix)
 }
 
 func TestNew_WithDefaultModel(t *testing.T) {
@@ -69,7 +80,7 @@ func TestInitClient_LazyInitialization(t *testing.T) {
 	}
 
 	p := New(
-		WithRegion("us-east-1"),
+		WithRegion(RegionUSEast1),
 		WithCredentialsProvider(mock),
 	)
 
@@ -102,7 +113,7 @@ func TestInitClient_ThreadSafety(t *testing.T) {
 	}
 
 	p := New(
-		WithRegion("us-east-1"),
+		WithRegion(RegionUSEast1),
 		WithCredentialsProvider(mock),
 	)
 
@@ -141,7 +152,7 @@ func TestInitClient_OnlyOnce(t *testing.T) {
 	}
 
 	p := New(
-		WithRegion("us-east-1"),
+		WithRegion(RegionUSEast1),
 		WithCredentialsProvider(mock),
 	)
 
@@ -166,4 +177,134 @@ func TestProvider_Name(t *testing.T) {
 func TestProvider_DefaultModel(t *testing.T) {
 	p := New(WithDefaultModel("custom-model"))
 	assert.Equal(t, "custom-model", p.DefaultModel())
+}
+
+func TestNew_ReadsRegionFromEnv(t *testing.T) {
+	// Save and restore env vars
+	oldRegion := os.Getenv(EnvAWSRegion)
+	oldDefaultRegion := os.Getenv(EnvAWSDefaultRegion)
+	defer func() {
+		os.Setenv(EnvAWSRegion, oldRegion)
+		os.Setenv(EnvAWSDefaultRegion, oldDefaultRegion)
+	}()
+
+	// Test AWS_REGION takes precedence
+	os.Setenv(EnvAWSRegion, RegionEUCentral1)
+	os.Setenv(EnvAWSDefaultRegion, RegionUSWest2)
+
+	p := New()
+	assert.Equal(t, RegionEUCentral1, p.region)
+	assert.Equal(t, PrefixEU, p.regionPrefix)
+}
+
+func TestNew_ReadsDefaultRegionFromEnv(t *testing.T) {
+	// Save and restore env vars
+	oldRegion := os.Getenv(EnvAWSRegion)
+	oldDefaultRegion := os.Getenv(EnvAWSDefaultRegion)
+	defer func() {
+		os.Setenv(EnvAWSRegion, oldRegion)
+		os.Setenv(EnvAWSDefaultRegion, oldDefaultRegion)
+	}()
+
+	// Test AWS_DEFAULT_REGION is used when AWS_REGION is not set
+	os.Unsetenv(EnvAWSRegion)
+	os.Setenv(EnvAWSDefaultRegion, RegionAPNortheast1)
+
+	p := New()
+	assert.Equal(t, RegionAPNortheast1, p.region)
+	assert.Equal(t, PrefixAPAC, p.regionPrefix)
+}
+
+func TestNew_WithProfile(t *testing.T) {
+	p := New(WithProfile("test-profile"))
+	assert.Equal(t, "test-profile", p.profile)
+}
+
+func TestWithRegionFromEnv(t *testing.T) {
+	// Save and restore env vars
+	oldRegion := os.Getenv(EnvAWSRegion)
+	defer os.Setenv(EnvAWSRegion, oldRegion)
+
+	os.Setenv(EnvAWSRegion, RegionAPNortheast1)
+
+	// WithRegion overrides env, then WithRegionFromEnv re-reads from env
+	p := New(
+		WithRegion(RegionUSEast1),
+		WithRegionFromEnv(),
+	)
+	assert.Equal(t, RegionAPNortheast1, p.region)
+	assert.Equal(t, PrefixAPAC, p.regionPrefix)
+}
+
+func TestWithRegion_OverridesEnv(t *testing.T) {
+	// Save and restore env vars
+	oldRegion := os.Getenv(EnvAWSRegion)
+	defer os.Setenv(EnvAWSRegion, oldRegion)
+
+	os.Setenv(EnvAWSRegion, RegionAPNortheast1)
+
+	// WithRegion should override the env var
+	p := New(WithRegion(RegionEUWest1))
+	assert.Equal(t, RegionEUWest1, p.region)
+	assert.Equal(t, PrefixEU, p.regionPrefix)
+}
+
+func TestGetRegionFromEnv(t *testing.T) {
+	// Save and restore env vars
+	oldRegion := os.Getenv(EnvAWSRegion)
+	oldDefaultRegion := os.Getenv(EnvAWSDefaultRegion)
+	defer func() {
+		os.Setenv(EnvAWSRegion, oldRegion)
+		os.Setenv(EnvAWSDefaultRegion, oldDefaultRegion)
+	}()
+
+	tests := []struct {
+		name           string
+		awsRegion      string
+		awsDefault     string
+		expectedRegion string
+	}{
+		{
+			name:           "AWS_REGION set",
+			awsRegion:      RegionEUCentral1,
+			awsDefault:     "",
+			expectedRegion: RegionEUCentral1,
+		},
+		{
+			name:           "AWS_DEFAULT_REGION set",
+			awsRegion:      "",
+			awsDefault:     RegionUSWest2,
+			expectedRegion: RegionUSWest2,
+		},
+		{
+			name:           "AWS_REGION takes precedence",
+			awsRegion:      RegionEUWest1,
+			awsDefault:     RegionUSWest2,
+			expectedRegion: RegionEUWest1,
+		},
+		{
+			name:           "neither set - falls back to default",
+			awsRegion:      "",
+			awsDefault:     "",
+			expectedRegion: DefaultRegion,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.awsRegion != "" {
+				os.Setenv(EnvAWSRegion, tt.awsRegion)
+			} else {
+				os.Unsetenv(EnvAWSRegion)
+			}
+			if tt.awsDefault != "" {
+				os.Setenv(EnvAWSDefaultRegion, tt.awsDefault)
+			} else {
+				os.Unsetenv(EnvAWSDefaultRegion)
+			}
+
+			result := getRegionFromEnv()
+			assert.Equal(t, tt.expectedRegion, result)
+		})
+	}
 }

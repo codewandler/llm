@@ -13,6 +13,7 @@ const (
 	EnvAWSSecretAccessKey = "AWS_SECRET_ACCESS_KEY"
 	EnvAWSRegion          = "AWS_REGION"
 	EnvAWSDefaultRegion   = "AWS_DEFAULT_REGION"
+	EnvAWSProfile         = "AWS_PROFILE"
 )
 
 // MaybeRegister registers the Bedrock provider if AWS credentials are available.
@@ -27,15 +28,8 @@ func MaybeRegister(reg *llm.Registry) {
 	if os.Getenv(EnvAWSAccessKeyID) == "" && !hasAWSCredentials() {
 		return
 	}
-
-	var opts []Option
-	if region := os.Getenv(EnvAWSRegion); region != "" {
-		opts = append(opts, WithRegion(region))
-	} else if region := os.Getenv(EnvAWSDefaultRegion); region != "" {
-		opts = append(opts, WithRegion(region))
-	}
-
-	reg.Register(New(opts...))
+	// New() automatically reads AWS_REGION, AWS_DEFAULT_REGION, and honors AWS_PROFILE
+	reg.Register(New())
 }
 
 // hasAWSCredentials checks if the AWS shared credentials file exists.

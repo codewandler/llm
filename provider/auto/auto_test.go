@@ -205,7 +205,7 @@ func TestConstants(t *testing.T) {
 	assert.NotEmpty(t, ClaudeSonnet)
 	assert.NotEmpty(t, ClaudeHaiku)
 
-	assert.NotEmpty(t, bedrock.ModelOpus)
-	assert.NotEmpty(t, bedrock.ModelSonnet)
-	assert.NotEmpty(t, bedrock.ModelHaiku)
+	assert.NotEmpty(t, bedrock.ModelOpusLatest)
+	assert.NotEmpty(t, bedrock.ModelSonnetLatest)
+	assert.NotEmpty(t, bedrock.ModelHaikuLatest)
 }

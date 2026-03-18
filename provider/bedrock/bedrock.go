@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -17,18 +18,17 @@ import (
 	"github.com/codewandler/llm"
 )
 
-const (
-	providerName = "bedrock"
+const providerName = "bedrock"
 
-	// DefaultModel is the recommended default model (Claude Sonnet 4).
-	DefaultModel = "anthropic.claude-sonnet-4-20250514-v1:0"
-)
+// DefaultModel is the recommended default model (Claude Sonnet 4.6).
+var DefaultModel = ModelSonnetLatest
 
 // Provider implements the AWS Bedrock LLM backend.
 type Provider struct {
 	region              string
-	regionPrefix        string // inference profile prefix: "eu", "us", "apac", or "global"
+	regionPrefix        string // inference profile prefix: PrefixEU, PrefixUS, PrefixAPAC, or PrefixGlobal
 	defaultModel        string
+	profile             string // AWS profile name (optional)
 	credentialsProvider aws.CredentialsProvider
 
 	mu        sync.Mutex // protects client initialization
@@ -39,11 +39,30 @@ type Provider struct {
 // Option configures a Bedrock provider.
 type Option func(*Provider)
 
-// WithRegion sets the AWS region for Bedrock.
-// Defaults to us-east-1 if not specified.
+// WithRegion sets the AWS region for Bedrock explicitly.
+// By default, New() reads the region from AWS_REGION or AWS_DEFAULT_REGION
+// environment variables, falling back to DefaultRegion (us-east-1).
 func WithRegion(region string) Option {
 	return func(p *Provider) {
 		p.region = region
+	}
+}
+
+// WithRegionFromEnv reads the region from AWS_REGION or AWS_DEFAULT_REGION
+// environment variables. This is useful to re-enable environment variable
+// lookup after WithRegion() has been called.
+func WithRegionFromEnv() Option {
+	return func(p *Provider) {
+		p.region = getRegionFromEnv()
+	}
+}
+
+// WithProfile sets the AWS profile to use for credentials and configuration.
+// This allows using a specific profile from ~/.aws/credentials or ~/.aws/config
+// instead of the default profile or AWS_PROFILE environment variable.
+func WithProfile(profile string) Option {
+	return func(p *Provider) {
+		p.profile = profile
 	}
 }
 
@@ -65,6 +84,18 @@ func WithCredentialsProvider(cp aws.CredentialsProvider) Option {
 	}
 }
 
+// getRegionFromEnv reads the region from AWS_REGION or AWS_DEFAULT_REGION
+// environment variables, falling back to DefaultRegion if neither is set.
+func getRegionFromEnv() string {
+	if r := os.Getenv(EnvAWSRegion); r != "" {
+		return r
+	}
+	if r := os.Getenv(EnvAWSDefaultRegion); r != "" {
+		return r
+	}
+	return DefaultRegion
+}
+
 // New creates a new AWS Bedrock provider.
 // The provider uses the AWS SDK's default credential chain:
 //   - Environment variables (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY)
@@ -72,25 +103,42 @@ func WithCredentialsProvider(cp aws.CredentialsProvider) Option {
 //   - IAM role (for EC2/ECS/Lambda)
 //   - SSO credentials
 //
+// Region is determined from:
+//   - AWS_REGION environment variable
+//   - AWS_DEFAULT_REGION environment variable
+//   - DefaultRegion (us-east-1) if neither is set
+//
+// The AWS_PROFILE environment variable is honored automatically by the SDK.
+// Use WithProfile() to explicitly select a different profile.
+//
 // When WithCredentialsProvider is used, client creation is deferred until
 // the first CreateStream call, allowing credentials to be fetched lazily.
 //
 // Example usage:
 //
-//	// Use defaults (us-east-1, default credentials)
+//	// Use defaults (reads AWS_REGION, AWS_PROFILE from env)
 //	p := bedrock.New()
 //
-//	// Specify region
-//	p := bedrock.New(bedrock.WithRegion("us-west-2"))
+//	// Specify region explicitly
+//	p := bedrock.New(bedrock.WithRegion(bedrock.RegionEUCentral1))
+//
+//	// Use a specific AWS profile
+//	p := bedrock.New(bedrock.WithProfile("production"))
+//
+//	// Combine options
+//	p := bedrock.New(
+//	    bedrock.WithProfile("production"),
+//	    bedrock.WithRegion(bedrock.RegionEUWest1),
+//	)
 //
 //	// Specify default model
-//	p := bedrock.New(bedrock.WithDefaultModel("anthropic.claude-3-5-haiku-20241022-v1:0"))
+//	p := bedrock.New(bedrock.WithDefaultModel(bedrock.ModelHaikuLatest))
 //
 //	// Use custom credentials provider (lazy initialization)
 //	p := bedrock.New(bedrock.WithCredentialsProvider(myProvider))
 func New(opts ...Option) *Provider {
 	p := &Provider{
-		region:       "us-east-1",
+		region:       getRegionFromEnv(),
 		defaultModel: DefaultModel,
 	}
 
@@ -109,9 +157,13 @@ func New(opts ...Option) *Provider {
 
 	// Create AWS SDK client immediately using default credential chain
 	// We defer errors to CreateStream so New() never fails
-	cfg, err := config.LoadDefaultConfig(context.Background(),
+	configOpts := []func(*config.LoadOptions) error{
 		config.WithRegion(p.region),
-	)
+	}
+	if p.profile != "" {
+		configOpts = append(configOpts, config.WithSharedConfigProfile(p.profile))
+	}
+	cfg, err := config.LoadDefaultConfig(context.Background(), configOpts...)
 	if err != nil {
 		p.clientErr = fmt.Errorf("load AWS config: %w", err)
 		return p
@@ -130,17 +182,7 @@ func (p *Provider) DefaultModel() string {
 
 // Models returns a curated list of popular Bedrock models.
 func (p *Provider) Models() []llm.Model {
-	models := make([]llm.Model, 0, len(modelOrder))
-	for _, id := range modelOrder {
-		if info, ok := modelRegistry[id]; ok {
-			models = append(models, llm.Model{
-				ID:       info.ID,
-				Name:     info.Name,
-				Provider: providerName,
-			})
-		}
-	}
-	return models
+	return models()
 }
 
 // initClient creates the AWS client lazily if not already initialized.
@@ -157,6 +199,9 @@ func (p *Provider) initClient(ctx context.Context) error {
 	// Build config options
 	configOpts := []func(*config.LoadOptions) error{
 		config.WithRegion(p.region),
+	}
+	if p.profile != "" {
+		configOpts = append(configOpts, config.WithSharedConfigProfile(p.profile))
 	}
 	if p.credentialsProvider != nil {
 		configOpts = append(configOpts, config.WithCredentialsProvider(p.credentialsProvider))
@@ -200,8 +245,8 @@ func (p *Provider) resolveModel(model string) (string, error) {
 	}
 
 	// 4. Fallback to global
-	if containsPrefix(profile.Prefixes, "global") {
-		return "global." + model, nil
+	if containsPrefix(profile.Prefixes, PrefixGlobal) {
+		return PrefixGlobal + "." + model, nil
 	}
 
 	// 5. No valid prefix available - return error
@@ -210,7 +255,7 @@ func (p *Provider) resolveModel(model string) (string, error) {
 }
 
 // RegionPrefix returns the computed inference profile prefix for this provider's region.
-// Returns "eu", "us", "apac", or "global".
+// Returns PrefixEU, PrefixUS, PrefixAPAC, or PrefixGlobal.
 func (p *Provider) RegionPrefix() string {
 	return p.regionPrefix
 }

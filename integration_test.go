@@ -72,7 +72,7 @@ func getAWSRegion() string {
 	if region := os.Getenv(bedrock.EnvAWSDefaultRegion); region != "" {
 		return region
 	}
-	return "us-east-1"
+	return bedrock.DefaultRegion
 }
 
 // TestProviders is a comprehensive integration test that verifies all providers
@@ -140,9 +140,9 @@ func TestProviders(t *testing.T) {
 				if tt.name == "ollama" {
 					return ollama.ModelDefault
 				}
-				// Special handling for Bedrock - need inference profile IDs
+				// Special handling for Bedrock - use constant, provider resolves inference profile
 				if tt.name == "bedrock" {
-					return "us.anthropic.claude-3-5-haiku-20241022-v1:0"
+					return bedrock.ModelHaikuLatest
 				}
 				// Fallback to static models
 				return tt.provider.Models()[0].ID
