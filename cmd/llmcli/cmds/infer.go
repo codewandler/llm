@@ -12,6 +12,7 @@ import (
 // NewInferCmd returns the infer command.
 func NewInferCmd() *cobra.Command {
 	var model string
+	var system string
 	var verbose bool
 
 	cmd := &cobra.Command{
@@ -26,29 +27,34 @@ Examples:
   llmcli infer "Hello, how are you?"              # Uses fast model (haiku)
   llmcli infer -m default "Explain Go channels"   # Balanced (sonnet)
   llmcli infer -m powerful "Write a poem about Go" # Most capable (opus)
+  llmcli infer -s "You are a pirate" "Hello"      # With system prompt
   llmcli infer -m work/claude/sonnet "Hello"      # Use specific account`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runInfer(cmd.Context(), args[0], model, verbose)
+			return runInfer(cmd.Context(), args[0], model, system, verbose)
 		},
 	}
 
 	cmd.Flags().StringVarP(&model, "model", "m", "fast", "Model to use (fast, default, powerful, or full path)")
+	cmd.Flags().StringVarP(&system, "system", "s", "", "System prompt to prepend")
 	cmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "Show usage statistics")
 	return cmd
 }
 
-func runInfer(ctx context.Context, message, model string, verbose bool) error {
+func runInfer(ctx context.Context, message, model, system string, verbose bool) error {
 	provider, err := createProvider(ctx)
 	if err != nil {
 		return err
 	}
 
+	msgs := llm.Messages{&llm.UserMsg{Content: message}}
+	if system != "" {
+		msgs = append(llm.Messages{&llm.SystemMsg{Content: system}}, msgs...)
+	}
+
 	stream, err := provider.CreateStream(ctx, llm.StreamOptions{
-		Model: model,
-		Messages: llm.Messages{
-			&llm.UserMsg{Content: message},
-		},
+		Model:    model,
+		Messages: msgs,
 	})
 	if err != nil {
 		return fmt.Errorf("create stream: %w", err)
