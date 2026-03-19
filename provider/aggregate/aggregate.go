@@ -9,6 +9,25 @@ import (
 
 const defaultName = "aggregate"
 
+// buildModelPath constructs a model path. When instance name equals provider type
+// (singleton provider), uses short form "type/model". Otherwise uses full form
+// "instance/type/model" for multi-instance disambiguation.
+func buildModelPath(instName, provType, modelID string) string {
+	if instName == provType {
+		return fmt.Sprintf("%s/%s", provType, modelID)
+	}
+	return fmt.Sprintf("%s/%s/%s", instName, provType, modelID)
+}
+
+// buildProviderPath constructs a provider path. When instance name equals provider
+// type (singleton), returns just the type. Otherwise returns "instance/type".
+func buildProviderPath(instName, provType string) string {
+	if instName == provType {
+		return provType
+	}
+	return fmt.Sprintf("%s/%s", instName, provType)
+}
+
 // Factory creates a provider instance from options.
 type Factory func(opts ...llm.Option) llm.Provider
 
@@ -65,7 +84,7 @@ func New(cfg Config, factories map[string]Factory) (*Provider, error) {
 	for instName, prov := range providers {
 		provType := providerTypes[instName]
 		for _, m := range prov.Models() {
-			fullID := fmt.Sprintf("%s/%s/%s", instName, provType, m.ID)
+			fullID := buildModelPath(instName, provType, m.ID)
 
 			// Check if we already have this fullID
 			if idx, exists := modelIndex[fullID]; exists {
@@ -78,7 +97,7 @@ func New(cfg Config, factories map[string]Factory) (*Provider, error) {
 			model := llm.Model{
 				ID:       fullID,
 				Name:     m.Name,
-				Provider: fmt.Sprintf("%s/%s", instName, provType),
+				Provider: buildProviderPath(instName, provType),
 				Aliases:  m.Aliases,
 			}
 			modelIndex[fullID] = len(models)
@@ -90,7 +109,7 @@ func New(cfg Config, factories map[string]Factory) (*Provider, error) {
 	for instName, aliases := range localAliases {
 		provType := providerTypes[instName]
 		for alias, modelID := range aliases {
-			fullID := fmt.Sprintf("%s/%s/%s", instName, provType, modelID)
+			fullID := buildModelPath(instName, provType, modelID)
 			target := resolvedTarget{
 				provider:     providers[instName],
 				providerName: instName,
@@ -100,17 +119,23 @@ func New(cfg Config, factories map[string]Factory) (*Provider, error) {
 			}
 
 			// Add resolution entries
-			prefixedAlias := fmt.Sprintf("%s/%s/%s", instName, provType, alias)
+			prefixedAlias := buildModelPath(instName, provType, alias)
 			aliasMap[alias] = append(aliasMap[alias], target)
 			aliasMap[prefixedAlias] = append(aliasMap[prefixedAlias], target)
 
-			// Also add short form: provType/alias
+			// Also add short form for multi-instance: provType/alias (only if different from prefixed)
 			shortAlias := fmt.Sprintf("%s/%s", provType, alias)
-			aliasMap[shortAlias] = append(aliasMap[shortAlias], target)
+			if shortAlias != prefixedAlias {
+				aliasMap[shortAlias] = append(aliasMap[shortAlias], target)
+			}
 
 			// Update model's aliases if it exists
 			if idx, ok := modelIndex[fullID]; ok {
-				models[idx].Aliases = mergeAliases(models[idx].Aliases, []string{alias, prefixedAlias, shortAlias})
+				aliasesToAdd := []string{alias, prefixedAlias}
+				if shortAlias != prefixedAlias {
+					aliasesToAdd = append(aliasesToAdd, shortAlias)
+				}
+				models[idx].Aliases = mergeAliases(models[idx].Aliases, aliasesToAdd)
 			}
 		}
 	}
@@ -127,9 +152,14 @@ func New(cfg Config, factories map[string]Factory) (*Provider, error) {
 
 			// Update model's aliases
 			if idx, ok := modelIndex[rt.fullID]; ok {
-				prefixedAlias := fmt.Sprintf("%s/%s/%s", rt.providerName, rt.providerType, alias)
+				prefixedAlias := buildModelPath(rt.providerName, rt.providerType, alias)
+				aliasesToAdd := []string{alias, prefixedAlias}
+				// Add short form only for multi-instance
 				shortAlias := fmt.Sprintf("%s/%s", rt.providerType, alias)
-				models[idx].Aliases = mergeAliases(models[idx].Aliases, []string{alias, prefixedAlias, shortAlias})
+				if shortAlias != prefixedAlias {
+					aliasesToAdd = append(aliasesToAdd, shortAlias)
+				}
+				models[idx].Aliases = mergeAliases(models[idx].Aliases, aliasesToAdd)
 			}
 		}
 		if len(resolvedTargets) > 0 {
@@ -137,7 +167,7 @@ func New(cfg Config, factories map[string]Factory) (*Provider, error) {
 			// Also add prefixed forms for single-target aliases
 			if len(resolvedTargets) == 1 {
 				rt := resolvedTargets[0]
-				prefixedAlias := fmt.Sprintf("%s/%s/%s", rt.providerName, rt.providerType, alias)
+				prefixedAlias := buildModelPath(rt.providerName, rt.providerType, alias)
 				aliasMap[prefixedAlias] = resolvedTargets
 			}
 		}
@@ -148,7 +178,7 @@ func New(cfg Config, factories map[string]Factory) (*Provider, error) {
 		provType := providerTypes[instName]
 		prov := providers[instName]
 		for _, m := range prov.Models() {
-			fullID := fmt.Sprintf("%s/%s/%s", instName, provType, m.ID)
+			fullID := buildModelPath(instName, provType, m.ID)
 			target := resolvedTarget{
 				provider:     prov,
 				providerName: instName,
@@ -157,15 +187,17 @@ func New(cfg Config, factories map[string]Factory) (*Provider, error) {
 				fullID:       fullID,
 			}
 
-			// Full ID
+			// Full ID (which is already the short form for singletons)
 			aliasMap[fullID] = append(aliasMap[fullID], target)
 
 			// Short model ID (may be ambiguous)
 			aliasMap[m.ID] = append(aliasMap[m.ID], target)
 
-			// Provider-prefixed model ID
+			// Provider-prefixed model ID (only add if different from fullID)
 			prefixedID := fmt.Sprintf("%s/%s", provType, m.ID)
-			aliasMap[prefixedID] = append(aliasMap[prefixedID], target)
+			if prefixedID != fullID {
+				aliasMap[prefixedID] = append(aliasMap[prefixedID], target)
+			}
 		}
 	}
 
@@ -197,7 +229,7 @@ func resolveTargetSimple(t AliasTarget, providers map[string]llm.Provider, provi
 		}
 	}
 
-	fullID := fmt.Sprintf("%s/%s/%s", t.Provider, provType, modelID)
+	fullID := buildModelPath(t.Provider, provType, modelID)
 
 	return resolvedTarget{
 		provider:     prov,
