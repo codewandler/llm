@@ -15,16 +15,15 @@ import (
 	"github.com/codewandler/llm"
 )
 
-// testMeta returns a streamMeta for testing.
-func testMeta(model string) streamMeta {
-	return streamMeta{
-		RequestedModel: model,
-		ResolvedModel:  model,
-		StartTime:      time.Now(),
+// testMeta returns a ccStreamMeta for testing.
+func testMeta(model string) ccStreamMeta {
+	return ccStreamMeta{
+		requestedModel: model,
+		startTime:      time.Now(),
 	}
 }
 
-// --- Unit tests for buildRequest ---
+// --- Unit tests for ccBuildRequest ---
 
 func TestBuildRequest_Basic(t *testing.T) {
 	opts := llm.StreamOptions{
@@ -34,10 +33,10 @@ func TestBuildRequest_Basic(t *testing.T) {
 		},
 	}
 
-	body, err := buildRequest(opts)
+	body, err := ccBuildRequest(opts)
 	require.NoError(t, err)
 
-	var req request
+	var req ccRequest
 	err = json.Unmarshal(body, &req)
 	require.NoError(t, err)
 
@@ -47,7 +46,6 @@ func TestBuildRequest_Basic(t *testing.T) {
 	assert.Equal(t, "user", req.Messages[0].Role)
 	assert.Equal(t, "Hello", req.Messages[0].Content)
 
-	// Verify stream_options is set for usage
 	require.NotNil(t, req.StreamOptions)
 	assert.True(t, req.StreamOptions.IncludeUsage)
 }
@@ -67,10 +65,10 @@ func TestBuildRequest_WithTools(t *testing.T) {
 		},
 	}
 
-	body, err := buildRequest(opts)
+	body, err := ccBuildRequest(opts)
 	require.NoError(t, err)
 
-	var req request
+	var req ccRequest
 	err = json.Unmarshal(body, &req)
 	require.NoError(t, err)
 
@@ -89,21 +87,19 @@ func TestBuildRequest_AssistantWithToolCalls(t *testing.T) {
 			&llm.AssistantMsg{
 				ToolCalls: []llm.ToolCall{
 					{
-						ID:   "call_123",
-						Name: "get_weather",
-						Arguments: map[string]any{
-							"location": "Paris",
-						},
+						ID:        "call_123",
+						Name:      "get_weather",
+						Arguments: map[string]any{"location": "Paris"},
 					},
 				},
 			},
 		},
 	}
 
-	body, err := buildRequest(opts)
+	body, err := ccBuildRequest(opts)
 	require.NoError(t, err)
 
-	var req request
+	var req ccRequest
 	err = json.Unmarshal(body, &req)
 	require.NoError(t, err)
 
@@ -135,10 +131,10 @@ func TestBuildRequest_ToolResults(t *testing.T) {
 		},
 	}
 
-	body, err := buildRequest(opts)
+	body, err := ccBuildRequest(opts)
 	require.NoError(t, err)
 
-	var req request
+	var req ccRequest
 	err = json.Unmarshal(body, &req)
 	require.NoError(t, err)
 
@@ -149,7 +145,7 @@ func TestBuildRequest_ToolResults(t *testing.T) {
 	assert.Equal(t, "call_123", toolMsg.ToolCallID)
 }
 
-// --- Unit tests for parseStream ---
+// --- Unit tests for ccParseStream ---
 
 func TestParseStream_TextDeltas(t *testing.T) {
 	sseData := `data: {"choices":[{"delta":{"content":"Hello"}}]}
@@ -157,13 +153,11 @@ data: {"choices":[{"delta":{"content":" world"}}]}
 data: {"choices":[{"finish_reason":"stop"}]}
 data: [DONE]
 `
-
 	events := make(chan llm.StreamEvent, 64)
-	go parseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), events, testMeta("gpt-4o"))
+	go ccParseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), events, testMeta("gpt-4o"))
 
 	var deltas []string
 	var gotDone bool
-
 	for event := range events {
 		switch event.Type {
 		case llm.StreamEventDelta:
@@ -186,9 +180,8 @@ data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":":\
 data: {"choices":[{"finish_reason":"tool_calls"}]}
 data: [DONE]
 `
-
 	events := make(chan llm.StreamEvent, 64)
-	go parseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), events, testMeta("gpt-4o"))
+	go ccParseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), events, testMeta("gpt-4o"))
 
 	var toolCalls []*llm.ToolCall
 	for event := range events {
@@ -209,9 +202,8 @@ func TestParseStream_Usage(t *testing.T) {
 data: {"choices":[{"finish_reason":"stop"}]}
 data: [DONE]
 `
-
 	events := make(chan llm.StreamEvent, 64)
-	go parseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), events, testMeta("gpt-4o"))
+	go ccParseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), events, testMeta("gpt-4o"))
 
 	var usage *llm.Usage
 	for event := range events {
@@ -231,9 +223,8 @@ func TestParseStream_UsageWithDetails(t *testing.T) {
 data: {"choices":[],"usage":{"prompt_tokens":100,"completion_tokens":50,"total_tokens":150,"prompt_tokens_details":{"cached_tokens":80},"completion_tokens_details":{"reasoning_tokens":30}}}
 data: [DONE]
 `
-
 	events := make(chan llm.StreamEvent, 64)
-	go parseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), events, testMeta("gpt-5"))
+	go ccParseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), events, testMeta("gpt-5"))
 
 	var usage *llm.Usage
 	for event := range events {
@@ -248,13 +239,9 @@ data: [DONE]
 	assert.Equal(t, 150, usage.TotalTokens)
 	assert.Equal(t, 80, usage.CachedTokens)
 	assert.Equal(t, 30, usage.ReasoningTokens)
-
-	// gpt-5: $1.25/1M input, $0.125/1M cached, $10.00/1M output
-	// Cost = (20 regular input * 1.25/1M) + (80 cached * 0.125/1M) + (50 output * 10.00/1M)
-	// Cost = 0.000025 + 0.00001 + 0.0005 = 0.000535
-	expectedCost := (20.0/1_000_000)*1.25 + (80.0/1_000_000)*0.125 + (50.0/1_000_000)*10.00
-	assert.InDelta(t, expectedCost, usage.Cost, 0.0000001, "cost should be calculated correctly")
 }
+
+// --- Unit tests for calculateCost ---
 
 func TestCalculateCost(t *testing.T) {
 	tests := []struct {
@@ -279,7 +266,7 @@ func TestCalculateCost(t *testing.T) {
 			usage: &llm.Usage{
 				InputTokens:  1_000_000,
 				OutputTokens: 500_000,
-				CachedTokens: 800_000, // 80% cached
+				CachedTokens: 800_000,
 			},
 			// (200k regular * $2.50/1M) + (800k cached * $1.25/1M) + (500k output * $10.00/1M)
 			// = $0.50 + $1.00 + $5.00 = $6.50
@@ -327,6 +314,419 @@ func TestCalculateCost(t *testing.T) {
 	}
 }
 
+// --- Unit tests for model registry ---
+
+func TestGetModelInfo(t *testing.T) {
+	for _, id := range modelOrder {
+		t.Run(id, func(t *testing.T) {
+			info, err := getModelInfo(id)
+			require.NoError(t, err, "model %s should be in registry", id)
+			assert.Equal(t, id, info.ID)
+			assert.NotEmpty(t, info.Name)
+			assert.Greater(t, info.InputPrice, 0.0, "model %s should have input price", id)
+			assert.Greater(t, info.OutputPrice, 0.0, "model %s should have output price", id)
+		})
+	}
+
+	t.Run("unknown_model", func(t *testing.T) {
+		_, err := getModelInfo("unknown-model-xyz")
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrUnknownModel)
+	})
+}
+
+func TestGetModelInfo_Categories(t *testing.T) {
+	tests := []struct {
+		model    string
+		category modelCategory
+	}{
+		{"gpt-4o", categoryNonReasoning},
+		{"gpt-4o-mini", categoryNonReasoning},
+		{"gpt-4", categoryNonReasoning},
+		{"gpt-4-turbo", categoryNonReasoning},
+		{"gpt-3.5-turbo", categoryNonReasoning},
+		{"gpt-4.1", categoryNonReasoning},
+		{"gpt-4.1-mini", categoryNonReasoning},
+		{"gpt-4.1-nano", categoryNonReasoning},
+
+		{"gpt-5", categoryPreGPT51},
+		{"gpt-5-mini", categoryPreGPT51},
+		{"gpt-5-nano", categoryPreGPT51},
+		{"gpt-5.2", categoryPreGPT51},
+		{"o1", categoryPreGPT51},
+		{"o1-mini", categoryPreGPT51},
+		{"o3", categoryPreGPT51},
+		{"o3-mini", categoryPreGPT51},
+		{"o4-mini", categoryPreGPT51},
+
+		{"gpt-5.1", categoryGPT51},
+
+		{"gpt-5-pro", categoryPro},
+		{"gpt-5.2-pro", categoryPro},
+		{"o1-pro", categoryPro},
+		{"o3-pro", categoryPro},
+
+		{"gpt-5-codex", categoryCodex},
+		{"gpt-5.1-codex", categoryCodex},
+		{"gpt-5.2-codex", categoryCodex},
+		{"gpt-5.1-codex-max", categoryCodex},
+		{"gpt-5.1-codex-mini", categoryCodex},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.model, func(t *testing.T) {
+			info, err := getModelInfo(tt.model)
+			require.NoError(t, err)
+			assert.Equal(t, tt.category, info.Category, "model %s should be category %d", tt.model, tt.category)
+		})
+	}
+}
+
+// --- Unit tests for mapReasoningEffort ---
+
+func TestMapReasoningEffort_NonReasoning(t *testing.T) {
+	models := []string{"gpt-4o", "gpt-4o-mini", "gpt-4", "gpt-3.5-turbo", "gpt-4.1"}
+	efforts := []llm.ReasoningEffort{"", llm.ReasoningEffortNone, llm.ReasoningEffortMinimal, llm.ReasoningEffortLow, llm.ReasoningEffortMedium, llm.ReasoningEffortHigh, llm.ReasoningEffortXHigh}
+
+	for _, model := range models {
+		for _, effort := range efforts {
+			t.Run(model+"_"+string(effort), func(t *testing.T) {
+				result, err := mapReasoningEffort(model, effort)
+				require.NoError(t, err)
+				assert.Empty(t, result, "non-reasoning models should return empty")
+			})
+		}
+	}
+}
+
+func TestMapReasoningEffort_PreGPT51(t *testing.T) {
+	models := []string{"gpt-5", "gpt-5-mini", "gpt-5-nano", "o1", "o3"}
+
+	tests := []struct {
+		effort  llm.ReasoningEffort
+		want    string
+		wantErr bool
+	}{
+		{"", "", false},
+		{llm.ReasoningEffortMinimal, "minimal", false},
+		{llm.ReasoningEffortLow, "low", false},
+		{llm.ReasoningEffortMedium, "medium", false},
+		{llm.ReasoningEffortHigh, "high", false},
+		{llm.ReasoningEffortNone, "", true},
+		{llm.ReasoningEffortXHigh, "", true},
+	}
+
+	for _, model := range models {
+		for _, tt := range tests {
+			t.Run(model+"_"+string(tt.effort), func(t *testing.T) {
+				result, err := mapReasoningEffort(model, tt.effort)
+				if tt.wantErr {
+					require.Error(t, err)
+				} else {
+					require.NoError(t, err)
+					assert.Equal(t, tt.want, result)
+				}
+			})
+		}
+	}
+}
+
+func TestMapReasoningEffort_GPT51(t *testing.T) {
+	model := "gpt-5.1"
+
+	tests := []struct {
+		effort  llm.ReasoningEffort
+		want    string
+		wantErr bool
+	}{
+		{"", "", false},
+		{llm.ReasoningEffortNone, "none", false},
+		{llm.ReasoningEffortMinimal, "low", false},
+		{llm.ReasoningEffortLow, "low", false},
+		{llm.ReasoningEffortMedium, "medium", false},
+		{llm.ReasoningEffortHigh, "high", false},
+		{llm.ReasoningEffortXHigh, "", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(string(tt.effort), func(t *testing.T) {
+			result, err := mapReasoningEffort(model, tt.effort)
+			if tt.wantErr {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+				assert.Equal(t, tt.want, result)
+			}
+		})
+	}
+}
+
+func TestMapReasoningEffort_Pro(t *testing.T) {
+	models := []string{"gpt-5-pro", "gpt-5.2-pro", "o1-pro", "o3-pro"}
+
+	for _, model := range models {
+		t.Run(model+"_empty", func(t *testing.T) {
+			result, err := mapReasoningEffort(model, "")
+			require.NoError(t, err)
+			assert.Empty(t, result)
+		})
+
+		t.Run(model+"_high", func(t *testing.T) {
+			result, err := mapReasoningEffort(model, llm.ReasoningEffortHigh)
+			require.NoError(t, err)
+			assert.Equal(t, "high", result)
+		})
+
+		for _, effort := range []llm.ReasoningEffort{llm.ReasoningEffortNone, llm.ReasoningEffortMinimal, llm.ReasoningEffortLow, llm.ReasoningEffortMedium, llm.ReasoningEffortXHigh} {
+			t.Run(model+"_"+string(effort), func(t *testing.T) {
+				_, err := mapReasoningEffort(model, effort)
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), "must be")
+			})
+		}
+	}
+}
+
+func TestMapReasoningEffort_CodexMax(t *testing.T) {
+	models := []string{"gpt-5.1-codex", "gpt-5.2-codex", "gpt-5.1-codex-max"}
+
+	tests := []struct {
+		effort  llm.ReasoningEffort
+		want    string
+		wantErr bool
+	}{
+		{"", "", false},
+		{llm.ReasoningEffortNone, "none", false},
+		{llm.ReasoningEffortMinimal, "low", false},
+		{llm.ReasoningEffortLow, "low", false},
+		{llm.ReasoningEffortMedium, "medium", false},
+		{llm.ReasoningEffortHigh, "high", false},
+		{llm.ReasoningEffortXHigh, "xhigh", false},
+	}
+
+	for _, model := range models {
+		for _, tt := range tests {
+			t.Run(model+"_"+string(tt.effort), func(t *testing.T) {
+				result, err := mapReasoningEffort(model, tt.effort)
+				if tt.wantErr {
+					require.Error(t, err)
+				} else {
+					require.NoError(t, err)
+					assert.Equal(t, tt.want, result)
+				}
+			})
+		}
+	}
+}
+
+// --- enrichOpts + ccBuildRequest integration tests ---
+// These test the full pipeline: enrichOpts (reasoning mapping, cache retention)
+// feeding into ccBuildRequest.
+
+func TestBuildRequest_ReasoningEffortOmitted(t *testing.T) {
+	opts := llm.StreamOptions{
+		Model:    "gpt-4o",
+		Messages: llm.Messages{&llm.UserMsg{Content: "Hello"}},
+	}
+
+	body, err := ccBuildRequest(opts)
+	require.NoError(t, err)
+
+	var req map[string]any
+	require.NoError(t, json.Unmarshal(body, &req))
+	_, exists := req["reasoning_effort"]
+	assert.False(t, exists, "reasoning_effort should be omitted when not specified")
+}
+
+func TestBuildRequest_ReasoningEffortSet(t *testing.T) {
+	// enrichOpts passes the raw effort string through for pre-GPT51 models.
+	opts, err := enrichOpts(llm.StreamOptions{
+		Model:           "gpt-5",
+		Messages:        llm.Messages{&llm.UserMsg{Content: "Hello"}},
+		ReasoningEffort: llm.ReasoningEffortLow,
+	})
+	require.NoError(t, err)
+
+	body, err := ccBuildRequest(opts)
+	require.NoError(t, err)
+
+	var req map[string]any
+	require.NoError(t, json.Unmarshal(body, &req))
+	assert.Equal(t, "low", req["reasoning_effort"])
+}
+
+func TestBuildRequest_ReasoningEffortMapped(t *testing.T) {
+	// enrichOpts maps "minimal" → "low" for gpt-5.1.
+	opts, err := enrichOpts(llm.StreamOptions{
+		Model:           "gpt-5.1",
+		Messages:        llm.Messages{&llm.UserMsg{Content: "Hello"}},
+		ReasoningEffort: llm.ReasoningEffortMinimal,
+	})
+	require.NoError(t, err)
+
+	body, err := ccBuildRequest(opts)
+	require.NoError(t, err)
+
+	var req map[string]any
+	require.NoError(t, json.Unmarshal(body, &req))
+	assert.Equal(t, "low", req["reasoning_effort"], "minimal should be mapped to low for gpt-5.1")
+}
+
+func TestBuildRequest_ReasoningEffortError(t *testing.T) {
+	_, err := enrichOpts(llm.StreamOptions{
+		Model:           "gpt-5-pro",
+		Messages:        llm.Messages{&llm.UserMsg{Content: "Hello"}},
+		ReasoningEffort: llm.ReasoningEffortLow,
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "must be")
+}
+
+func TestBuildRequest_PromptCacheRetention_ExtendedSupported(t *testing.T) {
+	models := []string{
+		"gpt-5", "gpt-5-mini", "gpt-5-nano", "gpt-5.1", "gpt-5.2",
+		"gpt-5-codex", "gpt-5.1-codex", "gpt-5.1-codex-max", "gpt-5.1-codex-mini", "gpt-5.2-codex",
+		"gpt-4.1", "gpt-4.1-mini", "gpt-4.1-nano",
+	}
+
+	for _, model := range models {
+		t.Run(model, func(t *testing.T) {
+			opts, err := enrichOpts(llm.StreamOptions{
+				Model:    model,
+				Messages: llm.Messages{&llm.UserMsg{Content: "Hello"}},
+			})
+			require.NoError(t, err)
+
+			body, err := ccBuildRequest(opts)
+			require.NoError(t, err)
+
+			var req map[string]any
+			require.NoError(t, json.Unmarshal(body, &req))
+			assert.Equal(t, "24h", req["prompt_cache_retention"], "model %s should have extended cache enabled", model)
+		})
+	}
+}
+
+func TestBuildRequest_PromptCacheRetention_NotSupported(t *testing.T) {
+	models := []string{
+		"gpt-4o", "gpt-4o-mini",
+		"gpt-4", "gpt-4-turbo",
+		"gpt-3.5-turbo",
+		"o1", "o1-mini", "o1-pro",
+		"o3", "o3-mini", "o3-pro",
+		"o4-mini",
+		"gpt-5-pro", "gpt-5.2-pro",
+	}
+
+	for _, model := range models {
+		t.Run(model, func(t *testing.T) {
+			opts, err := enrichOpts(llm.StreamOptions{
+				Model:    model,
+				Messages: llm.Messages{&llm.UserMsg{Content: "Hello"}},
+			})
+			require.NoError(t, err)
+
+			body, err := ccBuildRequest(opts)
+			require.NoError(t, err)
+
+			var req map[string]any
+			require.NoError(t, json.Unmarshal(body, &req))
+			_, exists := req["prompt_cache_retention"]
+			assert.False(t, exists, "model %s should not have prompt_cache_retention set", model)
+		})
+	}
+}
+
+// --- Unit tests for model registry ---
+
+func TestEnrichOpts_ReasoningEffortOmitted(t *testing.T) {
+	opts := llm.StreamOptions{Model: "gpt-4o", Messages: llm.Messages{&llm.UserMsg{Content: "hi"}}}
+	out, err := enrichOpts(opts)
+	require.NoError(t, err)
+	assert.Empty(t, out.ReasoningEffort)
+}
+
+func TestEnrichOpts_ReasoningEffortMappedMinimalToLow(t *testing.T) {
+	opts := llm.StreamOptions{
+		Model:           "gpt-5.1",
+		ReasoningEffort: llm.ReasoningEffortMinimal,
+		Messages:        llm.Messages{&llm.UserMsg{Content: "hi"}},
+	}
+	out, err := enrichOpts(opts)
+	require.NoError(t, err)
+	assert.Equal(t, llm.ReasoningEffort("low"), out.ReasoningEffort)
+}
+
+func TestEnrichOpts_ReasoningEffortErrorProModel(t *testing.T) {
+	opts := llm.StreamOptions{
+		Model:           "gpt-5-pro",
+		ReasoningEffort: llm.ReasoningEffortLow,
+		Messages:        llm.Messages{&llm.UserMsg{Content: "hi"}},
+	}
+	_, err := enrichOpts(opts)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "must be")
+}
+
+func TestEnrichOpts_PromptCacheRetentionSet(t *testing.T) {
+	extended := []string{
+		"gpt-5", "gpt-5-mini", "gpt-5-nano",
+		"gpt-5.1", "gpt-5.2",
+		"gpt-4.1", "gpt-4.1-mini", "gpt-4.1-nano",
+		"gpt-5-codex", "gpt-5.1-codex", "gpt-5.1-codex-max", "gpt-5.1-codex-mini", "gpt-5.2-codex",
+	}
+	for _, model := range extended {
+		t.Run(model, func(t *testing.T) {
+			opts := llm.StreamOptions{Model: model, Messages: llm.Messages{&llm.UserMsg{Content: "hi"}}}
+			out, err := enrichOpts(opts)
+			require.NoError(t, err)
+			assert.Equal(t, "24h", out.PromptCacheRetention, "model %s should get 24h retention", model)
+		})
+	}
+}
+
+func TestEnrichOpts_PromptCacheRetentionNotSet(t *testing.T) {
+	notExtended := []string{"gpt-4o", "gpt-4o-mini", "o1", "o1-pro", "o3", "o3-mini", "o4-mini"}
+	for _, model := range notExtended {
+		t.Run(model, func(t *testing.T) {
+			opts := llm.StreamOptions{Model: model, Messages: llm.Messages{&llm.UserMsg{Content: "hi"}}}
+			out, err := enrichOpts(opts)
+			require.NoError(t, err)
+			assert.Empty(t, out.PromptCacheRetention)
+		})
+	}
+}
+
+func TestMapReasoningEffort_Codex(t *testing.T) {
+	tests := []struct {
+		effort  llm.ReasoningEffort
+		want    string
+		wantErr bool
+	}{
+		{"", "", false},
+		{llm.ReasoningEffortNone, "none", false},
+		{llm.ReasoningEffortMinimal, "low", false},
+		{llm.ReasoningEffortLow, "low", false},
+		{llm.ReasoningEffortMedium, "medium", false},
+		{llm.ReasoningEffortHigh, "high", false},
+		{llm.ReasoningEffortXHigh, "xhigh", false},
+	}
+
+	for _, model := range []string{"gpt-5.1-codex", "gpt-5.2-codex", "gpt-5.1-codex-max"} {
+		for _, tt := range tests {
+			t.Run(model+"_"+string(tt.effort), func(t *testing.T) {
+				result, err := mapReasoningEffort(model, tt.effort)
+				if tt.wantErr {
+					require.Error(t, err)
+				} else {
+					require.NoError(t, err)
+					assert.Equal(t, tt.want, result)
+				}
+			})
+		}
+	}
+}
+
 // --- Integration tests (require OPENAI_KEY) ---
 
 func TestOpenAI_BasicStreaming(t *testing.T) {
@@ -334,20 +734,16 @@ func TestOpenAI_BasicStreaming(t *testing.T) {
 		t.Skip("OPENAI_KEY not set")
 	}
 
-	provider := New(llm.APIKeyFromEnv("OPENAI_KEY"))
+	p := New(llm.APIKeyFromEnv("OPENAI_KEY"))
 	ctx := context.Background()
 
-	stream, err := provider.CreateStream(ctx, llm.StreamOptions{
-		Model: "gpt-4o-mini",
-		Messages: llm.Messages{
-			&llm.UserMsg{Content: "Say 'hello' and nothing else."},
-		},
+	stream, err := p.CreateStream(ctx, llm.StreamOptions{
+		Model:    "gpt-4o-mini",
+		Messages: llm.Messages{&llm.UserMsg{Content: "Say 'hello' and nothing else."}},
 	})
 	require.NoError(t, err)
 
-	var gotDelta bool
-	var gotDone bool
-
+	var gotDelta, gotDone bool
 	for event := range stream {
 		switch event.Type {
 		case llm.StreamEventError:
@@ -376,21 +772,17 @@ func TestOpenAI_ToolCallRoundTrip(t *testing.T) {
 		Location string `json:"location" jsonschema:"description=City name,required"`
 	}
 
-	provider := New(llm.APIKeyFromEnv("OPENAI_KEY"))
+	p := New(llm.APIKeyFromEnv("OPENAI_KEY"))
 	ctx := context.Background()
 
 	tools := []llm.ToolDefinition{
 		llm.ToolDefinitionFor[GetWeatherParams]("get_weather", "Get the current weather for a location"),
 	}
 
-	// First request: model should call the tool
-	t.Log("Sending initial request with tool definitions...")
-	stream, err := provider.CreateStream(ctx, llm.StreamOptions{
-		Model: "gpt-4o-mini",
-		Messages: llm.Messages{
-			&llm.UserMsg{Content: "What's the weather in Paris? Use the get_weather tool."},
-		},
-		Tools: tools,
+	stream, err := p.CreateStream(ctx, llm.StreamOptions{
+		Model:    "gpt-4o-mini",
+		Messages: llm.Messages{&llm.UserMsg{Content: "What's the weather in Paris? Use the get_weather tool."}},
+		Tools:    tools,
 	})
 	require.NoError(t, err)
 
@@ -407,35 +799,25 @@ func TestOpenAI_ToolCallRoundTrip(t *testing.T) {
 		}
 	}
 
-	// We expect a tool call
 	if toolCall == nil {
 		t.Skip("Model did not call tool (expected but not guaranteed)")
 	}
 
-	require.NotEmpty(t, toolCall.ID, "Tool call should have an ID")
+	require.NotEmpty(t, toolCall.ID)
 	assert.Equal(t, "get_weather", toolCall.Name)
 
-	// Simulate tool execution
-	toolResult := `{"temperature": 72, "conditions": "sunny", "humidity": 65}`
-
-	// Second request: send tool result back
-	t.Log("Sending tool result back...")
-	stream2, err := provider.CreateStream(ctx, llm.StreamOptions{
+	stream2, err := p.CreateStream(ctx, llm.StreamOptions{
 		Model: "gpt-4o-mini",
 		Messages: llm.Messages{
 			&llm.UserMsg{Content: "What's the weather in Paris? Use the get_weather tool."},
 			&llm.AssistantMsg{
 				ToolCalls: []llm.ToolCall{
-					{
-						ID:        toolCall.ID,
-						Name:      toolCall.Name,
-						Arguments: toolCall.Arguments,
-					},
+					{ID: toolCall.ID, Name: toolCall.Name, Arguments: toolCall.Arguments},
 				},
 			},
 			&llm.ToolCallResult{
 				ToolCallID: toolCall.ID,
-				Output:     toolResult,
+				Output:     `{"temperature": 72, "conditions": "sunny", "humidity": 65}`,
 			},
 		},
 		Tools: tools,
@@ -444,7 +826,6 @@ func TestOpenAI_ToolCallRoundTrip(t *testing.T) {
 
 	var finalResponse strings.Builder
 	var gotDone bool
-
 	for event := range stream2 {
 		switch event.Type {
 		case llm.StreamEventError:
@@ -457,11 +838,8 @@ func TestOpenAI_ToolCallRoundTrip(t *testing.T) {
 	}
 
 	assert.True(t, gotDone)
-	response := finalResponse.String()
-	t.Logf("Final response: %s", response)
-
-	// Verify the response mentions the weather data
-	assert.NotEmpty(t, response, "Should get a final response")
+	assert.NotEmpty(t, finalResponse.String())
+	t.Logf("Final response: %s", finalResponse.String())
 }
 
 func TestOpenAI_Conversation(t *testing.T) {
@@ -469,19 +847,17 @@ func TestOpenAI_Conversation(t *testing.T) {
 		t.Skip("OPENAI_KEY not set")
 	}
 
-	provider := New(llm.APIKeyFromEnv("OPENAI_KEY"))
+	p := New(llm.APIKeyFromEnv("OPENAI_KEY"))
 	ctx := context.Background()
 
-	messages := llm.Messages{
-		&llm.SystemMsg{Content: "You are a helpful assistant."},
-		&llm.UserMsg{Content: "Hello"},
-		&llm.AssistantMsg{Content: "Hi there!"},
-		&llm.UserMsg{Content: "How are you?"},
-	}
-
-	stream, err := provider.CreateStream(ctx, llm.StreamOptions{
-		Model:    "gpt-4o-mini",
-		Messages: messages,
+	stream, err := p.CreateStream(ctx, llm.StreamOptions{
+		Model: "gpt-4o-mini",
+		Messages: llm.Messages{
+			&llm.SystemMsg{Content: "You are a helpful assistant."},
+			&llm.UserMsg{Content: "Hello"},
+			&llm.AssistantMsg{Content: "Hi there!"},
+			&llm.UserMsg{Content: "How are you?"},
+		},
 	})
 	require.NoError(t, err)
 
@@ -495,356 +871,487 @@ func TestOpenAI_Conversation(t *testing.T) {
 		}
 	}
 
-	assert.True(t, gotResponse, "Should get a response")
+	assert.True(t, gotResponse)
 }
 
-// --- Unit tests for model registry and reasoning effort mapping ---
+// --- Unit tests for cost calculation in streams ---
 
-func TestGetModelInfo(t *testing.T) {
-	// Test that all models in modelOrder are in the registry
-	for _, id := range modelOrder {
-		t.Run(id, func(t *testing.T) {
-			info, err := getModelInfo(id)
-			require.NoError(t, err, "model %s should be in registry", id)
-			assert.Equal(t, id, info.ID)
-			assert.NotEmpty(t, info.Name)
-			assert.Greater(t, info.InputPrice, 0.0, "model %s should have input price", id)
-			assert.Greater(t, info.OutputPrice, 0.0, "model %s should have output price", id)
-		})
+func TestParseStream_CostCalculation(t *testing.T) {
+	// gpt-4o: $2.50/1M input, $10.00/1M output
+	sseData := `data: {"id":"chatcmpl-123","model":"gpt-4o","choices":[{"delta":{"content":"Hi"}}]}
+data: {"id":"chatcmpl-123","model":"gpt-4o","choices":[],"usage":{"prompt_tokens":100,"completion_tokens":50,"total_tokens":150}}
+data: [DONE]
+`
+	events := make(chan llm.StreamEvent, 64)
+	go ccParseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), events, testMeta("gpt-4o"))
+
+	var usage *llm.Usage
+	for event := range events {
+		if event.Type == llm.StreamEventDone && event.Usage != nil {
+			usage = event.Usage
+		}
 	}
 
-	// Test unknown model returns error
-	t.Run("unknown_model", func(t *testing.T) {
-		_, err := getModelInfo("unknown-model-xyz")
-		require.Error(t, err)
-		assert.ErrorIs(t, err, ErrUnknownModel)
-	})
+	require.NotNil(t, usage)
+	assert.Equal(t, 100, usage.InputTokens)
+	assert.Equal(t, 50, usage.OutputTokens)
+
+	// Expected cost: (100/1M * $2.50) + (50/1M * $10.00) = $0.00025 + $0.0005 = $0.00075
+	expectedCost := 0.00075
+	assert.InDelta(t, expectedCost, usage.Cost, 0.0000001)
 }
 
-func TestGetModelInfo_Categories(t *testing.T) {
+func TestParseStream_CostCalculation_WithCache(t *testing.T) {
+	// gpt-4o: $2.50/1M input, $1.25/1M cached, $10.00/1M output
+	sseData := `data: {"id":"chatcmpl-123","model":"gpt-4o","choices":[{"delta":{"content":"Hi"}}]}
+data: {"id":"chatcmpl-123","model":"gpt-4o","choices":[],"usage":{"prompt_tokens":1000,"completion_tokens":500,"total_tokens":1500,"prompt_tokens_details":{"cached_tokens":800}}}
+data: [DONE]
+`
+	events := make(chan llm.StreamEvent, 64)
+	go ccParseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), events, testMeta("gpt-4o"))
+
+	var usage *llm.Usage
+	for event := range events {
+		if event.Type == llm.StreamEventDone && event.Usage != nil {
+			usage = event.Usage
+		}
+	}
+
+	require.NotNil(t, usage)
+	assert.Equal(t, 1000, usage.InputTokens)
+	assert.Equal(t, 800, usage.CachedTokens)
+	assert.Equal(t, 500, usage.OutputTokens)
+
+	// Expected cost:
+	// Regular input: (200/1M * $2.50) = $0.0005
+	// Cached input: (800/1M * $1.25) = $0.001
+	// Output: (500/1M * $10.00) = $0.005
+	// Total: $0.0065
+	expectedCost := 0.0065
+	assert.InDelta(t, expectedCost, usage.Cost, 0.0000001)
+}
+
+// --- Unit tests for Responses API request building ---
+
+func TestRespBuildRequest_Basic(t *testing.T) {
+	opts := llm.StreamOptions{
+		Model: "gpt-5.1-codex",
+		Messages: llm.Messages{
+			&llm.UserMsg{Content: "Write a function"},
+		},
+	}
+
+	body, err := respBuildRequest(opts)
+	require.NoError(t, err)
+
+	var req respRequest
+	err = json.Unmarshal(body, &req)
+	require.NoError(t, err)
+
+	assert.Equal(t, "gpt-5.1-codex", req.Model)
+	assert.True(t, req.Stream)
+	require.Len(t, req.Input, 1)
+	assert.Equal(t, "user", req.Input[0].Role)
+	assert.Equal(t, "Write a function", req.Input[0].Content)
+}
+
+func TestRespBuildRequest_SystemAsInstructions(t *testing.T) {
+	opts := llm.StreamOptions{
+		Model: "gpt-5.1-codex",
+		Messages: llm.Messages{
+			&llm.SystemMsg{Content: "You are a coding assistant."},
+			&llm.UserMsg{Content: "Hello"},
+		},
+	}
+
+	body, err := respBuildRequest(opts)
+	require.NoError(t, err)
+
+	var req respRequest
+	err = json.Unmarshal(body, &req)
+	require.NoError(t, err)
+
+	// First system message should become top-level instructions
+	assert.Equal(t, "You are a coding assistant.", req.Instructions)
+	// Only user message in input array
+	require.Len(t, req.Input, 1)
+	assert.Equal(t, "user", req.Input[0].Role)
+}
+
+func TestRespBuildRequest_MultipleSystemMessages(t *testing.T) {
+	opts := llm.StreamOptions{
+		Model: "gpt-5.1-codex",
+		Messages: llm.Messages{
+			&llm.SystemMsg{Content: "Primary instructions."},
+			&llm.UserMsg{Content: "Hello"},
+			&llm.SystemMsg{Content: "Additional context."},
+		},
+	}
+
+	body, err := respBuildRequest(opts)
+	require.NoError(t, err)
+
+	var req respRequest
+	err = json.Unmarshal(body, &req)
+	require.NoError(t, err)
+
+	// First system message -> instructions
+	assert.Equal(t, "Primary instructions.", req.Instructions)
+	// Second system message -> developer role in input
+	require.Len(t, req.Input, 2)
+	assert.Equal(t, "user", req.Input[0].Role)
+	assert.Equal(t, "developer", req.Input[1].Role)
+	assert.Equal(t, "Additional context.", req.Input[1].Content)
+}
+
+func TestRespBuildRequest_WithTools(t *testing.T) {
+	opts := llm.StreamOptions{
+		Model: "gpt-5.1-codex",
+		Messages: llm.Messages{
+			&llm.UserMsg{Content: "test"},
+		},
+		Tools: []llm.ToolDefinition{
+			{
+				Name:        "run_tests",
+				Description: "Run the test suite",
+				Parameters:  map[string]any{"type": "object", "properties": map[string]any{}},
+			},
+		},
+	}
+
+	body, err := respBuildRequest(opts)
+	require.NoError(t, err)
+
+	var req respRequest
+	err = json.Unmarshal(body, &req)
+	require.NoError(t, err)
+
+	require.Len(t, req.Tools, 1)
+	tool := req.Tools[0]
+	// Responses API has name/description at top level (not nested in "function")
+	assert.Equal(t, "function", tool.Type)
+	assert.Equal(t, "run_tests", tool.Name)
+	assert.Equal(t, "Run the test suite", tool.Description)
+}
+
+func TestRespBuildRequest_ToolCallsAndResults(t *testing.T) {
+	opts := llm.StreamOptions{
+		Model: "gpt-5.1-codex",
+		Messages: llm.Messages{
+			&llm.UserMsg{Content: "Run tests"},
+			&llm.AssistantMsg{
+				Content: "I'll run the tests.",
+				ToolCalls: []llm.ToolCall{
+					{ID: "call_abc", Name: "run_tests", Arguments: map[string]any{"verbose": true}},
+				},
+			},
+			&llm.ToolCallResult{
+				ToolCallID: "call_abc",
+				Output:     "All 42 tests passed",
+			},
+		},
+	}
+
+	body, err := respBuildRequest(opts)
+	require.NoError(t, err)
+
+	var req respRequest
+	err = json.Unmarshal(body, &req)
+	require.NoError(t, err)
+
+	require.Len(t, req.Input, 4)
+
+	// User message
+	assert.Equal(t, "user", req.Input[0].Role)
+
+	// Assistant text content
+	assert.Equal(t, "assistant", req.Input[1].Role)
+	assert.Equal(t, "I'll run the tests.", req.Input[1].Content)
+
+	// Tool call as function_call item
+	assert.Equal(t, "function_call", req.Input[2].Type)
+	assert.Equal(t, "call_abc", req.Input[2].CallID)
+	assert.Equal(t, "run_tests", req.Input[2].Name)
+	assert.Contains(t, req.Input[2].Arguments, "verbose")
+
+	// Tool result as function_call_output item
+	assert.Equal(t, "function_call_output", req.Input[3].Type)
+	assert.Equal(t, "call_abc", req.Input[3].CallID)
+	assert.Equal(t, "All 42 tests passed", req.Input[3].Output)
+}
+
+func TestRespBuildRequest_ReasoningEffort(t *testing.T) {
+	opts := llm.StreamOptions{
+		Model:           "gpt-5.1-codex",
+		Messages:        llm.Messages{&llm.UserMsg{Content: "test"}},
+		ReasoningEffort: llm.ReasoningEffortHigh,
+	}
+
+	body, err := respBuildRequest(opts)
+	require.NoError(t, err)
+
+	var req respRequest
+	err = json.Unmarshal(body, &req)
+	require.NoError(t, err)
+
+	// Responses API wraps reasoning effort in {"reasoning": {"effort": "..."}}
+	require.NotNil(t, req.Reasoning)
+	assert.Equal(t, "high", req.Reasoning.Effort)
+}
+
+// --- Unit tests for Responses API stream parsing ---
+
+func TestRespParseStream_TextDeltas(t *testing.T) {
+	sseData := `event: response.created
+data: {"response":{"id":"resp_123","model":"gpt-5.1-codex"}}
+event: response.output_text.delta
+data: {"delta":"Hello"}
+event: response.output_text.delta
+data: {"delta":" world"}
+event: response.completed
+data: {"response":{"id":"resp_123","model":"gpt-5.1-codex","usage":{"input_tokens":10,"output_tokens":2}}}
+`
+	events := make(chan llm.StreamEvent, 64)
+	go respParseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), events, testMeta("gpt-5.1-codex"))
+
+	var deltas []string
+	var gotDone bool
+	var gotStart bool
+	for event := range events {
+		switch event.Type {
+		case llm.StreamEventStart:
+			gotStart = true
+		case llm.StreamEventDelta:
+			deltas = append(deltas, event.Delta)
+		case llm.StreamEventDone:
+			gotDone = true
+		case llm.StreamEventError:
+			t.Fatalf("Unexpected error: %v", event.Error)
+		}
+	}
+
+	assert.True(t, gotStart)
+	assert.Equal(t, []string{"Hello", " world"}, deltas)
+	assert.True(t, gotDone)
+}
+
+func TestRespParseStream_ToolCallAccumulation(t *testing.T) {
+	sseData := `event: response.created
+data: {"response":{"id":"resp_123","model":"gpt-5.1-codex"}}
+event: response.output_item.added
+data: {"output_index":0,"item":{"type":"function_call","id":"item_1","call_id":"call_xyz","name":"run_tests"}}
+event: response.function_call_arguments.delta
+data: {"output_index":0,"delta":"{\"path\":"}
+event: response.function_call_arguments.delta
+data: {"output_index":0,"delta":"\"src/\"}"}
+event: response.output_item.done
+data: {"output_index":0,"item":{"type":"function_call","id":"item_1","call_id":"call_xyz","name":"run_tests","arguments":"{\"path\":\"src/\"}"}}
+event: response.completed
+data: {"response":{"id":"resp_123","model":"gpt-5.1-codex","usage":{"input_tokens":50,"output_tokens":20}}}
+`
+	events := make(chan llm.StreamEvent, 64)
+	go respParseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), events, testMeta("gpt-5.1-codex"))
+
+	var toolCalls []*llm.ToolCall
+	for event := range events {
+		if event.Type == llm.StreamEventToolCall {
+			toolCalls = append(toolCalls, event.ToolCall)
+		}
+	}
+
+	require.Len(t, toolCalls, 1)
+	tc := toolCalls[0]
+	assert.Equal(t, "call_xyz", tc.ID)
+	assert.Equal(t, "run_tests", tc.Name)
+	assert.Equal(t, "src/", tc.Arguments["path"])
+}
+
+func TestRespParseStream_Usage(t *testing.T) {
+	sseData := `event: response.created
+data: {"response":{"id":"resp_123","model":"gpt-5.1-codex"}}
+event: response.output_text.delta
+data: {"delta":"test"}
+event: response.completed
+data: {"response":{"id":"resp_123","model":"gpt-5.1-codex","usage":{"input_tokens":100,"output_tokens":50,"input_tokens_details":{"cached_tokens":80},"output_tokens_details":{"reasoning_tokens":30}}}}
+`
+	events := make(chan llm.StreamEvent, 64)
+	go respParseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), events, testMeta("gpt-5.1-codex"))
+
+	var usage *llm.Usage
+	for event := range events {
+		if event.Type == llm.StreamEventDone && event.Usage != nil {
+			usage = event.Usage
+		}
+	}
+
+	require.NotNil(t, usage)
+	assert.Equal(t, 100, usage.InputTokens)
+	assert.Equal(t, 50, usage.OutputTokens)
+	assert.Equal(t, 150, usage.TotalTokens)
+	assert.Equal(t, 80, usage.CachedTokens)
+	assert.Equal(t, 30, usage.ReasoningTokens)
+}
+
+func TestRespParseStream_CostCalculation(t *testing.T) {
+	// gpt-5.1-codex: $1.25/1M input, $10.00/1M output
+	sseData := `event: response.created
+data: {"response":{"id":"resp_123","model":"gpt-5.1-codex"}}
+event: response.output_text.delta
+data: {"delta":"done"}
+event: response.completed
+data: {"response":{"id":"resp_123","model":"gpt-5.1-codex","usage":{"input_tokens":1000,"output_tokens":500}}}
+`
+	events := make(chan llm.StreamEvent, 64)
+	go respParseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), events, testMeta("gpt-5.1-codex"))
+
+	var usage *llm.Usage
+	for event := range events {
+		if event.Type == llm.StreamEventDone && event.Usage != nil {
+			usage = event.Usage
+		}
+	}
+
+	require.NotNil(t, usage)
+	// Expected cost: (1000/1M * $1.25) + (500/1M * $10.00) = $0.00125 + $0.005 = $0.00625
+	expectedCost := 0.00625
+	assert.InDelta(t, expectedCost, usage.Cost, 0.0000001)
+}
+
+func TestRespParseStream_Error(t *testing.T) {
+	sseData := `event: error
+data: {"error":{"message":"Rate limit exceeded","code":"rate_limit_exceeded"}}
+`
+	events := make(chan llm.StreamEvent, 64)
+	go respParseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), events, testMeta("gpt-5.1-codex"))
+
+	var gotError bool
+	var errMsg string
+	for event := range events {
+		if event.Type == llm.StreamEventError {
+			gotError = true
+			errMsg = event.Error.Error()
+		}
+	}
+
+	assert.True(t, gotError)
+	assert.Contains(t, errMsg, "Rate limit exceeded")
+	assert.Contains(t, errMsg, "rate_limit_exceeded")
+}
+
+func TestRespParseStream_StartEvent(t *testing.T) {
+	sseData := `event: response.created
+data: {"response":{"id":"resp_abc123","model":"gpt-5.1-codex"}}
+event: response.completed
+data: {"response":{"id":"resp_abc123","model":"gpt-5.1-codex","usage":{"input_tokens":10,"output_tokens":5}}}
+`
+	events := make(chan llm.StreamEvent, 64)
+	go respParseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), events, testMeta("gpt-5.1-codex"))
+
+	var start *llm.StreamStart
+	for event := range events {
+		if event.Type == llm.StreamEventStart {
+			start = event.Start
+		}
+	}
+
+	require.NotNil(t, start)
+	assert.Equal(t, "gpt-5.1-codex", start.RequestedModel)
+	assert.Equal(t, "gpt-5.1-codex", start.ProviderModel)
+	assert.Equal(t, "resp_abc123", start.RequestID)
+}
+
+// --- Unit tests for enrichOpts ---
+
+func TestEnrichOpts_PromptCacheRetention(t *testing.T) {
 	tests := []struct {
-		model    string
-		category modelCategory
+		name          string
+		model         string
+		wantRetention string
 	}{
-		// Non-reasoning models
-		{"gpt-4o", categoryNonReasoning},
-		{"gpt-4o-mini", categoryNonReasoning},
-		{"gpt-4", categoryNonReasoning},
-		{"gpt-4-turbo", categoryNonReasoning},
-		{"gpt-3.5-turbo", categoryNonReasoning},
-		{"gpt-4.1", categoryNonReasoning},
-		{"gpt-4.1-mini", categoryNonReasoning},
-		{"gpt-4.1-nano", categoryNonReasoning},
-
-		// Pre-GPT-5.1 reasoning models
-		{"gpt-5", categoryPreGPT51},
-		{"gpt-5-mini", categoryPreGPT51},
-		{"gpt-5-nano", categoryPreGPT51},
-		{"gpt-5.2", categoryPreGPT51},
-		{"o1", categoryPreGPT51},
-		{"o1-mini", categoryPreGPT51},
-		{"o3", categoryPreGPT51},
-		{"o3-mini", categoryPreGPT51},
-		{"o4-mini", categoryPreGPT51},
-
-		// GPT-5.1 (supports none, but not minimal)
-		{"gpt-5.1", categoryGPT51},
-
-		// Pro models (only support high)
-		{"gpt-5-pro", categoryPro},
-		{"gpt-5.2-pro", categoryPro},
-		{"o1-pro", categoryPro},
-		{"o3-pro", categoryPro},
-
-		// Codex models (support xhigh)
-		{"gpt-5-codex", categoryCodex},
-		{"gpt-5.1-codex", categoryCodex},
-		{"gpt-5.2-codex", categoryCodex},
-		{"gpt-5.1-codex-max", categoryCodex},
-		{"gpt-5.1-codex-mini", categoryCodex},
+		{"gpt-5.4 supports cache", "gpt-5.4", "24h"},
+		{"gpt-5.1-codex supports cache", "gpt-5.1-codex", "24h"},
+		{"gpt-4.1 supports cache", "gpt-4.1", "24h"},
+		{"gpt-4o no extended cache", "gpt-4o", ""},
+		{"gpt-4o-mini no extended cache", "gpt-4o-mini", ""},
+		{"unknown model no cache", "unknown-model", ""},
 	}
 
 	for _, tt := range tests {
-		t.Run(tt.model, func(t *testing.T) {
-			info, err := getModelInfo(tt.model)
+		t.Run(tt.name, func(t *testing.T) {
+			opts := llm.StreamOptions{
+				Model:    tt.model,
+				Messages: llm.Messages{&llm.UserMsg{Content: "test"}},
+			}
+
+			enriched, err := enrichOpts(opts)
 			require.NoError(t, err)
-			assert.Equal(t, tt.category, info.Category, "model %s should be category %d", tt.model, tt.category)
+			assert.Equal(t, tt.wantRetention, enriched.PromptCacheRetention)
 		})
 	}
 }
 
-func TestMapReasoningEffort_NonReasoning(t *testing.T) {
-	// Non-reasoning models should always return empty (ignore the parameter)
-	models := []string{"gpt-4o", "gpt-4o-mini", "gpt-4", "gpt-3.5-turbo", "gpt-4.1"}
-
-	for _, model := range models {
-		for _, effort := range []llm.ReasoningEffort{"", llm.ReasoningEffortNone, llm.ReasoningEffortMinimal, llm.ReasoningEffortLow, llm.ReasoningEffortMedium, llm.ReasoningEffortHigh, llm.ReasoningEffortXHigh} {
-			t.Run(model+"_"+string(effort), func(t *testing.T) {
-				result, err := mapReasoningEffort(model, effort)
-				require.NoError(t, err)
-				assert.Empty(t, result, "non-reasoning models should return empty")
-			})
-		}
-	}
-}
-
-func TestMapReasoningEffort_PreGPT51(t *testing.T) {
-	models := []string{"gpt-5", "gpt-5-mini", "gpt-5-nano", "o1", "o3"}
-
+func TestEnrichOpts_ReasoningEffortMapping(t *testing.T) {
 	tests := []struct {
-		effort  llm.ReasoningEffort
-		want    string
-		wantErr bool
+		name       string
+		model      string
+		effort     llm.ReasoningEffort
+		wantEffort llm.ReasoningEffort
+		wantErr    bool
 	}{
-		{"", "", false}, // empty -> omit
-		{llm.ReasoningEffortMinimal, "minimal", false},
-		{llm.ReasoningEffortLow, "low", false},
-		{llm.ReasoningEffortMedium, "medium", false},
-		{llm.ReasoningEffortHigh, "high", false},
-		{llm.ReasoningEffortNone, "", true},  // not supported
-		{llm.ReasoningEffortXHigh, "", true}, // not supported
-	}
-
-	for _, model := range models {
-		for _, tt := range tests {
-			t.Run(model+"_"+string(tt.effort), func(t *testing.T) {
-				result, err := mapReasoningEffort(model, tt.effort)
-				if tt.wantErr {
-					require.Error(t, err)
-				} else {
-					require.NoError(t, err)
-					assert.Equal(t, tt.want, result)
-				}
-			})
-		}
-	}
-}
-
-func TestMapReasoningEffort_GPT51(t *testing.T) {
-	model := "gpt-5.1"
-
-	tests := []struct {
-		effort  llm.ReasoningEffort
-		want    string
-		wantErr bool
-	}{
-		{"", "", false},                            // empty -> omit
-		{llm.ReasoningEffortNone, "none", false},   // supported
-		{llm.ReasoningEffortMinimal, "low", false}, // mapped to low
-		{llm.ReasoningEffortLow, "low", false},
-		{llm.ReasoningEffortMedium, "medium", false},
-		{llm.ReasoningEffortHigh, "high", false},
-		{llm.ReasoningEffortXHigh, "", true}, // not supported
+		{"non-reasoning model ignores effort", "gpt-4o", llm.ReasoningEffortHigh, "", false},
+		{"gpt-5.1 accepts high", "gpt-5.1", llm.ReasoningEffortHigh, "high", false},
+		{"gpt-5.1 maps minimal to low", "gpt-5.1", llm.ReasoningEffortMinimal, "low", false},
+		{"gpt-5.1 rejects xhigh", "gpt-5.1", llm.ReasoningEffortXHigh, "", true},
+		{"codex accepts xhigh", "gpt-5.1-codex", llm.ReasoningEffortXHigh, "xhigh", false},
+		{"codex maps minimal to low", "gpt-5.1-codex", llm.ReasoningEffortMinimal, "low", false},
+		{"pro only accepts high", "o1-pro", llm.ReasoningEffortHigh, "high", false},
+		{"pro rejects medium", "o1-pro", llm.ReasoningEffortMedium, "", true},
 	}
 
 	for _, tt := range tests {
-		t.Run(string(tt.effort), func(t *testing.T) {
-			result, err := mapReasoningEffort(model, tt.effort)
+		t.Run(tt.name, func(t *testing.T) {
+			opts := llm.StreamOptions{
+				Model:           tt.model,
+				Messages:        llm.Messages{&llm.UserMsg{Content: "test"}},
+				ReasoningEffort: tt.effort,
+			}
+
+			enriched, err := enrichOpts(opts)
 			if tt.wantErr {
 				require.Error(t, err)
 			} else {
 				require.NoError(t, err)
-				assert.Equal(t, tt.want, result)
+				assert.Equal(t, tt.wantEffort, enriched.ReasoningEffort)
 			}
 		})
 	}
 }
 
-func TestMapReasoningEffort_Pro(t *testing.T) {
-	models := []string{"gpt-5-pro", "gpt-5.2-pro", "o1-pro", "o3-pro"}
+// --- Unit tests for isCodexModel ---
 
-	for _, model := range models {
-		t.Run(model+"_empty", func(t *testing.T) {
-			result, err := mapReasoningEffort(model, "")
-			require.NoError(t, err)
-			assert.Empty(t, result) // omit
-		})
-
-		t.Run(model+"_high", func(t *testing.T) {
-			result, err := mapReasoningEffort(model, llm.ReasoningEffortHigh)
-			require.NoError(t, err)
-			assert.Equal(t, "high", result)
-		})
-
-		// All other values should error
-		for _, effort := range []llm.ReasoningEffort{llm.ReasoningEffortNone, llm.ReasoningEffortMinimal, llm.ReasoningEffortLow, llm.ReasoningEffortMedium, llm.ReasoningEffortXHigh} {
-			t.Run(model+"_"+string(effort), func(t *testing.T) {
-				_, err := mapReasoningEffort(model, effort)
-				require.Error(t, err)
-				assert.Contains(t, err.Error(), "must be")
-			})
-		}
-	}
-}
-
-func TestMapReasoningEffort_CodexMax(t *testing.T) {
-	models := []string{"gpt-5.1-codex", "gpt-5.2-codex", "gpt-5.1-codex-max"}
-
+func TestIsCodexModel(t *testing.T) {
 	tests := []struct {
-		effort  llm.ReasoningEffort
-		want    string
-		wantErr bool
+		model   string
+		isCodex bool
 	}{
-		{"", "", false}, // empty -> omit
-		{llm.ReasoningEffortNone, "none", false},
-		{llm.ReasoningEffortMinimal, "low", false}, // mapped to low
-		{llm.ReasoningEffortLow, "low", false},
-		{llm.ReasoningEffortMedium, "medium", false},
-		{llm.ReasoningEffortHigh, "high", false},
-		{llm.ReasoningEffortXHigh, "xhigh", false}, // supported
+		{"gpt-5.1-codex", true},
+		{"gpt-5.1-codex-mini", true},
+		{"gpt-5.1-codex-max", true},
+		{"gpt-5.2-codex", true},
+		{"gpt-5.3-codex", true},
+		{"gpt-5-codex", true},
+		{"gpt-5.1", false},
+		{"gpt-5.4", false},
+		{"gpt-4o", false},
+		{"gpt-4o-mini", false},
+		{"o3", false},
+		{"o1-pro", false},
+		{"unknown-model", false},
 	}
 
-	for _, model := range models {
-		for _, tt := range tests {
-			t.Run(model+"_"+string(tt.effort), func(t *testing.T) {
-				result, err := mapReasoningEffort(model, tt.effort)
-				if tt.wantErr {
-					require.Error(t, err)
-				} else {
-					require.NoError(t, err)
-					assert.Equal(t, tt.want, result)
-				}
-			})
-		}
-	}
-}
-
-func TestBuildRequest_ReasoningEffortOmitted(t *testing.T) {
-	// Test that reasoning_effort is omitted when not specified
-	opts := llm.StreamOptions{
-		Model: "gpt-4o",
-		Messages: llm.Messages{
-			&llm.UserMsg{Content: "Hello"},
-		},
-	}
-
-	body, err := buildRequest(opts)
-	require.NoError(t, err)
-
-	var req map[string]any
-	err = json.Unmarshal(body, &req)
-	require.NoError(t, err)
-
-	_, exists := req["reasoning_effort"]
-	assert.False(t, exists, "reasoning_effort should be omitted when not specified")
-}
-
-func TestBuildRequest_ReasoningEffortSet(t *testing.T) {
-	// Test that reasoning_effort is set when specified for a reasoning model
-	opts := llm.StreamOptions{
-		Model: "gpt-5",
-		Messages: llm.Messages{
-			&llm.UserMsg{Content: "Hello"},
-		},
-		ReasoningEffort: llm.ReasoningEffortLow,
-	}
-
-	body, err := buildRequest(opts)
-	require.NoError(t, err)
-
-	var req map[string]any
-	err = json.Unmarshal(body, &req)
-	require.NoError(t, err)
-
-	assert.Equal(t, "low", req["reasoning_effort"])
-}
-
-func TestBuildRequest_ReasoningEffortMapped(t *testing.T) {
-	// Test that minimal is mapped to low for gpt-5.1
-	opts := llm.StreamOptions{
-		Model: "gpt-5.1",
-		Messages: llm.Messages{
-			&llm.UserMsg{Content: "Hello"},
-		},
-		ReasoningEffort: llm.ReasoningEffortMinimal,
-	}
-
-	body, err := buildRequest(opts)
-	require.NoError(t, err)
-
-	var req map[string]any
-	err = json.Unmarshal(body, &req)
-	require.NoError(t, err)
-
-	assert.Equal(t, "low", req["reasoning_effort"], "minimal should be mapped to low for gpt-5.1")
-}
-
-func TestBuildRequest_ReasoningEffortError(t *testing.T) {
-	// Test that invalid combinations return an error
-	opts := llm.StreamOptions{
-		Model: "gpt-5-pro",
-		Messages: llm.Messages{
-			&llm.UserMsg{Content: "Hello"},
-		},
-		ReasoningEffort: llm.ReasoningEffortLow, // Invalid for pro models
-	}
-
-	_, err := buildRequest(opts)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "must be")
-}
-
-// --- Unit tests for prompt cache retention ---
-
-func TestBuildRequest_PromptCacheRetention_ExtendedSupported(t *testing.T) {
-	// Models that support extended cache should have prompt_cache_retention set to "24h"
-	models := []string{
-		"gpt-5", "gpt-5-mini", "gpt-5-nano", "gpt-5.1", "gpt-5.2",
-		"gpt-5-codex", "gpt-5.1-codex", "gpt-5.1-codex-max", "gpt-5.1-codex-mini", "gpt-5.2-codex",
-		"gpt-4.1", "gpt-4.1-mini", "gpt-4.1-nano",
-	}
-
-	for _, model := range models {
-		t.Run(model, func(t *testing.T) {
-			opts := llm.StreamOptions{
-				Model: model,
-				Messages: llm.Messages{
-					&llm.UserMsg{Content: "Hello"},
-				},
-			}
-
-			body, err := buildRequest(opts)
-			require.NoError(t, err)
-
-			var req map[string]any
-			err = json.Unmarshal(body, &req)
-			require.NoError(t, err)
-
-			assert.Equal(t, "24h", req["prompt_cache_retention"], "model %s should have extended cache enabled", model)
-		})
-	}
-}
-
-func TestBuildRequest_PromptCacheRetention_NotSupported(t *testing.T) {
-	// Models that don't support extended cache should not have the field set
-	models := []string{
-		"gpt-4o", "gpt-4o-mini",
-		"gpt-4", "gpt-4-turbo",
-		"gpt-3.5-turbo",
-		"o1", "o1-mini", "o1-pro",
-		"o3", "o3-mini", "o3-pro",
-		"o4-mini",
-		"gpt-5-pro", "gpt-5.2-pro",
-	}
-
-	for _, model := range models {
-		t.Run(model, func(t *testing.T) {
-			opts := llm.StreamOptions{
-				Model: model,
-				Messages: llm.Messages{
-					&llm.UserMsg{Content: "Hello"},
-				},
-			}
-
-			body, err := buildRequest(opts)
-			require.NoError(t, err)
-
-			var req map[string]any
-			err = json.Unmarshal(body, &req)
-			require.NoError(t, err)
-
-			_, exists := req["prompt_cache_retention"]
-			assert.False(t, exists, "model %s should not have prompt_cache_retention set", model)
+	for _, tt := range tests {
+		t.Run(tt.model, func(t *testing.T) {
+			assert.Equal(t, tt.isCodex, isCodexModel(tt.model))
 		})
 	}
 }

@@ -217,6 +217,15 @@ var modelOrder = []string{
 	"o1-pro",
 }
 
+// isCodexModel reports whether the given model ID should be routed to the
+// Responses API instead of Chat Completions.
+// Codex models (categoryCodex) require /v1/responses.
+// Unknown models default to false so they are routed to Chat Completions.
+func isCodexModel(model string) bool {
+	info, ok := modelRegistry[model]
+	return ok && info.Category == categoryCodex
+}
+
 // getModelInfo returns the model info for the given model ID.
 // Returns ErrUnknownModel if the model is not in the registry.
 func getModelInfo(model string) (modelInfo, error) {

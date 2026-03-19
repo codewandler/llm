@@ -67,11 +67,12 @@ type StreamEvent struct {
 
 // StreamOptions configures a provider CreateStream call.
 type StreamOptions struct {
-	Model           string
-	Messages        Messages
-	Tools           []ToolDefinition
-	ToolChoice      ToolChoice      // nil defaults to Auto when Tools provided
-	ReasoningEffort ReasoningEffort // Controls reasoning for reasoning models (OpenAI)
+	Model                string
+	Messages             Messages
+	Tools                []ToolDefinition
+	ToolChoice           ToolChoice      // nil defaults to Auto when Tools provided
+	ReasoningEffort      ReasoningEffort // Controls reasoning for reasoning models (OpenAI)
+	PromptCacheRetention string          // Provider-specific cache retention hint (e.g. "24h" for OpenAI)
 }
 
 // Validate checks that the options are valid.
@@ -124,11 +125,15 @@ func (o StreamOptions) Validate() error {
 	return nil
 }
 
+type Streamer interface {
+	CreateStream(ctx context.Context, opts StreamOptions) (<-chan StreamEvent, error)
+}
+
 // Provider is the interface each LLM backend must implement.
 type Provider interface {
 	Name() string
 	Models() []Model
-	CreateStream(ctx context.Context, opts StreamOptions) (<-chan StreamEvent, error)
+	Streamer
 }
 
 // ModelFetcher is an optional interface providers can implement to list
