@@ -61,7 +61,7 @@ func detectProviders() []providerEntry {
 			factory: func(opts ...llm.Option) llm.Provider {
 				return openai.New(opts...)
 			},
-			modelAliases: nil,
+			modelAliases: openaiModelAliases,
 			hasAliases:   false,
 		})
 	}

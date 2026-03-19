@@ -113,7 +113,7 @@ func WithOpenAI() Option {
 			factory: func(opts ...llm.Option) llm.Provider {
 				return openai.New(opts...)
 			},
-			modelAliases: nil,
+			modelAliases: openaiModelAliases,
 			hasAliases:   false, // OpenAI doesn't participate in fast/default/powerful aliases
 		})
 	}

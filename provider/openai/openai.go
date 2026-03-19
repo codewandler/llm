@@ -94,6 +94,51 @@ func (p *Provider) Models() []llm.Model {
 	return models
 }
 
+// FetchModels retrieves the list of available models from the OpenAI API.
+func (p *Provider) FetchModels(ctx context.Context) ([]llm.Model, error) {
+	apiKey, err := p.opts.APIKeyFunc(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("get API key: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "GET", p.opts.BaseURL+"/v1/models", nil)
+	if err != nil {
+		return nil, fmt.Errorf("create request: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+
+	resp, err := p.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("openai list models: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("openai models API error (HTTP %d): %s", resp.StatusCode, string(body))
+	}
+
+	var result struct {
+		Data []struct {
+			ID      string `json:"id"`
+			OwnedBy string `json:"owned_by"`
+		} `json:"data"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("decode models response: %w", err)
+	}
+
+	models := make([]llm.Model, 0, len(result.Data))
+	for _, m := range result.Data {
+		models = append(models, llm.Model{
+			ID:       m.ID,
+			Name:     m.ID, // OpenAI API doesn't return display names
+			Provider: providerName,
+		})
+	}
+	return models, nil
+}
+
 func (p *Provider) CreateStream(ctx context.Context, opts llm.StreamOptions) (<-chan llm.StreamEvent, error) {
 	if err := opts.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid options: %w", err)

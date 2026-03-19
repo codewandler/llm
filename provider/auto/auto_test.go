@@ -180,9 +180,16 @@ func TestModelAliasesForProvider(t *testing.T) {
 	require.NotNil(t, anthropicAliases)
 	assert.Equal(t, AnthropicSonnet, anthropicAliases["sonnet"])
 
-	// OpenAI should not have model aliases
+	// OpenAI should have model aliases
 	openaiAliases := modelAliasesForProvider(ProviderOpenAI)
-	assert.Nil(t, openaiAliases)
+	require.NotNil(t, openaiAliases)
+	assert.Equal(t, "gpt-5.4", openaiAliases["flagship"])
+	assert.Equal(t, "gpt-5.4-mini", openaiAliases["mini"])
+	assert.Equal(t, "gpt-5.4-nano", openaiAliases["nano"])
+	assert.Equal(t, "gpt-5.4-pro", openaiAliases["pro"])
+	assert.Equal(t, "gpt-5.3-codex", openaiAliases["codex"])
+	assert.Equal(t, "o4-mini", openaiAliases["o4"])
+	assert.Equal(t, "o3", openaiAliases["o3"])
 }
 
 func TestConstants(t *testing.T) {

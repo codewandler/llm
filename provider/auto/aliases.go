@@ -3,6 +3,7 @@ package auto
 import (
 	"github.com/codewandler/llm/provider/aggregate"
 	"github.com/codewandler/llm/provider/bedrock"
+	"github.com/codewandler/llm/provider/openai"
 )
 
 // claudeModelAliases maps short names to full Claude model IDs.
@@ -17,6 +18,22 @@ var anthropicModelAliases = map[string]string{
 	"opus":   AnthropicOpus,
 	"sonnet": AnthropicSonnet,
 	"haiku":  AnthropicHaiku,
+}
+
+// openaiModelAliases maps short names to full OpenAI model IDs.
+var openaiModelAliases = map[string]string{
+	// GPT-5.4 tier (flagship)
+	"flagship": openai.ModelGPT54,
+	"mini":     openai.ModelGPT54Mini,
+	"nano":     openai.ModelGPT54Nano,
+	"pro":      openai.ModelGPT54Pro,
+
+	// Coding models
+	"codex": openai.ModelGPT53Codex,
+
+	// Reasoning models
+	"o4": openai.ModelO4Mini,
+	"o3": openai.ModelO3,
 }
 
 // aliasModels defines which model to use for each global alias per provider.
@@ -66,6 +83,8 @@ func modelAliasesForProvider(providerType string) map[string]string {
 		return claudeModelAliases
 	case ProviderAnthropic:
 		return anthropicModelAliases
+	case ProviderOpenAI:
+		return openaiModelAliases
 	default:
 		return nil
 	}
