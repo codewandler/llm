@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/codewandler/llm/provider/anthropic"
 	"github.com/codewandler/llm/provider/anthropic/claude"
 	"github.com/codewandler/llm/provider/bedrock"
 )
@@ -168,17 +169,17 @@ func TestBuildAliasTargets(t *testing.T) {
 }
 
 func TestModelAliasesForProvider(t *testing.T) {
-	// Claude should have model aliases
+	// Claude should have model aliases (from anthropic package)
 	claudeAliases := modelAliasesForProvider(ProviderClaude)
 	require.NotNil(t, claudeAliases)
-	assert.Equal(t, ClaudeSonnet, claudeAliases["sonnet"])
-	assert.Equal(t, ClaudeOpus, claudeAliases["opus"])
-	assert.Equal(t, ClaudeHaiku, claudeAliases["haiku"])
+	assert.Equal(t, anthropic.ModelSonnet, claudeAliases["sonnet"])
+	assert.Equal(t, anthropic.ModelOpus, claudeAliases["opus"])
+	assert.Equal(t, anthropic.ModelHaiku, claudeAliases["haiku"])
 
-	// Anthropic should have model aliases
+	// Anthropic should have same aliases
 	anthropicAliases := modelAliasesForProvider(ProviderAnthropic)
 	require.NotNil(t, anthropicAliases)
-	assert.Equal(t, AnthropicSonnet, anthropicAliases["sonnet"])
+	assert.Equal(t, anthropic.ModelSonnet, anthropicAliases["sonnet"])
 
 	// OpenAI should have model aliases
 	openaiAliases := modelAliasesForProvider(ProviderOpenAI)
@@ -208,9 +209,10 @@ func TestConstants(t *testing.T) {
 	assert.NotEmpty(t, AliasDefault)
 	assert.NotEmpty(t, AliasPowerful)
 
-	assert.NotEmpty(t, ClaudeOpus)
-	assert.NotEmpty(t, ClaudeSonnet)
-	assert.NotEmpty(t, ClaudeHaiku)
+	// Model constants are now in provider packages
+	assert.NotEmpty(t, anthropic.ModelOpus)
+	assert.NotEmpty(t, anthropic.ModelSonnet)
+	assert.NotEmpty(t, anthropic.ModelHaiku)
 
 	assert.NotEmpty(t, bedrock.ModelOpusLatest)
 	assert.NotEmpty(t, bedrock.ModelSonnetLatest)

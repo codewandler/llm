@@ -24,17 +24,3 @@ const (
 	AliasDefault  = "default"
 	AliasPowerful = "powerful"
 )
-
-// Claude model IDs.
-const (
-	ClaudeOpus   = "claude-opus-4-6"
-	ClaudeSonnet = "claude-sonnet-4-6"
-	ClaudeHaiku  = "claude-haiku-4-5-20251001"
-)
-
-// Anthropic model IDs (same as Claude, different provider).
-const (
-	AnthropicOpus   = ClaudeOpus
-	AnthropicSonnet = ClaudeSonnet
-	AnthropicHaiku  = ClaudeHaiku
-)

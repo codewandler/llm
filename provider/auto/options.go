@@ -68,7 +68,7 @@ func WithClaudeAccount(name string, store claude.TokenStore) Option {
 			factory: func(opts ...llm.Option) llm.Provider {
 				return claude.New(claude.WithManagedTokenProvider(name, store, nil))
 			},
-			modelAliases: claudeModelAliases,
+			modelAliases: anthropic.ModelAliases,
 			hasAliases:   true,
 		})
 	}
@@ -83,7 +83,7 @@ func WithClaudeLocal() Option {
 			factory: func(opts ...llm.Option) llm.Provider {
 				return claude.New(claude.WithLocalTokenProvider())
 			},
-			modelAliases: claudeModelAliases,
+			modelAliases: anthropic.ModelAliases,
 			hasAliases:   true,
 		})
 	}
@@ -114,7 +114,7 @@ func WithOpenAI() Option {
 			factory: func(opts ...llm.Option) llm.Provider {
 				return openai.New(opts...)
 			},
-			modelAliases: openaiModelAliases,
+			modelAliases: openai.ModelAliases,
 			hasAliases:   false, // OpenAI doesn't participate in fast/default/powerful aliases
 		})
 	}
@@ -146,7 +146,7 @@ func WithAnthropic() Option {
 			factory: func(opts ...llm.Option) llm.Provider {
 				return anthropic.New(llm.APIKeyFromEnv(EnvAnthropicKey))
 			},
-			modelAliases: anthropicModelAliases,
+			modelAliases: anthropic.ModelAliases,
 			hasAliases:   true,
 		})
 	}

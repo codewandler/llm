@@ -2,39 +2,10 @@ package auto
 
 import (
 	"github.com/codewandler/llm/provider/aggregate"
+	"github.com/codewandler/llm/provider/anthropic"
 	"github.com/codewandler/llm/provider/bedrock"
 	"github.com/codewandler/llm/provider/openai"
 )
-
-// claudeModelAliases maps short names to full Claude model IDs.
-var claudeModelAliases = map[string]string{
-	"opus":   ClaudeOpus,
-	"sonnet": ClaudeSonnet,
-	"haiku":  ClaudeHaiku,
-}
-
-// anthropicModelAliases maps short names to full Anthropic model IDs.
-var anthropicModelAliases = map[string]string{
-	"opus":   AnthropicOpus,
-	"sonnet": AnthropicSonnet,
-	"haiku":  AnthropicHaiku,
-}
-
-// openaiModelAliases maps short names to full OpenAI model IDs.
-var openaiModelAliases = map[string]string{
-	// GPT-5.4 tier (flagship)
-	"flagship": openai.ModelGPT54,
-	"mini":     openai.ModelGPT54Mini,
-	"nano":     openai.ModelGPT54Nano,
-	"pro":      openai.ModelGPT54Pro,
-
-	// Coding models
-	"codex": openai.ModelGPT53Codex,
-
-	// Reasoning models
-	"o4": openai.ModelO4Mini,
-	"o3": openai.ModelO3,
-}
 
 // aliasModels defines which model to use for each global alias per provider.
 type aliasModels struct {
@@ -44,16 +15,17 @@ type aliasModels struct {
 }
 
 // providerAliasModels maps provider types to their alias model mappings.
+// These are used for the built-in global aliases (fast, default, powerful).
 var providerAliasModels = map[string]aliasModels{
 	ProviderClaude: {
-		fast:     "haiku",
-		normal:   "sonnet",
-		powerful: "opus",
+		fast:     anthropic.ModelHaiku,
+		normal:   anthropic.ModelSonnet,
+		powerful: anthropic.ModelOpus,
 	},
 	ProviderAnthropic: {
-		fast:     "haiku",
-		normal:   "sonnet",
-		powerful: "opus",
+		fast:     anthropic.ModelHaiku,
+		normal:   anthropic.ModelSonnet,
+		powerful: anthropic.ModelOpus,
 	},
 	ProviderBedrock: {
 		fast:     bedrock.ModelHaikuLatest,
@@ -77,14 +49,13 @@ func buildAliasTargets(instanceName, providerType string) map[string]aggregate.A
 }
 
 // modelAliasesForProvider returns the local model aliases for a provider type.
+// Aliases are defined in each provider package (e.g., openai.ModelAliases).
 func modelAliasesForProvider(providerType string) map[string]string {
 	switch providerType {
-	case ProviderClaude:
-		return claudeModelAliases
-	case ProviderAnthropic:
-		return anthropicModelAliases
+	case ProviderClaude, ProviderAnthropic:
+		return anthropic.ModelAliases
 	case ProviderOpenAI:
-		return openaiModelAliases
+		return openai.ModelAliases
 	default:
 		return nil
 	}

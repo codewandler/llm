@@ -7,6 +7,7 @@ import (
 
 	"github.com/codewandler/llm"
 	"github.com/codewandler/llm/provider/aggregate"
+	"github.com/codewandler/llm/provider/anthropic"
 	"github.com/codewandler/llm/provider/anthropic/claude"
 )
 
@@ -156,7 +157,7 @@ func enumerateClaudeAccounts(ctx context.Context, store claude.TokenStore) []pro
 			factory: func(opts ...llm.Option) llm.Provider {
 				return claude.New(claude.WithManagedTokenProvider(accountKey, store, nil))
 			},
-			modelAliases: claudeModelAliases,
+			modelAliases: anthropic.ModelAliases,
 			hasAliases:   true,
 		})
 	}

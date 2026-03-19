@@ -59,6 +59,23 @@ const (
 	ModelO1Pro  = "o1-pro"
 )
 
+// ModelAliases maps short alias names to full model IDs.
+// These are used by the auto package for provider-prefixed resolution (e.g., "openai/mini").
+var ModelAliases = map[string]string{
+	// GPT-5.4 tier (flagship)
+	"flagship": ModelGPT54,
+	"mini":     ModelGPT54Mini,
+	"nano":     ModelGPT54Nano,
+	"pro":      ModelGPT54Pro,
+
+	// Coding models
+	"codex": ModelGPT53Codex,
+
+	// Reasoning models
+	"o4": ModelO4Mini,
+	"o3": ModelO3,
+}
+
 // modelCategory identifies reasoning support level for a model.
 type modelCategory int
 

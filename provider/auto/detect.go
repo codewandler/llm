@@ -24,7 +24,7 @@ func detectProviders() []providerEntry {
 			factory: func(opts ...llm.Option) llm.Provider {
 				return claude.New(claude.WithLocalTokenProvider())
 			},
-			modelAliases: claudeModelAliases,
+			modelAliases: anthropic.ModelAliases,
 			hasAliases:   true,
 		})
 	}
@@ -48,7 +48,7 @@ func detectProviders() []providerEntry {
 			factory: func(opts ...llm.Option) llm.Provider {
 				return anthropic.New(llm.APIKeyFromEnv(EnvAnthropicKey))
 			},
-			modelAliases: anthropicModelAliases,
+			modelAliases: anthropic.ModelAliases,
 			hasAliases:   true,
 		})
 	}
@@ -61,7 +61,7 @@ func detectProviders() []providerEntry {
 			factory: func(opts ...llm.Option) llm.Provider {
 				return openai.New(opts...)
 			},
-			modelAliases: openaiModelAliases,
+			modelAliases: openai.ModelAliases,
 			hasAliases:   false,
 		})
 	}
