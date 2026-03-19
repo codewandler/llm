@@ -26,10 +26,11 @@ type claudeStoreEntry struct {
 
 // config holds the auto provider configuration.
 type config struct {
-	name         string
-	providers    []providerEntry
-	claudeStores []claudeStoreEntry // stores to enumerate accounts from
-	autoDetect   bool
+	name          string
+	providers     []providerEntry
+	claudeStores  []claudeStoreEntry // stores to enumerate accounts from
+	autoDetect    bool
+	globalAliases map[string][]string // user-defined global aliases: alias -> []targets
 }
 
 // Option configures the auto provider.
@@ -148,5 +149,41 @@ func WithAnthropic() Option {
 			modelAliases: anthropicModelAliases,
 			hasAliases:   true,
 		})
+	}
+}
+
+// WithGlobalAlias adds a user-defined global alias that resolves to one or more targets.
+// Targets should be provider-prefixed model references (e.g., "openai/o3", "openrouter/openai/o3").
+// Multiple targets enable failover - if the first target fails, the next is tried.
+//
+// Example:
+//
+//	auto.WithGlobalAlias("o3", "openai/o3", "openrouter/openai/o3")
+func WithGlobalAlias(alias string, targets ...string) Option {
+	return func(c *config) {
+		if c.globalAliases == nil {
+			c.globalAliases = make(map[string][]string)
+		}
+		c.globalAliases[alias] = targets
+	}
+}
+
+// WithGlobalAliases adds multiple user-defined global aliases.
+// Each key is an alias name, and the value is a slice of targets.
+//
+// Example:
+//
+//	auto.WithGlobalAliases(map[string][]string{
+//	    "o3":    {"openai/o3", "openrouter/openai/o3"},
+//	    "codex": {"openai/codex"},
+//	})
+func WithGlobalAliases(aliases map[string][]string) Option {
+	return func(c *config) {
+		if c.globalAliases == nil {
+			c.globalAliases = make(map[string][]string)
+		}
+		for alias, targets := range aliases {
+			c.globalAliases[alias] = targets
+		}
 	}
 }

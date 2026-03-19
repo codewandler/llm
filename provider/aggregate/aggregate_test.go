@@ -192,8 +192,10 @@ func TestModels(t *testing.T) {
 
 		model := models[0]
 		assert.Equal(t, "work-claude/anthropic/claude-sonnet", model.ID)
+		// Global alias "smart" is accessible bare
 		assert.Contains(t, model.Aliases, "smart")
-		assert.Contains(t, model.Aliases, "sonnet")
+		// Local alias "sonnet" is only accessible with prefix, not bare
+		assert.NotContains(t, model.Aliases, "sonnet")
 		assert.Contains(t, model.Aliases, "work-claude/anthropic/smart")
 		assert.Contains(t, model.Aliases, "work-claude/anthropic/sonnet")
 		assert.Contains(t, model.Aliases, "anthropic/smart")
@@ -231,12 +233,17 @@ func TestResolve(t *testing.T) {
 		wantID  string
 		wantErr bool
 	}{
+		// Global alias works bare
 		{"smart", "work-claude/anthropic/claude-sonnet", false},
-		{"sonnet", "work-claude/anthropic/claude-sonnet", false},
+		// Local alias does NOT work bare - must be prefixed
+		{"sonnet", "", true},
+		// Full model ID works
 		{"claude-sonnet", "work-claude/anthropic/claude-sonnet", false},
 		{"anthropic/claude-sonnet", "work-claude/anthropic/claude-sonnet", false},
 		{"work-claude/anthropic/claude-sonnet", "work-claude/anthropic/claude-sonnet", false},
+		// Local alias works with prefix
 		{"work-claude/anthropic/sonnet", "work-claude/anthropic/claude-sonnet", false},
+		{"anthropic/sonnet", "work-claude/anthropic/claude-sonnet", false},
 		{"unknown", "", true},
 	}
 

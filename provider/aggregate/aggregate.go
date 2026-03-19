@@ -105,7 +105,9 @@ func New(cfg Config, factories map[string]Factory) (*Provider, error) {
 		}
 	}
 
-	// Process local aliases from provider configs
+	// Process local aliases from provider configs.
+	// Local aliases are only accessible with provider prefix (e.g., "openai/mini").
+	// Global aliases must be explicitly configured via cfg.Aliases.
 	for instName, aliases := range localAliases {
 		provType := providerTypes[instName]
 		for alias, modelID := range aliases {
@@ -118,9 +120,8 @@ func New(cfg Config, factories map[string]Factory) (*Provider, error) {
 				fullID:       fullID,
 			}
 
-			// Add resolution entries
+			// Add prefixed alias entry only (no bare alias in global namespace)
 			prefixedAlias := buildModelPath(instName, provType, alias)
-			aliasMap[alias] = append(aliasMap[alias], target)
 			aliasMap[prefixedAlias] = append(aliasMap[prefixedAlias], target)
 
 			// Also add short form for multi-instance: provType/alias (only if different from prefixed)
@@ -131,7 +132,7 @@ func New(cfg Config, factories map[string]Factory) (*Provider, error) {
 
 			// Update model's aliases if it exists
 			if idx, ok := modelIndex[fullID]; ok {
-				aliasesToAdd := []string{alias, prefixedAlias}
+				aliasesToAdd := []string{prefixedAlias}
 				if shortAlias != prefixedAlias {
 					aliasesToAdd = append(aliasesToAdd, shortAlias)
 				}

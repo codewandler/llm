@@ -3,6 +3,7 @@ package auto
 import (
 	"context"
 	"sort"
+	"strings"
 
 	"github.com/codewandler/llm"
 	"github.com/codewandler/llm/provider/aggregate"
@@ -113,7 +114,27 @@ func New(ctx context.Context, opts ...Option) (*aggregate.Provider, error) {
 		}
 	}
 
+	// Add user-defined global aliases
+	for alias, targets := range cfg.globalAliases {
+		for _, target := range targets {
+			aliasTarget := parseAliasTarget(target)
+			aggCfg.Aliases[alias] = append(aggCfg.Aliases[alias], aliasTarget)
+		}
+	}
+
 	return aggregate.New(aggCfg, factories)
+}
+
+// parseAliasTarget parses a string target like "openai/o3" or "work/claude/sonnet"
+// into an AliasTarget. The first component is the provider instance name,
+// and the rest is the model reference.
+func parseAliasTarget(target string) aggregate.AliasTarget {
+	parts := strings.SplitN(target, "/", 2)
+	if len(parts) == 1 {
+		// Just a model ID, no provider prefix - use as-is
+		return aggregate.AliasTarget{Provider: "", Model: parts[0]}
+	}
+	return aggregate.AliasTarget{Provider: parts[0], Model: parts[1]}
 }
 
 // enumerateClaudeAccounts lists all accounts from a TokenStore and creates provider entries.
