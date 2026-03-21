@@ -244,10 +244,13 @@ data: [DONE]
 
 func TestCalculateCost(t *testing.T) {
 	tests := []struct {
-		name     string
-		model    string
-		usage    *llm.Usage
-		wantCost float64
+		name           string
+		model          string
+		usage          *llm.Usage
+		wantCost       float64
+		wantInputCost  float64
+		wantCachedCost float64
+		wantOutputCost float64
 	}{
 		{
 			name:  "gpt-4o basic",
@@ -257,7 +260,10 @@ func TestCalculateCost(t *testing.T) {
 				OutputTokens: 1_000_000,
 			},
 			// $2.50/1M input + $10.00/1M output = $12.50
-			wantCost: 12.50,
+			wantCost:       12.50,
+			wantInputCost:  2.50,
+			wantCachedCost: 0,
+			wantOutputCost: 10.00,
 		},
 		{
 			name:  "gpt-4o with cache",
@@ -269,7 +275,10 @@ func TestCalculateCost(t *testing.T) {
 			},
 			// (200k regular * $2.50/1M) + (800k cached * $1.25/1M) + (500k output * $10.00/1M)
 			// = $0.50 + $1.00 + $5.00 = $6.50
-			wantCost: 6.50,
+			wantCost:       6.50,
+			wantInputCost:  0.50,
+			wantCachedCost: 1.00,
+			wantOutputCost: 5.00,
 		},
 		{
 			name:  "gpt-4o-mini cheap",
@@ -279,7 +288,10 @@ func TestCalculateCost(t *testing.T) {
 				OutputTokens: 1_000_000,
 			},
 			// $0.15/1M input + $0.60/1M output = $0.75
-			wantCost: 0.75,
+			wantCost:       0.75,
+			wantInputCost:  0.15,
+			wantCachedCost: 0,
+			wantOutputCost: 0.60,
 		},
 		{
 			name:  "o1-pro expensive",
@@ -289,7 +301,10 @@ func TestCalculateCost(t *testing.T) {
 				OutputTokens: 1_000_000,
 			},
 			// $150/1M input + $600/1M output = $750
-			wantCost: 750.0,
+			wantCost:       750.0,
+			wantInputCost:  150.0,
+			wantCachedCost: 0,
+			wantOutputCost: 600.0,
 		},
 		{
 			name:     "unknown model returns zero",
@@ -307,8 +322,20 @@ func TestCalculateCost(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := calculateCost(tt.model, tt.usage)
-			assert.InDelta(t, tt.wantCost, got, 0.001, "cost mismatch")
+			// Make a copy so we can check mutation
+			var u *llm.Usage
+			if tt.usage != nil {
+				c := *tt.usage
+				u = &c
+			}
+			calculateCost(tt.model, u)
+			if u == nil {
+				return // nil case; no further checks
+			}
+			assert.InDelta(t, tt.wantCost, u.Cost, 0.001, "Cost mismatch")
+			assert.InDelta(t, tt.wantInputCost, u.InputCost, 0.001, "InputCost mismatch")
+			assert.InDelta(t, tt.wantCachedCost, u.CachedCost, 0.001, "CachedCost mismatch")
+			assert.InDelta(t, tt.wantOutputCost, u.OutputCost, 0.001, "OutputCost mismatch")
 		})
 	}
 }
@@ -590,11 +617,10 @@ func TestBuildRequest_PromptCacheRetention_ExtendedSupported(t *testing.T) {
 
 	for _, model := range models {
 		t.Run(model, func(t *testing.T) {
-			opts, err := enrichOpts(llm.StreamOptions{
+			opts := llm.StreamOptions{
 				Model:    model,
 				Messages: llm.Messages{&llm.UserMsg{Content: "Hello"}},
-			})
-			require.NoError(t, err)
+			}
 
 			body, err := ccBuildRequest(opts)
 			require.NoError(t, err)
@@ -619,11 +645,10 @@ func TestBuildRequest_PromptCacheRetention_NotSupported(t *testing.T) {
 
 	for _, model := range models {
 		t.Run(model, func(t *testing.T) {
-			opts, err := enrichOpts(llm.StreamOptions{
+			opts := llm.StreamOptions{
 				Model:    model,
 				Messages: llm.Messages{&llm.UserMsg{Content: "Hello"}},
-			})
-			require.NoError(t, err)
+			}
 
 			body, err := ccBuildRequest(opts)
 			require.NoError(t, err)
@@ -667,7 +692,7 @@ func TestEnrichOpts_ReasoningEffortErrorProModel(t *testing.T) {
 	assert.Contains(t, err.Error(), "must be")
 }
 
-func TestEnrichOpts_PromptCacheRetentionSet(t *testing.T) {
+func TestWantsExtendedCache_Set(t *testing.T) {
 	extended := []string{
 		"gpt-5", "gpt-5-mini", "gpt-5-nano",
 		"gpt-5.1", "gpt-5.2",
@@ -677,21 +702,17 @@ func TestEnrichOpts_PromptCacheRetentionSet(t *testing.T) {
 	for _, model := range extended {
 		t.Run(model, func(t *testing.T) {
 			opts := llm.StreamOptions{Model: model, Messages: llm.Messages{&llm.UserMsg{Content: "hi"}}}
-			out, err := enrichOpts(opts)
-			require.NoError(t, err)
-			assert.Equal(t, "24h", out.PromptCacheRetention, "model %s should get 24h retention", model)
+			assert.True(t, wantsExtendedCache(opts), "model %s should want extended cache", model)
 		})
 	}
 }
 
-func TestEnrichOpts_PromptCacheRetentionNotSet(t *testing.T) {
+func TestWantsExtendedCache_NotSet(t *testing.T) {
 	notExtended := []string{"gpt-4o", "gpt-4o-mini", "o1", "o1-pro", "o3", "o3-mini", "o4-mini"}
 	for _, model := range notExtended {
 		t.Run(model, func(t *testing.T) {
 			opts := llm.StreamOptions{Model: model, Messages: llm.Messages{&llm.UserMsg{Content: "hi"}}}
-			out, err := enrichOpts(opts)
-			require.NoError(t, err)
-			assert.Empty(t, out.PromptCacheRetention)
+			assert.False(t, wantsExtendedCache(opts), "model %s should not want extended cache", model)
 		})
 	}
 }
@@ -781,6 +802,14 @@ data: [DONE]
 	// Total: $0.0065
 	expectedCost := 0.0065
 	assert.InDelta(t, expectedCost, usage.Cost, 0.0000001)
+
+	// Verify granular cost breakdown
+	assert.InDelta(t, 0.0005, usage.InputCost, 0.0000001, "InputCost")
+	assert.InDelta(t, 0.001, usage.CachedCost, 0.0000001, "CachedCost")
+	assert.InDelta(t, 0.0, usage.CacheWriteCost, 0.0000001, "CacheWriteCost should be zero for OpenAI")
+	assert.InDelta(t, 0.005, usage.OutputCost, 0.0000001, "OutputCost")
+	// Sanity: breakdown sums to total
+	assert.InDelta(t, usage.Cost, usage.InputCost+usage.CachedCost+usage.CacheWriteCost+usage.OutputCost, 0.0000001, "breakdown should sum to Cost")
 }
 
 // --- Unit tests for Responses API request building ---
@@ -1114,18 +1143,18 @@ data: {"response":{"id":"resp_abc123","model":"gpt-5.1-codex","usage":{"input_to
 
 // --- Unit tests for enrichOpts ---
 
-func TestEnrichOpts_PromptCacheRetention(t *testing.T) {
+func TestWantsExtendedCache_TableDriven(t *testing.T) {
 	tests := []struct {
-		name          string
-		model         string
-		wantRetention string
+		name string
+		model string
+		want bool
 	}{
-		{"gpt-5.4 supports cache", "gpt-5.4", "24h"},
-		{"gpt-5.1-codex supports cache", "gpt-5.1-codex", "24h"},
-		{"gpt-4.1 supports cache", "gpt-4.1", "24h"},
-		{"gpt-4o no extended cache", "gpt-4o", ""},
-		{"gpt-4o-mini no extended cache", "gpt-4o-mini", ""},
-		{"unknown model no cache", "unknown-model", ""},
+		{"gpt-5.4 supports cache", "gpt-5.4", true},
+		{"gpt-5.1-codex supports cache", "gpt-5.1-codex", true},
+		{"gpt-4.1 supports cache", "gpt-4.1", true},
+		{"gpt-4o no extended cache", "gpt-4o", false},
+		{"gpt-4o-mini no extended cache", "gpt-4o-mini", false},
+		{"unknown model no cache", "unknown-model", false},
 	}
 
 	for _, tt := range tests {
@@ -1134,10 +1163,7 @@ func TestEnrichOpts_PromptCacheRetention(t *testing.T) {
 				Model:    tt.model,
 				Messages: llm.Messages{&llm.UserMsg{Content: "test"}},
 			}
-
-			enriched, err := enrichOpts(opts)
-			require.NoError(t, err)
-			assert.Equal(t, tt.wantRetention, enriched.PromptCacheRetention)
+			assert.Equal(t, tt.want, wantsExtendedCache(opts))
 		})
 	}
 }

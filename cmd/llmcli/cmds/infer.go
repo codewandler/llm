@@ -121,7 +121,18 @@ func printVerboseInfo(start *llm.StreamStart, usage *llm.Usage) {
 
 	// Cost
 	if usage != nil && usage.Cost > 0 {
-		fields = append(fields, field{"cost", formatCost(usage.Cost)})
+		hasBreakdown := usage.InputCost > 0 || usage.CachedCost > 0 || usage.CacheWriteCost > 0
+		if hasBreakdown {
+			fields = append(fields, field{"cost", fmt.Sprintf("%s (in %s, cache-r %s, cache-w %s, out %s)",
+				formatCost(usage.Cost),
+				formatCost(usage.InputCost),
+				formatCost(usage.CachedCost),
+				formatCost(usage.CacheWriteCost),
+				formatCost(usage.OutputCost),
+			)})
+		} else {
+			fields = append(fields, field{"cost", formatCost(usage.Cost)})
+		}
 	}
 
 	// Time to first token

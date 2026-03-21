@@ -69,7 +69,7 @@ var modelPricingRegistry = map[string]modelPricing{
 	"claude-3-haiku-20240307":  {InputPrice: 0.25, OutputPrice: 1.25, CachedInputPrice: 0.03, CacheWritePrice: 0.3125},
 }
 
-// CalculateCost computes the cost in USD for the given usage and model.
+// CalculateCost computes the total cost in USD for the given usage and model.
 // Returns 0 if the model is unknown.
 func CalculateCost(model string, usage *llm.Usage) float64 {
 	if usage == nil {
@@ -97,6 +97,34 @@ func CalculateCost(model string, usage *llm.Usage) float64 {
 	cost += (float64(usage.OutputTokens) / 1_000_000) * pricing.OutputPrice
 
 	return cost
+}
+
+// FillCost calculates the cost for the given usage and model and populates
+// both the total Cost field and the granular breakdown fields on the usage struct.
+// No-op if usage is nil or the model is unknown.
+func FillCost(model string, usage *llm.Usage) {
+	if usage == nil {
+		return
+	}
+
+	pricing, ok := modelPricingRegistry[model]
+	if !ok {
+		pricing, ok = matchPricingByPrefix(model)
+		if !ok {
+			return
+		}
+	}
+
+	regularInput := usage.InputTokens - usage.CachedTokens - usage.CacheWriteTokens
+	if regularInput < 0 {
+		regularInput = 0
+	}
+
+	usage.InputCost = (float64(regularInput) / 1_000_000) * pricing.InputPrice
+	usage.CachedCost = (float64(usage.CachedTokens) / 1_000_000) * pricing.CachedInputPrice
+	usage.CacheWriteCost = (float64(usage.CacheWriteTokens) / 1_000_000) * pricing.CacheWritePrice
+	usage.OutputCost = (float64(usage.OutputTokens) / 1_000_000) * pricing.OutputPrice
+	usage.Cost = usage.InputCost + usage.CachedCost + usage.CacheWriteCost + usage.OutputCost
 }
 
 // matchPricingByPrefix tries to find pricing for a model by matching prefixes.

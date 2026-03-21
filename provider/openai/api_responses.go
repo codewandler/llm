@@ -456,7 +456,7 @@ func respHandleEvent(
 			if u.OutputTokensDetails != nil {
 				usage.ReasoningTokens = u.OutputTokensDetails.ReasoningTokens
 			}
-			usage.Cost = calculateCost(meta.requestedModel, usage)
+			calculateCost(meta.requestedModel, usage)
 		}
 		events <- llm.StreamEvent{Type: llm.StreamEventDone, Usage: usage}
 

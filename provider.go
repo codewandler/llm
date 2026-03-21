@@ -24,12 +24,25 @@ type Usage struct {
 	InputTokens  int
 	OutputTokens int
 	TotalTokens  int
-	Cost         float64
 
-	// Detailed breakdown (provider-specific, may be zero)
+	// Cost is the total request cost in USD.
+	// For Anthropic, Bedrock, and OpenAI this is locally calculated from
+	// provider pricing tables and equals the sum of the breakdown fields below.
+	// For OpenRouter this is API-reported by the proxy (already includes cache pricing).
+	Cost float64
+
+	// Detailed token breakdown (provider-specific, may be zero)
 	CachedTokens     int // Prompt tokens served from cache (all providers)
 	CacheWriteTokens int // Prompt tokens written to cache (Anthropic, Bedrock)
 	ReasoningTokens  int // Tokens used for model reasoning
+
+	// Granular cost breakdown in USD (zero if provider/model pricing is unknown).
+	// Sum of InputCost + CachedCost + CacheWriteCost + OutputCost == Cost.
+	// Not populated for OpenRouter (API-reported cost is used instead).
+	InputCost      float64 // Cost of regular (non-cached) input tokens
+	CachedCost     float64 // Cost of cache-read tokens
+	CacheWriteCost float64 // Cost of cache-write tokens
+	OutputCost     float64 // Cost of output tokens
 }
 
 // StreamStart contains metadata about the stream, emitted with StreamEventStart.
@@ -73,7 +86,6 @@ type StreamOptions struct {
 	Tools                []ToolDefinition
 	ToolChoice           ToolChoice      // nil defaults to Auto when Tools provided
 	ReasoningEffort      ReasoningEffort // Controls reasoning for reasoning models (OpenAI)
-	PromptCacheRetention string          // Provider-specific cache retention hint (e.g. "24h" for OpenAI)
 	CacheHint            *CacheHint      // Top-level prompt caching hint (Anthropic auto mode, Bedrock trailing cachePoint, OpenAI extended retention)
 }
 

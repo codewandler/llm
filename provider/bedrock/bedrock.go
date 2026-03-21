@@ -654,7 +654,7 @@ func parseStream(ctx context.Context, output *bedrockruntime.ConverseStreamOutpu
 				if e.Value.Usage.CacheWriteInputTokens != nil {
 					usage.CacheWriteTokens = int(*e.Value.Usage.CacheWriteInputTokens)
 				}
-				usage.Cost = calculateCost(meta.ResolvedModel, &usage)
+				fillCost(meta.ResolvedModel, &usage)
 			}
 			// Emit done event with usage after metadata is received
 			events <- llm.StreamEvent{

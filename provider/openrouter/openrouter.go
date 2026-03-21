@@ -425,11 +425,14 @@ func parseStream(ctx context.Context, body io.ReadCloser, events chan<- llm.Stre
 				InputTokens:  chunk.Usage.PromptTokens,
 				OutputTokens: chunk.Usage.CompletionTokens,
 				TotalTokens:  chunk.Usage.TotalTokens,
-				Cost:         chunk.Usage.Cost,
+				// Cost is API-reported by OpenRouter; it already incorporates
+				// cache read/write pricing for the underlying model.
+				Cost: chunk.Usage.Cost,
 			}
 			if chunk.Usage.PromptTokensDetails != nil {
 				usage.CachedTokens = chunk.Usage.PromptTokensDetails.CachedTokens
 			}
+			// CacheWriteTokens is not reported by OpenRouter's API; left as 0.
 			if chunk.Usage.CompletionTokensDetails != nil {
 				usage.ReasoningTokens = chunk.Usage.CompletionTokensDetails.ReasoningTokens
 			}

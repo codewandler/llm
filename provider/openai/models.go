@@ -300,27 +300,31 @@ func mapReasoningEffort(model string, effort llm.ReasoningEffort) (string, error
 	return "", fmt.Errorf("unknown reasoning_effort value %q", effort)
 }
 
-// calculateCost computes the cost in USD for the given usage and model.
-// Returns 0 if the model is unknown.
-func calculateCost(model string, usage *llm.Usage) float64 {
+// calculateCost computes the cost in USD for the given usage and model and
+// populates both the total Cost field and the granular breakdown fields.
+// No-op if usage is nil or the model is unknown.
+func calculateCost(model string, usage *llm.Usage) {
 	if usage == nil {
-		return 0
+		return
 	}
 
 	info, err := getModelInfo(model)
 	if err != nil {
-		return 0 // unknown model, can't calculate cost
+		return // unknown model, can't calculate cost
 	}
 
-	// Regular input tokens (non-cached)
-	regularInput := usage.InputTokens - usage.CachedTokens
+	// Regular input tokens (non-cached). Subtract both CachedTokens and
+	// CacheWriteTokens defensively; OpenAI currently only reports CachedTokens
+	// but may report write tokens in future API versions.
+	regularInput := usage.InputTokens - usage.CachedTokens - usage.CacheWriteTokens
 	if regularInput < 0 {
 		regularInput = 0
 	}
 
-	cost := (float64(regularInput) / 1_000_000) * info.InputPrice
-	cost += (float64(usage.CachedTokens) / 1_000_000) * info.CachedInputPrice
-	cost += (float64(usage.OutputTokens) / 1_000_000) * info.OutputPrice
-
-	return cost
+	usage.InputCost = (float64(regularInput) / 1_000_000) * info.InputPrice
+	usage.CachedCost = (float64(usage.CachedTokens) / 1_000_000) * info.CachedInputPrice
+	// CacheWriteCost is 0 for OpenAI (not reported), but set for consistency.
+	usage.CacheWriteCost = (float64(usage.CacheWriteTokens) / 1_000_000) * info.CachedInputPrice
+	usage.OutputCost = (float64(usage.OutputTokens) / 1_000_000) * info.OutputPrice
+	usage.Cost = usage.InputCost + usage.CachedCost + usage.CacheWriteCost + usage.OutputCost
 }

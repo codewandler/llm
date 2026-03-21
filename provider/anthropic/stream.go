@@ -159,7 +159,7 @@ func ParseStream(ctx context.Context, body io.ReadCloser, events chan<- llm.Stre
 			}
 
 		case "message_stop":
-			usage.Cost = CalculateCost(meta.ResolvedModel, &usage)
+			FillCost(meta.ResolvedModel, &usage)
 			events <- llm.StreamEvent{Type: llm.StreamEventDone, Usage: &usage}
 			return
 

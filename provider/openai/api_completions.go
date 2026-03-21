@@ -148,9 +148,10 @@ func ccBuildRequest(opts llm.StreamOptions) ([]byte, error) {
 		r.ReasoningEffort = string(opts.ReasoningEffort)
 	}
 
-	// Prompt cache retention (set by enrichOpts for models that support it).
-	if opts.PromptCacheRetention != "" {
-		r.PromptCacheRetention = opts.PromptCacheRetention
+	// Prompt cache retention: 24h for models that support it or when explicitly
+	// requested via CacheHint.TTL == "1h".
+	if wantsExtendedCache(opts) {
+		r.PromptCacheRetention = "24h"
 	}
 
 	// Messages
@@ -269,7 +270,7 @@ func ccParseStream(ctx context.Context, body io.ReadCloser, events chan<- llm.St
 		data := strings.TrimPrefix(line, "data: ")
 		if data == "[DONE]" {
 			if finalUsage != nil {
-				finalUsage.Cost = calculateCost(meta.requestedModel, finalUsage)
+				calculateCost(meta.requestedModel, finalUsage)
 			}
 			events <- llm.StreamEvent{Type: llm.StreamEventDone, Usage: finalUsage}
 			return

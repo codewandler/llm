@@ -282,3 +282,37 @@ func calculateCost(model string, usage *llm.Usage) float64 {
 
 	return cost
 }
+
+// fillCost calculates the cost for the given usage and model and populates
+// both the total Cost field and the granular breakdown fields on the usage struct.
+// No-op if usage is nil or the model is unknown.
+func fillCost(model string, usage *llm.Usage) {
+	if usage == nil {
+		return
+	}
+
+	// Strip inference profile prefix (us., eu., global., etc.) to match registry
+	modelID := model
+	if idx := strings.Index(model, "."); idx != -1 {
+		prefix := model[:idx]
+		if prefix == PrefixUS || prefix == PrefixEU || prefix == PrefixGlobal || prefix == PrefixAPAC || prefix == "ap" {
+			modelID = model[idx+1:]
+		}
+	}
+
+	info, ok := modelRegistry[modelID]
+	if !ok {
+		return
+	}
+
+	regularInput := usage.InputTokens - usage.CachedTokens - usage.CacheWriteTokens
+	if regularInput < 0 {
+		regularInput = 0
+	}
+
+	usage.InputCost = (float64(regularInput) / 1_000_000) * info.InputPrice
+	usage.CachedCost = (float64(usage.CachedTokens) / 1_000_000) * info.CachedInputPrice
+	usage.CacheWriteCost = (float64(usage.CacheWriteTokens) / 1_000_000) * info.CacheWritePrice
+	usage.OutputCost = (float64(usage.OutputTokens) / 1_000_000) * info.OutputPrice
+	usage.Cost = usage.InputCost + usage.CachedCost + usage.CacheWriteCost + usage.OutputCost
+}
