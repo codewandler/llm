@@ -142,7 +142,8 @@ func (p *Provider) CreateStream(ctx context.Context, opts llm.StreamOptions) (<-
 }
 
 // enrichOpts resolves model-specific fields before dispatch.
-// Currently handles reasoning effort mapping and prompt cache retention.
+// Currently handles reasoning effort mapping only; cache retention is
+// determined at request-build time by wantsExtendedCache.
 func enrichOpts(opts llm.StreamOptions) (llm.StreamOptions, error) {
 	if opts.ReasoningEffort != "" {
 		mapped, err := mapReasoningEffort(opts.Model, opts.ReasoningEffort)
@@ -151,16 +152,16 @@ func enrichOpts(opts llm.StreamOptions) (llm.StreamOptions, error) {
 		}
 		opts.ReasoningEffort = llm.ReasoningEffort(mapped)
 	}
-
-	// Explicit CacheHint TTL "1h" overrides model-based detection.
-	if opts.CacheHint != nil && opts.CacheHint.Enabled && opts.CacheHint.TTL == "1h" {
-		opts.PromptCacheRetention = "24h"
-		return opts, nil
-	}
-
-	if info, err := getModelInfo(opts.Model); err == nil && info.SupportsExtendedCache {
-		opts.PromptCacheRetention = "24h"
-	}
-
 	return opts, nil
+}
+
+// wantsExtendedCache reports whether the request should use 24h prompt cache
+// retention. An explicit CacheHint with TTL "1h" takes priority; otherwise
+// the model registry is consulted for automatic extended-cache support.
+func wantsExtendedCache(opts llm.StreamOptions) bool {
+	if opts.CacheHint != nil && opts.CacheHint.Enabled && opts.CacheHint.TTL == "1h" {
+		return true
+	}
+	info, err := getModelInfo(opts.Model)
+	return err == nil && info.SupportsExtendedCache
 }

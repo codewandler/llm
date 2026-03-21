@@ -1,6 +1,7 @@
 package openai
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -10,8 +11,8 @@ import (
 )
 
 func TestEnrichOpts_CacheHintTTL_OneHour(t *testing.T) {
-	// CacheHint with TTL "1h" should set PromptCacheRetention to "24h"
-	// regardless of model capability.
+	// CacheHint with TTL "1h" should make wantsExtendedCache return true,
+	// and the built request should carry prompt_cache_retention: "24h".
 	opts := llm.StreamOptions{
 		Model: "gpt-4o-mini", // doesn't normally support extended cache
 		Messages: llm.Messages{
@@ -22,11 +23,18 @@ func TestEnrichOpts_CacheHintTTL_OneHour(t *testing.T) {
 
 	enriched, err := enrichOpts(opts)
 	require.NoError(t, err)
-	assert.Equal(t, "24h", enriched.PromptCacheRetention)
+	assert.True(t, wantsExtendedCache(enriched), "CacheHint TTL=1h should request extended cache")
+
+	body, err := ccBuildRequest(enriched)
+	require.NoError(t, err)
+	var req map[string]any
+	require.NoError(t, json.Unmarshal(body, &req))
+	assert.Equal(t, "24h", req["prompt_cache_retention"])
 }
 
 func TestEnrichOpts_CacheHintTTL_DefaultDoesNotForceExtended(t *testing.T) {
-	// CacheHint with no explicit TTL (or TTL != "1h") should NOT force "24h"
+	// CacheHint with no TTL should not trigger extended cache on a model
+	// that doesn't support it.
 	opts := llm.StreamOptions{
 		Model: "gpt-4o-mini",
 		Messages: llm.Messages{
@@ -37,8 +45,14 @@ func TestEnrichOpts_CacheHintTTL_DefaultDoesNotForceExtended(t *testing.T) {
 
 	enriched, err := enrichOpts(opts)
 	require.NoError(t, err)
-	// gpt-4o-mini doesn't support extended cache, so PromptCacheRetention stays ""
-	assert.Equal(t, "", enriched.PromptCacheRetention)
+	assert.False(t, wantsExtendedCache(enriched), "no TTL on non-extended model should not request 24h cache")
+
+	body, err := ccBuildRequest(enriched)
+	require.NoError(t, err)
+	var req map[string]any
+	require.NoError(t, json.Unmarshal(body, &req))
+	_, exists := req["prompt_cache_retention"]
+	assert.False(t, exists)
 }
 
 func TestEnrichOpts_CacheHintDisabled_NoEffect(t *testing.T) {
@@ -53,14 +67,21 @@ func TestEnrichOpts_CacheHintDisabled_NoEffect(t *testing.T) {
 	enriched, err := enrichOpts(opts)
 	require.NoError(t, err)
 	// Disabled hint with TTL "1h" should not trigger extended cache
-	assert.Equal(t, "", enriched.PromptCacheRetention)
+	assert.False(t, wantsExtendedCache(enriched), "disabled CacheHint should not request extended cache")
+
+	body, err := ccBuildRequest(enriched)
+	require.NoError(t, err)
+	var req map[string]any
+	require.NoError(t, json.Unmarshal(body, &req))
+	_, exists := req["prompt_cache_retention"]
+	assert.False(t, exists)
 }
 
 func TestEnrichOpts_NoCacheHint_ModelBasedDetectionStillWorks(t *testing.T) {
-	// Without CacheHint, model-based auto-detection should still set "24h" for
-	// models that support it.
+	// Without CacheHint, model-based auto-detection should still request 24h
+	// for models that support it.
 	opts := llm.StreamOptions{
-		Model: "codex-mini-latest", // Codex models support extended cache
+		Model: "gpt-5.1-codex", // known extended-cache model in registry
 		Messages: llm.Messages{
 			&llm.UserMsg{Content: "Hello"},
 		},
@@ -68,7 +89,5 @@ func TestEnrichOpts_NoCacheHint_ModelBasedDetectionStillWorks(t *testing.T) {
 
 	enriched, err := enrichOpts(opts)
 	require.NoError(t, err)
-	// Model-based detection should still work when CacheHint is nil
-	// (exact value depends on registry; just check no panic and no error)
-	_ = enriched
+	assert.True(t, wantsExtendedCache(enriched), "extended-cache model should auto-detect 24h retention")
 }
