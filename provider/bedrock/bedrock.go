@@ -303,6 +303,51 @@ func (p *Provider) CreateStream(ctx context.Context, opts llm.StreamOptions) (<-
 
 // --- Request building ---
 
+// isClaudeModel returns true if the model ID refers to an Anthropic Claude model
+// on Bedrock. Only Claude models support cachePoint blocks.
+func isClaudeModel(modelID string) bool {
+	return strings.HasPrefix(modelID, "anthropic.claude") ||
+		strings.Contains(modelID, "anthropic.claude")
+}
+
+// buildBedrockCachePoint creates a CachePointBlock from a CacheHint.
+// Returns nil if the hint is nil, not enabled, or the model doesn't support caching.
+func buildBedrockCachePoint(h *llm.CacheHint, modelID string) *types.CachePointBlock {
+	if h == nil || !h.Enabled || !isClaudeModel(modelID) {
+		return nil
+	}
+	cp := &types.CachePointBlock{Type: types.CachePointTypeDefault}
+	if h.TTL == "1h" {
+		cp.Ttl = types.CacheTTLOneHour
+	}
+	return cp
+}
+
+// hasBedrockPerMessageCacheHints returns true if any message carries an enabled CacheHint.
+func hasBedrockPerMessageCacheHints(msgs llm.Messages) bool {
+	for _, msg := range msgs {
+		switch m := msg.(type) {
+		case *llm.SystemMsg:
+			if m.CacheHint != nil && m.CacheHint.Enabled {
+				return true
+			}
+		case *llm.UserMsg:
+			if m.CacheHint != nil && m.CacheHint.Enabled {
+				return true
+			}
+		case *llm.AssistantMsg:
+			if m.CacheHint != nil && m.CacheHint.Enabled {
+				return true
+			}
+		case *llm.ToolCallResult:
+			if m.CacheHint != nil && m.CacheHint.Enabled {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func buildRequest(opts llm.StreamOptions) (*bedrockruntime.ConverseStreamInput, error) {
 	input := &bedrockruntime.ConverseStreamInput{
 		ModelId: aws.String(opts.Model),
@@ -320,13 +365,24 @@ func buildRequest(opts llm.StreamOptions) (*bedrockruntime.ConverseStreamInput, 
 			system = append(system, &types.SystemContentBlockMemberText{
 				Value: m.Content,
 			})
+			// Append cachePoint after this system block if requested
+			if cp := buildBedrockCachePoint(m.CacheHint, opts.Model); cp != nil {
+				system = append(system, &types.SystemContentBlockMemberCachePoint{
+					Value: *cp,
+				})
+			}
 
 		case *llm.UserMsg:
+			content := []types.ContentBlock{
+				&types.ContentBlockMemberText{Value: m.Content},
+			}
+			// Append cachePoint after content if requested
+			if cp := buildBedrockCachePoint(m.CacheHint, opts.Model); cp != nil {
+				content = append(content, &types.ContentBlockMemberCachePoint{Value: *cp})
+			}
 			messages = append(messages, types.Message{
-				Role: types.ConversationRoleUser,
-				Content: []types.ContentBlock{
-					&types.ContentBlockMemberText{Value: m.Content},
-				},
+				Role:    types.ConversationRoleUser,
+				Content: content,
 			})
 
 		case *llm.AssistantMsg:
@@ -348,6 +404,10 @@ func buildRequest(opts llm.StreamOptions) (*bedrockruntime.ConverseStreamInput, 
 					},
 				})
 			}
+			// Append cachePoint after all content blocks if requested
+			if cp := buildBedrockCachePoint(m.CacheHint, opts.Model); cp != nil {
+				content = append(content, &types.ContentBlockMemberCachePoint{Value: *cp})
+			}
 			messages = append(messages, types.Message{
 				Role:    types.ConversationRoleAssistant,
 				Content: content,
@@ -357,6 +417,7 @@ func buildRequest(opts llm.StreamOptions) (*bedrockruntime.ConverseStreamInput, 
 			// Bedrock expects tool results in a user message with toolResult content blocks
 			// Collect consecutive tool results
 			var toolResults []types.ContentBlock
+			startI := i
 			for ; i < len(opts.Messages); i++ {
 				tr, ok := opts.Messages[i].(*llm.ToolCallResult)
 				if !ok {
@@ -376,6 +437,14 @@ func buildRequest(opts llm.StreamOptions) (*bedrockruntime.ConverseStreamInput, 
 					},
 				})
 			}
+			// Apply cache hint from the last ToolCallResult in this batch
+			if i > startI {
+				if lastTR, ok := opts.Messages[i-1].(*llm.ToolCallResult); ok {
+					if cp := buildBedrockCachePoint(lastTR.CacheHint, opts.Model); cp != nil {
+						toolResults = append(toolResults, &types.ContentBlockMemberCachePoint{Value: *cp})
+					}
+				}
+			}
 			i-- // back up one since loop will increment
 			messages = append(messages, types.Message{
 				Role:    types.ConversationRoleUser,
@@ -388,6 +457,19 @@ func buildRequest(opts llm.StreamOptions) (*bedrockruntime.ConverseStreamInput, 
 		input.System = system
 	}
 	input.Messages = messages
+
+	// Apply top-level automatic cache hint: append a cachePoint to the last message
+	// when no per-message hints are present. Only applies to Claude models.
+	if opts.CacheHint != nil && opts.CacheHint.Enabled &&
+		!hasBedrockPerMessageCacheHints(opts.Messages) &&
+		isClaudeModel(opts.Model) &&
+		len(input.Messages) > 0 {
+		cp := buildBedrockCachePoint(opts.CacheHint, opts.Model)
+		if cp != nil {
+			last := &input.Messages[len(input.Messages)-1]
+			last.Content = append(last.Content, &types.ContentBlockMemberCachePoint{Value: *cp})
+		}
+	}
 
 	// Convert tools
 	if len(opts.Tools) > 0 {
@@ -565,6 +647,12 @@ func parseStream(ctx context.Context, output *bedrockruntime.ConverseStreamOutpu
 				}
 				if e.Value.Usage.TotalTokens != nil {
 					usage.TotalTokens = int(*e.Value.Usage.TotalTokens)
+				}
+				if e.Value.Usage.CacheReadInputTokens != nil {
+					usage.CachedTokens = int(*e.Value.Usage.CacheReadInputTokens)
+				}
+				if e.Value.Usage.CacheWriteInputTokens != nil {
+					usage.CacheWriteTokens = int(*e.Value.Usage.CacheWriteInputTokens)
 				}
 				usage.Cost = calculateCost(meta.ResolvedModel, &usage)
 			}

@@ -152,6 +152,12 @@ func enrichOpts(opts llm.StreamOptions) (llm.StreamOptions, error) {
 		opts.ReasoningEffort = llm.ReasoningEffort(mapped)
 	}
 
+	// Explicit CacheHint TTL "1h" overrides model-based detection.
+	if opts.CacheHint != nil && opts.CacheHint.Enabled && opts.CacheHint.TTL == "1h" {
+		opts.PromptCacheRetention = "24h"
+		return opts, nil
+	}
+
 	if info, err := getModelInfo(opts.Model); err == nil && info.SupportsExtendedCache {
 		opts.PromptCacheRetention = "24h"
 	}

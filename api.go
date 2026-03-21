@@ -51,7 +51,8 @@ type Message interface {
 
 // SystemMsg contains a system prompt.
 type SystemMsg struct {
-	Content string
+	Content   string
+	CacheHint *CacheHint
 }
 
 func (m *SystemMsg) Role() Role { return RoleSystem }
@@ -74,7 +75,8 @@ func (m *SystemMsg) messageMarker() {}
 
 // UserMsg contains user input.
 type UserMsg struct {
-	Content string
+	Content   string
+	CacheHint *CacheHint
 }
 
 func (m *UserMsg) Role() Role { return RoleUser }
@@ -99,6 +101,7 @@ func (m *UserMsg) messageMarker() {}
 type AssistantMsg struct {
 	Content   string
 	ToolCalls []ToolCall
+	CacheHint *CacheHint
 }
 
 func (m *AssistantMsg) Role() Role { return RoleAssistant }
@@ -131,6 +134,7 @@ type ToolCallResult struct {
 	ToolCallID string
 	Output     string
 	IsError    bool
+	CacheHint  *CacheHint
 }
 
 func (m *ToolCallResult) Role() Role { return RoleTool }
@@ -231,6 +235,25 @@ type ToolChoiceTool struct {
 }
 
 func (ToolChoiceTool) toolChoice() {}
+
+// --- CacheHint ---
+
+// CacheHint requests provider-side prompt caching for a message or request.
+// It is a provider-neutral instruction: Anthropic and Bedrock translate it to
+// explicit cache breakpoints on content blocks; OpenAI caching is always
+// automatic and ignores per-message hints, but honours TTL on
+// StreamOptions.CacheHint.
+type CacheHint struct {
+	// Enabled marks this content as a cache breakpoint candidate.
+	// For Anthropic/Bedrock: emits cache_control / cachePoint at this position.
+	// For OpenAI: no-op (caching is automatic).
+	Enabled bool
+
+	// TTL requests a specific cache duration.
+	// Valid values: "" (provider default, typically 5m), "5m", "1h".
+	// The "1h" option requires a supporting model (Claude Haiku/Sonnet/Opus 4.5+).
+	TTL string
+}
 
 // --- ReasoningEffort ---
 

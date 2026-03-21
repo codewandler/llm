@@ -84,12 +84,16 @@ func ParseStream(ctx context.Context, body io.ReadCloser, events chan<- llm.Stre
 					ID    string `json:"id"`
 					Model string `json:"model"`
 					Usage struct {
-						InputTokens int `json:"input_tokens"`
+						InputTokens              int `json:"input_tokens"`
+						CacheCreationInputTokens int `json:"cache_creation_input_tokens"`
+						CacheReadInputTokens     int `json:"cache_read_input_tokens"`
 					} `json:"usage"`
 				} `json:"message"`
 			}
 			if err := json.Unmarshal([]byte(data), &evt); err == nil {
 				usage.InputTokens = evt.Message.Usage.InputTokens
+				usage.CacheWriteTokens = evt.Message.Usage.CacheCreationInputTokens
+				usage.CachedTokens = evt.Message.Usage.CacheReadInputTokens
 
 				// Emit StreamEventStart with metadata
 				events <- llm.StreamEvent{

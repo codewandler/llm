@@ -114,6 +114,11 @@ func printVerboseInfo(start *llm.StreamStart, usage *llm.Usage) {
 		fields = append(fields, field{"tokens", fmt.Sprintf("%d in, %d out", usage.InputTokens, usage.OutputTokens)})
 	}
 
+	// Cache usage (shown only when provider returned cache data)
+	if usage != nil && (usage.CachedTokens > 0 || usage.CacheWriteTokens > 0) {
+		fields = append(fields, field{"cache", fmt.Sprintf("%d read, %d written", usage.CachedTokens, usage.CacheWriteTokens)})
+	}
+
 	// Cost
 	if usage != nil && usage.Cost > 0 {
 		fields = append(fields, field{"cost", formatCost(usage.Cost)})

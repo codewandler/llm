@@ -84,23 +84,33 @@ func TestProviders(t *testing.T) {
 	tests := []struct {
 		name     string
 		provider llm.Provider
+		model    string // explicit model; empty = use provider.Models()[0].ID
 		skip     bool   // Set to true for providers requiring external setup
 		skipMsg  string // Reason for skipping
 	}{
 		{
 			name:     "fake",
 			provider: fake.NewProvider(),
-			skip:     false,
 		},
 		{
 			name:     "claude",
-			provider: claude.New(), // Uses local token provider by default
+			provider: claude.New(),
 			skip:     !isClaudeAvailable(),
 			skipMsg:  "requires local Claude credentials (~/.claude/.credentials.json)",
 		},
 		{
-			name:     "openai",
+			// Chat Completions API path
+			name:     "openai/completions",
 			provider: openai.New(llm.APIKeyFromEnv("OPENAI_KEY")),
+			model:    openai.ModelGPT4oMini,
+			skip:     os.Getenv("OPENAI_KEY") == "",
+			skipMsg:  "requires OPENAI_KEY",
+		},
+		{
+			// Responses API path (codex models route to /v1/responses)
+			name:     "openai/responses",
+			provider: openai.New(llm.APIKeyFromEnv("OPENAI_KEY")),
+			model:    openai.ModelGPT51CodexMini,
 			skip:     os.Getenv("OPENAI_KEY") == "",
 			skipMsg:  "requires OPENAI_KEY",
 		},
@@ -113,6 +123,7 @@ func TestProviders(t *testing.T) {
 		{
 			name:     "bedrock",
 			provider: bedrock.New(bedrock.WithRegion(getAWSRegion())),
+			model:    bedrock.ModelHaikuLatest,
 			skip:     !isBedrockAvailable(),
 			skipMsg:  "requires AWS credentials (AWS_ACCESS_KEY_ID or ~/.aws/credentials)",
 		},
@@ -134,17 +145,14 @@ func TestProviders(t *testing.T) {
 
 			ctx := context.Background()
 
-			// Get model ID to use for tests
+			// Resolve model: explicit override > provider default
 			getModelID := func() string {
-				// Special handling for Ollama to avoid non-chat models
+				if tt.model != "" {
+					return tt.model
+				}
 				if tt.name == "ollama" {
 					return ollama.ModelDefault
 				}
-				// Special handling for Bedrock - use constant, provider resolves inference profile
-				if tt.name == "bedrock" {
-					return bedrock.ModelHaikuLatest
-				}
-				// Fallback to static models
 				return tt.provider.Models()[0].ID
 			}
 

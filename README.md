@@ -600,6 +600,129 @@ The OpenAI provider maps `ReasoningEffort` values to valid API values per model:
 
 **Note:** If not specified, the parameter is omitted and the OpenAI API uses its default for the model.
 
+## Prompt Caching
+
+Prompt caching reduces cost and latency on repeated requests by reusing previously
+processed input tokens. Behaviour varies by provider — for most use cases, set a
+`CacheHint` on `StreamOptions` or on individual messages and the library handles the rest.
+
+### Quick Start
+
+```go
+import "github.com/codewandler/llm"
+
+// Enable automatic caching for the entire conversation prefix.
+// Works for Anthropic, Bedrock (Claude), and OpenAI (always automatic).
+events, err := provider.CreateStream(ctx, llm.StreamOptions{
+    Model: "anthropic/claude-sonnet-4-6",
+    Messages: llm.Messages{
+        &llm.SystemMsg{Content: largeSystemPrompt},
+        &llm.UserMsg{Content: "Hello!"},
+    },
+    CacheHint: &llm.CacheHint{Enabled: true},
+})
+```
+
+On the **first call**, the provider writes the prompt prefix to cache
+(`CacheWriteTokens > 0`). On **subsequent calls within the TTL window** with the same
+prefix, the provider reads from cache (`CachedTokens > 0`, cost and latency drop
+significantly).
+
+Inspect cache usage via the `StreamEventDone` event:
+
+```go
+for event := range events {
+    if event.Type == llm.StreamEventDone && event.Usage != nil {
+        fmt.Printf("cached read:  %d tokens\n", event.Usage.CachedTokens)
+        fmt.Printf("cached write: %d tokens\n", event.Usage.CacheWriteTokens)
+        fmt.Printf("cost:         $%.6f\n",     event.Usage.Cost)
+    }
+}
+```
+
+### Controlling Cache TTL
+
+The default TTL is **5 minutes** (refreshed on each cache hit, at no extra cost).
+For workloads with longer processing times, request a **1-hour TTL**:
+
+```go
+events, err := provider.CreateStream(ctx, llm.StreamOptions{
+    Model:     "anthropic/claude-sonnet-4-6",
+    Messages:  messages,
+    CacheHint: &llm.CacheHint{Enabled: true, TTL: "1h"},
+})
+```
+
+> ⚠️ 1-hour TTL is only available on Claude Haiku 4.5, Sonnet 4.5, and Opus 4.5
+> (Anthropic direct and Bedrock). For other models the `TTL: "1h"` hint silently falls
+> back to the default 5-minute TTL.
+
+### Fine-Grained Cache Breakpoints (Advanced)
+
+For requests with multiple sections that change at different rates — e.g. static tool
+definitions and a growing conversation — attach a `CacheHint` directly to individual
+messages. The provider caches everything up to each marked block (up to 4 breakpoints
+per request on Anthropic and Bedrock).
+
+```go
+events, err := provider.CreateStream(ctx, llm.StreamOptions{
+    Model: "anthropic/claude-sonnet-4-6",
+    Messages: llm.Messages{
+        // Cache the large static system prompt at this breakpoint
+        &llm.SystemMsg{
+            Content:   largeSystemPrompt,
+            CacheHint: &llm.CacheHint{Enabled: true},
+        },
+        &llm.UserMsg{Content: "Turn 1"},
+        &llm.AssistantMsg{Content: "Response 1"},
+        // Also cache up to the last user turn
+        &llm.UserMsg{
+            Content:   "Turn 2",
+            CacheHint: &llm.CacheHint{Enabled: true},
+        },
+    },
+})
+```
+
+Per-message hints and `StreamOptions.CacheHint` are mutually exclusive: if any message
+carries a `CacheHint`, the top-level field is ignored.
+
+### Provider Support Summary
+
+| Provider | Mode | Annotation required | TTL options |
+|---|---|---|---|
+| **Anthropic** (direct) | Explicit breakpoints | `CacheHint` on messages or `StreamOptions` | `"5m"` (default), `"1h"` (selected models) |
+| **Bedrock** (Claude) | Explicit breakpoints | `CacheHint` on messages or `StreamOptions` | `"5m"` (default), `"1h"` (selected models) |
+| **OpenAI** | Fully automatic | None (always active) | `"in_memory"` default, `"1h"` via `CacheHint{TTL: "1h"}` |
+| **Claude OAuth** | Same as Anthropic | Same as Anthropic | Same as Anthropic |
+| **Ollama / OpenRouter** | Not supported | Ignored | — |
+
+### Minimum Token Threshold
+
+Providers only cache prompts above a minimum token count:
+
+| Provider | Minimum |
+|---|---|
+| Anthropic direct | 1,024 tokens |
+| Bedrock (Claude) | 2,048 tokens (varies by model) |
+| OpenAI | 1,024 tokens |
+
+Cache hints on smaller prompts are silently ignored — no error is returned. The
+`CacheWriteTokens` and `CachedTokens` fields in `Usage` will be `0`.
+
+### Pricing
+
+Cache reads are significantly cheaper than regular input tokens:
+
+| Provider | Cache write (relative) | Cache read (relative) |
+|---|---|---|
+| Anthropic | 1.25× input price | 0.1× input price |
+| Bedrock (Claude) | 1.25× input price | 0.1× input price |
+| OpenAI | 1× input price (first call) | 0.5× input price |
+
+`Usage.Cost` in the `StreamEventDone` event accounts for cache read and write pricing
+automatically.
+
 ## Multi-Turn Conversations
 
 Build conversations by appending messages:

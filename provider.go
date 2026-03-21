@@ -27,8 +27,9 @@ type Usage struct {
 	Cost         float64
 
 	// Detailed breakdown (provider-specific, may be zero)
-	CachedTokens    int // Prompt tokens served from cache
-	ReasoningTokens int // Tokens used for model reasoning
+	CachedTokens     int // Prompt tokens served from cache (all providers)
+	CacheWriteTokens int // Prompt tokens written to cache (Anthropic, Bedrock)
+	ReasoningTokens  int // Tokens used for model reasoning
 }
 
 // StreamStart contains metadata about the stream, emitted with StreamEventStart.
@@ -73,6 +74,7 @@ type StreamOptions struct {
 	ToolChoice           ToolChoice      // nil defaults to Auto when Tools provided
 	ReasoningEffort      ReasoningEffort // Controls reasoning for reasoning models (OpenAI)
 	PromptCacheRetention string          // Provider-specific cache retention hint (e.g. "24h" for OpenAI)
+	CacheHint            *CacheHint      // Top-level prompt caching hint (Anthropic auto mode, Bedrock trailing cachePoint, OpenAI extended retention)
 }
 
 // Validate checks that the options are valid.

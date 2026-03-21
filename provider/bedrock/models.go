@@ -102,11 +102,13 @@ const (
 
 // modelDef defines a single model with all its metadata.
 type modelDef struct {
-	ID          string   // Bedrock model ID (use constants above)
-	Name        string   // Human-readable name
-	InputPrice  float64  // USD per 1M input tokens (0 if unknown)
-	OutputPrice float64  // USD per 1M output tokens (0 if unknown)
-	Prefixes    []string // Inference profile prefixes (nil = no profile)
+	ID               string   // Bedrock model ID (use constants above)
+	Name             string   // Human-readable name
+	InputPrice       float64  // USD per 1M input tokens (0 if unknown)
+	OutputPrice      float64  // USD per 1M output tokens (0 if unknown)
+	CachedInputPrice float64  // USD per 1M cache read tokens (~0.1× input)
+	CacheWritePrice  float64  // USD per 1M cache write tokens (~1.25× input)
+	Prefixes         []string // Inference profile prefixes (nil = no profile)
 }
 
 // Common prefix combinations for inference profiles.
@@ -122,75 +124,75 @@ var (
 // Pricing data from AWS Bedrock pricing page (us-east-1 region).
 var allModels = []modelDef{
 	// -------------------------------------------------------------------------
-	// Anthropic Claude
+	// Anthropic Claude (cache pricing: read=0.1×input, write=1.25×input)
 	// -------------------------------------------------------------------------
-	{ModelOpusLatest, "Claude Opus 4.6", 5.00, 25.00, prefixesEUUSGlobal},
-	{ModelSonnetLatest, "Claude Sonnet 4.6", 3.00, 15.00, prefixesEUUSGlobal},
-	{ModelHaikuLatest, "Claude Haiku 4.5", 1.00, 5.00, prefixesEUUSGlobal},
-	{ModelOpus45, "Claude Opus 4.5", 5.00, 25.00, prefixesEUUSGlobal},
-	{ModelSonnet45, "Claude Sonnet 4.5", 3.00, 15.00, prefixesEUUSGlobal},
-	{ModelSonnet37, "Claude 3.7 Sonnet", 3.00, 15.00, prefixesEUUSAPAC},
-	{ModelSonnet35, "Claude 3.5 Sonnet", 3.00, 15.00, prefixesEUUSAPAC},
-	{ModelHaiku3, "Claude 3 Haiku", 0.25, 1.25, prefixesEUUSAPAC},
+	{ModelOpusLatest, "Claude Opus 4.6", 5.00, 25.00, 0.50, 6.25, prefixesEUUSGlobal},
+	{ModelSonnetLatest, "Claude Sonnet 4.6", 3.00, 15.00, 0.30, 3.75, prefixesEUUSGlobal},
+	{ModelHaikuLatest, "Claude Haiku 4.5", 1.00, 5.00, 0.10, 1.25, prefixesEUUSGlobal},
+	{ModelOpus45, "Claude Opus 4.5", 5.00, 25.00, 0.50, 6.25, prefixesEUUSGlobal},
+	{ModelSonnet45, "Claude Sonnet 4.5", 3.00, 15.00, 0.30, 3.75, prefixesEUUSGlobal},
+	{ModelSonnet37, "Claude 3.7 Sonnet", 3.00, 15.00, 0.30, 3.75, prefixesEUUSAPAC},
+	{ModelSonnet35, "Claude 3.5 Sonnet", 3.00, 15.00, 0.30, 3.75, prefixesEUUSAPAC},
+	{ModelHaiku3, "Claude 3 Haiku", 0.25, 1.25, 0.025, 0.3125, prefixesEUUSAPAC},
 
 	// -------------------------------------------------------------------------
 	// Amazon Nova
 	// -------------------------------------------------------------------------
-	{ModelNovaPremier, "Amazon Nova Premier", 2.50, 10.00, prefixesUSOnly},
-	{ModelNovaPro, "Amazon Nova Pro", 0.80, 3.20, prefixesEUUSAPAC},
-	{ModelNova2Lite, "Amazon Nova 2 Lite", 0.06, 0.24, prefixesEUUSGlobal},
-	{ModelNovaLite, "Amazon Nova Lite", 0.06, 0.24, prefixesEUUSAPAC},
-	{ModelNovaMicro, "Amazon Nova Micro", 0.035, 0.14, prefixesEUUSAPAC},
+	{ModelNovaPremier, "Amazon Nova Premier", 2.50, 10.00, 0, 0, prefixesUSOnly},
+	{ModelNovaPro, "Amazon Nova Pro", 0.80, 3.20, 0, 0, prefixesEUUSAPAC},
+	{ModelNova2Lite, "Amazon Nova 2 Lite", 0.06, 0.24, 0, 0, prefixesEUUSGlobal},
+	{ModelNovaLite, "Amazon Nova Lite", 0.06, 0.24, 0, 0, prefixesEUUSAPAC},
+	{ModelNovaMicro, "Amazon Nova Micro", 0.035, 0.14, 0, 0, prefixesEUUSAPAC},
 
 	// -------------------------------------------------------------------------
 	// Cohere
 	// -------------------------------------------------------------------------
-	{ModelCommandRPlus, "Command R+", 2.50, 10.00, nil},
-	{ModelCommandR, "Command R", 0.15, 0.60, nil},
-	{ModelCohereEmbedV4, "Cohere Embed v4", 0.10, 0, prefixesEUUSGlobal},
+	{ModelCommandRPlus, "Command R+", 2.50, 10.00, 0, 0, nil},
+	{ModelCommandR, "Command R", 0.15, 0.60, 0, 0, nil},
+	{ModelCohereEmbedV4, "Cohere Embed v4", 0.10, 0, 0, 0, prefixesEUUSGlobal},
 
 	// -------------------------------------------------------------------------
 	// DeepSeek
 	// -------------------------------------------------------------------------
-	{ModelDeepSeekR1, "DeepSeek R1", 1.35, 5.40, prefixesUSOnly},
+	{ModelDeepSeekR1, "DeepSeek R1", 1.35, 5.40, 0, 0, prefixesUSOnly},
 
 	// -------------------------------------------------------------------------
 	// Meta Llama
 	// -------------------------------------------------------------------------
-	{ModelLlama4Maverick, "Llama 4 Maverick 17B", 0.22, 0.88, prefixesUSOnly},
-	{ModelLlama4Scout, "Llama 4 Scout 17B", 0.22, 0.88, prefixesUSOnly},
-	{ModelLlama33_70B, "Llama 3.3 70B Instruct", 0.72, 0.72, prefixesUSOnly},
-	{ModelLlama32_90B, "Llama 3.2 90B Instruct", 0.72, 0.72, prefixesUSOnly},
-	{ModelLlama32_11B, "Llama 3.2 11B Instruct", 0.16, 0.16, prefixesUSOnly},
-	{ModelLlama32_3B, "Llama 3.2 3B Instruct", 0.15, 0.15, prefixesEUUS},
-	{ModelLlama32_1B, "Llama 3.2 1B Instruct", 0.10, 0.10, prefixesEUUS},
-	{ModelLlama31_70B, "Llama 3.1 70B Instruct", 0.72, 0.72, prefixesUSOnly},
-	{ModelLlama31_8B, "Llama 3.1 8B Instruct", 0.22, 0.22, prefixesUSOnly},
-	{ModelLlama3_70B, "Llama 3 70B Instruct", 2.65, 3.50, nil},
-	{ModelLlama3_8B, "Llama 3 8B Instruct", 0.30, 0.60, nil},
+	{ModelLlama4Maverick, "Llama 4 Maverick 17B", 0.22, 0.88, 0, 0, prefixesUSOnly},
+	{ModelLlama4Scout, "Llama 4 Scout 17B", 0.22, 0.88, 0, 0, prefixesUSOnly},
+	{ModelLlama33_70B, "Llama 3.3 70B Instruct", 0.72, 0.72, 0, 0, prefixesUSOnly},
+	{ModelLlama32_90B, "Llama 3.2 90B Instruct", 0.72, 0.72, 0, 0, prefixesUSOnly},
+	{ModelLlama32_11B, "Llama 3.2 11B Instruct", 0.16, 0.16, 0, 0, prefixesUSOnly},
+	{ModelLlama32_3B, "Llama 3.2 3B Instruct", 0.15, 0.15, 0, 0, prefixesEUUS},
+	{ModelLlama32_1B, "Llama 3.2 1B Instruct", 0.10, 0.10, 0, 0, prefixesEUUS},
+	{ModelLlama31_70B, "Llama 3.1 70B Instruct", 0.72, 0.72, 0, 0, prefixesUSOnly},
+	{ModelLlama31_8B, "Llama 3.1 8B Instruct", 0.22, 0.22, 0, 0, prefixesUSOnly},
+	{ModelLlama3_70B, "Llama 3 70B Instruct", 2.65, 3.50, 0, 0, nil},
+	{ModelLlama3_8B, "Llama 3 8B Instruct", 0.30, 0.60, 0, 0, nil},
 
 	// -------------------------------------------------------------------------
 	// Mistral
 	// -------------------------------------------------------------------------
-	{ModelMistralLarge3, "Mistral Large 3", 0.50, 1.50, nil},
-	{ModelPixtralLarge, "Pixtral Large", 0.50, 1.50, prefixesEUUS},
-	{ModelDevstral2, "Devstral 2", 0.40, 2.00, nil},
-	{ModelMagistralSmall, "Magistral Small", 0.50, 1.50, nil},
-	{ModelMinistral14B, "Ministral 14B", 0.20, 0.20, nil},
-	{ModelMinistral8B, "Ministral 8B", 0.15, 0.15, nil},
-	{ModelMinistral3B, "Ministral 3B", 0.10, 0.10, nil},
-	{ModelVoxtralSmall, "Voxtral Small", 0.10, 0.30, nil},
-	{ModelVoxtralMini, "Voxtral Mini", 0.04, 0.04, nil},
-	{ModelMistralLarge2402, "Mistral Large (24.02)", 4.00, 12.00, nil},
-	{ModelMistralSmall, "Mistral Small", 0.10, 0.30, nil},
-	{ModelMixtral8x7B, "Mixtral 8x7B Instruct", 0.45, 0.70, nil},
-	{ModelMistral7B, "Mistral 7B Instruct", 0.15, 0.20, nil},
+	{ModelMistralLarge3, "Mistral Large 3", 0.50, 1.50, 0, 0, nil},
+	{ModelPixtralLarge, "Pixtral Large", 0.50, 1.50, 0, 0, prefixesEUUS},
+	{ModelDevstral2, "Devstral 2", 0.40, 2.00, 0, 0, nil},
+	{ModelMagistralSmall, "Magistral Small", 0.50, 1.50, 0, 0, nil},
+	{ModelMinistral14B, "Ministral 14B", 0.20, 0.20, 0, 0, nil},
+	{ModelMinistral8B, "Ministral 8B", 0.15, 0.15, 0, 0, nil},
+	{ModelMinistral3B, "Ministral 3B", 0.10, 0.10, 0, 0, nil},
+	{ModelVoxtralSmall, "Voxtral Small", 0.10, 0.30, 0, 0, nil},
+	{ModelVoxtralMini, "Voxtral Mini", 0.04, 0.04, 0, 0, nil},
+	{ModelMistralLarge2402, "Mistral Large (24.02)", 4.00, 12.00, 0, 0, nil},
+	{ModelMistralSmall, "Mistral Small", 0.10, 0.30, 0, 0, nil},
+	{ModelMixtral8x7B, "Mixtral 8x7B Instruct", 0.45, 0.70, 0, 0, nil},
+	{ModelMistral7B, "Mistral 7B Instruct", 0.15, 0.20, 0, 0, nil},
 
 	// -------------------------------------------------------------------------
 	// Writer
 	// -------------------------------------------------------------------------
-	{ModelPalmyraX4, "Palmyra X4", 2.50, 10.00, prefixesUSOnly},
-	{ModelPalmyraX5, "Palmyra X5", 0.60, 6.00, prefixesUSOnly},
+	{ModelPalmyraX4, "Palmyra X4", 2.50, 10.00, 0, 0, prefixesUSOnly},
+	{ModelPalmyraX5, "Palmyra X5", 0.60, 6.00, 0, 0, prefixesUSOnly},
 }
 
 // -----------------------------------------------------------------------------
@@ -199,10 +201,12 @@ var allModels = []modelDef{
 
 // modelInfo contains metadata and pricing for a Bedrock model.
 type modelInfo struct {
-	ID          string  // Bedrock model ID
-	Name        string  // Human-readable name
-	InputPrice  float64 // USD per 1M input tokens (0 if unknown)
-	OutputPrice float64 // USD per 1M output tokens (0 if unknown)
+	ID               string  // Bedrock model ID
+	Name             string  // Human-readable name
+	InputPrice       float64 // USD per 1M input tokens (0 if unknown)
+	OutputPrice      float64 // USD per 1M output tokens (0 if unknown)
+	CachedInputPrice float64 // USD per 1M cache read tokens (~0.1× input)
+	CacheWritePrice  float64 // USD per 1M cache write tokens (~1.25× input)
 }
 
 // modelRegistry maps model IDs to their info (derived from allModels).
@@ -217,10 +221,12 @@ func init() {
 
 	for _, m := range allModels {
 		modelRegistry[m.ID] = modelInfo{
-			ID:          m.ID,
-			Name:        m.Name,
-			InputPrice:  m.InputPrice,
-			OutputPrice: m.OutputPrice,
+			ID:               m.ID,
+			Name:             m.Name,
+			InputPrice:       m.InputPrice,
+			OutputPrice:      m.OutputPrice,
+			CachedInputPrice: m.CachedInputPrice,
+			CacheWritePrice:  m.CacheWritePrice,
 		}
 		if len(m.Prefixes) > 0 {
 			inferenceProfiles[m.ID] = InferenceProfile{Prefixes: m.Prefixes}
@@ -263,7 +269,15 @@ func calculateCost(model string, usage *llm.Usage) float64 {
 		return 0 // unknown model, can't calculate cost
 	}
 
-	cost := (float64(usage.InputTokens) / 1_000_000) * info.InputPrice
+	// Regular input = total input minus cached (read) and written-to-cache tokens
+	regularInput := usage.InputTokens - usage.CachedTokens - usage.CacheWriteTokens
+	if regularInput < 0 {
+		regularInput = 0
+	}
+
+	cost := (float64(regularInput) / 1_000_000) * info.InputPrice
+	cost += (float64(usage.CachedTokens) / 1_000_000) * info.CachedInputPrice
+	cost += (float64(usage.CacheWriteTokens) / 1_000_000) * info.CacheWritePrice
 	cost += (float64(usage.OutputTokens) / 1_000_000) * info.OutputPrice
 
 	return cost
