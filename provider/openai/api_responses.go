@@ -79,9 +79,10 @@ type respRequest struct {
 	Stream       bool        `json:"stream"`
 }
 
-// respReason holds the effort level for reasoning models.
+// respReason holds the reasoning configuration for reasoning models.
 type respReason struct {
-	Effort string `json:"effort"`
+	Effort  string `json:"effort,omitempty"`
+	Summary string `json:"summary,omitempty"`
 }
 
 // respInput is a polymorphic input item in the "input" array.
@@ -245,7 +246,8 @@ type respOutputItemAdded struct {
 }
 
 type respTextDelta struct {
-	Delta string `json:"delta"`
+	OutputIndex int    `json:"output_index"`
+	Delta       string `json:"delta"`
 }
 
 type respFuncArgsDelta struct {
@@ -344,6 +346,15 @@ func respHandleEvent(
 			})
 		}
 
+	case "response.reasoning_summary_text.delta":
+		var ev respTextDelta
+		if err := json.Unmarshal([]byte(data), &ev); err != nil {
+			return
+		}
+		if ev.Delta != "" {
+			events.Delta(llm.ReasoningDelta(llm.DeltaIndex(ev.OutputIndex), ev.Delta))
+		}
+
 	case "response.output_text.delta":
 		var ev respTextDelta
 		if err := json.Unmarshal([]byte(data), &ev); err != nil {
@@ -356,7 +367,7 @@ func respHandleEvent(
 			*startEmitted = true
 			events.Start(llm.StreamStartOpts{})
 		}
-		events.Delta(ev.Delta)
+		events.Delta(llm.TextDelta(llm.DeltaIndex(ev.OutputIndex), ev.Delta))
 
 	case "response.output_item.added":
 		var ev respOutputItemAdded
@@ -377,6 +388,7 @@ func respHandleEvent(
 		}
 		if accum, ok := activeTools[ev.OutputIndex]; ok {
 			accum.argBuf.WriteString(ev.Delta)
+			events.Delta(llm.ToolDelta(llm.DeltaIndex(ev.OutputIndex), accum.id, accum.name, ev.Delta))
 		}
 
 	case "response.output_item.done":

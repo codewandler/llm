@@ -78,6 +78,7 @@ var responseHeaderAllowlist = map[string]bool{
 
 const (
 	ansiBold  = "\033[1m"
+	ansiDim   = "\033[2m"
 	ansiReset = "\033[0m"
 )
 

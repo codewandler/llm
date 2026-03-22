@@ -9,6 +9,11 @@ import (
 
 // Request types for Anthropic API
 
+type thinking struct {
+	Type         string `json:"type"`                    // always "enabled"
+	BudgetTokens int    `json:"budget_tokens,omitempty"`
+}
+
 type request struct {
 	Model        string           `json:"model"`
 	MaxTokens    int              `json:"max_tokens"`
@@ -17,6 +22,7 @@ type request struct {
 	Messages     []messagePayload `json:"messages"`
 	Tools        []toolPayload    `json:"tools,omitempty"`
 	ToolChoice   any              `json:"tool_choice,omitempty"`
+	Thinking     *thinking        `json:"thinking,omitempty"`
 	Metadata     *metadata        `json:"metadata,omitempty"`
 	CacheControl *cacheControl    `json:"cache_control,omitempty"`
 }
@@ -141,6 +147,23 @@ func BuildRequest(reqOpts RequestOptions) ([]byte, error) {
 
 	for _, t := range opts.Tools {
 		r.Tools = append(r.Tools, toolPayload{Name: t.Name, Description: t.Description, InputSchema: llm.NewSortedMap(t.Parameters)})
+	}
+
+	// Wire extended thinking. Incompatible with forced tool_choice — downgrade to auto.
+	if opts.ReasoningEffort != "" {
+		budgetTokens := 5000
+		switch opts.ReasoningEffort {
+		case llm.ReasoningEffortLow:
+			budgetTokens = 1024
+		case llm.ReasoningEffortMedium:
+			budgetTokens = 5000
+		case llm.ReasoningEffortHigh:
+			budgetTokens = 16000
+		}
+		r.Thinking = &thinking{Type: "enabled", BudgetTokens: budgetTokens}
+		if _, isForced := opts.ToolChoice.(llm.ToolChoiceTool); isForced {
+			opts.ToolChoice = llm.ToolChoiceAuto{}
+		}
 	}
 
 	if len(opts.Tools) > 0 {

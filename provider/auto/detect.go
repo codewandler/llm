@@ -81,7 +81,7 @@ func detectProviders(httpClient *http.Client, llmOpts []llm.Option) []providerEn
 				return openai.New(opts...)
 			},
 			modelAliases: openai.ModelAliases,
-			hasAliases:   false,
+			hasAliases:   true,
 		})
 	}
 

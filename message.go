@@ -239,6 +239,26 @@ type CacheHint struct {
 // Messages is a slice of Message with JSON unmarshal support.
 type Messages []Message
 
+func (m *Messages) Append(msg ...Message) {
+	*m = append(*m, msg...)
+}
+
+func (m *Messages) AddUserMsg(content string) {
+	*m = append(*m, &UserMsg{Content: content})
+}
+
+func (m *Messages) AddAssistantMsg(content string, toolCalls ...ToolCall) {
+	*m = append(*m, &AssistantMsg{Content: content, ToolCalls: toolCalls})
+}
+
+func (m *Messages) AddToolCallResult(toolCallID, output string, isError bool) {
+	*m = append(*m, &ToolCallResult{ToolCallID: toolCallID, Output: output, IsError: isError})
+}
+
+func (m *Messages) AddSystemMsg(content string) {
+	*m = append(*m, &SystemMsg{Content: content})
+}
+
 func (m *Messages) UnmarshalJSON(data []byte) error {
 	var rawMessages []json.RawMessage
 	if err := json.Unmarshal(data, &rawMessages); err != nil {

@@ -72,6 +72,7 @@ func New(ctx context.Context, opts ...Option) (*router.Provider, error) {
 			AliasFast:     {},
 			AliasDefault:  {},
 			AliasPowerful: {},
+			AliasCodex:    {},
 		},
 	}
 	factories := make(map[string]router.Factory)

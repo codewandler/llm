@@ -29,6 +29,7 @@ type contentBlockDeltaEvent struct {
 		Type        string `json:"type"`
 		Text        string `json:"text,omitempty"`
 		PartialJSON string `json:"partial_json,omitempty"`
+		Thinking    string `json:"thinking,omitempty"`
 	} `json:"delta"`
 }
 
@@ -132,10 +133,13 @@ func ParseStream(ctx context.Context, body io.ReadCloser, events *llm.EventStrea
 			}
 			switch evt.Delta.Type {
 			case "text_delta":
-				events.Delta(evt.Delta.Text)
+				events.Delta(llm.TextDelta(llm.DeltaIndex(evt.Index), evt.Delta.Text))
+			case "thinking_delta":
+				events.Delta(llm.ReasoningDelta(llm.DeltaIndex(evt.Index), evt.Delta.Thinking))
 			case "input_json_delta":
 				if tb, ok := activeTools[evt.Index]; ok {
 					tb.jsonBuf.WriteString(evt.Delta.PartialJSON)
+					events.Delta(llm.ToolDelta(llm.DeltaIndex(evt.Index), tb.id, tb.name, evt.Delta.PartialJSON))
 				}
 			}
 

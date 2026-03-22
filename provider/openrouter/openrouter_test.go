@@ -256,7 +256,9 @@ data: [DONE]
 	for event := range events.C() {
 		switch event.Type {
 		case llm.StreamEventDelta:
-			deltas = append(deltas, event.Delta)
+			if event.Delta != nil {
+				deltas = append(deltas, event.Delta.Text)
+			}
 		case llm.StreamEventDone:
 			gotDone = true
 		case llm.StreamEventError:
@@ -343,10 +345,16 @@ data: [DONE]
 
 	for event := range events.C() {
 		switch event.Type {
-		case llm.StreamEventReasoning:
-			reasoning = append(reasoning, event.Reasoning)
 		case llm.StreamEventDelta:
-			content = append(content, event.Delta)
+			if event.Delta == nil {
+				continue
+			}
+			switch event.Delta.Type {
+			case llm.DeltaTypeReasoning:
+				reasoning = append(reasoning, event.Delta.Reasoning)
+			case llm.DeltaTypeText:
+				content = append(content, event.Delta.Text)
+			}
 		}
 	}
 

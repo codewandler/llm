@@ -15,15 +15,81 @@ import (
 type StreamEventType string
 
 const (
-	StreamEventCreated   StreamEventType = "created"
-	StreamEventRouted    StreamEventType = "routed"
-	StreamEventStart     StreamEventType = "start"
-	StreamEventDelta     StreamEventType = "delta"
-	StreamEventReasoning StreamEventType = "reasoning"
-	StreamEventToolCall  StreamEventType = "tool_call"
-	StreamEventDone      StreamEventType = "done"
-	StreamEventError     StreamEventType = "error"
+	StreamEventCreated  StreamEventType = "created"
+	StreamEventRouted   StreamEventType = "routed"
+	StreamEventStart    StreamEventType = "start"
+	StreamEventDelta    StreamEventType = "delta"
+	StreamEventToolCall StreamEventType = "tool_call"
+	StreamEventDone     StreamEventType = "done"
+	StreamEventError    StreamEventType = "error"
 )
+
+// DeltaType identifies the kind of incremental content carried by a Delta.
+type DeltaType string
+
+const (
+	DeltaTypeText      DeltaType = "text"
+	DeltaTypeReasoning DeltaType = "reasoning"
+	DeltaTypeTool      DeltaType = "tool"
+)
+
+// Delta carries one incremental content chunk from the model stream.
+// Exactly one payload field is populated, indicated by Type.
+type Delta struct {
+	// Type identifies which payload field is set.
+	Type DeltaType `json:"type"`
+
+	// Index is the position of this content block in the model's output array.
+	// nil when the provider does not supply block-level indexing.
+	//
+	// Index is meaningful because a single HTTP response can contain multiple
+	// blocks of the same type. With Anthropic's interleaved-thinking beta a
+	// single response may produce: thinking(0) → text(1) → tool(2) → thinking(3) → text(4).
+	// Without Index a consumer cannot tell which thinking or text block a delta
+	// belongs to.
+	//
+	// Provider semantics:
+	//   Anthropic          — content_block index, all block types
+	//   Bedrock            — ContentBlockIndex, all block types
+	//   OpenAI Responses   — output_index, all output types
+	//   OpenAI Completions — tool_calls[].index, tool calls only; text=nil
+	//   OpenRouter         — tool_calls[].index, tool calls only; text=nil
+	//   Ollama             — nil (complete tool calls only, no streaming fragments)
+	Index *uint32 `json:"index,omitempty"`
+
+	// Text is populated for DeltaTypeText.
+	Text string `json:"text,omitempty"`
+
+	// Reasoning is populated for DeltaTypeReasoning.
+	Reasoning string `json:"reasoning,omitempty"`
+
+	// ToolID, ToolName, and ToolArgs are populated for DeltaTypeTool.
+	// ToolArgs is a raw partial JSON fragment — not yet a complete object.
+	ToolID   string `json:"tool_id,omitempty"`
+	ToolName string `json:"tool_name,omitempty"`
+	ToolArgs string `json:"tool_args,omitempty"`
+}
+
+// DeltaIndex converts an int to a *uint32 for use as Delta.Index.
+func DeltaIndex(i int) *uint32 {
+	v := uint32(i)
+	return &v
+}
+
+// TextDelta creates a Delta for an incremental text chunk.
+func TextDelta(idx *uint32, text string) *Delta {
+	return &Delta{Type: DeltaTypeText, Index: idx, Text: text}
+}
+
+// ReasoningDelta creates a Delta for an incremental reasoning/thinking chunk.
+func ReasoningDelta(idx *uint32, text string) *Delta {
+	return &Delta{Type: DeltaTypeReasoning, Index: idx, Reasoning: text}
+}
+
+// ToolDelta creates a Delta for a partial tool-call arguments fragment.
+func ToolDelta(idx *uint32, id, name, argsFragment string) *Delta {
+	return &Delta{Type: DeltaTypeTool, Index: idx, ToolID: id, ToolName: name, ToolArgs: argsFragment}
+}
 
 // Usage holds token counts and cost from a provider response.
 type Usage struct {
@@ -134,14 +200,9 @@ func (s *EventStream) Routed(r Routed) {
 	s.Send(StreamEvent{Type: StreamEventRouted, Routed: &r})
 }
 
-// Delta sends a StreamEventDelta event with the given text chunk.
-func (s *EventStream) Delta(text string) {
-	s.Send(StreamEvent{Type: StreamEventDelta, Delta: text})
-}
-
-// Reasoning sends a StreamEventReasoning event with the given reasoning chunk.
-func (s *EventStream) Reasoning(text string) {
-	s.Send(StreamEvent{Type: StreamEventReasoning, Reasoning: text})
+// Delta sends a StreamEventDelta event with the given delta.
+func (s *EventStream) Delta(d *Delta) {
+	s.Send(StreamEvent{Type: StreamEventDelta, Delta: d})
 }
 
 // Done sends a StreamEventDone event with the given usage statistics.
@@ -250,11 +311,8 @@ type StreamEvent struct {
 	// Timestamp is the wall-clock time at which this event was sent.
 	Timestamp time.Time `json:"timestamp,omitempty"`
 
-	// Delta is the incremental text content. Populated for StreamEventDelta.
-	Delta string `json:"delta,omitempty"`
-
-	// Reasoning is the incremental reasoning/thinking text. Populated for StreamEventReasoning.
-	Reasoning string `json:"reasoning,omitempty"`
+	// Delta carries incremental model output. Populated for StreamEventDelta.
+	Delta *Delta `json:"delta,omitempty"`
 
 	// ToolCall is the tool invocation requested by the model. Populated for StreamEventToolCall.
 	ToolCall *ToolCall `json:"tool_call,omitempty"`
@@ -270,6 +328,24 @@ type StreamEvent struct {
 
 	// Routed holds routing metadata. Populated for StreamEventRouted.
 	Routed *Routed `json:"routed,omitempty"`
+}
+
+// Text returns the text content of the delta if this is a StreamEventDelta
+// of type DeltaTypeText, otherwise returns "".
+func (e StreamEvent) Text() string {
+	if e.Delta != nil && e.Delta.Type == DeltaTypeText {
+		return e.Delta.Text
+	}
+	return ""
+}
+
+// ReasoningText returns the reasoning content of the delta if this is a
+// StreamEventDelta of type DeltaTypeReasoning, otherwise returns "".
+func (e StreamEvent) ReasoningText() string {
+	if e.Delta != nil && e.Delta.Type == DeltaTypeReasoning {
+		return e.Delta.Reasoning
+	}
+	return ""
 }
 
 // StreamRequest configures a provider CreateStream call.

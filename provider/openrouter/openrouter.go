@@ -438,12 +438,12 @@ func parseStream(ctx context.Context, body io.ReadCloser, events *llm.EventStrea
 
 		// Reasoning content delta.
 		if choice.Delta.ReasoningContent != "" {
-			events.Reasoning(choice.Delta.ReasoningContent)
+			events.Delta(llm.ReasoningDelta(nil, choice.Delta.ReasoningContent))
 		}
 
 		// Text content delta.
 		if choice.Delta.Content != "" {
-			events.Delta(choice.Delta.Content)
+			events.Delta(llm.TextDelta(nil, choice.Delta.Content))
 		}
 
 		// Tool call deltas.
@@ -461,6 +461,7 @@ func parseStream(ctx context.Context, body io.ReadCloser, events *llm.EventStrea
 			}
 			if tc.Function.Arguments != "" {
 				accum.argsBuf.WriteString(tc.Function.Arguments)
+				events.Delta(llm.ToolDelta(llm.DeltaIndex(tc.Index), accum.id, accum.name, tc.Function.Arguments))
 			}
 		}
 

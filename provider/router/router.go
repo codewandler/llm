@@ -330,6 +330,9 @@ func (p *Provider) CreateStream(ctx context.Context, opts llm.StreamRequest) (<-
 				if evt.Type == llm.StreamEventCreated {
 					continue
 				}
+				if evt.Start != nil && evt.Start.Model == "" {
+					evt.Start.Model = target.modelID
+				}
 				out.Send(evt)
 			}
 		}()

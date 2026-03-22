@@ -23,4 +23,5 @@ const (
 	AliasFast     = "fast"
 	AliasDefault  = "default"
 	AliasPowerful = "powerful"
+	AliasCodex    = "codex"
 )

@@ -143,10 +143,10 @@ func TestBuildAliasTargets(t *testing.T) {
 			wantAliases:  []string{AliasFast, AliasDefault, AliasPowerful},
 		},
 		{
-			name:         "openai provider (no aliases)",
+			name:         "openai provider",
 			instanceName: "openai",
 			providerType: ProviderOpenAI,
-			wantAliases:  nil,
+			wantAliases:  []string{AliasFast, AliasDefault, AliasPowerful, AliasCodex},
 		},
 	}
 

@@ -526,8 +526,15 @@ func buildRequest(opts llm.StreamRequest) (*bedrockruntime.ConverseStreamInput, 
 			Tools: tools,
 		}
 
-		// Set tool choice
-		switch tc := opts.ToolChoice.(type) {
+		// Set tool choice — force-tool is incompatible with extended thinking.
+		// Fall back to auto when reasoning is enabled.
+		effectiveToolChoice := opts.ToolChoice
+		if opts.ReasoningEffort != "" {
+			if _, isForced := effectiveToolChoice.(llm.ToolChoiceTool); isForced {
+				effectiveToolChoice = llm.ToolChoiceAuto{}
+			}
+		}
+		switch tc := effectiveToolChoice.(type) {
 		case nil, llm.ToolChoiceAuto:
 			toolConfig.ToolChoice = &types.ToolChoiceMemberAuto{Value: types.AutoToolChoice{}}
 		case llm.ToolChoiceRequired:
@@ -546,6 +553,31 @@ func buildRequest(opts llm.StreamRequest) (*bedrockruntime.ConverseStreamInput, 
 		if toolConfig != nil {
 			input.ToolConfig = toolConfig
 		}
+	}
+
+	// Wire reasoning/thinking via additionalModelRequestFields.
+	// Bedrock uses reasoning_config: {type: "enabled", budget_tokens: N}.
+	// Map ReasoningEffort to sensible token budgets.
+	if opts.ReasoningEffort != "" {
+		budgetTokens := 5000 // default / medium
+		switch opts.ReasoningEffort {
+		case llm.ReasoningEffortLow:
+			budgetTokens = 1024
+		case llm.ReasoningEffortMedium:
+			budgetTokens = 5000
+		case llm.ReasoningEffortHigh:
+			budgetTokens = 16000
+		}
+		reasoningCfg, err := toDocument(map[string]any{
+			"reasoning_config": map[string]any{
+				"type":         "enabled",
+				"budget_tokens": budgetTokens,
+			},
+		})
+		if err != nil {
+			return nil, fmt.Errorf("marshal reasoning config: %w", err)
+		}
+		input.AdditionalModelRequestFields = reasoningCfg
 	}
 
 	return input, nil
@@ -652,10 +684,16 @@ func parseStream(ctx context.Context, output *bedrockruntime.ConverseStreamOutpu
 			if e.Value.Delta != nil {
 				switch delta := e.Value.Delta.(type) {
 				case *types.ContentBlockDeltaMemberText:
-					events.Delta(delta.Value)
+					events.Delta(llm.TextDelta(llm.DeltaIndex(idx), delta.Value))
 				case *types.ContentBlockDeltaMemberToolUse:
 					if tb, ok := activeTools[idx]; ok && delta.Value.Input != nil {
 						tb.argsBuf.WriteString(*delta.Value.Input)
+						events.Delta(llm.ToolDelta(llm.DeltaIndex(idx), tb.id, tb.name, *delta.Value.Input))
+					}
+				case *types.ContentBlockDeltaMemberReasoningContent:
+					switch r := delta.Value.(type) {
+					case *types.ReasoningContentBlockDeltaMemberText:
+						events.Delta(llm.ReasoningDelta(llm.DeltaIndex(idx), r.Value))
 					}
 				}
 			}

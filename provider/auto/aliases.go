@@ -12,10 +12,11 @@ type aliasModels struct {
 	fast     string
 	normal   string
 	powerful string
+	codex    string
 }
 
 // providerAliasModels maps provider types to their alias model mappings.
-// These are used for the built-in global aliases (fast, default, powerful).
+// These are used for the built-in global aliases (fast, default, powerful, codex).
 var providerAliasModels = map[string]aliasModels{
 	ProviderClaude: {
 		fast:     anthropic.ModelHaiku,
@@ -32,6 +33,12 @@ var providerAliasModels = map[string]aliasModels{
 		normal:   bedrock.ModelSonnetLatest,
 		powerful: bedrock.ModelOpusLatest,
 	},
+	ProviderOpenAI: {
+		fast:     openai.ModelGPT4oMini,
+		normal:   openai.ModelGPT4o,
+		powerful: openai.ModelO3,
+		codex:    openai.ModelGPT53Codex,
+	},
 }
 
 // buildAliasTargets creates alias targets for a provider instance.
@@ -41,11 +48,15 @@ func buildAliasTargets(instanceName, providerType string) map[string]router.Alia
 		return nil
 	}
 
-	return map[string]router.AliasTarget{
+	targets := map[string]router.AliasTarget{
 		AliasFast:     {Provider: instanceName, Model: models.fast},
 		AliasDefault:  {Provider: instanceName, Model: models.normal},
 		AliasPowerful: {Provider: instanceName, Model: models.powerful},
 	}
+	if models.codex != "" {
+		targets[AliasCodex] = router.AliasTarget{Provider: instanceName, Model: models.codex}
+	}
+	return targets
 }
 
 // modelAliasesForProvider returns the local model aliases for a provider type.

@@ -160,7 +160,9 @@ data: [DONE]
 	for event := range events.C() {
 		switch event.Type {
 		case llm.StreamEventDelta:
-			deltas = append(deltas, event.Delta)
+			if event.Delta != nil {
+				deltas = append(deltas, event.Delta.Text)
+			}
 		case llm.StreamEventDone:
 			gotDone = true
 		case llm.StreamEventError:
@@ -1003,7 +1005,9 @@ data: {"response":{"id":"resp_123","model":"gpt-5.1-codex","usage":{"input_token
 		case llm.StreamEventStart:
 			gotStart = true
 		case llm.StreamEventDelta:
-			deltas = append(deltas, event.Delta)
+			if event.Delta != nil {
+				deltas = append(deltas, event.Delta.Text)
+			}
 		case llm.StreamEventDone:
 			gotDone = true
 		case llm.StreamEventError:

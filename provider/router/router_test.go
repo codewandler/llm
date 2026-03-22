@@ -268,7 +268,7 @@ func TestCreateStream(t *testing.T) {
 			streamFunc: func(ctx context.Context, opts llm.StreamRequest) (<-chan llm.StreamEvent, error) {
 				ch := make(chan llm.StreamEvent, 1)
 				go func() {
-					ch <- llm.StreamEvent{Type: llm.StreamEventDelta, Delta: "hello"}
+					ch <- llm.StreamEvent{Type: llm.StreamEventDelta, Delta: llm.TextDelta(nil, "hello")}
 					ch <- llm.StreamEvent{Type: llm.StreamEventDone}
 					close(ch)
 				}()

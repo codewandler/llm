@@ -205,16 +205,12 @@ func TestProviders(t *testing.T) {
 						}
 
 					case llm.StreamEventDelta:
-						t.Logf("Received delta: %s", event.Delta)
+						t.Logf("Received delta: type=%s", event.Delta.Type)
 						// Valid content event
 
 					case llm.StreamEventToolCall:
 						// Valid tool call event
 						assert.NotNil(t, event.ToolCall, "StreamEventToolCall has nil ToolCall")
-
-					case llm.StreamEventReasoning:
-						// Valid reasoning event
-						t.Logf("Received reasoning: %s", event.Reasoning)
 					}
 				}
 
@@ -448,7 +444,7 @@ func TestOllamaModels(t *testing.T) {
 						t.Logf("✗ Streaming error: %v", event.Error)
 						return
 					case llm.StreamEventDelta:
-						if event.Delta != "" {
+						if event.Delta != nil && event.Delta.Text != "" {
 							gotContent = true
 						}
 					case llm.StreamEventDone:

@@ -322,12 +322,15 @@ func ccParseStream(ctx context.Context, body io.ReadCloser, events *llm.EventStr
 			if tc.Function.Name != "" {
 				accum.name = tc.Function.Name
 			}
-			accum.argsBuf.WriteString(tc.Function.Arguments)
+			if tc.Function.Arguments != "" {
+				accum.argsBuf.WriteString(tc.Function.Arguments)
+				events.Delta(llm.ToolDelta(llm.DeltaIndex(tc.Index), accum.id, accum.name, tc.Function.Arguments))
+			}
 		}
 
 		// Text delta.
 		if choice.Delta.Content != "" {
-			events.Delta(choice.Delta.Content)
+			events.Delta(llm.TextDelta(nil, choice.Delta.Content))
 		}
 
 		// Emit completed tool calls on finish_reason == "tool_calls".
