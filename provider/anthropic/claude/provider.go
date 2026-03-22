@@ -75,6 +75,21 @@ type Provider struct {
 // Option configures the Claude provider.
 type Option func(*Provider)
 
+// WithLLMOptions applies one or more llm.Option values to the Claude provider.
+// This allows using shared llm options (e.g. llm.WithHTTPClient) with this provider.
+//
+// Example:
+//
+//	claude.New(claude.WithLLMOptions(llm.WithHTTPClient(myClient)))
+func WithLLMOptions(opts ...llm.Option) Option {
+	return func(p *Provider) {
+		cfg := llm.Apply(opts...)
+		if cfg.HTTPClient != nil {
+			p.client = cfg.HTTPClient
+		}
+	}
+}
+
 // WithTokenProvider sets a custom token provider.
 func WithTokenProvider(tp TokenProvider) Option {
 	return func(p *Provider) {
@@ -129,7 +144,7 @@ func WithBaseURL(url string) Option {
 func New(opts ...Option) *Provider {
 	p := &Provider{
 		baseURL:   defaultBaseURL,
-		client:    &http.Client{},
+		client:    llm.DefaultHttpClient(),
 		sessionID: randomUUID(),
 	}
 

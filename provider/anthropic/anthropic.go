@@ -35,7 +35,11 @@ func DefaultOptions() []llm.Option {
 func New(opts ...llm.Option) *Provider {
 	allOpts := append(DefaultOptions(), opts...)
 	cfg := llm.Apply(allOpts...)
-	return &Provider{opts: cfg, client: &http.Client{}}
+	client := cfg.HTTPClient
+	if client == nil {
+		client = llm.DefaultHttpClient()
+	}
+	return &Provider{opts: cfg, client: client}
 }
 
 func (p *Provider) Name() string { return providerName }

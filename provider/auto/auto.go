@@ -2,6 +2,7 @@ package auto
 
 import (
 	"context"
+	"net/http"
 	"sort"
 	"strings"
 
@@ -45,7 +46,7 @@ func New(ctx context.Context, opts ...Option) (*aggregate.Provider, error) {
 
 	// Add providers from Claude stores (enumerate accounts)
 	for _, storeEntry := range cfg.claudeStores {
-		entries := enumerateClaudeAccounts(ctx, storeEntry.store)
+		entries := enumerateClaudeAccounts(ctx, storeEntry.store, cfg.httpClient)
 		allProviders = append(allProviders, entries...)
 	}
 
@@ -54,7 +55,7 @@ func New(ctx context.Context, opts ...Option) (*aggregate.Provider, error) {
 
 	// Auto-detect available providers (unless disabled)
 	if cfg.autoDetect {
-		detected := detectProviders()
+		detected := detectProviders(cfg.httpClient, cfg.llmOpts)
 		allProviders = append(allProviders, detected...)
 	}
 
@@ -139,7 +140,7 @@ func parseAliasTarget(target string) aggregate.AliasTarget {
 }
 
 // enumerateClaudeAccounts lists all accounts from a TokenStore and creates provider entries.
-func enumerateClaudeAccounts(ctx context.Context, store claude.TokenStore) []providerEntry {
+func enumerateClaudeAccounts(ctx context.Context, store claude.TokenStore, httpClient *http.Client) []providerEntry {
 	keys, err := store.List(ctx)
 	if err != nil {
 		return nil
@@ -155,7 +156,11 @@ func enumerateClaudeAccounts(ctx context.Context, store claude.TokenStore) []pro
 			name:         accountKey,
 			providerType: ProviderClaude,
 			factory: func(opts ...llm.Option) llm.Provider {
-				return claude.New(claude.WithManagedTokenProvider(accountKey, store, nil))
+				claudeOpts := []claude.Option{claude.WithManagedTokenProvider(accountKey, store, nil)}
+				if httpClient != nil {
+					claudeOpts = append(claudeOpts, claude.WithLLMOptions(llm.WithHTTPClient(httpClient)))
+				}
+				return claude.New(claudeOpts...)
 			},
 			modelAliases: anthropic.ModelAliases,
 			hasAliases:   true,

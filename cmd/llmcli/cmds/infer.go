@@ -10,7 +10,7 @@ import (
 )
 
 // NewInferCmd returns the infer command.
-func NewInferCmd() *cobra.Command {
+func NewInferCmd(root *RootFlags) *cobra.Command {
 	var model string
 	var system string
 	var verbose bool
@@ -31,7 +31,7 @@ Examples:
   llmcli infer -m work/claude/sonnet "Hello"      # Use specific account`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runInfer(cmd.Context(), args[0], model, system, verbose)
+			return runInfer(cmd.Context(), args[0], model, system, verbose, root)
 		},
 	}
 
@@ -41,8 +41,9 @@ Examples:
 	return cmd
 }
 
-func runInfer(ctx context.Context, message, model, system string, verbose bool) error {
-	provider, err := createProvider(ctx)
+func runInfer(ctx context.Context, message, model, system string, verbose bool, root *RootFlags) error {
+	httpClient, logHandler := root.BuildHTTPClient()
+	provider, err := createProvider(ctx, httpClient, root.BuildLLMOptions(logHandler)...)
 	if err != nil {
 		return err
 	}
@@ -61,6 +62,7 @@ func runInfer(ctx context.Context, message, model, system string, verbose bool) 
 	}
 
 	var startInfo *llm.StreamStart
+	var hadTokenOutput bool
 
 	for event := range stream {
 		switch event.Type {
@@ -68,8 +70,14 @@ func runInfer(ctx context.Context, message, model, system string, verbose bool) 
 			startInfo = event.Start
 		case llm.StreamEventDelta:
 			fmt.Print(event.Delta)
+			if logHandler != nil {
+				hadTokenOutput = true
+				logHandler.MarkTokenOutput()
+			}
 		case llm.StreamEventDone:
-			fmt.Println()
+			if hadTokenOutput {
+				fmt.Println()
+			}
 			if verbose {
 				printVerboseInfo(startInfo, event.Usage)
 			}

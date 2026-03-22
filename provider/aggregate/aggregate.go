@@ -165,11 +165,14 @@ func New(cfg Config, factories map[string]Factory) (*Provider, error) {
 		}
 		if len(resolvedTargets) > 0 {
 			aliasMap[alias] = resolvedTargets
-			// Also add prefixed forms for single-target aliases
-			if len(resolvedTargets) == 1 {
-				rt := resolvedTargets[0]
+			// Always register the prefixed form for each individual target so
+			// provider-scoped aliases like "bedrock/fast" work even when multiple
+			// providers share the same global alias.
+			for _, rt := range resolvedTargets {
 				prefixedAlias := buildModelPath(rt.providerName, rt.providerType, alias)
-				aliasMap[prefixedAlias] = resolvedTargets
+				if _, exists := aliasMap[prefixedAlias]; !exists {
+					aliasMap[prefixedAlias] = []resolvedTarget{rt}
+				}
 			}
 		}
 	}

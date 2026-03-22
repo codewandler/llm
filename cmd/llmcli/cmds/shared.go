@@ -2,23 +2,77 @@ package cmds
 
 import (
 	"context"
+	"log/slog"
+	"net/http"
 
+	"github.com/codewandler/llm"
 	"github.com/codewandler/llm/cmd/llmcli/store"
 	"github.com/codewandler/llm/provider/aggregate"
 	"github.com/codewandler/llm/provider/auto"
 )
 
+// RootFlags holds flags defined on the root command that are shared across
+// all subcommands.
+type RootFlags struct {
+	// LogHTTP enables HTTP request/response logging at Debug level.
+	LogHTTP bool
+	// LogHTTPDebug additionally logs request/response headers and bodies.
+	// Has no effect unless LogHTTP is also true.
+	LogHTTPDebug bool
+	// LogHTTPAllHeaders disables the response header allowlist and prints all headers.
+	// Has no effect unless LogHTTPDebug is also true.
+	LogHTTPAllHeaders bool
+}
+
+// BuildHTTPClient constructs an *http.Client from the root flags.
+// Returns nil when no HTTP logging is requested, causing providers to fall
+// back to llm.DefaultHttpClient(). The returned handler may be non-nil even
+// when the client is nil — callers should check the client first.
+func (f *RootFlags) BuildHTTPClient() (*http.Client, *httpLogHandler) {
+	if !f.LogHTTP && !f.LogHTTPDebug && !f.LogHTTPAllHeaders {
+		return nil, nil
+	}
+	debug := f.LogHTTPDebug || f.LogHTTPAllHeaders
+	handler := newHTTPLogHandler(f.LogHTTPAllHeaders)
+	client := llm.NewHttpClient(llm.HttpClientOpts{
+		Logger: slog.New(handler),
+		Debug:  debug,
+	})
+	return client, handler
+}
+
+// BuildLLMOptions returns llm.Option values for the root flags to be passed
+// to providers that don't use the HTTP transport for logging (e.g. Bedrock).
+func (f *RootFlags) BuildLLMOptions(handler *httpLogHandler) []llm.Option {
+	if handler == nil {
+		return nil
+	}
+	return []llm.Option{llm.WithLogger(slog.New(handler))}
+}
+
 // createProvider builds the aggregate provider from available credentials.
-func createProvider(ctx context.Context) (*aggregate.Provider, error) {
+// httpClient overrides the default transport (e.g. for logging); pass nil to
+// use llm.DefaultHttpClient(). llmOpts are passed to providers that log
+// outside the HTTP transport layer (e.g. Bedrock).
+func createProvider(ctx context.Context, httpClient *http.Client, llmOpts ...llm.Option) (*aggregate.Provider, error) {
 	tokenStore, err := getTokenStore()
 	if err != nil {
 		return nil, err
 	}
 
-	return auto.New(ctx,
+	autoOpts := []auto.Option{
 		auto.WithName("llmcli"),
 		auto.WithClaude(tokenStore),
-	)
+	}
+
+	if httpClient != nil {
+		autoOpts = append(autoOpts, auto.WithHTTPClient(httpClient))
+	}
+	if len(llmOpts) > 0 {
+		autoOpts = append(autoOpts, auto.WithLLMOptions(llmOpts...))
+	}
+
+	return auto.New(ctx, autoOpts...)
 }
 
 func getTokenStore() (*store.FileTokenStore, error) {

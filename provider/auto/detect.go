@@ -1,6 +1,7 @@
 package auto
 
 import (
+	"net/http"
 	"os"
 
 	"github.com/codewandler/llm"
@@ -13,7 +14,7 @@ import (
 
 // detectProviders returns provider entries for all auto-detectable providers.
 // Detection order determines failover priority.
-func detectProviders() []providerEntry {
+func detectProviders(httpClient *http.Client, llmOpts []llm.Option) []providerEntry {
 	var providers []providerEntry
 
 	// 1. Claude local (highest priority for Claude models)
@@ -22,7 +23,11 @@ func detectProviders() []providerEntry {
 			name:         "local",
 			providerType: ProviderClaude,
 			factory: func(opts ...llm.Option) llm.Provider {
-				return claude.New(claude.WithLocalTokenProvider())
+				claudeOpts := []claude.Option{claude.WithLocalTokenProvider()}
+				if httpClient != nil {
+					claudeOpts = append(claudeOpts, claude.WithLLMOptions(llm.WithHTTPClient(httpClient)))
+				}
+				return claude.New(claudeOpts...)
 			},
 			modelAliases: anthropic.ModelAliases,
 			hasAliases:   true,
@@ -34,9 +39,16 @@ func detectProviders() []providerEntry {
 		name:         ProviderBedrock,
 		providerType: ProviderBedrock,
 		factory: func(opts ...llm.Option) llm.Provider {
-			return bedrock.New()
+			bedrockOpts := []bedrock.Option{}
+			if httpClient != nil {
+				bedrockOpts = append(bedrockOpts, bedrock.WithLLMOptions(llm.WithHTTPClient(httpClient)))
+			}
+			if len(llmOpts) > 0 {
+				bedrockOpts = append(bedrockOpts, bedrock.WithLLMOptions(llmOpts...))
+			}
+			return bedrock.New(bedrockOpts...)
 		},
-		modelAliases: nil,
+		modelAliases: bedrock.ModelAliases,
 		hasAliases:   true,
 	})
 
@@ -46,7 +58,11 @@ func detectProviders() []providerEntry {
 			name:         ProviderAnthropic,
 			providerType: ProviderAnthropic,
 			factory: func(opts ...llm.Option) llm.Provider {
-				return anthropic.New(llm.APIKeyFromEnv(EnvAnthropicKey))
+				anthropicOpts := []llm.Option{llm.APIKeyFromEnv(EnvAnthropicKey)}
+				if httpClient != nil {
+					anthropicOpts = append(anthropicOpts, llm.WithHTTPClient(httpClient))
+				}
+				return anthropic.New(anthropicOpts...)
 			},
 			modelAliases: anthropic.ModelAliases,
 			hasAliases:   true,
@@ -59,6 +75,9 @@ func detectProviders() []providerEntry {
 			name:         ProviderOpenAI,
 			providerType: ProviderOpenAI,
 			factory: func(opts ...llm.Option) llm.Provider {
+				if httpClient != nil {
+					opts = append(opts, llm.WithHTTPClient(httpClient))
+				}
 				return openai.New(opts...)
 			},
 			modelAliases: openai.ModelAliases,
@@ -72,7 +91,11 @@ func detectProviders() []providerEntry {
 			name:         ProviderOpenRouter,
 			providerType: ProviderOpenRouter,
 			factory: func(opts ...llm.Option) llm.Provider {
-				return openrouter.New(llm.APIKeyFromEnv(EnvOpenRouterKey))
+				routerOpts := []llm.Option{llm.APIKeyFromEnv(EnvOpenRouterKey)}
+				if httpClient != nil {
+					routerOpts = append(routerOpts, llm.WithHTTPClient(httpClient))
+				}
+				return openrouter.New(routerOpts...)
 			},
 			modelAliases: nil,
 			hasAliases:   false,

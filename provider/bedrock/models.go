@@ -247,6 +247,15 @@ func models() []llm.Model {
 	return result
 }
 
+// ModelAliases maps short alias names to full Bedrock model IDs.
+// These are used by the auto package for provider-prefixed resolution
+// (e.g., "bedrock/sonnet", "bedrock/haiku", "bedrock/opus").
+var ModelAliases = map[string]string{
+	"haiku":  ModelHaikuLatest,
+	"sonnet": ModelSonnetLatest,
+	"opus":   ModelOpusLatest,
+}
+
 // calculateCost computes the cost in USD for the given usage and model.
 // Returns 0 if the model is unknown or has no pricing data.
 func calculateCost(model string, usage *llm.Usage) float64 {

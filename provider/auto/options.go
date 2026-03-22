@@ -1,6 +1,8 @@
 package auto
 
 import (
+	"net/http"
+
 	"github.com/codewandler/llm"
 	"github.com/codewandler/llm/provider/aggregate"
 	"github.com/codewandler/llm/provider/anthropic"
@@ -31,10 +33,28 @@ type config struct {
 	claudeStores  []claudeStoreEntry // stores to enumerate accounts from
 	autoDetect    bool
 	globalAliases map[string][]string // user-defined global aliases: alias -> []targets
+	httpClient    *http.Client        // optional shared HTTP client for all providers
+	llmOpts       []llm.Option        // optional shared llm.Options for all providers (e.g. logger)
 }
 
 // Option configures the auto provider.
 type Option func(*config)
+
+// WithHTTPClient sets a custom HTTP client used by all providers created by
+// this auto provider. Useful for injecting a logging or tracing transport.
+func WithHTTPClient(client *http.Client) Option {
+	return func(c *config) {
+		c.httpClient = client
+	}
+}
+
+// WithLLMOptions sets shared llm.Option values applied to all providers that
+// support them (e.g. llm.WithLogger for Bedrock eventstream logging).
+func WithLLMOptions(opts ...llm.Option) Option {
+	return func(c *config) {
+		c.llmOpts = append(c.llmOpts, opts...)
+	}
+}
 
 // WithName sets the aggregate provider name.
 func WithName(name string) Option {
@@ -62,11 +82,16 @@ func WithClaude(store claude.TokenStore) Option {
 // WithClaudeAccount adds a specific Claude OAuth account.
 func WithClaudeAccount(name string, store claude.TokenStore) Option {
 	return func(c *config) {
+		httpClient := c.httpClient
 		c.providers = append(c.providers, providerEntry{
 			name:         name,
 			providerType: ProviderClaude,
 			factory: func(opts ...llm.Option) llm.Provider {
-				return claude.New(claude.WithManagedTokenProvider(name, store, nil))
+				claudeOpts := []claude.Option{claude.WithManagedTokenProvider(name, store, nil)}
+				if httpClient != nil {
+					claudeOpts = append(claudeOpts, claude.WithLLMOptions(llm.WithHTTPClient(httpClient)))
+				}
+				return claude.New(claudeOpts...)
 			},
 			modelAliases: anthropic.ModelAliases,
 			hasAliases:   true,
@@ -77,11 +102,16 @@ func WithClaudeAccount(name string, store claude.TokenStore) Option {
 // WithClaudeLocal adds the local Claude credentials (~/.claude).
 func WithClaudeLocal() Option {
 	return func(c *config) {
+		httpClient := c.httpClient
 		c.providers = append(c.providers, providerEntry{
 			name:         ProviderClaude,
 			providerType: ProviderClaude,
 			factory: func(opts ...llm.Option) llm.Provider {
-				return claude.New(claude.WithLocalTokenProvider())
+				claudeOpts := []claude.Option{claude.WithLocalTokenProvider()}
+				if httpClient != nil {
+					claudeOpts = append(claudeOpts, claude.WithLLMOptions(llm.WithHTTPClient(httpClient)))
+				}
+				return claude.New(claudeOpts...)
 			},
 			modelAliases: anthropic.ModelAliases,
 			hasAliases:   true,
@@ -92,13 +122,18 @@ func WithClaudeLocal() Option {
 // WithBedrock adds AWS Bedrock provider.
 func WithBedrock() Option {
 	return func(c *config) {
+		httpClient := c.httpClient
 		c.providers = append(c.providers, providerEntry{
 			name:         ProviderBedrock,
 			providerType: ProviderBedrock,
 			factory: func(opts ...llm.Option) llm.Provider {
-				return bedrock.New()
+				bedrockOpts := []bedrock.Option{}
+				if httpClient != nil {
+					bedrockOpts = append(bedrockOpts, bedrock.WithLLMOptions(llm.WithHTTPClient(httpClient)))
+				}
+				return bedrock.New(bedrockOpts...)
 			},
-			modelAliases: nil,
+			modelAliases: bedrock.ModelAliases,
 			hasAliases:   true,
 		})
 	}
@@ -108,14 +143,18 @@ func WithBedrock() Option {
 // Requires OPENAI_API_KEY or OPENAI_KEY environment variable.
 func WithOpenAI() Option {
 	return func(c *config) {
+		httpClient := c.httpClient
 		c.providers = append(c.providers, providerEntry{
 			name:         ProviderOpenAI,
 			providerType: ProviderOpenAI,
 			factory: func(opts ...llm.Option) llm.Provider {
+				if httpClient != nil {
+					opts = append(opts, llm.WithHTTPClient(httpClient))
+				}
 				return openai.New(opts...)
 			},
 			modelAliases: openai.ModelAliases,
-			hasAliases:   false, // OpenAI doesn't participate in fast/default/powerful aliases
+			hasAliases:   false,
 		})
 	}
 }
@@ -124,11 +163,16 @@ func WithOpenAI() Option {
 // Requires OPENROUTER_API_KEY environment variable.
 func WithOpenRouter() Option {
 	return func(c *config) {
+		httpClient := c.httpClient
 		c.providers = append(c.providers, providerEntry{
 			name:         ProviderOpenRouter,
 			providerType: ProviderOpenRouter,
 			factory: func(opts ...llm.Option) llm.Provider {
-				return openrouter.New(llm.APIKeyFromEnv(EnvOpenRouterKey))
+				routerOpts := []llm.Option{llm.APIKeyFromEnv(EnvOpenRouterKey)}
+				if httpClient != nil {
+					routerOpts = append(routerOpts, llm.WithHTTPClient(httpClient))
+				}
+				return openrouter.New(routerOpts...)
 			},
 			modelAliases: nil,
 			hasAliases:   false,
@@ -140,11 +184,16 @@ func WithOpenRouter() Option {
 // Requires ANTHROPIC_API_KEY environment variable.
 func WithAnthropic() Option {
 	return func(c *config) {
+		httpClient := c.httpClient
 		c.providers = append(c.providers, providerEntry{
 			name:         ProviderAnthropic,
 			providerType: ProviderAnthropic,
 			factory: func(opts ...llm.Option) llm.Provider {
-				return anthropic.New(llm.APIKeyFromEnv(EnvAnthropicKey))
+				anthropicOpts := []llm.Option{llm.APIKeyFromEnv(EnvAnthropicKey)}
+				if httpClient != nil {
+					anthropicOpts = append(anthropicOpts, llm.WithHTTPClient(httpClient))
+				}
+				return anthropic.New(anthropicOpts...)
 			},
 			modelAliases: anthropic.ModelAliases,
 			hasAliases:   true,

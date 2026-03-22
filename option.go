@@ -3,6 +3,8 @@ package llm
 import (
 	"context"
 	"fmt"
+	"log/slog"
+	"net/http"
 	"os"
 )
 
@@ -17,6 +19,16 @@ type Options struct {
 	// APIKeyFunc returns the API key for authentication.
 	// It is called on each CreateStream() call, allowing for lazy/dynamic resolution.
 	APIKeyFunc func(ctx context.Context) (string, error)
+
+	// HTTPClient is the HTTP client to use for API requests.
+	// When nil, providers fall back to DefaultHttpClient().
+	HTTPClient *http.Client
+
+	// Logger is used by providers that cannot log via the HTTP transport
+	// (e.g. Bedrock's binary eventstream). When set, stream events are logged
+	// at Debug level using the same message format as the HTTP transport logger
+	// so the same renderer handles both.
+	Logger *slog.Logger
 }
 
 // Apply applies all options to a new Options struct and returns it.
@@ -32,6 +44,24 @@ func Apply(opts ...Option) *Options {
 func WithBaseURL(url string) Option {
 	return func(o *Options) {
 		o.BaseURL = url
+	}
+}
+
+// WithHTTPClient sets a custom HTTP client for the provider.
+// When not set, providers use DefaultHttpClient().
+func WithHTTPClient(c *http.Client) Option {
+	return func(o *Options) {
+		o.HTTPClient = c
+	}
+}
+
+// WithLogger sets a logger for providers that emit events outside the HTTP
+// transport layer (e.g. Bedrock's binary eventstream). Events are logged at
+// Debug level using the same format as the HTTP transport, so the same log
+// renderer handles output from all providers.
+func WithLogger(l *slog.Logger) Option {
+	return func(o *Options) {
+		o.Logger = l
 	}
 }
 

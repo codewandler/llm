@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
+	"net/http"
 	"os"
 	"strings"
 	"sync"
@@ -30,6 +32,8 @@ type Provider struct {
 	defaultModel        string
 	profile             string // AWS profile name (optional)
 	credentialsProvider aws.CredentialsProvider
+	httpClient          *http.Client // HTTP client passed to the AWS SDK
+	logger              *slog.Logger // optional stream event logger
 
 	mu        sync.Mutex // protects client initialization
 	client    *bedrockruntime.Client
@@ -38,6 +42,24 @@ type Provider struct {
 
 // Option configures a Bedrock provider.
 type Option func(*Provider)
+
+// WithLLMOptions applies one or more llm.Option values to the Bedrock provider.
+// This allows using shared llm options (e.g. llm.WithHTTPClient) with this provider.
+//
+// Example:
+//
+//	bedrock.New(bedrock.WithLLMOptions(llm.WithHTTPClient(myClient)))
+func WithLLMOptions(opts ...llm.Option) Option {
+	return func(p *Provider) {
+		cfg := llm.Apply(opts...)
+		if cfg.HTTPClient != nil {
+			p.httpClient = cfg.HTTPClient
+		}
+		if cfg.Logger != nil {
+			p.logger = cfg.Logger
+		}
+	}
+}
 
 // WithRegion sets the AWS region for Bedrock explicitly.
 // By default, New() reads the region from AWS_REGION or AWS_DEFAULT_REGION
@@ -140,6 +162,7 @@ func New(opts ...Option) *Provider {
 	p := &Provider{
 		region:       getRegionFromEnv(),
 		defaultModel: DefaultModel,
+		httpClient:   llm.DefaultHttpClient(),
 	}
 
 	for _, opt := range opts {
@@ -159,6 +182,7 @@ func New(opts ...Option) *Provider {
 	// We defer errors to CreateStream so New() never fails
 	configOpts := []func(*config.LoadOptions) error{
 		config.WithRegion(p.region),
+		config.WithHTTPClient(p.httpClient),
 	}
 	if p.profile != "" {
 		configOpts = append(configOpts, config.WithSharedConfigProfile(p.profile))
@@ -199,6 +223,7 @@ func (p *Provider) initClient(ctx context.Context) error {
 	// Build config options
 	configOpts := []func(*config.LoadOptions) error{
 		config.WithRegion(p.region),
+		config.WithHTTPClient(p.httpClient),
 	}
 	if p.profile != "" {
 		configOpts = append(configOpts, config.WithSharedConfigProfile(p.profile))
@@ -292,9 +317,10 @@ func (p *Provider) CreateStream(ctx context.Context, opts llm.StreamOptions) (<-
 	}
 
 	meta := streamMeta{
-		RequestedModel: opts.Model,    // Original user-provided model
-		ResolvedModel:  resolvedModel, // Resolved with inference profile prefix
+		RequestedModel: opts.Model,
+		ResolvedModel:  resolvedModel,
 		StartTime:      startTime,
+		Logger:         p.logger,
 	}
 	events := make(chan llm.StreamEvent, 64)
 	go parseStream(ctx, output, events, meta)
@@ -540,6 +566,7 @@ type streamMeta struct {
 	RequestedModel string
 	ResolvedModel  string
 	StartTime      time.Time
+	Logger         *slog.Logger
 }
 
 func parseStream(ctx context.Context, output *bedrockruntime.ConverseStreamOutput, events chan<- llm.StreamEvent, meta streamMeta) {
@@ -547,6 +574,33 @@ func parseStream(ctx context.Context, output *bedrockruntime.ConverseStreamOutpu
 
 	stream := output.GetStream()
 	defer stream.Close()
+
+	// logEvent emits a decoded eventstream frame to the logger in the same
+	// format the HTTP transport uses for SSE chunks, so httpLogHandler renders
+	// it identically. v must be JSON-serialisable.
+	logEvent := func(eventType string, v any) {
+		if meta.Logger == nil {
+			return
+		}
+		b, err := json.Marshal(v)
+		if err != nil {
+			return
+		}
+		// Inject the event type into the JSON so httpLogHandler can identify
+		// and render it (noisy events collapsed, full events expanded).
+		// Merge {"type":"<eventType>"} with the struct JSON.
+		merged := `{"type":"` + eventType + `"`
+		if string(b) != "{}" {
+			merged += "," + string(b[1:]) // drop leading '{' from b
+		} else {
+			merged += "}"
+		}
+		meta.Logger.Debug("http response body",
+			"method", "POST",
+			"url", "bedrock/converse-stream",
+			"chunk", "data: "+merged+"\n\n",
+		)
+	}
 
 	// Tool call accumulation
 	type toolAccum struct {
@@ -587,8 +641,8 @@ func parseStream(ctx context.Context, output *bedrockruntime.ConverseStreamOutpu
 
 		switch e := event.(type) {
 		case *types.ConverseStreamOutputMemberContentBlockStart:
-			// Start of a new content block (text or tool_use)
 			idx := int(aws.ToInt32(e.Value.ContentBlockIndex))
+			logEvent("content_block_start", e.Value)
 			if e.Value.Start != nil {
 				switch start := e.Value.Start.(type) {
 				case *types.ContentBlockStartMemberToolUse:
@@ -600,8 +654,8 @@ func parseStream(ctx context.Context, output *bedrockruntime.ConverseStreamOutpu
 			}
 
 		case *types.ConverseStreamOutputMemberContentBlockDelta:
-			// Delta within a content block
 			idx := int(aws.ToInt32(e.Value.ContentBlockIndex))
+			logEvent("content_block_delta", e.Value)
 			if e.Value.Delta != nil {
 				switch delta := e.Value.Delta.(type) {
 				case *types.ContentBlockDeltaMemberText:
@@ -610,7 +664,6 @@ func parseStream(ctx context.Context, output *bedrockruntime.ConverseStreamOutpu
 						Delta: delta.Value,
 					}
 				case *types.ContentBlockDeltaMemberToolUse:
-					// Accumulate tool input JSON
 					if tb, ok := activeTools[idx]; ok && delta.Value.Input != nil {
 						tb.argsBuf.WriteString(*delta.Value.Input)
 					}
@@ -618,8 +671,8 @@ func parseStream(ctx context.Context, output *bedrockruntime.ConverseStreamOutpu
 			}
 
 		case *types.ConverseStreamOutputMemberContentBlockStop:
-			// End of a content block - emit tool call if it was a tool
 			idx := int(aws.ToInt32(e.Value.ContentBlockIndex))
+			logEvent("content_block_stop", e.Value)
 			if tb, ok := activeTools[idx]; ok {
 				var args map[string]any
 				if tb.argsBuf.Len() > 0 {
@@ -637,7 +690,7 @@ func parseStream(ctx context.Context, output *bedrockruntime.ConverseStreamOutpu
 			}
 
 		case *types.ConverseStreamOutputMemberMetadata:
-			// Usage information - this comes after MessageStop
+			logEvent("metadata", e.Value)
 			if e.Value.Usage != nil {
 				if e.Value.Usage.InputTokens != nil {
 					usage.InputTokens = int(*e.Value.Usage.InputTokens)
@@ -656,7 +709,6 @@ func parseStream(ctx context.Context, output *bedrockruntime.ConverseStreamOutpu
 				}
 				fillCost(meta.ResolvedModel, &usage)
 			}
-			// Emit done event with usage after metadata is received
 			events <- llm.StreamEvent{
 				Type:  llm.StreamEventDone,
 				Usage: &usage,
@@ -664,8 +716,7 @@ func parseStream(ctx context.Context, output *bedrockruntime.ConverseStreamOutpu
 			return
 
 		case *types.ConverseStreamOutputMemberMessageStop:
-			// Message complete - but continue to receive metadata event
-			// Don't return here, the metadata event comes after
+			logEvent("message_stop", e.Value)
 		}
 	}
 

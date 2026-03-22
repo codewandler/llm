@@ -56,6 +56,8 @@ func modelAliasesForProvider(providerType string) map[string]string {
 		return anthropic.ModelAliases
 	case ProviderOpenAI:
 		return openai.ModelAliases
+	case ProviderBedrock:
+		return bedrock.ModelAliases
 	default:
 		return nil
 	}

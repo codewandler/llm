@@ -15,7 +15,7 @@ import (
 var topLevelAliases = []string{"fast", "default", "powerful"}
 
 // NewModelsCmd returns the models command.
-func NewModelsCmd() *cobra.Command {
+func NewModelsCmd(root *RootFlags) *cobra.Command {
 	var filter string
 
 	cmd := &cobra.Command{
@@ -30,7 +30,7 @@ Examples:
   llmcli models              # List aliases and models
   llmcli models -f sonnet    # Filter models by substring`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runModels(cmd.Context(), filter)
+			return runModels(cmd.Context(), filter, root)
 		},
 	}
 
@@ -38,8 +38,9 @@ Examples:
 	return cmd
 }
 
-func runModels(ctx context.Context, filter string) error {
-	provider, err := createProvider(ctx)
+func runModels(ctx context.Context, filter string, root *RootFlags) error {
+	httpClient, logHandler := root.BuildHTTPClient()
+	provider, err := createProvider(ctx, httpClient, root.BuildLLMOptions(logHandler)...)
 	if err != nil {
 		return err
 	}
