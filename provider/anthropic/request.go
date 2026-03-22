@@ -140,7 +140,7 @@ func BuildRequest(reqOpts RequestOptions) ([]byte, error) {
 	}
 
 	for _, t := range opts.Tools {
-		r.Tools = append(r.Tools, toolPayload{Name: t.Name, Description: t.Description, InputSchema: t.Parameters})
+		r.Tools = append(r.Tools, toolPayload{Name: t.Name, Description: t.Description, InputSchema: llm.NewSortedMap(t.Parameters)})
 	}
 
 	if len(opts.Tools) > 0 {
