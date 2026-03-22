@@ -437,10 +437,7 @@ func parseStream(ctx context.Context, body io.ReadCloser, events *llm.EventStrea
 
 		// Handle content delta
 		if chunk.Message.Content != "" {
-			events.Send(llm.StreamEvent{
-				Type:  llm.StreamEventDelta,
-				Delta: chunk.Message.Content,
-			})
+			events.Delta(chunk.Message.Content)
 		}
 
 		// Handle tool calls

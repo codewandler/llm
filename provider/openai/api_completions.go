@@ -327,7 +327,7 @@ func ccParseStream(ctx context.Context, body io.ReadCloser, events *llm.EventStr
 
 		// Text delta.
 		if choice.Delta.Content != "" {
-			events.Send(llm.StreamEvent{Type: llm.StreamEventDelta, Delta: choice.Delta.Content})
+			events.Delta(choice.Delta.Content)
 		}
 
 		// Emit completed tool calls on finish_reason == "tool_calls".

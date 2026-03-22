@@ -438,18 +438,12 @@ func parseStream(ctx context.Context, body io.ReadCloser, events *llm.EventStrea
 
 		// Reasoning content delta.
 		if choice.Delta.ReasoningContent != "" {
-			events.Send(llm.StreamEvent{
-				Type:      llm.StreamEventReasoning,
-				Reasoning: choice.Delta.ReasoningContent,
-			})
+			events.Reasoning(choice.Delta.ReasoningContent)
 		}
 
 		// Text content delta.
 		if choice.Delta.Content != "" {
-			events.Send(llm.StreamEvent{
-				Type:  llm.StreamEventDelta,
-				Delta: choice.Delta.Content,
-			})
+			events.Delta(choice.Delta.Content)
 		}
 
 		// Tool call deltas.

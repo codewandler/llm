@@ -134,6 +134,16 @@ func (s *EventStream) Routed(r Routed) {
 	s.Send(StreamEvent{Type: StreamEventRouted, Routed: &r})
 }
 
+// Delta sends a StreamEventDelta event with the given text chunk.
+func (s *EventStream) Delta(text string) {
+	s.Send(StreamEvent{Type: StreamEventDelta, Delta: text})
+}
+
+// Reasoning sends a StreamEventReasoning event with the given reasoning chunk.
+func (s *EventStream) Reasoning(text string) {
+	s.Send(StreamEvent{Type: StreamEventReasoning, Reasoning: text})
+}
+
 // Done sends a StreamEventDone event with the given usage statistics.
 // usage may be nil if the provider did not return token counts.
 func (s *EventStream) Done(usage *Usage) {

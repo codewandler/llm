@@ -652,10 +652,7 @@ func parseStream(ctx context.Context, output *bedrockruntime.ConverseStreamOutpu
 			if e.Value.Delta != nil {
 				switch delta := e.Value.Delta.(type) {
 				case *types.ContentBlockDeltaMemberText:
-					events.Send(llm.StreamEvent{
-						Type:  llm.StreamEventDelta,
-						Delta: delta.Value,
-					})
+					events.Delta(delta.Value)
 				case *types.ContentBlockDeltaMemberToolUse:
 					if tb, ok := activeTools[idx]; ok && delta.Value.Input != nil {
 						tb.argsBuf.WriteString(*delta.Value.Input)

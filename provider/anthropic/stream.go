@@ -132,7 +132,7 @@ func ParseStream(ctx context.Context, body io.ReadCloser, events *llm.EventStrea
 			}
 			switch evt.Delta.Type {
 			case "text_delta":
-				events.Send(llm.StreamEvent{Type: llm.StreamEventDelta, Delta: evt.Delta.Text})
+				events.Delta(evt.Delta.Text)
 			case "input_json_delta":
 				if tb, ok := activeTools[evt.Index]; ok {
 					tb.jsonBuf.WriteString(evt.Delta.PartialJSON)

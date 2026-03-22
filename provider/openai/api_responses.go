@@ -356,7 +356,7 @@ func respHandleEvent(
 			*startEmitted = true
 			events.Start(llm.StreamStartOpts{})
 		}
-		events.Send(llm.StreamEvent{Type: llm.StreamEventDelta, Delta: ev.Delta})
+		events.Delta(ev.Delta)
 
 	case "response.output_item.added":
 		var ev respOutputItemAdded

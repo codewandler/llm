@@ -32,7 +32,7 @@ func (f *Provider) CreateStream(_ context.Context, opts llm.StreamRequest) (<-ch
 				Arguments: map[string]any{"command": "echo hello"},
 			})
 		} else {
-			stream.Send(llm.StreamEvent{Type: llm.StreamEventDelta, Delta: "done"})
+			stream.Delta("done")
 		}
 		stream.Done(&llm.Usage{InputTokens: 1, OutputTokens: 1, TotalTokens: 2, Cost: 0.01})
 	}()
