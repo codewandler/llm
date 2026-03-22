@@ -33,13 +33,10 @@ func (f *Provider) CreateStream(_ context.Context, opts llm.StreamRequest) (<-ch
 
 		if !f.called {
 			f.called = true
-			stream.Send(llm.StreamEvent{
-				Type: llm.StreamEventToolCall,
-				ToolCall: &llm.ToolCall{
-					Name:      "bash",
-					ID:        "bash-1",
-					Arguments: map[string]any{"command": "echo hello"},
-				},
+			stream.ToolCall(llm.ToolCall{
+				Name:      "bash",
+				ID:        "bash-1",
+				Arguments: map[string]any{"command": "echo hello"},
 			})
 		} else {
 			stream.Send(llm.StreamEvent{Type: llm.StreamEventDelta, Delta: "done"})

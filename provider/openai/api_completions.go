@@ -354,13 +354,10 @@ func ccEmitToolCalls(activeTools map[int]*ccToolAccum, events *llm.EventStream) 
 		if accum.argsBuf.Len() > 0 {
 			_ = json.Unmarshal([]byte(accum.argsBuf.String()), &args)
 		}
-		events.Send(llm.StreamEvent{
-			Type: llm.StreamEventToolCall,
-			ToolCall: &llm.ToolCall{
-				ID:        accum.id,
-				Name:      accum.name,
-				Arguments: args,
-			},
+		events.ToolCall(llm.ToolCall{
+			ID:        accum.id,
+			Name:      accum.name,
+			Arguments: args,
 		})
 	}
 }

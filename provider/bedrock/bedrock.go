@@ -675,13 +675,10 @@ func parseStream(ctx context.Context, output *bedrockruntime.ConverseStreamOutpu
 				if tb.argsBuf.Len() > 0 {
 					_ = json.Unmarshal([]byte(tb.argsBuf.String()), &args)
 				}
-				events.Send(llm.StreamEvent{
-					Type: llm.StreamEventToolCall,
-					ToolCall: &llm.ToolCall{
-						ID:        tb.id,
-						Name:      tb.name,
-						Arguments: args,
-					},
+				events.ToolCall(llm.ToolCall{
+					ID:        tb.id,
+					Name:      tb.name,
+					Arguments: args,
 				})
 				delete(activeTools, idx)
 			}

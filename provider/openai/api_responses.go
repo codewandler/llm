@@ -424,13 +424,10 @@ func respHandleEvent(
 			delete(activeTools, ev.OutputIndex)
 		}
 
-		events.Send(llm.StreamEvent{
-			Type: llm.StreamEventToolCall,
-			ToolCall: &llm.ToolCall{
-				ID:        callID,
-				Name:      name,
-				Arguments: args,
-			},
+		events.ToolCall(llm.ToolCall{
+			ID:        callID,
+			Name:      name,
+			Arguments: args,
 		})
 
 	case "response.completed":

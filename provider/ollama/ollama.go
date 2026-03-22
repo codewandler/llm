@@ -456,13 +456,10 @@ func parseStream(ctx context.Context, body io.ReadCloser, events *llm.EventStrea
 		if len(chunk.Message.ToolCalls) > 0 {
 			for _, tc := range chunk.Message.ToolCalls {
 				toolCallID++
-				events.Send(llm.StreamEvent{
-					Type: llm.StreamEventToolCall,
-					ToolCall: &llm.ToolCall{
-						ID:        fmt.Sprintf("call_%d", toolCallID),
-						Name:      tc.Function.Name,
-						Arguments: tc.Function.Arguments,
-					},
+				events.ToolCall(llm.ToolCall{
+					ID:        fmt.Sprintf("call_%d", toolCallID),
+					Name:      tc.Function.Name,
+					Arguments: tc.Function.Arguments,
 				})
 			}
 		}

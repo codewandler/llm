@@ -157,7 +157,7 @@ func ParseStream(ctx context.Context, body io.ReadCloser, events *llm.EventStrea
 				if tb.jsonBuf.Len() > 0 {
 					_ = json.Unmarshal([]byte(tb.jsonBuf.String()), &args)
 				}
-				events.Send(llm.StreamEvent{Type: llm.StreamEventToolCall, ToolCall: &llm.ToolCall{ID: tb.id, Name: tb.name, Arguments: args}})
+				events.ToolCall(llm.ToolCall{ID: tb.id, Name: tb.name, Arguments: args})
 				delete(activeTools, evt.Index)
 			}
 
