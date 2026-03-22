@@ -624,16 +624,7 @@ func parseStream(ctx context.Context, output *bedrockruntime.ConverseStreamOutpu
 		// Emit StreamEventStart on first event
 		if !startEmitted {
 			startEmitted = true
-			events.Send(llm.StreamEvent{
-				Type: llm.StreamEventStart,
-				Start: &llm.StreamStart{
-					ModelRequested:    meta.RequestedModel,
-					ModelResolved:     meta.ResolvedModel,
-					ModelProviderID:   "", // Bedrock doesn't return model in stream
-					ProviderRequestID: "", // Bedrock doesn't return request ID in stream
-					TimeToFirstToken:  time.Since(meta.StartTime),
-				},
-			})
+			events.Start(llm.StreamStartOpts{})
 		}
 
 		switch e := event.(type) {

@@ -99,15 +99,9 @@ func ParseStream(ctx context.Context, body io.ReadCloser, events *llm.EventStrea
 					usage.CacheWriteTokens + usage.CacheReadTokens
 
 				// Emit StreamEventStart with metadata
-				events.Send(llm.StreamEvent{
-					Type: llm.StreamEventStart,
-					Start: &llm.StreamStart{
-						ModelRequested:    meta.RequestedModel,
-						ModelResolved:     meta.ResolvedModel,
-						ModelProviderID:   evt.Message.Model,
-						ProviderRequestID: evt.Message.ID,
-						TimeToFirstToken:  time.Since(meta.StartTime),
-					},
+				events.Start(llm.StreamStartOpts{
+					Model:     evt.Message.Model,
+					RequestID: evt.Message.ID,
 				})
 			}
 

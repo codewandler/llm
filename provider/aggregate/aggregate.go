@@ -303,6 +303,7 @@ func (p *Provider) CreateStream(ctx context.Context, opts llm.StreamRequest) (<-
 	}
 
 	var lastErr error
+	var triedErrors []error
 	for _, target := range targets {
 		streamOpts := opts
 		streamOpts.Model = target.modelID
@@ -311,43 +312,30 @@ func (p *Provider) CreateStream(ctx context.Context, opts llm.StreamRequest) (<-
 		if err != nil {
 			if isRetriableError(err) {
 				lastErr = err
+				triedErrors = append(triedErrors, fmt.Errorf("%s: %w", target.providerName, err))
 				continue
 			}
 			return nil, fmt.Errorf("%s: %w", target.providerName, err)
 		}
 
-		// Wrap stream to transform StreamEventStart with aggregate context
-		return p.wrapStream(stream, opts.Model, target), nil
+		out := llm.NewEventStream()
+		out.Routed(llm.Routed{
+			Provider:       target.providerName,
+			RequestedModel: opts.Model,
+			ResolvedModel:  target.fullID,
+			Errors:         triedErrors,
+		})
+		go func() {
+			defer out.Close()
+			for evt := range stream {
+				out.Send(evt)
+			}
+		}()
+		return out.C(), nil
 	}
 
 	if lastErr != nil {
 		return nil, fmt.Errorf("all targets failed: %w", lastErr)
 	}
 	return nil, ErrNoProviders
-}
-
-// wrapStream transforms the underlying provider's stream to update StreamEventStart
-// with aggregate-level model resolution info.
-func (p *Provider) wrapStream(upstream <-chan llm.StreamEvent, requestedModel string, target resolvedTarget) <-chan llm.StreamEvent {
-	out := make(chan llm.StreamEvent, 64)
-
-	go func() {
-		defer close(out)
-
-		for evt := range upstream {
-			// Transform StreamEventStart to include aggregate context
-			if evt.Type == llm.StreamEventStart && evt.Start != nil {
-				evt.Start = &llm.StreamStart{
-					ModelRequested:    requestedModel,
-					ModelResolved:     target.fullID,
-					ModelProviderID:   evt.Start.ModelProviderID,
-					ProviderRequestID: evt.Start.ProviderRequestID,
-					TimeToFirstToken:  evt.Start.TimeToFirstToken,
-				}
-			}
-			out <- evt
-		}
-	}()
-
-	return out
 }

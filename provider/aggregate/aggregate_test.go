@@ -297,7 +297,11 @@ func TestCreateStream(t *testing.T) {
 		for evt := range stream {
 			events = append(events, evt)
 		}
-		assert.Len(t, events, 2)
+		assert.Len(t, events, 4) // created, routed, delta, done
+		assert.Equal(t, llm.StreamEventCreated, events[0].Type)
+		assert.Equal(t, llm.StreamEventRouted, events[1].Type)
+		assert.Equal(t, llm.StreamEventDelta, events[2].Type)
+		assert.Equal(t, llm.StreamEventDone, events[3].Type)
 	})
 
 	t.Run("failover to second provider", func(t *testing.T) {

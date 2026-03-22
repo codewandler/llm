@@ -338,15 +338,9 @@ func respHandleEvent(
 		}
 		if !*startEmitted {
 			*startEmitted = true
-			events.Send(llm.StreamEvent{
-				Type: llm.StreamEventStart,
-				Start: &llm.StreamStart{
-					ModelRequested:    meta.requestedModel,
-					ModelResolved:     meta.requestedModel,
-					ModelProviderID:   ev.Response.Model,
-					ProviderRequestID: ev.Response.ID,
-					TimeToFirstToken:  time.Since(meta.startTime),
-				},
+			events.Start(llm.StreamStartOpts{
+				Model:     ev.Response.Model,
+				RequestID: ev.Response.ID,
 			})
 		}
 
@@ -360,14 +354,7 @@ func respHandleEvent(
 		}
 		if !*startEmitted {
 			*startEmitted = true
-			events.Send(llm.StreamEvent{
-				Type: llm.StreamEventStart,
-				Start: &llm.StreamStart{
-					ModelRequested:   meta.requestedModel,
-					ModelResolved:    meta.requestedModel,
-					TimeToFirstToken: time.Since(meta.startTime),
-				},
-			})
+			events.Start(llm.StreamStartOpts{})
 		}
 		events.Send(llm.StreamEvent{Type: llm.StreamEventDelta, Delta: ev.Delta})
 

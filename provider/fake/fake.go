@@ -2,7 +2,6 @@ package fake
 
 import (
 	"context"
-	"time"
 
 	"github.com/codewandler/llm"
 )
@@ -20,15 +19,9 @@ func (f *Provider) CreateStream(_ context.Context, opts llm.StreamRequest) (<-ch
 	go func() {
 		defer stream.Close()
 		// Emit start event first
-		stream.Send(llm.StreamEvent{
-			Type: llm.StreamEventStart,
-			Start: &llm.StreamStart{
-				ModelRequested:    opts.Model,
-				ModelResolved:     opts.Model,
-				ModelProviderID:   "fake-model-v1",
-				ProviderRequestID: "fake-req-123",
-				TimeToFirstToken:  1 * time.Millisecond,
-			},
+		stream.Start(llm.StreamStartOpts{
+			Model:     "fake-model-v1",
+			RequestID: "fake-req-123",
 		})
 
 		if !f.called {

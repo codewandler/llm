@@ -102,24 +102,14 @@ func printVerboseInfo(start *llm.StreamStart, usage *llm.Usage) {
 	}
 	var fields []field
 
-	// Request ID
-	if start != nil && start.ProviderRequestID != "" {
-		fields = append(fields, field{"request_id", start.ProviderRequestID})
-	}
-
-	// Requested model
-	if start != nil && start.ModelRequested != "" {
-		fields = append(fields, field{"requested", start.ModelRequested})
-	}
-
-	// Resolved model (only if different from requested)
-	if start != nil && start.ModelResolved != "" && start.ModelResolved != start.ModelRequested {
-		fields = append(fields, field{"resolved", start.ModelResolved})
+	// Request ID (from the upstream API)
+	if start != nil && start.RequestID != "" {
+		fields = append(fields, field{"request_id", start.RequestID})
 	}
 
 	// API model (what the provider returned)
-	if start != nil && start.ModelProviderID != "" {
-		fields = append(fields, field{"api_model", start.ModelProviderID})
+	if start != nil && start.Model != "" {
+		fields = append(fields, field{"api_model", start.Model})
 	}
 
 	// Token usage
@@ -215,7 +205,7 @@ func logStreamEvent(ev llm.StreamEvent) {
 		Error string `json:"error,omitempty"`
 	}{
 		streamEventAlias: streamEventAlias(ev),
-		Error:            func() string {
+		Error: func() string {
 			if ev.Error != nil {
 				return ev.Error.Error()
 			}

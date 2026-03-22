@@ -16,6 +16,7 @@ type StreamEventType string
 
 const (
 	StreamEventCreated   StreamEventType = "created"
+	StreamEventRouted    StreamEventType = "routed"
 	StreamEventStart     StreamEventType = "start"
 	StreamEventDelta     StreamEventType = "delta"
 	StreamEventReasoning StreamEventType = "reasoning"
@@ -78,6 +79,7 @@ type EventStream struct {
 	id        string
 	seq       uint64
 	createdAt time.Time
+	startedAt time.Time
 	ch        chan StreamEvent
 	closeOnce sync.Once
 }
@@ -115,6 +117,22 @@ func (s *EventStream) ToolCall(tc ToolCall) {
 	s.Send(StreamEvent{Type: StreamEventToolCall, ToolCall: &tc})
 }
 
+// Start sends a StreamEventStart event with the given provider metadata.
+// TimeToFirstToken is computed automatically from the stream's createdAt time.
+func (s *EventStream) Start(opts StreamStartOpts) {
+	s.startedAt = time.Now()
+	s.Send(StreamEvent{Type: StreamEventStart, Start: &StreamStart{
+		RequestID:        opts.RequestID,
+		Model:            opts.Model,
+		TimeToFirstToken: s.startedAt.Sub(s.createdAt),
+	}})
+}
+
+// Routed sends a StreamEventRouted event with routing metadata.
+func (s *EventStream) Routed(r Routed) {
+	s.Send(StreamEvent{Type: StreamEventRouted, Routed: &r})
+}
+
 // Close closes the underlying channel. Safe to call multiple times.
 func (s *EventStream) Close() {
 	s.closeOnce.Do(func() { close(s.ch) })
@@ -125,28 +143,63 @@ func (s *EventStream) C() <-chan StreamEvent {
 	return s.ch
 }
 
+// StreamStartOpts is the input to EventStream.Start — what the provider knows
+// from the upstream API response. Routing fields (requested model, resolved model)
+// are not included here; they belong to a separate routing event in meta-providers.
+type StreamStartOpts struct {
+	// RequestID is the unique identifier returned by the upstream API.
+	// Useful for debugging and support tickets. May be empty if the API doesn't provide one.
+	RequestID string
+
+	// Model is the model identifier returned by the upstream API in its response.
+	// e.g., "claude-haiku-4-5-20251001". May be empty if the API doesn't echo the model back.
+	Model string
+}
+
 // StreamStart contains metadata about the stream, emitted with StreamEventStart.
 type StreamStart struct {
-	// ProviderRequestID is the unique identifier returned by the upstream API.
+	// RequestID is the unique identifier returned by the upstream API.
 	// Useful for debugging and support tickets. May be empty if the API doesn't provide one.
-	ProviderRequestID string `json:"provider_request_id,omitempty"`
+	RequestID string `json:"request_id,omitempty"`
 
-	// ModelRequested is what the caller passed in StreamRequest.Model.
-	// e.g., "fast", "sonnet", "work/claude/sonnet"
-	ModelRequested string `json:"model_requested,omitempty"`
-
-	// ModelResolved is the fully qualified model path after alias resolution.
-	// For aggregate: "instance/type/model" e.g., "work/claude/claude-haiku-4-5-20251001"
-	// For simple providers: same as what was sent to the API.
-	ModelResolved string `json:"model_resolved,omitempty"`
-
-	// ModelProviderID is the model identifier returned by the upstream API in its response.
+	// Model is the model identifier returned by the upstream API in its response.
 	// e.g., "claude-haiku-4-5-20251001". May be empty if the API doesn't echo the model back.
-	ModelProviderID string `json:"model_provider_id,omitempty"`
+	Model string `json:"model,omitempty"`
 
-	// TimeToFirstToken is the duration from request dispatch until the first response byte.
-	// Serialised as a human-readable string (e.g. "412ms") by MarshalJSON.
-	TimeToFirstToken time.Duration `json:"-"`
+	TimeToFirstToken time.Duration `json:"time_to_first_token,omitempty"`
+}
+
+// Routed carries routing metadata emitted by meta-providers (e.g. aggregate)
+// when a request has been dispatched to a specific backend provider.
+type Routed struct {
+	// Provider is the name of the backend provider selected (e.g. "anthropic", "bedrock").
+	Provider string `json:"provider"`
+	// RequestedModel is the model alias or name the caller originally asked for.
+	RequestedModel string `json:"requested_model,omitempty"`
+	// ResolvedModel is the fully qualified model identifier dispatched to the provider.
+	ResolvedModel string `json:"resolved_model,omitempty"`
+	// Errors contains errors from any targets that were tried and failed before
+	// this provider was selected. Empty when the first target succeeded.
+	Errors []error `json:"-"`
+}
+
+// MarshalJSON serialises Routed, rendering Errors as strings since []error
+// is not directly JSON-marshallable.
+func (r Routed) MarshalJSON() ([]byte, error) {
+	type routedAlias Routed
+	errs := make([]string, 0, len(r.Errors))
+	for _, e := range r.Errors {
+		if e != nil {
+			errs = append(errs, e.Error())
+		}
+	}
+	return json.Marshal(struct {
+		routedAlias
+		Errors []string `json:"errors,omitempty"`
+	}{
+		routedAlias: routedAlias(r),
+		Errors:      errs,
+	})
 }
 
 // MarshalJSON renders TimeToFirstToken as a human-readable string (e.g. "412ms")
@@ -198,6 +251,9 @@ type StreamEvent struct {
 
 	// Start holds stream metadata. Populated for StreamEventStart.
 	Start *StreamStart `json:"start,omitempty"`
+
+	// Routed holds routing metadata. Populated for StreamEventRouted.
+	Routed *Routed `json:"routed,omitempty"`
 }
 
 // StreamRequest configures a provider CreateStream call.

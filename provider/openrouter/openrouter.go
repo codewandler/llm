@@ -400,15 +400,9 @@ func parseStream(ctx context.Context, body io.ReadCloser, events *llm.EventStrea
 		// Emit StreamEventStart on first chunk
 		if !startEmitted {
 			startEmitted = true
-			events.Send(llm.StreamEvent{
-				Type: llm.StreamEventStart,
-				Start: &llm.StreamStart{
-					ModelRequested:    meta.RequestedModel,
-					ModelResolved:     meta.ResolvedModel,
-					ModelProviderID:   chunk.Model,
-					ProviderRequestID: chunk.ID,
-					TimeToFirstToken:  time.Since(meta.StartTime),
-				},
+			events.Start(llm.StreamStartOpts{
+				Model:     chunk.Model,
+				RequestID: chunk.ID,
 			})
 		}
 

@@ -1136,9 +1136,8 @@ data: {"response":{"id":"resp_abc123","model":"gpt-5.1-codex","usage":{"input_to
 	}
 
 	require.NotNil(t, start)
-	assert.Equal(t, "gpt-5.1-codex", start.ModelRequested)
-	assert.Equal(t, "gpt-5.1-codex", start.ModelProviderID)
-	assert.Equal(t, "resp_abc123", start.ProviderRequestID)
+	assert.Equal(t, "gpt-5.1-codex", start.Model)
+	assert.Equal(t, "resp_abc123", start.RequestID)
 }
 
 // --- Unit tests for enrichOpts ---
