@@ -304,7 +304,7 @@ func ccParseStream(ctx context.Context, body io.ReadCloser, events chan<- llm.St
 				TotalTokens:  chunk.Usage.TotalTokens,
 			}
 			if chunk.Usage.PromptTokensDetails != nil {
-				finalUsage.CachedTokens = chunk.Usage.PromptTokensDetails.CachedTokens
+				finalUsage.CacheReadTokens = chunk.Usage.PromptTokensDetails.CachedTokens
 			}
 			if chunk.Usage.CompletionTokensDetails != nil {
 				finalUsage.ReasoningTokens = chunk.Usage.CompletionTokensDetails.ReasoningTokens

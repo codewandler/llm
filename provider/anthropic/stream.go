@@ -91,9 +91,13 @@ func ParseStream(ctx context.Context, body io.ReadCloser, events chan<- llm.Stre
 				} `json:"message"`
 			}
 			if err := json.Unmarshal([]byte(data), &evt); err == nil {
-				usage.InputTokens = evt.Message.Usage.InputTokens
 				usage.CacheWriteTokens = evt.Message.Usage.CacheCreationInputTokens
-				usage.CachedTokens = evt.Message.Usage.CacheReadInputTokens
+				usage.CacheReadTokens = evt.Message.Usage.CacheReadInputTokens
+				// InputTokens is total input: uncached remainder + cache-read + cache-write.
+				// The wire field input_tokens is only the uncached remainder (tokens after
+				// the last cache breakpoint), so we sum all three buckets here.
+				usage.InputTokens = evt.Message.Usage.InputTokens +
+					usage.CacheWriteTokens + usage.CacheReadTokens
 
 				// Emit StreamEventStart with metadata
 				events <- llm.StreamEvent{

@@ -313,18 +313,18 @@ func calculateCost(model string, usage *llm.Usage) {
 		return // unknown model, can't calculate cost
 	}
 
-	// Regular input tokens (non-cached). Subtract both CachedTokens and
-	// CacheWriteTokens defensively; OpenAI currently only reports CachedTokens
+	// Regular input tokens (non-cached). Subtract both CacheReadTokens and
+	// CacheWriteTokens defensively; OpenAI currently only reports CacheReadTokens
 	// but may report write tokens in future API versions.
-	regularInput := usage.InputTokens - usage.CachedTokens - usage.CacheWriteTokens
+	regularInput := usage.InputTokens - usage.CacheReadTokens - usage.CacheWriteTokens
 	if regularInput < 0 {
 		regularInput = 0
 	}
 
 	usage.InputCost = (float64(regularInput) / 1_000_000) * info.InputPrice
-	usage.CachedCost = (float64(usage.CachedTokens) / 1_000_000) * info.CachedInputPrice
+	usage.CacheReadCost = (float64(usage.CacheReadTokens) / 1_000_000) * info.CachedInputPrice
 	// CacheWriteCost is 0 for OpenAI (not reported), but set for consistency.
 	usage.CacheWriteCost = (float64(usage.CacheWriteTokens) / 1_000_000) * info.CachedInputPrice
 	usage.OutputCost = (float64(usage.OutputTokens) / 1_000_000) * info.OutputPrice
-	usage.Cost = usage.InputCost + usage.CachedCost + usage.CacheWriteCost + usage.OutputCost
+	usage.Cost = usage.InputCost + usage.CacheReadCost + usage.CacheWriteCost + usage.OutputCost
 }

@@ -398,7 +398,7 @@ data: [DONE]
 	assert.Equal(t, 50, usage.OutputTokens)
 	assert.Equal(t, 150, usage.TotalTokens)
 	assert.Equal(t, 0.005, usage.Cost)
-	assert.Equal(t, 80, usage.CachedTokens)
+	assert.Equal(t, 80, usage.CacheReadTokens)
 	assert.Equal(t, 30, usage.ReasoningTokens)
 }
 

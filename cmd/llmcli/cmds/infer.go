@@ -115,18 +115,18 @@ func printVerboseInfo(start *llm.StreamStart, usage *llm.Usage) {
 	}
 
 	// Cache usage (shown only when provider returned cache data)
-	if usage != nil && (usage.CachedTokens > 0 || usage.CacheWriteTokens > 0) {
-		fields = append(fields, field{"cache", fmt.Sprintf("%d read, %d written", usage.CachedTokens, usage.CacheWriteTokens)})
+	if usage != nil && (usage.CacheReadTokens > 0 || usage.CacheWriteTokens > 0) {
+		fields = append(fields, field{"cache", fmt.Sprintf("%d read, %d written", usage.CacheReadTokens, usage.CacheWriteTokens)})
 	}
 
 	// Cost
 	if usage != nil && usage.Cost > 0 {
-		hasBreakdown := usage.InputCost > 0 || usage.CachedCost > 0 || usage.CacheWriteCost > 0
+		hasBreakdown := usage.InputCost > 0 || usage.CacheReadCost > 0 || usage.CacheWriteCost > 0
 		if hasBreakdown {
 			fields = append(fields, field{"cost", fmt.Sprintf("%s (in %s, cache-r %s, cache-w %s, out %s)",
 				formatCost(usage.Cost),
 				formatCost(usage.InputCost),
-				formatCost(usage.CachedCost),
+				formatCost(usage.CacheReadCost),
 				formatCost(usage.CacheWriteCost),
 				formatCost(usage.OutputCost),
 			)})

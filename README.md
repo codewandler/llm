@@ -625,7 +625,7 @@ events, err := provider.CreateStream(ctx, llm.StreamOptions{
 
 On the **first call**, the provider writes the prompt prefix to cache
 (`CacheWriteTokens > 0`). On **subsequent calls within the TTL window** with the same
-prefix, the provider reads from cache (`CachedTokens > 0`, cost and latency drop
+prefix, the provider reads from cache (`CacheReadTokens > 0`, cost and latency drop
 significantly).
 
 Inspect cache usage via the `StreamEventDone` event:
@@ -633,7 +633,7 @@ Inspect cache usage via the `StreamEventDone` event:
 ```go
 for event := range events {
     if event.Type == llm.StreamEventDone && event.Usage != nil {
-        fmt.Printf("cached read:  %d tokens\n", event.Usage.CachedTokens)
+        fmt.Printf("cached read:  %d tokens\n", event.Usage.CacheReadTokens)
         fmt.Printf("cached write: %d tokens\n", event.Usage.CacheWriteTokens)
         fmt.Printf("cost:         $%.6f\n",     event.Usage.Cost)
     }
@@ -708,7 +708,7 @@ Providers only cache prompts above a minimum token count:
 | OpenAI | 1,024 tokens |
 
 Cache hints on smaller prompts are silently ignored — no error is returned. The
-`CacheWriteTokens` and `CachedTokens` fields in `Usage` will be `0`.
+`CacheWriteTokens` and `CacheReadTokens` fields in `Usage` will be `0`.
 
 ### Pricing
 
@@ -878,14 +878,15 @@ The `Usage` struct provides token counts and detailed breakdown:
 
 ```go
 type Usage struct {
-    InputTokens     int     // Prompt tokens
+    InputTokens     int     // Total input tokens (uncached + cache-read + cache-write)
     OutputTokens    int     // Completion tokens
-    TotalTokens     int     // Total tokens
+    TotalTokens     int     // InputTokens + OutputTokens
     Cost            float64 // Cost in USD (Anthropic, OpenRouter)
 
     // Detailed breakdown (provider-specific, may be zero)
-    CachedTokens    int // Prompt tokens served from cache
-    ReasoningTokens int // Tokens used for model reasoning
+    CacheReadTokens  int // Input tokens served from an existing cache entry
+    CacheWriteTokens int // Input tokens written to a new cache entry
+    ReasoningTokens  int // Tokens used for model reasoning
 }
 ```
 
@@ -897,8 +898,8 @@ for event := range stream {
         fmt.Printf("Tokens: %d in, %d out\n",
             event.Usage.InputTokens, event.Usage.OutputTokens)
 
-        if event.Usage.CachedTokens > 0 {
-            fmt.Printf("Cache hit: %d tokens\n", event.Usage.CachedTokens)
+        if event.Usage.CacheReadTokens > 0 {
+            fmt.Printf("Cache hit: %d tokens\n", event.Usage.CacheReadTokens)
         }
         if event.Usage.ReasoningTokens > 0 {
             fmt.Printf("Reasoning: %d tokens\n", event.Usage.ReasoningTokens)
@@ -909,11 +910,12 @@ for event := range stream {
 
 | Field | Description | Providers |
 |-------|-------------|-----------|
-| `InputTokens` | Prompt tokens | All |
+| `InputTokens` | Total input tokens processed (uncached + cache-read + cache-write) | All |
 | `OutputTokens` | Completion tokens | All |
-| `TotalTokens` | Total tokens | All |
+| `TotalTokens` | InputTokens + OutputTokens | All |
 | `Cost` | Cost in USD | Anthropic (calculated), OpenRouter |
-| `CachedTokens` | Tokens served from prompt cache | OpenAI, OpenRouter |
+| `CacheReadTokens` | Input tokens served from an existing cache entry | Anthropic, Bedrock, OpenAI, OpenRouter |
+| `CacheWriteTokens` | Input tokens written to a new cache entry | Anthropic, Bedrock |
 | `ReasoningTokens` | Tokens used for reasoning | OpenAI, OpenRouter (reasoning models) |
 
 ## Error Handling

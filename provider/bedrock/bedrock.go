@@ -649,7 +649,7 @@ func parseStream(ctx context.Context, output *bedrockruntime.ConverseStreamOutpu
 					usage.TotalTokens = int(*e.Value.Usage.TotalTokens)
 				}
 				if e.Value.Usage.CacheReadInputTokens != nil {
-					usage.CachedTokens = int(*e.Value.Usage.CacheReadInputTokens)
+					usage.CacheReadTokens = int(*e.Value.Usage.CacheReadInputTokens)
 				}
 				if e.Value.Usage.CacheWriteInputTokens != nil {
 					usage.CacheWriteTokens = int(*e.Value.Usage.CacheWriteInputTokens)

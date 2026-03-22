@@ -21,9 +21,17 @@ const (
 
 // Usage holds token counts and cost from a provider response.
 type Usage struct {
-	InputTokens  int
+	// InputTokens is the total number of input tokens processed, including
+	// tokens served from cache (CacheReadTokens) and tokens written to cache
+	// (CacheWriteTokens). Callers can use this as the single "how many input
+	// tokens did this request consume" figure.
+	InputTokens int
+
+	// OutputTokens is the number of tokens generated in the response.
 	OutputTokens int
-	TotalTokens  int
+
+	// TotalTokens is InputTokens + OutputTokens.
+	TotalTokens int
 
 	// Cost is the total request cost in USD.
 	// For Anthropic, Bedrock, and OpenAI this is locally calculated from
@@ -31,18 +39,18 @@ type Usage struct {
 	// For OpenRouter this is API-reported by the proxy (already includes cache pricing).
 	Cost float64
 
-	// Detailed token breakdown (provider-specific, may be zero)
-	CachedTokens     int // Prompt tokens served from cache (all providers)
-	CacheWriteTokens int // Prompt tokens written to cache (Anthropic, Bedrock)
-	ReasoningTokens  int // Tokens used for model reasoning
+	// Detailed token breakdown (provider-specific, may be zero).
+	CacheReadTokens  int // Input tokens served from an existing cache entry (all providers).
+	CacheWriteTokens int // Input tokens written to a new cache entry (Anthropic, Bedrock).
+	ReasoningTokens  int // Output tokens consumed by model reasoning (e.g. extended thinking).
 
 	// Granular cost breakdown in USD (zero if provider/model pricing is unknown).
-	// Sum of InputCost + CachedCost + CacheWriteCost + OutputCost == Cost.
+	// Sum of InputCost + CacheReadCost + CacheWriteCost + OutputCost == Cost.
 	// Not populated for OpenRouter (API-reported cost is used instead).
-	InputCost      float64 // Cost of regular (non-cached) input tokens
-	CachedCost     float64 // Cost of cache-read tokens
-	CacheWriteCost float64 // Cost of cache-write tokens
-	OutputCost     float64 // Cost of output tokens
+	InputCost      float64 // Cost of non-cached, non-write input tokens.
+	CacheReadCost  float64 // Cost of cache-read tokens.
+	CacheWriteCost float64 // Cost of cache-write tokens.
+	OutputCost     float64 // Cost of output tokens.
 }
 
 // StreamStart contains metadata about the stream, emitted with StreamEventStart.

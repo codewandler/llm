@@ -236,7 +236,7 @@ data: [DONE]
 	assert.Equal(t, 100, usage.InputTokens)
 	assert.Equal(t, 50, usage.OutputTokens)
 	assert.Equal(t, 150, usage.TotalTokens)
-	assert.Equal(t, 80, usage.CachedTokens)
+	assert.Equal(t, 80, usage.CacheReadTokens)
 	assert.Equal(t, 30, usage.ReasoningTokens)
 }
 
@@ -249,7 +249,7 @@ func TestCalculateCost(t *testing.T) {
 		usage          *llm.Usage
 		wantCost       float64
 		wantInputCost  float64
-		wantCachedCost float64
+		wantCacheReadCost float64
 		wantOutputCost float64
 	}{
 		{
@@ -262,7 +262,7 @@ func TestCalculateCost(t *testing.T) {
 			// $2.50/1M input + $10.00/1M output = $12.50
 			wantCost:       12.50,
 			wantInputCost:  2.50,
-			wantCachedCost: 0,
+			wantCacheReadCost: 0,
 			wantOutputCost: 10.00,
 		},
 		{
@@ -271,13 +271,13 @@ func TestCalculateCost(t *testing.T) {
 			usage: &llm.Usage{
 				InputTokens:  1_000_000,
 				OutputTokens: 500_000,
-				CachedTokens: 800_000,
+				CacheReadTokens: 800_000,
 			},
 			// (200k regular * $2.50/1M) + (800k cached * $1.25/1M) + (500k output * $10.00/1M)
 			// = $0.50 + $1.00 + $5.00 = $6.50
 			wantCost:       6.50,
 			wantInputCost:  0.50,
-			wantCachedCost: 1.00,
+			wantCacheReadCost: 1.00,
 			wantOutputCost: 5.00,
 		},
 		{
@@ -290,7 +290,7 @@ func TestCalculateCost(t *testing.T) {
 			// $0.15/1M input + $0.60/1M output = $0.75
 			wantCost:       0.75,
 			wantInputCost:  0.15,
-			wantCachedCost: 0,
+			wantCacheReadCost: 0,
 			wantOutputCost: 0.60,
 		},
 		{
@@ -303,7 +303,7 @@ func TestCalculateCost(t *testing.T) {
 			// $150/1M input + $600/1M output = $750
 			wantCost:       750.0,
 			wantInputCost:  150.0,
-			wantCachedCost: 0,
+			wantCacheReadCost: 0,
 			wantOutputCost: 600.0,
 		},
 		{
@@ -334,7 +334,7 @@ func TestCalculateCost(t *testing.T) {
 			}
 			assert.InDelta(t, tt.wantCost, u.Cost, 0.001, "Cost mismatch")
 			assert.InDelta(t, tt.wantInputCost, u.InputCost, 0.001, "InputCost mismatch")
-			assert.InDelta(t, tt.wantCachedCost, u.CachedCost, 0.001, "CachedCost mismatch")
+			assert.InDelta(t, tt.wantCacheReadCost, u.CacheReadCost, 0.001, "CacheReadCost mismatch")
 			assert.InDelta(t, tt.wantOutputCost, u.OutputCost, 0.001, "OutputCost mismatch")
 		})
 	}
@@ -792,7 +792,7 @@ data: [DONE]
 
 	require.NotNil(t, usage)
 	assert.Equal(t, 1000, usage.InputTokens)
-	assert.Equal(t, 800, usage.CachedTokens)
+	assert.Equal(t, 800, usage.CacheReadTokens)
 	assert.Equal(t, 500, usage.OutputTokens)
 
 	// Expected cost:
@@ -805,11 +805,11 @@ data: [DONE]
 
 	// Verify granular cost breakdown
 	assert.InDelta(t, 0.0005, usage.InputCost, 0.0000001, "InputCost")
-	assert.InDelta(t, 0.001, usage.CachedCost, 0.0000001, "CachedCost")
+	assert.InDelta(t, 0.001, usage.CacheReadCost, 0.0000001, "CacheReadCost")
 	assert.InDelta(t, 0.0, usage.CacheWriteCost, 0.0000001, "CacheWriteCost should be zero for OpenAI")
 	assert.InDelta(t, 0.005, usage.OutputCost, 0.0000001, "OutputCost")
 	// Sanity: breakdown sums to total
-	assert.InDelta(t, usage.Cost, usage.InputCost+usage.CachedCost+usage.CacheWriteCost+usage.OutputCost, 0.0000001, "breakdown should sum to Cost")
+	assert.InDelta(t, usage.Cost, usage.InputCost+usage.CacheReadCost+usage.CacheWriteCost+usage.OutputCost, 0.0000001, "breakdown should sum to Cost")
 }
 
 // --- Unit tests for Responses API request building ---
@@ -1069,7 +1069,7 @@ data: {"response":{"id":"resp_123","model":"gpt-5.1-codex","usage":{"input_token
 	assert.Equal(t, 100, usage.InputTokens)
 	assert.Equal(t, 50, usage.OutputTokens)
 	assert.Equal(t, 150, usage.TotalTokens)
-	assert.Equal(t, 80, usage.CachedTokens)
+	assert.Equal(t, 80, usage.CacheReadTokens)
 	assert.Equal(t, 30, usage.ReasoningTokens)
 }
 

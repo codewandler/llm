@@ -86,13 +86,13 @@ func CalculateCost(model string, usage *llm.Usage) float64 {
 	}
 
 	// Regular input tokens (non-cached, non-written)
-	regularInput := usage.InputTokens - usage.CachedTokens - usage.CacheWriteTokens
+	regularInput := usage.InputTokens - usage.CacheReadTokens - usage.CacheWriteTokens
 	if regularInput < 0 {
 		regularInput = 0
 	}
 
 	cost := (float64(regularInput) / 1_000_000) * pricing.InputPrice
-	cost += (float64(usage.CachedTokens) / 1_000_000) * pricing.CachedInputPrice
+	cost += (float64(usage.CacheReadTokens) / 1_000_000) * pricing.CachedInputPrice
 	cost += (float64(usage.CacheWriteTokens) / 1_000_000) * pricing.CacheWritePrice
 	cost += (float64(usage.OutputTokens) / 1_000_000) * pricing.OutputPrice
 
@@ -115,16 +115,16 @@ func FillCost(model string, usage *llm.Usage) {
 		}
 	}
 
-	regularInput := usage.InputTokens - usage.CachedTokens - usage.CacheWriteTokens
+	regularInput := usage.InputTokens - usage.CacheReadTokens - usage.CacheWriteTokens
 	if regularInput < 0 {
 		regularInput = 0
 	}
 
 	usage.InputCost = (float64(regularInput) / 1_000_000) * pricing.InputPrice
-	usage.CachedCost = (float64(usage.CachedTokens) / 1_000_000) * pricing.CachedInputPrice
+	usage.CacheReadCost = (float64(usage.CacheReadTokens) / 1_000_000) * pricing.CachedInputPrice
 	usage.CacheWriteCost = (float64(usage.CacheWriteTokens) / 1_000_000) * pricing.CacheWritePrice
 	usage.OutputCost = (float64(usage.OutputTokens) / 1_000_000) * pricing.OutputPrice
-	usage.Cost = usage.InputCost + usage.CachedCost + usage.CacheWriteCost + usage.OutputCost
+	usage.Cost = usage.InputCost + usage.CacheReadCost + usage.CacheWriteCost + usage.OutputCost
 }
 
 // matchPricingByPrefix tries to find pricing for a model by matching prefixes.

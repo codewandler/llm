@@ -451,7 +451,7 @@ func respHandleEvent(
 				TotalTokens:  u.InputTokens + u.OutputTokens,
 			}
 			if u.InputTokensDetails != nil {
-				usage.CachedTokens = u.InputTokensDetails.CachedTokens
+				usage.CacheReadTokens = u.InputTokensDetails.CachedTokens
 			}
 			if u.OutputTokensDetails != nil {
 				usage.ReasoningTokens = u.OutputTokensDetails.ReasoningTokens

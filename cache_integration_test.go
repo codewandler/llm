@@ -85,9 +85,9 @@ func TestCacheIntegration_Claude_TopLevel(t *testing.T) {
 
 	require.NotNil(t, usage1, "expected usage on first call")
 	t.Logf("Call 1 — input: %d, write: %d, read: %d, cost: $%.6f",
-		usage1.InputTokens, usage1.CacheWriteTokens, usage1.CachedTokens, usage1.Cost)
+		usage1.InputTokens, usage1.CacheWriteTokens, usage1.CacheReadTokens, usage1.Cost)
 
-	assert.True(t, usage1.CacheWriteTokens > 0 || usage1.CachedTokens > 0,
+	assert.True(t, usage1.CacheWriteTokens > 0 || usage1.CacheReadTokens > 0,
 		"first call should involve cache (write on cold start, read if cache is warm)")
 
 	// Call 2: same prefix, should always hit cache
@@ -98,9 +98,9 @@ func TestCacheIntegration_Claude_TopLevel(t *testing.T) {
 
 	require.NotNil(t, usage2, "expected usage on second call")
 	t.Logf("Call 2 — input: %d, write: %d, read: %d, cost: $%.6f",
-		usage2.InputTokens, usage2.CacheWriteTokens, usage2.CachedTokens, usage2.Cost)
+		usage2.InputTokens, usage2.CacheWriteTokens, usage2.CacheReadTokens, usage2.Cost)
 
-	assert.Greater(t, usage2.CachedTokens, 0,
+	assert.Greater(t, usage2.CacheReadTokens, 0,
 		"second call should always serve tokens from cache")
 }
 
@@ -132,8 +132,8 @@ func TestCacheIntegration_Claude_PerMessageHint(t *testing.T) {
 	require.NoError(t, err)
 	usage1 := drainCacheStream(t, stream1)
 	require.NotNil(t, usage1)
-	t.Logf("Call 1 — write: %d, read: %d", usage1.CacheWriteTokens, usage1.CachedTokens)
-	assert.True(t, usage1.CacheWriteTokens > 0 || usage1.CachedTokens > 0,
+	t.Logf("Call 1 — write: %d, read: %d", usage1.CacheWriteTokens, usage1.CacheReadTokens)
+	assert.True(t, usage1.CacheWriteTokens > 0 || usage1.CacheReadTokens > 0,
 		"first call should involve cache (write on cold start, read if cache already warm)")
 
 	// Call 2: different user question but same system prefix — must read from cache
@@ -141,8 +141,8 @@ func TestCacheIntegration_Claude_PerMessageHint(t *testing.T) {
 	require.NoError(t, err)
 	usage2 := drainCacheStream(t, stream2)
 	require.NotNil(t, usage2)
-	t.Logf("Call 2 — write: %d, read: %d", usage2.CacheWriteTokens, usage2.CachedTokens)
-	assert.Greater(t, usage2.CachedTokens, 0,
+	t.Logf("Call 2 — write: %d, read: %d", usage2.CacheWriteTokens, usage2.CacheReadTokens)
+	assert.Greater(t, usage2.CacheReadTokens, 0,
 		"second call with same system prefix should read from cache despite different user question")
 }
 
@@ -169,11 +169,11 @@ func TestCacheIntegration_Claude_ExtendedTTL(t *testing.T) {
 	usage := drainCacheStream(t, stream)
 
 	require.NotNil(t, usage)
-	t.Logf("Extended TTL — write: %d, read: %d", usage.CacheWriteTokens, usage.CachedTokens)
+	t.Logf("Extended TTL — write: %d, read: %d", usage.CacheWriteTokens, usage.CacheReadTokens)
 
 	// Either a write (first call) or a read (repeated run) is acceptable;
 	// the key assertion is: no error, and cache was involved.
-	assert.True(t, usage.CacheWriteTokens > 0 || usage.CachedTokens > 0,
+	assert.True(t, usage.CacheWriteTokens > 0 || usage.CacheReadTokens > 0,
 		"extended TTL request should produce either cache write or read tokens")
 }
 
@@ -202,8 +202,8 @@ func TestCacheIntegration_AnthropicDirect_TopLevel(t *testing.T) {
 	usage1 := drainCacheStream(t, stream1)
 	require.NotNil(t, usage1)
 	t.Logf("Call 1 — write: %d, read: %d, cost: $%.6f",
-		usage1.CacheWriteTokens, usage1.CachedTokens, usage1.Cost)
-	assert.True(t, usage1.CacheWriteTokens > 0 || usage1.CachedTokens > 0,
+		usage1.CacheWriteTokens, usage1.CacheReadTokens, usage1.Cost)
+	assert.True(t, usage1.CacheWriteTokens > 0 || usage1.CacheReadTokens > 0,
 		"first call should involve cache (write on cold start, read if cache already warm)")
 
 	// Call 2: read from cache
@@ -212,8 +212,8 @@ func TestCacheIntegration_AnthropicDirect_TopLevel(t *testing.T) {
 	usage2 := drainCacheStream(t, stream2)
 	require.NotNil(t, usage2)
 	t.Logf("Call 2 — write: %d, read: %d, cost: $%.6f",
-		usage2.CacheWriteTokens, usage2.CachedTokens, usage2.Cost)
-	assert.Greater(t, usage2.CachedTokens, 0, "second call should serve tokens from cache")
+		usage2.CacheWriteTokens, usage2.CacheReadTokens, usage2.Cost)
+	assert.Greater(t, usage2.CacheReadTokens, 0, "second call should serve tokens from cache")
 }
 
 // --- Bedrock provider ---
@@ -243,8 +243,8 @@ func TestCacheIntegration_Bedrock_TopLevel(t *testing.T) {
 	usage1 := drainCacheStream(t, stream1)
 	require.NotNil(t, usage1)
 	t.Logf("Call 1 — input: %d, write: %d, read: %d, cost: $%.6f",
-		usage1.InputTokens, usage1.CacheWriteTokens, usage1.CachedTokens, usage1.Cost)
-	assert.True(t, usage1.CacheWriteTokens > 0 || usage1.CachedTokens > 0,
+		usage1.InputTokens, usage1.CacheWriteTokens, usage1.CacheReadTokens, usage1.Cost)
+	assert.True(t, usage1.CacheWriteTokens > 0 || usage1.CacheReadTokens > 0,
 		"first call should involve cache (write on cold start, read if cache already warm)")
 
 	// Call 2: same prefix, must always hit cache
@@ -254,8 +254,8 @@ func TestCacheIntegration_Bedrock_TopLevel(t *testing.T) {
 	usage2 := drainCacheStream(t, stream2)
 	require.NotNil(t, usage2)
 	t.Logf("Call 2 — input: %d, write: %d, read: %d, cost: $%.6f",
-		usage2.InputTokens, usage2.CacheWriteTokens, usage2.CachedTokens, usage2.Cost)
-	assert.Greater(t, usage2.CachedTokens, 0,
+		usage2.InputTokens, usage2.CacheWriteTokens, usage2.CacheReadTokens, usage2.Cost)
+	assert.Greater(t, usage2.CacheReadTokens, 0,
 		"second call should serve tokens from cache")
 }
 
@@ -286,8 +286,8 @@ func TestCacheIntegration_Bedrock_PerMessageHint(t *testing.T) {
 	require.NoError(t, err)
 	usage1 := drainCacheStream(t, stream1)
 	require.NotNil(t, usage1)
-	t.Logf("Call 1 — write: %d, read: %d", usage1.CacheWriteTokens, usage1.CachedTokens)
-	assert.True(t, usage1.CacheWriteTokens > 0 || usage1.CachedTokens > 0,
+	t.Logf("Call 1 — write: %d, read: %d", usage1.CacheWriteTokens, usage1.CacheReadTokens)
+	assert.True(t, usage1.CacheWriteTokens > 0 || usage1.CacheReadTokens > 0,
 		"first call should involve cache (write on cold start, read if cache already warm)")
 
 	// Call 2: different user question, same system prefix — must read from cache
@@ -295,8 +295,8 @@ func TestCacheIntegration_Bedrock_PerMessageHint(t *testing.T) {
 	require.NoError(t, err)
 	usage2 := drainCacheStream(t, stream2)
 	require.NotNil(t, usage2)
-	t.Logf("Call 2 — write: %d, read: %d", usage2.CacheWriteTokens, usage2.CachedTokens)
-	assert.Greater(t, usage2.CachedTokens, 0,
+	t.Logf("Call 2 — write: %d, read: %d", usage2.CacheWriteTokens, usage2.CacheReadTokens)
+	assert.Greater(t, usage2.CacheReadTokens, 0,
 		"second call should read system prompt from cache despite different user question")
 }
 
@@ -323,6 +323,6 @@ func TestCacheIntegration_Bedrock_NonClaudeModel_NoError(t *testing.T) {
 
 	usage := drainCacheStream(t, stream)
 	require.NotNil(t, usage)
-	assert.Equal(t, 0, usage.CachedTokens, "non-Claude model should have no cached read tokens")
+	assert.Equal(t, 0, usage.CacheReadTokens, "non-Claude model should have no cached read tokens")
 	assert.Equal(t, 0, usage.CacheWriteTokens, "non-Claude model should have no cache write tokens")
 }

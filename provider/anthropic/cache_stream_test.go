@@ -52,23 +52,23 @@ func TestParseStream_CacheTokens(t *testing.T) {
 	}
 
 	require.NotNil(t, doneUsage, "expected StreamEventDone with usage")
-	assert.Equal(t, 10, doneUsage.InputTokens)
+	assert.Equal(t, 1546, doneUsage.InputTokens) // 10 (uncached) + 512 (cache-write) + 1024 (cache-read)
 	assert.Equal(t, 512, doneUsage.CacheWriteTokens, "cache creation tokens should map to CacheWriteTokens")
-	assert.Equal(t, 1024, doneUsage.CachedTokens, "cache read tokens should map to CachedTokens")
+	assert.Equal(t, 1024, doneUsage.CacheReadTokens, "cache read tokens should map to CacheReadTokens")
 	assert.Equal(t, 5, doneUsage.OutputTokens)
 
 	// Verify granular cost breakdown.
-	// regularInput = 10 - 1024 - 512 = clamped to 0
-	// InputCost    = 0 * $3.00/1M = $0
-	// CachedCost   = 1024/1M * $0.30 = $0.0000003072
-	// WriteСost    = 512/1M  * $3.75 = $0.00000192
-	// OutputCost   = 5/1M    * $15.00 = $0.000000075
-	assert.InDelta(t, 0.0, doneUsage.InputCost, 1e-10, "InputCost")
-	assert.InDelta(t, 1024.0/1_000_000*0.30, doneUsage.CachedCost, 1e-10, "CachedCost")
+	// regularInput  = 1546 - 1024 - 512 = 10
+	// InputCost     = 10/1M   * $3.00  = $0.00000003
+	// CacheReadCost = 1024/1M * $0.30  = $0.0000003072
+	// CacheWriteCost = 512/1M * $3.75  = $0.00000192
+	// OutputCost    = 5/1M   * $15.00  = $0.000000075
+	assert.InDelta(t, 10.0/1_000_000*3.00, doneUsage.InputCost, 1e-10, "InputCost")
+	assert.InDelta(t, 1024.0/1_000_000*0.30, doneUsage.CacheReadCost, 1e-10, "CacheReadCost")
 	assert.InDelta(t, 512.0/1_000_000*3.75, doneUsage.CacheWriteCost, 1e-10, "CacheWriteCost")
 	assert.InDelta(t, 5.0/1_000_000*15.00, doneUsage.OutputCost, 1e-10, "OutputCost")
 	// Sanity: breakdown sums to total
-	assert.InDelta(t, doneUsage.Cost, doneUsage.InputCost+doneUsage.CachedCost+doneUsage.CacheWriteCost+doneUsage.OutputCost, 1e-10, "breakdown should sum to Cost")
+	assert.InDelta(t, doneUsage.Cost, doneUsage.InputCost+doneUsage.CacheReadCost+doneUsage.CacheWriteCost+doneUsage.OutputCost, 1e-10, "breakdown should sum to Cost")
 }
 
 func TestParseStream_NoCacheTokens(t *testing.T) {
@@ -109,5 +109,5 @@ func TestParseStream_NoCacheTokens(t *testing.T) {
 
 	require.NotNil(t, doneUsage)
 	assert.Equal(t, 0, doneUsage.CacheWriteTokens)
-	assert.Equal(t, 0, doneUsage.CachedTokens)
+	assert.Equal(t, 0, doneUsage.CacheReadTokens)
 }
