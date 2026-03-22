@@ -110,10 +110,10 @@ type respInput struct {
 // respTool is a tool definition in the Responses API format.
 // Unlike Chat Completions, name/description/parameters are at the top level.
 type respTool struct {
-	Type        string         `json:"type"`
-	Name        string         `json:"name"`
-	Description string         `json:"description"`
-	Parameters  map[string]any `json:"parameters,omitempty"`
+	Type        string `json:"type"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Parameters  any    `json:"parameters,omitempty"`
 }
 
 func respBuildRequest(opts llm.StreamOptions) ([]byte, error) {
@@ -181,7 +181,7 @@ func respBuildRequest(opts llm.StreamOptions) ([]byte, error) {
 			Type:        "function",
 			Name:        t.Name,
 			Description: t.Description,
-			Parameters:  t.Parameters,
+			Parameters:  llm.NewSortedMap(t.Parameters),
 		})
 	}
 

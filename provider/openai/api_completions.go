@@ -100,9 +100,9 @@ type ccToolPayload struct {
 }
 
 type ccFunctionPayload struct {
-	Name        string         `json:"name"`
-	Description string         `json:"description"`
-	Parameters  map[string]any `json:"parameters"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Parameters  any    `json:"parameters"`
 }
 
 func ccBuildRequest(opts llm.StreamOptions) ([]byte, error) {
@@ -119,7 +119,7 @@ func ccBuildRequest(opts llm.StreamOptions) ([]byte, error) {
 			Function: ccFunctionPayload{
 				Name:        t.Name,
 				Description: t.Description,
-				Parameters:  t.Parameters,
+				Parameters:  llm.NewSortedMap(t.Parameters),
 			},
 		})
 	}

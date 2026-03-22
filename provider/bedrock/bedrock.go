@@ -475,7 +475,7 @@ func buildRequest(opts llm.StreamOptions) (*bedrockruntime.ConverseStreamInput, 
 	if len(opts.Tools) > 0 {
 		var tools []types.Tool
 		for _, t := range opts.Tools {
-			schema, err := toDocument(t.Parameters)
+			schema, err := toDocument(llm.NewSortedMap(t.Parameters))
 			if err != nil {
 				return nil, fmt.Errorf("marshal tool schema: %w", err)
 			}

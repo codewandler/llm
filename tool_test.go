@@ -1,11 +1,98 @@
 package llm
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// --- SortedMap tests ---
+
+func TestSortedMap_MarshalJSON_Flat(t *testing.T) {
+	m := NewSortedMap(map[string]any{"z": 1, "a": 2, "m": 3})
+	b, err := json.Marshal(m)
+	require.NoError(t, err)
+	assert.Equal(t, `{"a":2,"m":3,"z":1}`, string(b))
+}
+
+func TestSortedMap_MarshalJSON_Nested(t *testing.T) {
+	m := NewSortedMap(map[string]any{
+		"z": map[string]any{"b": 1, "a": 2},
+		"a": "hello",
+	})
+	b, err := json.Marshal(m)
+	require.NoError(t, err)
+	assert.Equal(t, `{"a":"hello","z":{"a":2,"b":1}}`, string(b))
+}
+
+func TestSortedMap_MarshalJSON_ArrayWithObjects(t *testing.T) {
+	m := NewSortedMap(map[string]any{
+		"items": []any{
+			map[string]any{"z": 9, "a": 1},
+		},
+	})
+	b, err := json.Marshal(m)
+	require.NoError(t, err)
+	assert.Equal(t, `{"items":[{"a":1,"z":9}]}`, string(b))
+}
+
+func TestSortedMap_MarshalJSON_Idempotent(t *testing.T) {
+	m := NewSortedMap(map[string]any{
+		"properties": map[string]any{
+			"unit":     map[string]any{"type": "string"},
+			"location": map[string]any{"type": "string", "description": "a city"},
+		},
+		"type":     "object",
+		"required": []any{"location"},
+	})
+	first, err := json.Marshal(m)
+	require.NoError(t, err)
+	second, err := json.Marshal(m)
+	require.NoError(t, err)
+	assert.Equal(t, string(first), string(second))
+}
+
+func TestSortedMap_MarshalJSON_NilMap(t *testing.T) {
+	m := NewSortedMap(nil)
+	b, err := json.Marshal(m)
+	require.NoError(t, err)
+	assert.Equal(t, `{}`, string(b))
+}
+
+func TestSortedMap_MarshalJSON_Scalars(t *testing.T) {
+	m := NewSortedMap(map[string]any{
+		"b": true,
+		"n": nil,
+		"f": 3.14,
+		"s": "str",
+	})
+	b, err := json.Marshal(m)
+	require.NoError(t, err)
+	assert.Equal(t, `{"b":true,"f":3.14,"n":null,"s":"str"}`, string(b))
+}
+
+// TestSortedMap_StableAcrossRuns marshals the same SortedMap many times and
+// asserts byte-identical output every time. This is the core correctness guard.
+func TestSortedMap_StableAcrossRuns(t *testing.T) {
+	type Params struct {
+		Location string `json:"location" jsonschema:"description=City name,required"`
+		Unit     string `json:"unit" jsonschema:"description=Temperature unit,enum=celsius,enum=fahrenheit"`
+		Days     int    `json:"days" jsonschema:"minimum=1,maximum=7"`
+	}
+	def := ToolDefinitionFor[Params]("get_weather", "Get weather")
+	sm := NewSortedMap(def.Parameters)
+
+	first, err := json.Marshal(sm)
+	require.NoError(t, err)
+
+	for i := 0; i < 100; i++ {
+		b, err := json.Marshal(sm)
+		require.NoError(t, err)
+		assert.Equal(t, string(first), string(b), "iteration %d produced different bytes", i)
+	}
+}
 
 func TestToolDefinitionFor_BasicStruct(t *testing.T) {
 	type BasicParams struct {

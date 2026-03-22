@@ -59,10 +59,10 @@ type toolUseBlock struct {
 }
 
 type toolPayload struct {
-	Name         string         `json:"name"`
-	Description  string         `json:"description"`
-	InputSchema  map[string]any `json:"input_schema"`
-	CacheControl *cacheControl  `json:"cache_control,omitempty"`
+	Name         string        `json:"name"`
+	Description  string        `json:"description"`
+	InputSchema  any           `json:"input_schema"`
+	CacheControl *cacheControl `json:"cache_control,omitempty"`
 }
 
 // cacheControl is the Anthropic API wire type for cache breakpoints.

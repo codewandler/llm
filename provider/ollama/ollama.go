@@ -303,9 +303,9 @@ type toolPayload struct {
 }
 
 type functionPayload struct {
-	Name        string         `json:"name"`
-	Description string         `json:"description"`
-	Parameters  map[string]any `json:"parameters"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Parameters  any    `json:"parameters"`
 }
 
 func buildRequest(opts llm.StreamOptions) ([]byte, error) {
@@ -323,7 +323,7 @@ func buildRequest(opts llm.StreamOptions) ([]byte, error) {
 			Function: functionPayload{
 				Name:        t.Name,
 				Description: t.Description,
-				Parameters:  t.Parameters,
+				Parameters:  llm.NewSortedMap(t.Parameters),
 			},
 		})
 	}
