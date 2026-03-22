@@ -15,6 +15,7 @@ import (
 type StreamEventType string
 
 const (
+	StreamEventCreated   StreamEventType = "created"
 	StreamEventStart     StreamEventType = "start"
 	StreamEventDelta     StreamEventType = "delta"
 	StreamEventReasoning StreamEventType = "reasoning"
@@ -70,30 +71,37 @@ func NewRequestID() string {
 }
 
 // EventStream wraps a buffered StreamEvent channel and stamps every outgoing
-// event with the same RequestID and an incrementing sequence number. Providers
-// create one at the top of CreateStream via NewEventStream, send all events
-// through Send, and return C() to callers.
+// event with the same RequestID, an incrementing sequence number, and a
+// timestamp. Providers create one at the top of CreateStream via NewEventStream,
+// send all events through Send, and return C() to callers.
 type EventStream struct {
 	id        string
 	seq       uint64
+	createdAt time.Time
 	ch        chan StreamEvent
 	closeOnce sync.Once
 }
 
-// NewEventStream creates an EventStream with a freshly generated RequestID
-// and a buffer of 64 events.
+// NewEventStream creates an EventStream with a freshly generated RequestID,
+// records the creation time, emits a StreamEventCreated event, and returns
+// a buffered channel of 64 events.
 func NewEventStream() *EventStream {
-	return &EventStream{
-		id: NewRequestID(),
-		ch: make(chan StreamEvent, 64),
+	s := &EventStream{
+		id:        NewRequestID(),
+		createdAt: time.Now(),
+		ch:        make(chan StreamEvent, 64),
 	}
+	s.Send(StreamEvent{Type: StreamEventCreated})
+	return s
 }
 
-// Send stamps ev with the stream's RequestID and a monotonically incrementing
-// sequence number, then sends it on the channel. The first event sent has Seq 1.
+// Send stamps ev with the stream's RequestID, a monotonically incrementing
+// sequence number, and the current timestamp, then sends it on the channel.
+// The first event sent has Seq 1.
 func (s *EventStream) Send(ev StreamEvent) {
 	ev.RequestID = s.id
 	ev.Seq = atomic.AddUint64(&s.seq, 1)
+	ev.Timestamp = time.Now()
 	s.ch <- ev
 }
 
@@ -168,6 +176,9 @@ type StreamEvent struct {
 	// Seq is a monotonically incrementing sequence number within a stream.
 	// The first event has Seq 1. Useful for detecting dropped or reordered events.
 	Seq uint64 `json:"seq,omitempty"`
+
+	// Timestamp is the wall-clock time at which this event was sent.
+	Timestamp time.Time `json:"timestamp,omitempty"`
 
 	// Delta is the incremental text content. Populated for StreamEventDelta.
 	Delta string `json:"delta,omitempty"`

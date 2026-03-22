@@ -189,6 +189,7 @@ func formatCost(cost float64) string {
 
 // noisyStreamEvents are collapsed to a single header line with no body.
 var noisyStreamEvents = map[llm.StreamEventType]bool{
+	llm.StreamEventCreated:   true,
 	llm.StreamEventDelta:     true,
 	llm.StreamEventReasoning: true,
 }
