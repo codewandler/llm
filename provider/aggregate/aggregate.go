@@ -294,15 +294,14 @@ func (p *Provider) Resolve(modelID string) (llm.Model, error) {
 // It tries each target in order until one succeeds or all fail.
 func (p *Provider) CreateStream(ctx context.Context, opts llm.StreamRequest) (<-chan llm.StreamEvent, error) {
 	if err := opts.Validate(); err != nil {
-		return nil, fmt.Errorf("invalid options: %w", err)
+		return nil, llm.NewErrBuildRequest(llm.ProviderNameAggregate, err)
 	}
 
 	targets, ok := p.aliasMap[opts.Model]
 	if !ok {
-		return nil, fmt.Errorf("%w: %s", ErrUnknownModel, opts.Model)
+		return nil, llm.NewErrUnknownModel(llm.ProviderNameAggregate, opts.Model)
 	}
 
-	var lastErr error
 	var triedErrors []error
 	for _, target := range targets {
 		streamOpts := opts
@@ -310,32 +309,32 @@ func (p *Provider) CreateStream(ctx context.Context, opts llm.StreamRequest) (<-
 
 		stream, err := target.provider.CreateStream(ctx, streamOpts)
 		if err != nil {
-			if isRetriableError(err) {
-				lastErr = err
-				triedErrors = append(triedErrors, fmt.Errorf("%s: %w", target.providerName, err))
+			pe := llm.AsProviderError(target.providerName, err)
+			if isRetriableError(pe) {
+				triedErrors = append(triedErrors, pe)
 				continue
 			}
-			return nil, fmt.Errorf("%s: %w", target.providerName, err)
+			return nil, pe
 		}
 
 		out := llm.NewEventStream()
 		out.Routed(llm.Routed{
 			Provider:       target.providerName,
-			RequestedModel: opts.Model,
-			ResolvedModel:  target.fullID,
+			ModelRequested: opts.Model,
+			ModelResolved:  target.fullID,
 			Errors:         triedErrors,
 		})
 		go func() {
 			defer out.Close()
 			for evt := range stream {
+				if evt.Type == llm.StreamEventCreated {
+					continue
+				}
 				out.Send(evt)
 			}
 		}()
 		return out.C(), nil
 	}
 
-	if lastErr != nil {
-		return nil, fmt.Errorf("all targets failed: %w", lastErr)
-	}
-	return nil, ErrNoProviders
+	return nil, llm.NewErrNoProviders(llm.ProviderNameAggregate)
 }

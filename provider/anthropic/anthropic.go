@@ -3,7 +3,6 @@ package anthropic
 import (
 	"bytes"
 	"context"
-	"fmt"
 	"io"
 	"net/http"
 	"time"
@@ -55,12 +54,12 @@ func (p *Provider) CreateStream(ctx context.Context, opts llm.StreamRequest) (<-
 	startTime := time.Now()
 
 	if err := opts.Validate(); err != nil {
-		return nil, fmt.Errorf("invalid options: %w", err)
+		return nil, llm.NewErrBuildRequest(llm.ProviderNameAnthropic, err)
 	}
 
 	apiKey, err := p.opts.ResolveAPIKey(ctx)
 	if err != nil {
-		return nil, err
+		return nil, llm.NewErrMissingAPIKey(llm.ProviderNameAnthropic)
 	}
 	if apiKey == "" {
 		return nil, llm.NewErrMissingAPIKey(llm.ProviderNameAnthropic)
@@ -76,7 +75,7 @@ func (p *Provider) CreateStream(ctx context.Context, opts llm.StreamRequest) (<-
 
 	req, err := p.newAPIRequest(ctx, apiKey, body)
 	if err != nil {
-		return nil, err
+		return nil, llm.NewErrBuildRequest(llm.ProviderNameAnthropic, err)
 	}
 
 	resp, err := p.client.Do(req)

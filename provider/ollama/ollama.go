@@ -242,7 +242,7 @@ func (p *Provider) downloadModel(ctx context.Context, modelID string) error {
 
 func (p *Provider) CreateStream(ctx context.Context, opts llm.StreamRequest) (<-chan llm.StreamEvent, error) {
 	if err := opts.Validate(); err != nil {
-		return nil, fmt.Errorf("invalid options: %w", err)
+		return nil, llm.NewErrBuildRequest(llm.ProviderNameOllama, err)
 	}
 	body, err := buildRequest(opts)
 	if err != nil {
@@ -251,7 +251,7 @@ func (p *Provider) CreateStream(ctx context.Context, opts llm.StreamRequest) (<-
 
 	req, err := http.NewRequestWithContext(ctx, "POST", p.opts.BaseURL+"/api/chat", bytes.NewReader(body))
 	if err != nil {
-		return nil, err
+		return nil, llm.NewErrBuildRequest(llm.ProviderNameOllama, err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 

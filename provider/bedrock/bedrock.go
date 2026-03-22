@@ -288,17 +288,17 @@ func (p *Provider) RegionPrefix() string {
 func (p *Provider) CreateStream(ctx context.Context, opts llm.StreamRequest) (<-chan llm.StreamEvent, error) {
 	// Lazy client initialization (thread-safe)
 	if err := p.initClient(ctx); err != nil {
-		return nil, err
+		return nil, llm.NewErrRequestFailed(llm.ProviderNameBedrock, err)
 	}
 
 	if err := opts.Validate(); err != nil {
-		return nil, fmt.Errorf("invalid options: %w", err)
+		return nil, llm.NewErrBuildRequest(llm.ProviderNameBedrock, err)
 	}
 
 	// Resolve model to include inference profile prefix
 	resolvedModel, err := p.resolveModel(opts.Model)
 	if err != nil {
-		return nil, err
+		return nil, llm.NewErrBuildRequest(llm.ProviderNameBedrock, err)
 	}
 
 	// Create a copy of opts with resolved model

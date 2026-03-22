@@ -107,8 +107,9 @@ func (s *EventStream) Send(ev StreamEvent) {
 	s.ch <- ev
 }
 
-// Error sends a StreamEventError event and is a convenience wrapper around Send.
-func (s *EventStream) Error(err error) {
+// Error sends a StreamEventError event. It accepts a *ProviderError so the
+// contract is enforced at compile time: every error in a stream is structured.
+func (s *EventStream) Error(err *ProviderError) {
 	s.Send(StreamEvent{Type: StreamEventError, Error: err})
 }
 
@@ -174,10 +175,10 @@ type StreamStart struct {
 type Routed struct {
 	// Provider is the name of the backend provider selected (e.g. "anthropic", "bedrock").
 	Provider string `json:"provider"`
-	// RequestedModel is the model alias or name the caller originally asked for.
-	RequestedModel string `json:"requested_model,omitempty"`
-	// ResolvedModel is the fully qualified model identifier dispatched to the provider.
-	ResolvedModel string `json:"resolved_model,omitempty"`
+	// ModelRequested is the model alias or name the caller originally asked for.
+	ModelRequested string `json:"model_requested,omitempty"`
+	// ModelResolved is the fully qualified model identifier dispatched to the provider.
+	ModelResolved string `json:"model_resolved,omitempty"`
 	// Errors contains errors from any targets that were tried and failed before
 	// this provider was selected. Empty when the first target succeeded.
 	Errors []error `json:"-"`
@@ -243,8 +244,7 @@ type StreamEvent struct {
 	ToolCall *ToolCall `json:"tool_call,omitempty"`
 
 	// Error holds the error that terminated the stream. Populated for StreamEventError.
-	// Not JSON-serialisable directly; callers that need to serialise should convert to string.
-	Error error `json:"-"`
+	Error *ProviderError `json:"error,omitempty"`
 
 	// Usage holds token counts and cost for the completed request. Populated for StreamEventDone.
 	Usage *Usage `json:"usage,omitempty"`

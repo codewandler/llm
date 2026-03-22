@@ -427,7 +427,7 @@ func TestCreateStream(t *testing.T) {
 			Messages: llm.Messages{&llm.UserMsg{Content: "hi"}},
 		})
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "all targets failed")
+		assert.ErrorIs(t, err, llm.ErrNoProviders)
 	})
 
 	t.Run("unknown model", func(t *testing.T) {
@@ -456,27 +456,35 @@ func TestCreateStream(t *testing.T) {
 }
 
 func TestIsRetriableError(t *testing.T) {
+	mkpe := func(msg string, statusCode int) *llm.ProviderError {
+		return &llm.ProviderError{
+			Sentinel:   llm.ErrAPIError,
+			Provider:   "test",
+			Message:    msg,
+			StatusCode: statusCode,
+		}
+	}
 	tests := []struct {
-		err       error
+		pe        *llm.ProviderError
 		retriable bool
 	}{
-		{errors.New("HTTP429: rate limit exceeded"), true},
-		{errors.New("HTTP 429: too many requests"), true},
-		{errors.New("503 service unavailable"), true},
-		{errors.New("quota exceeded"), true},
-		{errors.New("rate_limit"), true},
-		{errors.New("insufficient quota"), true},
-		{errors.New("usage limit exceeded"), true},
-		{errors.New("authentication failed"), false},
-		{errors.New("invalid API key"), false},
-		{errors.New("model not found"), false},
-		{errors.New("bad request"), false},
+		{mkpe("rate limit exceeded", 429), true},
+		{mkpe("too many requests", 429), true},
+		{mkpe("service unavailable", 503), true},
+		{mkpe("quota exceeded", 0), true},
+		{mkpe("rate_limit", 0), true},
+		{mkpe("insufficient quota", 0), true},
+		{mkpe("usage limit exceeded", 0), true},
+		{mkpe("authentication failed", 401), false},
+		{mkpe("invalid API key", 403), false},
+		{mkpe("model not found", 404), false},
+		{mkpe("bad request", 400), false},
 		{nil, false},
 	}
 
 	for _, tt := range tests {
 		t.Run("", func(t *testing.T) {
-			result := isRetriableError(tt.err)
+			result := isRetriableError(tt.pe)
 			assert.Equal(t, tt.retriable, result)
 		})
 	}

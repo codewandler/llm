@@ -11,7 +11,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -25,7 +24,7 @@ import (
 func (p *Provider) streamCompletions(ctx context.Context, opts llm.StreamRequest) (<-chan llm.StreamEvent, error) {
 	apiKey, err := p.opts.APIKeyFunc(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("get API key: %w", err)
+		return nil, llm.NewErrMissingAPIKey(llm.ProviderNameOpenAI)
 	}
 
 	body, err := ccBuildRequest(opts)
@@ -35,7 +34,7 @@ func (p *Provider) streamCompletions(ctx context.Context, opts llm.StreamRequest
 
 	req, err := http.NewRequestWithContext(ctx, "POST", p.opts.BaseURL+"/v1/chat/completions", bytes.NewReader(body))
 	if err != nil {
-		return nil, fmt.Errorf("create request: %w", err)
+		return nil, llm.NewErrBuildRequest(llm.ProviderNameOpenAI, err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+apiKey)

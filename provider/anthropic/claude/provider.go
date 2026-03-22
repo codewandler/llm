@@ -187,16 +187,16 @@ func (p *Provider) CreateStream(ctx context.Context, opts llm.StreamRequest) (<-
 	requestedModel := opts.Model
 
 	if err := opts.Validate(); err != nil {
-		return nil, fmt.Errorf("invalid options: %w", err)
+		return nil, llm.NewErrBuildRequest(llm.ProviderNameClaude, err)
 	}
 
 	if p.tokenProvider == nil {
-		return nil, fmt.Errorf("no token provider configured; use claude.WithTokenProvider() or claude.WithManagedTokenProvider()")
+		return nil, llm.NewErrMissingAPIKey(llm.ProviderNameClaude)
 	}
 
 	token, err := p.tokenProvider.Token(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("get token: %w", err)
+		return nil, llm.NewErrRequestFailed(llm.ProviderNameClaude, err)
 	}
 
 	opts.Model = normalizeModel(opts.Model)
@@ -207,7 +207,7 @@ func (p *Provider) CreateStream(ctx context.Context, opts llm.StreamRequest) (<-
 
 	req, err := p.newAPIRequest(ctx, token.AccessToken, body)
 	if err != nil {
-		return nil, err
+		return nil, llm.NewErrBuildRequest(llm.ProviderNameClaude, err)
 	}
 
 	resp, err := p.client.Do(req)

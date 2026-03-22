@@ -1,6 +1,7 @@
 package llm
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 )
@@ -13,6 +14,7 @@ const (
 	ProviderNameOllama     = "ollama"
 	ProviderNameOpenAI     = "openai"
 	ProviderNameOpenRouter = "openrouter"
+	ProviderNameAggregate  = "aggregate"
 )
 
 // Sentinel errors for use with errors.Is. Each ProviderError wraps one of
@@ -50,6 +52,17 @@ var (
 	// ErrBuildRequest is returned when serialising the outgoing request
 	// fails before it is sent.
 	ErrBuildRequest = errors.New("build request error")
+
+	// ErrUnknownModel is returned when a model ID or alias cannot be resolved.
+	ErrUnknownModel = errors.New("unknown model")
+
+	// ErrNoProviders is returned when no providers are configured or all
+	// failover targets have been exhausted.
+	ErrNoProviders = errors.New("no providers configured")
+
+	// ErrUnknown is used to wrap any error that is not already a ProviderError.
+	// Callers can test for it with errors.Is(err, llm.ErrUnknown).
+	ErrUnknown = errors.New("unknown error")
 )
 
 // ProviderError is a structured error emitted by any provider. It wraps a
@@ -57,23 +70,23 @@ var (
 // and optionally holds an HTTP status code and body for API errors.
 type ProviderError struct {
 	// Sentinel is one of the Err* vars above. errors.Is matches against it.
-	Sentinel error
+	Sentinel error `json:"-"`
 
 	// Provider is the name of the provider that produced this error.
 	// Use the ProviderName* constants.
-	Provider string
+	Provider string `json:"provider"`
 
 	// Message is a human-readable description of the error.
-	Message string
+	Message string `json:"message"`
 
 	// Cause is the underlying error that triggered this one, if any.
-	Cause error
+	Cause error `json:"-"`
 
 	// StatusCode is the HTTP response status code. Only set for ErrAPIError.
-	StatusCode int
+	StatusCode int `json:"status_code,omitempty"`
 
 	// Body is the raw HTTP response body. Only set for ErrAPIError.
-	Body string
+	Body string `json:"body,omitempty"`
 }
 
 // Error returns a human-readable error string in the form:
@@ -100,6 +113,32 @@ func (e *ProviderError) Unwrap() error {
 // same sentinel, enabling errors.Is(err, ErrAPIError) etc.
 func (e *ProviderError) Is(target error) bool {
 	return target == e.Sentinel
+}
+
+// MarshalJSON serialises ProviderError to JSON. Sentinel and Cause are
+// rendered as strings so the full error is machine-readable.
+func (e *ProviderError) MarshalJSON() ([]byte, error) {
+	type wire struct {
+		Sentinel   string `json:"sentinel"`
+		Provider   string `json:"provider"`
+		Message    string `json:"message"`
+		Cause      string `json:"cause,omitempty"`
+		StatusCode int    `json:"status_code,omitempty"`
+		Body       string `json:"body,omitempty"`
+	}
+	w := wire{
+		Provider:   e.Provider,
+		Message:    e.Message,
+		StatusCode: e.StatusCode,
+		Body:       e.Body,
+	}
+	if e.Sentinel != nil {
+		w.Sentinel = e.Sentinel.Error()
+	}
+	if e.Cause != nil {
+		w.Cause = e.Cause.Error()
+	}
+	return json.Marshal(w)
 }
 
 // --- Constructors ---
@@ -184,5 +223,45 @@ func NewErrBuildRequest(provider string, cause error) *ProviderError {
 		Provider: provider,
 		Message:  "failed to build request",
 		Cause:    cause,
+	}
+}
+
+// NewErrUnknownModel returns an error for a model ID or alias that cannot
+// be resolved by the provider.
+func NewErrUnknownModel(provider string, modelID string) *ProviderError {
+	return &ProviderError{
+		Sentinel: ErrUnknownModel,
+		Provider: provider,
+		Message:  fmt.Sprintf("unknown model %q", modelID),
+	}
+}
+
+// NewErrNoProviders returns an error when no providers are available or all
+// failover targets have been exhausted.
+func NewErrNoProviders(provider string) *ProviderError {
+	return &ProviderError{
+		Sentinel: ErrNoProviders,
+		Provider: provider,
+		Message:  "no providers configured",
+	}
+}
+
+// AsProviderError ensures err is a *ProviderError. If it already is one,
+// it is returned as-is. Otherwise it is wrapped in a new ProviderError
+// with ErrUnknown as the sentinel. This guarantees that every error
+// surface from CreateStream and EventStream.Error() is a *ProviderError.
+func AsProviderError(provider string, err error) *ProviderError {
+	if err == nil {
+		return nil
+	}
+	var pe *ProviderError
+	if errors.As(err, &pe) {
+		return pe
+	}
+	return &ProviderError{
+		Sentinel: ErrUnknown,
+		Provider: provider,
+		Message:  "unexpected error",
+		Cause:    err,
 	}
 }

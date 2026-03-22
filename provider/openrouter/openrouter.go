@@ -126,16 +126,16 @@ func (p *Provider) FetchModels(ctx context.Context) ([]llm.Model, error) {
 
 func (p *Provider) CreateStream(ctx context.Context, opts llm.StreamRequest) (<-chan llm.StreamEvent, error) {
 	if err := opts.Validate(); err != nil {
-		return nil, fmt.Errorf("invalid options: %w", err)
+		return nil, llm.NewErrBuildRequest(llm.ProviderNameOpenRouter, err)
 	}
 
 	// Resolve API key at stream creation time
 	apiKey, err := p.opts.ResolveAPIKey(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("resolve API key: %w", err)
+		return nil, llm.NewErrMissingAPIKey(llm.ProviderNameOpenRouter)
 	}
 	if apiKey == "" {
-		return nil, fmt.Errorf("openrouter: API key required")
+		return nil, llm.NewErrMissingAPIKey(llm.ProviderNameOpenRouter)
 	}
 
 	body, err := buildRequest(opts)
@@ -145,7 +145,7 @@ func (p *Provider) CreateStream(ctx context.Context, opts llm.StreamRequest) (<-
 
 	req, err := http.NewRequestWithContext(ctx, "POST", p.opts.BaseURL+"/v1/chat/completions", bytes.NewReader(body))
 	if err != nil {
-		return nil, err
+		return nil, llm.NewErrBuildRequest(llm.ProviderNameOpenRouter, err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+apiKey)

@@ -10,14 +10,15 @@ import (
 )
 
 var (
-	// ErrUnknownModel is returned when a model ID or alias is not found.
-	ErrUnknownModel = errors.New("unknown model")
-	// ErrNoProviders is returned when no providers are configured.
-	ErrNoProviders = errors.New("no providers configured")
 	// ErrProviderNotFound is returned when a referenced provider is not found.
 	ErrProviderNotFound = errors.New("provider not found")
 	// ErrAmbiguousModel is returned when a short model ID matches multiple providers.
 	ErrAmbiguousModel = errors.New("ambiguous model ID")
+
+	// ErrUnknownModel and ErrNoProviders are re-exported from the llm package
+	// for backwards compatibility with callers that import from this package.
+	ErrUnknownModel = llm.ErrUnknownModel
+	ErrNoProviders  = llm.ErrNoProviders
 )
 
 // resolvedTarget represents a fully resolved routing target.
@@ -58,18 +59,19 @@ func (p *Provider) resolveTarget(target AliasTarget) (resolvedTarget, error) {
 
 // isRetriableError checks if an error should trigger failover to the next target.
 // Retriable errors: rate limits (429), service unavailable (503), quota exceeded.
-func isRetriableError(err error) bool {
-	if err == nil {
+func isRetriableError(pe *llm.ProviderError) bool {
+	if pe == nil {
 		return false
 	}
 
-	errMsg := strings.ToLower(err.Error())
-
-	// HTTP status codes
-	if strings.Contains(errMsg, "429") ||
-		strings.Contains(errMsg, "503") {
+	// Use the structured StatusCode field when available — no string matching needed.
+	if pe.StatusCode == 429 || pe.StatusCode == 503 {
 		return true
 	}
+
+	// Fall back to message heuristics. Check both Message and the full error
+	// string (which includes Cause) so that wrapped plain errors are covered.
+	errMsg := strings.ToLower(pe.Error())
 
 	// Common error patterns
 	retryPatterns := []string{
