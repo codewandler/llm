@@ -14,7 +14,7 @@ const (
 	ProviderNameOllama     = "ollama"
 	ProviderNameOpenAI     = "openai"
 	ProviderNameOpenRouter = "openrouter"
-	ProviderNameAggregate  = "aggregate"
+	ProviderNameRouter  = "router"
 )
 
 // Sentinel errors for use with errors.Is. Each ProviderError wraps one of

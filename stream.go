@@ -170,7 +170,7 @@ type StreamStart struct {
 	TimeToFirstToken time.Duration `json:"time_to_first_token,omitempty"`
 }
 
-// Routed carries routing metadata emitted by meta-providers (e.g. aggregate)
+// Routed carries routing metadata emitted by meta-providers (e.g. router)
 // when a request has been dispatched to a specific backend provider.
 type Routed struct {
 	// Provider is the name of the backend provider selected (e.g. "anthropic", "bedrock").

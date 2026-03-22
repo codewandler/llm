@@ -4,7 +4,7 @@ import (
 	"net/http"
 
 	"github.com/codewandler/llm"
-	"github.com/codewandler/llm/provider/aggregate"
+	"github.com/codewandler/llm/provider/router"
 	"github.com/codewandler/llm/provider/anthropic"
 	"github.com/codewandler/llm/provider/anthropic/claude"
 	"github.com/codewandler/llm/provider/bedrock"
@@ -16,7 +16,7 @@ import (
 type providerEntry struct {
 	name         string
 	providerType string
-	factory      aggregate.Factory
+	factory      router.Factory
 	modelAliases map[string]string
 	hasAliases   bool // whether to add global aliases (fast/default/powerful)
 }

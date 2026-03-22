@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/codewandler/llm"
-	"github.com/codewandler/llm/provider/aggregate"
+	"github.com/codewandler/llm/provider/router"
 	"github.com/codewandler/llm/provider/anthropic"
 	"github.com/codewandler/llm/provider/anthropic/claude"
 )
@@ -31,7 +31,7 @@ const defaultName = "auto"
 //	    auto.WithClaudeLocal(),       // Claude local credentials
 //	    auto.WithBedrock(),           // AWS Bedrock
 //	)
-func New(ctx context.Context, opts ...Option) (*aggregate.Provider, error) {
+func New(ctx context.Context, opts ...Option) (*router.Provider, error) {
 	cfg := &config{
 		name:       defaultName,
 		autoDetect: true,
@@ -61,20 +61,20 @@ func New(ctx context.Context, opts ...Option) (*aggregate.Provider, error) {
 
 	// If still no providers, return error
 	if len(allProviders) == 0 {
-		return nil, aggregate.ErrNoProviders
+		return nil, router.ErrNoProviders
 	}
 
 	// Build aggregate config
-	aggCfg := aggregate.Config{
+	aggCfg := router.Config{
 		Name:      cfg.name,
-		Providers: make([]aggregate.ProviderInstanceConfig, 0, len(allProviders)),
-		Aliases: map[string][]aggregate.AliasTarget{
+		Providers: make([]router.ProviderInstanceConfig, 0, len(allProviders)),
+		Aliases: map[string][]router.AliasTarget{
 			AliasFast:     {},
 			AliasDefault:  {},
 			AliasPowerful: {},
 		},
 	}
-	factories := make(map[string]aggregate.Factory)
+	factories := make(map[string]router.Factory)
 
 	// Track used instance names to avoid duplicates
 	usedNames := make(map[string]int)
@@ -99,7 +99,7 @@ func New(ctx context.Context, opts ...Option) (*aggregate.Provider, error) {
 			factoryKey = entry.providerType + "-" + instanceName
 		}
 
-		aggCfg.Providers = append(aggCfg.Providers, aggregate.ProviderInstanceConfig{
+		aggCfg.Providers = append(aggCfg.Providers, router.ProviderInstanceConfig{
 			Name:         instanceName,
 			Type:         factoryKey, // Used for factory lookup and in model paths
 			ModelAliases: entry.modelAliases,
@@ -124,19 +124,19 @@ func New(ctx context.Context, opts ...Option) (*aggregate.Provider, error) {
 		}
 	}
 
-	return aggregate.New(aggCfg, factories)
+	return router.New(aggCfg, factories)
 }
 
 // parseAliasTarget parses a string target like "openai/o3" or "work/claude/sonnet"
 // into an AliasTarget. The first component is the provider instance name,
 // and the rest is the model reference.
-func parseAliasTarget(target string) aggregate.AliasTarget {
+func parseAliasTarget(target string) router.AliasTarget {
 	parts := strings.SplitN(target, "/", 2)
 	if len(parts) == 1 {
 		// Just a model ID, no provider prefix - use as-is
-		return aggregate.AliasTarget{Provider: "", Model: parts[0]}
+		return router.AliasTarget{Provider: "", Model: parts[0]}
 	}
-	return aggregate.AliasTarget{Provider: parts[0], Model: parts[1]}
+	return router.AliasTarget{Provider: parts[0], Model: parts[1]}
 }
 
 // enumerateClaudeAccounts lists all accounts from a TokenStore and creates provider entries.

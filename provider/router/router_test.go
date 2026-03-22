@@ -1,4 +1,4 @@
-package aggregate
+package router
 
 import (
 	"context"
@@ -86,7 +86,7 @@ func TestNew(t *testing.T) {
 		factories := map[string]Factory{"mock": mockFactory(prov)}
 		agg, err := New(cfg, factories)
 		require.NoError(t, err)
-		assert.Equal(t, "aggregate", agg.Name())
+		assert.Equal(t, "router", agg.Name())
 	})
 
 	t.Run("no providers", func(t *testing.T) {

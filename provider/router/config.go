@@ -1,4 +1,4 @@
-package aggregate
+package router
 
 import "github.com/codewandler/llm"
 
@@ -18,7 +18,7 @@ type AliasTarget struct {
 
 // Config is the complete aggregate configuration.
 type Config struct {
-	Name      string                   // Aggregate provider name (defaults to "aggregate")
+	Name      string                   // Router provider name (defaults to "router")
 	Providers []ProviderInstanceConfig // Named provider instances
 	Aliases   map[string][]AliasTarget // Global alias -> ordered targets
 }

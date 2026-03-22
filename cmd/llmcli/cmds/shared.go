@@ -7,7 +7,7 @@ import (
 
 	"github.com/codewandler/llm"
 	"github.com/codewandler/llm/cmd/llmcli/store"
-	"github.com/codewandler/llm/provider/aggregate"
+	"github.com/codewandler/llm/provider/router"
 	"github.com/codewandler/llm/provider/auto"
 )
 
@@ -58,7 +58,7 @@ func (f *RootFlags) BuildLLMOptions(handler *httpLogHandler) []llm.Option {
 // httpClient overrides the default transport (e.g. for logging); pass nil to
 // use llm.DefaultHttpClient(). llmOpts are passed to providers that log
 // outside the HTTP transport layer (e.g. Bedrock).
-func createProvider(ctx context.Context, httpClient *http.Client, llmOpts ...llm.Option) (*aggregate.Provider, error) {
+func createProvider(ctx context.Context, httpClient *http.Client, llmOpts ...llm.Option) (*router.Provider, error) {
 	tokenStore, err := getTokenStore()
 	if err != nil {
 		return nil, err

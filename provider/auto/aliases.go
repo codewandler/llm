@@ -1,7 +1,7 @@
 package auto
 
 import (
-	"github.com/codewandler/llm/provider/aggregate"
+	"github.com/codewandler/llm/provider/router"
 	"github.com/codewandler/llm/provider/anthropic"
 	"github.com/codewandler/llm/provider/bedrock"
 	"github.com/codewandler/llm/provider/openai"
@@ -35,13 +35,13 @@ var providerAliasModels = map[string]aliasModels{
 }
 
 // buildAliasTargets creates alias targets for a provider instance.
-func buildAliasTargets(instanceName, providerType string) map[string]aggregate.AliasTarget {
+func buildAliasTargets(instanceName, providerType string) map[string]router.AliasTarget {
 	models, ok := providerAliasModels[providerType]
 	if !ok {
 		return nil
 	}
 
-	return map[string]aggregate.AliasTarget{
+	return map[string]router.AliasTarget{
 		AliasFast:     {Provider: instanceName, Model: models.fast},
 		AliasDefault:  {Provider: instanceName, Model: models.normal},
 		AliasPowerful: {Provider: instanceName, Model: models.powerful},

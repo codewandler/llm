@@ -1,4 +1,4 @@
-package aggregate
+package router
 
 import (
 	"context"
@@ -7,7 +7,7 @@ import (
 	"github.com/codewandler/llm"
 )
 
-const defaultName = "aggregate"
+const defaultName = "router"
 
 // buildModelPath constructs a model path. When instance name equals provider type
 // (singleton provider), uses short form "type/model". Otherwise uses full form
@@ -294,12 +294,12 @@ func (p *Provider) Resolve(modelID string) (llm.Model, error) {
 // It tries each target in order until one succeeds or all fail.
 func (p *Provider) CreateStream(ctx context.Context, opts llm.StreamRequest) (<-chan llm.StreamEvent, error) {
 	if err := opts.Validate(); err != nil {
-		return nil, llm.NewErrBuildRequest(llm.ProviderNameAggregate, err)
+		return nil, llm.NewErrBuildRequest(llm.ProviderNameRouter, err)
 	}
 
 	targets, ok := p.aliasMap[opts.Model]
 	if !ok {
-		return nil, llm.NewErrUnknownModel(llm.ProviderNameAggregate, opts.Model)
+		return nil, llm.NewErrUnknownModel(llm.ProviderNameRouter, opts.Model)
 	}
 
 	var triedErrors []error
@@ -336,5 +336,5 @@ func (p *Provider) CreateStream(ctx context.Context, opts llm.StreamRequest) (<-
 		return out.C(), nil
 	}
 
-	return nil, llm.NewErrNoProviders(llm.ProviderNameAggregate)
+	return nil, llm.NewErrNoProviders(llm.ProviderNameRouter)
 }
