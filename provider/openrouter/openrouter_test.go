@@ -296,10 +296,11 @@ data: [DONE]
 }
 
 func TestParseStream_MultipleParallelToolCalls(t *testing.T) {
+	// Arguments for index 1 arrive before index 0; must still emit in LLM-production order (0, 1).
 	sseData := `data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_1","type":"function","function":{"name":"tool_a"}}]}}]}
 data: {"choices":[{"delta":{"tool_calls":[{"index":1,"id":"call_2","type":"function","function":{"name":"tool_b"}}]}}]}
-data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{\"a\":1}"}}]}}]}
 data: {"choices":[{"delta":{"tool_calls":[{"index":1,"function":{"arguments":"{\"b\":2}"}}]}}]}
+data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{\"a\":1}"}}]}}]}
 data: {"choices":[{"finish_reason":"tool_calls"}]}
 data: [DONE]
 `
@@ -315,19 +316,14 @@ data: [DONE]
 	}
 
 	require.Len(t, toolCalls, 2)
+	// Must be emitted in LLM-production order: index 0 first, then index 1
+	assert.Equal(t, "call_1", toolCalls[0].ID)
+	assert.Equal(t, "tool_a", toolCalls[0].Name)
+	assert.Equal(t, float64(1), toolCalls[0].Arguments["a"])
 
-	// Order might vary, so check both are present
-	toolMap := make(map[string]*llm.ToolCall)
-	for _, tc := range toolCalls {
-		toolMap[tc.ID] = tc
-	}
-
-	assert.Contains(t, toolMap, "call_1")
-	assert.Contains(t, toolMap, "call_2")
-	assert.Equal(t, "tool_a", toolMap["call_1"].Name)
-	assert.Equal(t, "tool_b", toolMap["call_2"].Name)
-	assert.Equal(t, float64(1), toolMap["call_1"].Arguments["a"])
-	assert.Equal(t, float64(2), toolMap["call_2"].Arguments["b"])
+	assert.Equal(t, "call_2", toolCalls[1].ID)
+	assert.Equal(t, "tool_b", toolCalls[1].Name)
+	assert.Equal(t, float64(2), toolCalls[1].Arguments["b"])
 }
 
 func TestParseStream_ReasoningContent(t *testing.T) {

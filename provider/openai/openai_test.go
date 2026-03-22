@@ -198,6 +198,44 @@ data: [DONE]
 	assert.Equal(t, "Paris", tc.Arguments["location"])
 }
 
+func TestParseStream_ParallelToolCallsOrder(t *testing.T) {
+	// Tool index 2 is introduced before index 0 arguments arrive, then index 1.
+	// The LLM produced them in order 0, 1, 2 (by their index values).
+	// We must emit them in that order regardless of map iteration order.
+	sseData := `data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_0","type":"function","function":{"name":"tool_alpha"}}]}}]}
+data: {"choices":[{"delta":{"tool_calls":[{"index":1,"id":"call_1","type":"function","function":{"name":"tool_beta"}}]}}]}
+data: {"choices":[{"delta":{"tool_calls":[{"index":2,"id":"call_2","type":"function","function":{"name":"tool_gamma"}}]}}]}
+data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{\"x\":1}"}}]}}]}
+data: {"choices":[{"delta":{"tool_calls":[{"index":2,"function":{"arguments":"{\"z\":3}"}}]}}]}
+data: {"choices":[{"delta":{"tool_calls":[{"index":1,"function":{"arguments":"{\"y\":2}"}}]}}]}
+data: {"choices":[{"finish_reason":"tool_calls"}]}
+data: [DONE]
+`
+	events := llm.NewEventStream()
+	go ccParseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), events, testMeta("gpt-4o"))
+
+	var toolCalls []*llm.ToolCall
+	for event := range events.C() {
+		if event.Type == llm.StreamEventToolCall {
+			toolCalls = append(toolCalls, event.ToolCall)
+		}
+	}
+
+	require.Len(t, toolCalls, 3)
+	// Must be emitted in LLM-production order: index 0, 1, 2
+	assert.Equal(t, "call_0", toolCalls[0].ID)
+	assert.Equal(t, "tool_alpha", toolCalls[0].Name)
+	assert.Equal(t, float64(1), toolCalls[0].Arguments["x"])
+
+	assert.Equal(t, "call_1", toolCalls[1].ID)
+	assert.Equal(t, "tool_beta", toolCalls[1].Name)
+	assert.Equal(t, float64(2), toolCalls[1].Arguments["y"])
+
+	assert.Equal(t, "call_2", toolCalls[2].ID)
+	assert.Equal(t, "tool_gamma", toolCalls[2].Name)
+	assert.Equal(t, float64(3), toolCalls[2].Arguments["z"])
+}
+
 func TestParseStream_Usage(t *testing.T) {
 	sseData := `data: {"choices":[{"delta":{"content":"test"}}],"usage":{"prompt_tokens":10,"completion_tokens":5,"total_tokens":15}}
 data: {"choices":[{"finish_reason":"stop"}]}

@@ -13,6 +13,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 
@@ -345,7 +346,15 @@ func ccParseStream(ctx context.Context, body io.ReadCloser, events *llm.EventStr
 }
 
 func ccEmitToolCalls(activeTools map[int]*ccToolAccum, events *llm.EventStream) {
-	for _, accum := range activeTools {
+	// Collect indices and sort so tool calls are emitted in LLM-production order.
+	indices := make([]int, 0, len(activeTools))
+	for idx := range activeTools {
+		indices = append(indices, idx)
+	}
+	sort.Ints(indices)
+
+	for _, idx := range indices {
+		accum := activeTools[idx]
 		var args map[string]any
 		if accum.argsBuf.Len() > 0 {
 			_ = json.Unmarshal([]byte(accum.argsBuf.String()), &args)
