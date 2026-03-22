@@ -6,12 +6,6 @@ import (
 	"fmt"
 )
 
-// Common errors
-var (
-	ErrNotFound   = errors.New("not found")
-	ErrBadRequest = errors.New("bad request")
-)
-
 // Role represents the role of a message in a conversation.
 type Role string
 

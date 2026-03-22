@@ -20,6 +20,15 @@ import (
 	"github.com/codewandler/llm"
 )
 
+// Environment variable names for AWS configuration.
+const (
+	EnvAWSAccessKeyID     = "AWS_ACCESS_KEY_ID"
+	EnvAWSSecretAccessKey = "AWS_SECRET_ACCESS_KEY"
+	EnvAWSRegion          = "AWS_REGION"
+	EnvAWSDefaultRegion   = "AWS_DEFAULT_REGION"
+	EnvAWSProfile         = "AWS_PROFILE"
+)
+
 const providerName = "bedrock"
 
 // DefaultModel is the recommended default model (Claude Sonnet 4.6).

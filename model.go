@@ -11,6 +11,6 @@ type Model struct {
 // Resolver resolves a model alias or ID to its full Model representation.
 type Resolver interface {
 	// Resolve returns the Model for the given model ID or alias.
-	// Returns ErrNotFound if the model is not recognized.
+	// Returns an error if the model is not recognized.
 	Resolve(modelID string) (Model, error)
 }
