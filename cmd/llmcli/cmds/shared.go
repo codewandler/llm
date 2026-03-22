@@ -22,6 +22,10 @@ type RootFlags struct {
 	// LogHTTPAllHeaders disables the response header allowlist and prints all headers.
 	// Has no effect unless LogHTTPDebug is also true.
 	LogHTTPAllHeaders bool
+	// LogEvents prints each StreamEvent as JSON to stderr as it is consumed
+	// from the channel, before any other handling. Useful for debugging the
+	// provider event stream at the application layer.
+	LogEvents bool
 }
 
 // BuildHTTPClient constructs an *http.Client from the root flags.

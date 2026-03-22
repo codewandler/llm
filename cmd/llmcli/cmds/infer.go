@@ -2,7 +2,9 @@ package cmds
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"os"
 
 	"github.com/spf13/cobra"
 
@@ -53,7 +55,7 @@ func runInfer(ctx context.Context, message, model, system string, verbose bool, 
 		msgs = append(llm.Messages{&llm.SystemMsg{Content: system}}, msgs...)
 	}
 
-	stream, err := provider.CreateStream(ctx, llm.StreamOptions{
+	stream, err := provider.CreateStream(ctx, llm.StreamRequest{
 		Model:    model,
 		Messages: msgs,
 	})
@@ -65,6 +67,9 @@ func runInfer(ctx context.Context, message, model, system string, verbose bool, 
 	var hadTokenOutput bool
 
 	for event := range stream {
+		if root.LogEvents {
+			logStreamEvent(event)
+		}
 		switch event.Type {
 		case llm.StreamEventStart:
 			startInfo = event.Start
@@ -98,23 +103,23 @@ func printVerboseInfo(start *llm.StreamStart, usage *llm.Usage) {
 	var fields []field
 
 	// Request ID
-	if start != nil && start.RequestID != "" {
-		fields = append(fields, field{"request_id", start.RequestID})
+	if start != nil && start.ProviderRequestID != "" {
+		fields = append(fields, field{"request_id", start.ProviderRequestID})
 	}
 
 	// Requested model
-	if start != nil && start.RequestedModel != "" {
-		fields = append(fields, field{"requested", start.RequestedModel})
+	if start != nil && start.ModelRequested != "" {
+		fields = append(fields, field{"requested", start.ModelRequested})
 	}
 
 	// Resolved model (only if different from requested)
-	if start != nil && start.ResolvedModel != "" && start.ResolvedModel != start.RequestedModel {
-		fields = append(fields, field{"resolved", start.ResolvedModel})
+	if start != nil && start.ModelResolved != "" && start.ModelResolved != start.ModelRequested {
+		fields = append(fields, field{"resolved", start.ModelResolved})
 	}
 
 	// API model (what the provider returned)
-	if start != nil && start.ProviderModel != "" {
-		fields = append(fields, field{"api_model", start.ProviderModel})
+	if start != nil && start.ModelProviderID != "" {
+		fields = append(fields, field{"api_model", start.ModelProviderID})
 	}
 
 	// Token usage
@@ -180,4 +185,47 @@ func formatCost(cost float64) string {
 	default:
 		return fmt.Sprintf("$%.2f", cost)
 	}
+}
+
+// noisyStreamEvents are collapsed to a single header line with no body.
+var noisyStreamEvents = map[llm.StreamEventType]bool{
+	llm.StreamEventDelta:     true,
+	llm.StreamEventReasoning: true,
+}
+
+// logStreamEvent pretty-prints a StreamEvent to stderr using the same visual
+// style as the SSE event renderer in httplog.go: bold [event_type] header
+// followed by indented JSON body. Delta and reasoning events are collapsed to
+// a single line (they are too numerous to expand usefully).
+func logStreamEvent(ev llm.StreamEvent) {
+	eventType := string(ev.Type)
+
+	if noisyStreamEvents[ev.Type] {
+		fmt.Fprintf(os.Stderr, "\n    %s[%s]%s\n", ansiBold, eventType, ansiReset)
+		return
+	}
+
+	// StreamEvent marshals cleanly except for the Error field (error interface
+	// is not JSON-serialisable). Use the type alias trick to shadow it with a
+	// string while keeping all other field tags from the struct.
+	type streamEventAlias llm.StreamEvent
+	b, err := json.Marshal(struct {
+		streamEventAlias
+		Error string `json:"error,omitempty"`
+	}{
+		streamEventAlias: streamEventAlias(ev),
+		Error:            func() string {
+			if ev.Error != nil {
+				return ev.Error.Error()
+			}
+			return ""
+		}(),
+	})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "\n    %s[%s]%s\n    (marshal error: %v)\n", ansiBold, eventType, ansiReset, err)
+		return
+	}
+
+	fmt.Fprintf(os.Stderr, "\n    %s[%s]%s\n", ansiBold, eventType, ansiReset)
+	fmt.Fprintln(os.Stderr, indentAll(prettyJSON(string(b)), "    "))
 }
