@@ -101,7 +101,7 @@ type StreamOptions struct {
 func (o StreamOptions) Validate() error {
 	// Validate Model
 	if o.Model == "" {
-		return errors.New("Model is required")
+		return errors.New("model is required")
 	}
 
 	// Validate ReasoningEffort
