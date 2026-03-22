@@ -247,13 +247,13 @@ data: {"choices":[{"finish_reason":"stop"}]}
 data: [DONE]
 `
 
-	events := make(chan llm.StreamEvent, 64)
+	events := llm.NewEventStream()
 	go parseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), events, testMeta("test/model"))
 
 	var deltas []string
 	var gotDone bool
 
-	for event := range events {
+	for event := range events.C() {
 		switch event.Type {
 		case llm.StreamEventDelta:
 			deltas = append(deltas, event.Delta)
@@ -276,11 +276,11 @@ data: {"choices":[{"finish_reason":"tool_calls"}]}
 data: [DONE]
 `
 
-	events := make(chan llm.StreamEvent, 64)
+	events := llm.NewEventStream()
 	go parseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), events, testMeta("test/model"))
 
 	var toolCalls []*llm.ToolCall
-	for event := range events {
+	for event := range events.C() {
 		if event.Type == llm.StreamEventToolCall {
 			toolCalls = append(toolCalls, event.ToolCall)
 		}
@@ -302,11 +302,11 @@ data: {"choices":[{"finish_reason":"tool_calls"}]}
 data: [DONE]
 `
 
-	events := make(chan llm.StreamEvent, 64)
+	events := llm.NewEventStream()
 	go parseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), events, testMeta("test/model"))
 
 	var toolCalls []*llm.ToolCall
-	for event := range events {
+	for event := range events.C() {
 		if event.Type == llm.StreamEventToolCall {
 			toolCalls = append(toolCalls, event.ToolCall)
 		}
@@ -335,13 +335,13 @@ data: {"choices":[{"finish_reason":"stop"}]}
 data: [DONE]
 `
 
-	events := make(chan llm.StreamEvent, 64)
+	events := llm.NewEventStream()
 	go parseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), events, testMeta("test/model"))
 
 	var reasoning []string
 	var content []string
 
-	for event := range events {
+	for event := range events.C() {
 		switch event.Type {
 		case llm.StreamEventReasoning:
 			reasoning = append(reasoning, event.Reasoning)
@@ -360,11 +360,11 @@ data: {"choices":[{"finish_reason":"stop"}]}
 data: [DONE]
 `
 
-	events := make(chan llm.StreamEvent, 64)
+	events := llm.NewEventStream()
 	go parseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), events, testMeta("test/model"))
 
 	var usage *llm.Usage
-	for event := range events {
+	for event := range events.C() {
 		if event.Type == llm.StreamEventDone && event.Usage != nil {
 			usage = event.Usage
 		}
@@ -383,11 +383,11 @@ data: {"choices":[],"usage":{"prompt_tokens":100,"completion_tokens":50,"total_t
 data: [DONE]
 `
 
-	events := make(chan llm.StreamEvent, 64)
+	events := llm.NewEventStream()
 	go parseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), events, testMeta("test/model"))
 
 	var usage *llm.Usage
-	for event := range events {
+	for event := range events.C() {
 		if event.Type == llm.StreamEventDone && event.Usage != nil {
 			usage = event.Usage
 		}
@@ -406,13 +406,13 @@ func TestParseStream_ErrorHandling(t *testing.T) {
 	sseData := `data: {"error":{"message":"Rate limit exceeded"}}
 `
 
-	events := make(chan llm.StreamEvent, 64)
+	events := llm.NewEventStream()
 	go parseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), events, testMeta("test/model"))
 
 	var gotError bool
 	var errorMsg string
 
-	for event := range events {
+	for event := range events.C() {
 		if event.Type == llm.StreamEventError {
 			gotError = true
 			errorMsg = event.Error.Error()
@@ -429,13 +429,13 @@ func TestParseStream_ContextCancellation(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	events := make(chan llm.StreamEvent, 64)
+	events := llm.NewEventStream()
 
 	go parseStream(ctx, io.NopCloser(strings.NewReader(sseData)), events, testMeta("test/model"))
 
 	// Cancel after receiving a few events
 	eventCount := 0
-	for event := range events {
+	for event := range events.C() {
 		eventCount++
 		if eventCount == 5 {
 			cancel()

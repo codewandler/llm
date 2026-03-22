@@ -37,7 +37,7 @@ func TestParseStream_CacheTokens(t *testing.T) {
 		``,
 	}, "\n")
 
-	events := make(chan llm.StreamEvent, 64)
+	events := llm.NewEventStream()
 	body := io.NopCloser(strings.NewReader(sse))
 	go ParseStream(context.Background(), body, events, StreamMeta{
 		RequestedModel: "claude-sonnet-4-5",
@@ -45,7 +45,7 @@ func TestParseStream_CacheTokens(t *testing.T) {
 	})
 
 	var doneUsage *llm.Usage
-	for ev := range events {
+	for ev := range events.C() {
 		if ev.Type == llm.StreamEventDone {
 			doneUsage = ev.Usage
 		}
@@ -94,14 +94,14 @@ func TestParseStream_NoCacheTokens(t *testing.T) {
 		``,
 	}, "\n")
 
-	events := make(chan llm.StreamEvent, 64)
+	events := llm.NewEventStream()
 	body := io.NopCloser(strings.NewReader(sse))
 	go ParseStream(context.Background(), body, events, StreamMeta{
 		RequestedModel: "claude-haiku-4-5",
 	})
 
 	var doneUsage *llm.Usage
-	for ev := range events {
+	for ev := range events.C() {
 		if ev.Type == llm.StreamEventDone {
 			doneUsage = ev.Usage
 		}

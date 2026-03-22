@@ -152,12 +152,12 @@ data: {"choices":[{"delta":{"content":" world"}}]}
 data: {"choices":[{"finish_reason":"stop"}]}
 data: [DONE]
 `
-	events := make(chan llm.StreamEvent, 64)
+	events := llm.NewEventStream()
 	go ccParseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), events, testMeta("gpt-4o"))
 
 	var deltas []string
 	var gotDone bool
-	for event := range events {
+	for event := range events.C() {
 		switch event.Type {
 		case llm.StreamEventDelta:
 			deltas = append(deltas, event.Delta)
@@ -179,11 +179,11 @@ data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":":\
 data: {"choices":[{"finish_reason":"tool_calls"}]}
 data: [DONE]
 `
-	events := make(chan llm.StreamEvent, 64)
+	events := llm.NewEventStream()
 	go ccParseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), events, testMeta("gpt-4o"))
 
 	var toolCalls []*llm.ToolCall
-	for event := range events {
+	for event := range events.C() {
 		if event.Type == llm.StreamEventToolCall {
 			toolCalls = append(toolCalls, event.ToolCall)
 		}
@@ -201,11 +201,11 @@ func TestParseStream_Usage(t *testing.T) {
 data: {"choices":[{"finish_reason":"stop"}]}
 data: [DONE]
 `
-	events := make(chan llm.StreamEvent, 64)
+	events := llm.NewEventStream()
 	go ccParseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), events, testMeta("gpt-4o"))
 
 	var usage *llm.Usage
-	for event := range events {
+	for event := range events.C() {
 		if event.Type == llm.StreamEventDone && event.Usage != nil {
 			usage = event.Usage
 		}
@@ -222,11 +222,11 @@ func TestParseStream_UsageWithDetails(t *testing.T) {
 data: {"choices":[],"usage":{"prompt_tokens":100,"completion_tokens":50,"total_tokens":150,"prompt_tokens_details":{"cached_tokens":80},"completion_tokens_details":{"reasoning_tokens":30}}}
 data: [DONE]
 `
-	events := make(chan llm.StreamEvent, 64)
+	events := llm.NewEventStream()
 	go ccParseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), events, testMeta("gpt-5"))
 
 	var usage *llm.Usage
-	for event := range events {
+	for event := range events.C() {
 		if event.Type == llm.StreamEventDone && event.Usage != nil {
 			usage = event.Usage
 		}
@@ -755,11 +755,11 @@ func TestParseStream_CostCalculation(t *testing.T) {
 data: {"id":"chatcmpl-123","model":"gpt-4o","choices":[],"usage":{"prompt_tokens":100,"completion_tokens":50,"total_tokens":150}}
 data: [DONE]
 `
-	events := make(chan llm.StreamEvent, 64)
+	events := llm.NewEventStream()
 	go ccParseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), events, testMeta("gpt-4o"))
 
 	var usage *llm.Usage
-	for event := range events {
+	for event := range events.C() {
 		if event.Type == llm.StreamEventDone && event.Usage != nil {
 			usage = event.Usage
 		}
@@ -780,11 +780,11 @@ func TestParseStream_CostCalculation_WithCache(t *testing.T) {
 data: {"id":"chatcmpl-123","model":"gpt-4o","choices":[],"usage":{"prompt_tokens":1000,"completion_tokens":500,"total_tokens":1500,"prompt_tokens_details":{"cached_tokens":800}}}
 data: [DONE]
 `
-	events := make(chan llm.StreamEvent, 64)
+	events := llm.NewEventStream()
 	go ccParseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), events, testMeta("gpt-4o"))
 
 	var usage *llm.Usage
-	for event := range events {
+	for event := range events.C() {
 		if event.Type == llm.StreamEventDone && event.Usage != nil {
 			usage = event.Usage
 		}
@@ -992,13 +992,13 @@ data: {"delta":" world"}
 event: response.completed
 data: {"response":{"id":"resp_123","model":"gpt-5.1-codex","usage":{"input_tokens":10,"output_tokens":2}}}
 `
-	events := make(chan llm.StreamEvent, 64)
+	events := llm.NewEventStream()
 	go respParseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), events, testMeta("gpt-5.1-codex"))
 
 	var deltas []string
 	var gotDone bool
 	var gotStart bool
-	for event := range events {
+	for event := range events.C() {
 		switch event.Type {
 		case llm.StreamEventStart:
 			gotStart = true
@@ -1030,11 +1030,11 @@ data: {"output_index":0,"item":{"type":"function_call","id":"item_1","call_id":"
 event: response.completed
 data: {"response":{"id":"resp_123","model":"gpt-5.1-codex","usage":{"input_tokens":50,"output_tokens":20}}}
 `
-	events := make(chan llm.StreamEvent, 64)
+	events := llm.NewEventStream()
 	go respParseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), events, testMeta("gpt-5.1-codex"))
 
 	var toolCalls []*llm.ToolCall
-	for event := range events {
+	for event := range events.C() {
 		if event.Type == llm.StreamEventToolCall {
 			toolCalls = append(toolCalls, event.ToolCall)
 		}
@@ -1055,11 +1055,11 @@ data: {"delta":"test"}
 event: response.completed
 data: {"response":{"id":"resp_123","model":"gpt-5.1-codex","usage":{"input_tokens":100,"output_tokens":50,"input_tokens_details":{"cached_tokens":80},"output_tokens_details":{"reasoning_tokens":30}}}}
 `
-	events := make(chan llm.StreamEvent, 64)
+	events := llm.NewEventStream()
 	go respParseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), events, testMeta("gpt-5.1-codex"))
 
 	var usage *llm.Usage
-	for event := range events {
+	for event := range events.C() {
 		if event.Type == llm.StreamEventDone && event.Usage != nil {
 			usage = event.Usage
 		}
@@ -1082,11 +1082,11 @@ data: {"delta":"done"}
 event: response.completed
 data: {"response":{"id":"resp_123","model":"gpt-5.1-codex","usage":{"input_tokens":1000,"output_tokens":500}}}
 `
-	events := make(chan llm.StreamEvent, 64)
+	events := llm.NewEventStream()
 	go respParseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), events, testMeta("gpt-5.1-codex"))
 
 	var usage *llm.Usage
-	for event := range events {
+	for event := range events.C() {
 		if event.Type == llm.StreamEventDone && event.Usage != nil {
 			usage = event.Usage
 		}
@@ -1102,12 +1102,12 @@ func TestRespParseStream_Error(t *testing.T) {
 	sseData := `event: error
 data: {"error":{"message":"Rate limit exceeded","code":"rate_limit_exceeded"}}
 `
-	events := make(chan llm.StreamEvent, 64)
+	events := llm.NewEventStream()
 	go respParseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), events, testMeta("gpt-5.1-codex"))
 
 	var gotError bool
 	var errMsg string
-	for event := range events {
+	for event := range events.C() {
 		if event.Type == llm.StreamEventError {
 			gotError = true
 			errMsg = event.Error.Error()
@@ -1125,11 +1125,11 @@ data: {"response":{"id":"resp_abc123","model":"gpt-5.1-codex"}}
 event: response.completed
 data: {"response":{"id":"resp_abc123","model":"gpt-5.1-codex","usage":{"input_tokens":10,"output_tokens":5}}}
 `
-	events := make(chan llm.StreamEvent, 64)
+	events := llm.NewEventStream()
 	go respParseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), events, testMeta("gpt-5.1-codex"))
 
 	var start *llm.StreamStart
-	for event := range events {
+	for event := range events.C() {
 		if event.Type == llm.StreamEventStart {
 			start = event.Start
 		}

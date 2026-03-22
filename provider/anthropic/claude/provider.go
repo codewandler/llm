@@ -221,13 +221,13 @@ func (p *Provider) CreateStream(ctx context.Context, opts llm.StreamRequest) (<-
 		return nil, fmt.Errorf("claude API error (HTTP %d): %s", resp.StatusCode, string(errBody))
 	}
 
-	events := make(chan llm.StreamEvent, 64)
-	go anthropic.ParseStream(ctx, resp.Body, events, anthropic.StreamMeta{
+	stream := llm.NewEventStream()
+	go anthropic.ParseStream(ctx, resp.Body, stream, anthropic.StreamMeta{
 		RequestedModel: requestedModel,
 		ResolvedModel:  opts.Model,
 		StartTime:      startTime,
 	})
-	return events, nil
+	return stream.C(), nil
 }
 
 func (p *Provider) newAPIRequest(ctx context.Context, accessToken string, body []byte) (*http.Request, error) {

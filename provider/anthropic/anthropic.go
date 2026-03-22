@@ -90,13 +90,13 @@ func (p *Provider) CreateStream(ctx context.Context, opts llm.StreamRequest) (<-
 		return nil, fmt.Errorf("anthropic API error (HTTP %d): %s", resp.StatusCode, string(errBody))
 	}
 
-	events := make(chan llm.StreamEvent, 64)
-	go ParseStream(ctx, resp.Body, events, StreamMeta{
+	stream := llm.NewEventStream()
+	go ParseStream(ctx, resp.Body, stream, StreamMeta{
 		RequestedModel: opts.Model,
 		ResolvedModel:  opts.Model,
 		StartTime:      startTime,
 	})
-	return events, nil
+	return stream.C(), nil
 }
 
 func (p *Provider) newAPIRequest(ctx context.Context, apiKey string, body []byte) (*http.Request, error) {

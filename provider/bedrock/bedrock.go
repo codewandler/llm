@@ -322,9 +322,9 @@ func (p *Provider) CreateStream(ctx context.Context, opts llm.StreamRequest) (<-
 		StartTime:      startTime,
 		Logger:         p.logger,
 	}
-	events := make(chan llm.StreamEvent, 64)
-	go parseStream(ctx, output, events, meta)
-	return events, nil
+	stream := llm.NewEventStream()
+	go parseStream(ctx, output, stream, meta)
+	return stream.C(), nil
 }
 
 // --- Request building ---
@@ -569,8 +569,8 @@ type streamMeta struct {
 	Logger         *slog.Logger
 }
 
-func parseStream(ctx context.Context, output *bedrockruntime.ConverseStreamOutput, events chan<- llm.StreamEvent, meta streamMeta) {
-	defer close(events)
+func parseStream(ctx context.Context, output *bedrockruntime.ConverseStreamOutput, events *llm.EventStream, meta streamMeta) {
+	defer events.Close()
 
 	stream := output.GetStream()
 	defer stream.Close()
@@ -616,10 +616,10 @@ func parseStream(ctx context.Context, output *bedrockruntime.ConverseStreamOutpu
 		// Check for context cancellation
 		select {
 		case <-ctx.Done():
-			events <- llm.StreamEvent{
+			events.Send(llm.StreamEvent{
 				Type:  llm.StreamEventError,
 				Error: ctx.Err(),
-			}
+			})
 			return
 		default:
 		}
@@ -627,7 +627,7 @@ func parseStream(ctx context.Context, output *bedrockruntime.ConverseStreamOutpu
 		// Emit StreamEventStart on first event
 		if !startEmitted {
 			startEmitted = true
-			events <- llm.StreamEvent{
+			events.Send(llm.StreamEvent{
 				Type: llm.StreamEventStart,
 				Start: &llm.StreamStart{
 					ModelRequested:    meta.RequestedModel,
@@ -636,7 +636,7 @@ func parseStream(ctx context.Context, output *bedrockruntime.ConverseStreamOutpu
 					ProviderRequestID: "", // Bedrock doesn't return request ID in stream
 					TimeToFirstToken:  time.Since(meta.StartTime),
 				},
-			}
+			})
 		}
 
 		switch e := event.(type) {
@@ -659,10 +659,10 @@ func parseStream(ctx context.Context, output *bedrockruntime.ConverseStreamOutpu
 			if e.Value.Delta != nil {
 				switch delta := e.Value.Delta.(type) {
 				case *types.ContentBlockDeltaMemberText:
-					events <- llm.StreamEvent{
+					events.Send(llm.StreamEvent{
 						Type:  llm.StreamEventDelta,
 						Delta: delta.Value,
-					}
+					})
 				case *types.ContentBlockDeltaMemberToolUse:
 					if tb, ok := activeTools[idx]; ok && delta.Value.Input != nil {
 						tb.argsBuf.WriteString(*delta.Value.Input)
@@ -678,14 +678,14 @@ func parseStream(ctx context.Context, output *bedrockruntime.ConverseStreamOutpu
 				if tb.argsBuf.Len() > 0 {
 					_ = json.Unmarshal([]byte(tb.argsBuf.String()), &args)
 				}
-				events <- llm.StreamEvent{
+				events.Send(llm.StreamEvent{
 					Type: llm.StreamEventToolCall,
 					ToolCall: &llm.ToolCall{
 						ID:        tb.id,
 						Name:      tb.name,
 						Arguments: args,
 					},
-				}
+				})
 				delete(activeTools, idx)
 			}
 
@@ -709,10 +709,10 @@ func parseStream(ctx context.Context, output *bedrockruntime.ConverseStreamOutpu
 				}
 				fillCost(meta.ResolvedModel, &usage)
 			}
-			events <- llm.StreamEvent{
+			events.Send(llm.StreamEvent{
 				Type:  llm.StreamEventDone,
 				Usage: &usage,
-			}
+			})
 			return
 
 		case *types.ConverseStreamOutputMemberMessageStop:
@@ -722,9 +722,9 @@ func parseStream(ctx context.Context, output *bedrockruntime.ConverseStreamOutpu
 
 	// Check for stream errors
 	if err := stream.Err(); err != nil {
-		events <- llm.StreamEvent{
+		events.Send(llm.StreamEvent{
 			Type:  llm.StreamEventError,
 			Error: fmt.Errorf("bedrock stream: %w", err),
-		}
+		})
 	}
 }

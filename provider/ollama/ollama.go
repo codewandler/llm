@@ -272,9 +272,9 @@ func (p *Provider) CreateStream(ctx context.Context, opts llm.StreamRequest) (<-
 		ResolvedModel:  opts.Model, // For simple providers, resolved = requested
 		StartTime:      startTime,
 	}
-	events := make(chan llm.StreamEvent, 64)
-	go parseStream(ctx, resp.Body, events, meta)
-	return events, nil
+	stream := llm.NewEventStream()
+	go parseStream(ctx, resp.Body, stream, meta)
+	return stream.C(), nil
 }
 
 // --- Request building ---
@@ -399,8 +399,8 @@ type streamChunk struct {
 	Done bool `json:"done"`
 }
 
-func parseStream(ctx context.Context, body io.ReadCloser, events chan<- llm.StreamEvent, meta streamMeta) {
-	defer close(events)
+func parseStream(ctx context.Context, body io.ReadCloser, events *llm.EventStream, meta streamMeta) {
+	defer events.Close()
 	defer body.Close()
 
 	scanner := bufio.NewScanner(body)
@@ -414,10 +414,10 @@ func parseStream(ctx context.Context, body io.ReadCloser, events chan<- llm.Stre
 		// Check for context cancellation
 		select {
 		case <-ctx.Done():
-			events <- llm.StreamEvent{
+			events.Send(llm.StreamEvent{
 				Type:  llm.StreamEventError,
 				Error: ctx.Err(),
-			}
+			})
 			return
 		default:
 		}
@@ -428,17 +428,17 @@ func parseStream(ctx context.Context, body io.ReadCloser, events chan<- llm.Stre
 
 		var chunk streamChunk
 		if err := json.Unmarshal([]byte(line), &chunk); err != nil {
-			events <- llm.StreamEvent{
+			events.Send(llm.StreamEvent{
 				Type:  llm.StreamEventError,
 				Error: fmt.Errorf("parse chunk: %w", err),
-			}
+			})
 			return
 		}
 
 		// Emit StreamEventStart on first chunk
 		if !startEmitted {
 			startEmitted = true
-			events <- llm.StreamEvent{
+			events.Send(llm.StreamEvent{
 				Type: llm.StreamEventStart,
 				Start: &llm.StreamStart{
 					ModelRequested:    meta.RequestedModel,
@@ -447,46 +447,46 @@ func parseStream(ctx context.Context, body io.ReadCloser, events chan<- llm.Stre
 					ProviderRequestID: "", // Ollama doesn't return request ID
 					TimeToFirstToken:  time.Since(meta.StartTime),
 				},
-			}
+			})
 		}
 
 		// Handle content delta
 		if chunk.Message.Content != "" {
-			events <- llm.StreamEvent{
+			events.Send(llm.StreamEvent{
 				Type:  llm.StreamEventDelta,
 				Delta: chunk.Message.Content,
-			}
+			})
 		}
 
 		// Handle tool calls
 		if len(chunk.Message.ToolCalls) > 0 {
 			for _, tc := range chunk.Message.ToolCalls {
 				toolCallID++
-				events <- llm.StreamEvent{
+				events.Send(llm.StreamEvent{
 					Type: llm.StreamEventToolCall,
 					ToolCall: &llm.ToolCall{
 						ID:        fmt.Sprintf("call_%d", toolCallID),
 						Name:      tc.Function.Name,
 						Arguments: tc.Function.Arguments,
 					},
-				}
+				})
 			}
 		}
 
 		// Handle done
 		if chunk.Done {
-			events <- llm.StreamEvent{
+			events.Send(llm.StreamEvent{
 				Type:  llm.StreamEventDone,
 				Usage: &usage,
-			}
+			})
 			return
 		}
 	}
 
 	if err := scanner.Err(); err != nil {
-		events <- llm.StreamEvent{
+		events.Send(llm.StreamEvent{
 			Type:  llm.StreamEventError,
 			Error: fmt.Errorf("scan stream: %w", err),
-		}
+		})
 	}
 }

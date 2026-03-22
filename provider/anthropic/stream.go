@@ -40,9 +40,9 @@ type StreamMeta struct {
 	StartTime      time.Time
 }
 
-// ParseStream parses an Anthropic SSE stream and sends events to the channel.
-func ParseStream(ctx context.Context, body io.ReadCloser, events chan<- llm.StreamEvent, meta StreamMeta) {
-	defer close(events)
+// ParseStream parses an Anthropic SSE stream and sends events to the stream.
+func ParseStream(ctx context.Context, body io.ReadCloser, events *llm.EventStream, meta StreamMeta) {
+	defer events.Close()
 	defer body.Close()
 
 	scanner := bufio.NewScanner(body)
@@ -59,7 +59,7 @@ func ParseStream(ctx context.Context, body io.ReadCloser, events chan<- llm.Stre
 	for scanner.Scan() {
 		select {
 		case <-ctx.Done():
-			events <- llm.StreamEvent{Type: llm.StreamEventError, Error: ctx.Err()}
+			events.Send(llm.StreamEvent{Type: llm.StreamEventError, Error: ctx.Err()})
 			return
 		default:
 		}
@@ -100,7 +100,7 @@ func ParseStream(ctx context.Context, body io.ReadCloser, events chan<- llm.Stre
 					usage.CacheWriteTokens + usage.CacheReadTokens
 
 				// Emit StreamEventStart with metadata
-				events <- llm.StreamEvent{
+				events.Send(llm.StreamEvent{
 					Type: llm.StreamEventStart,
 					Start: &llm.StreamStart{
 						ModelRequested:    meta.RequestedModel,
@@ -109,7 +109,7 @@ func ParseStream(ctx context.Context, body io.ReadCloser, events chan<- llm.Stre
 						ProviderRequestID: evt.Message.ID,
 						TimeToFirstToken:  time.Since(meta.StartTime),
 					},
-				}
+				})
 			}
 
 		case "message_delta":
@@ -139,7 +139,7 @@ func ParseStream(ctx context.Context, body io.ReadCloser, events chan<- llm.Stre
 			}
 			switch evt.Delta.Type {
 			case "text_delta":
-				events <- llm.StreamEvent{Type: llm.StreamEventDelta, Delta: evt.Delta.Text}
+				events.Send(llm.StreamEvent{Type: llm.StreamEventDelta, Delta: evt.Delta.Text})
 			case "input_json_delta":
 				if tb, ok := activeTools[evt.Index]; ok {
 					tb.jsonBuf.WriteString(evt.Delta.PartialJSON)
@@ -158,13 +158,13 @@ func ParseStream(ctx context.Context, body io.ReadCloser, events chan<- llm.Stre
 				if tb.jsonBuf.Len() > 0 {
 					_ = json.Unmarshal([]byte(tb.jsonBuf.String()), &args)
 				}
-				events <- llm.StreamEvent{Type: llm.StreamEventToolCall, ToolCall: &llm.ToolCall{ID: tb.id, Name: tb.name, Arguments: args}}
+				events.Send(llm.StreamEvent{Type: llm.StreamEventToolCall, ToolCall: &llm.ToolCall{ID: tb.id, Name: tb.name, Arguments: args}})
 				delete(activeTools, evt.Index)
 			}
 
 		case "message_stop":
 			FillCost(meta.ResolvedModel, &usage)
-			events <- llm.StreamEvent{Type: llm.StreamEventDone, Usage: &usage}
+			events.Send(llm.StreamEvent{Type: llm.StreamEventDone, Usage: &usage})
 			return
 
 		case "error":
@@ -174,7 +174,7 @@ func ParseStream(ctx context.Context, body io.ReadCloser, events chan<- llm.Stre
 				} `json:"error"`
 			}
 			if err := json.Unmarshal([]byte(data), &errEvt); err == nil {
-				events <- llm.StreamEvent{Type: llm.StreamEventError, Error: fmt.Errorf("anthropic: %s", errEvt.Error.Message)}
+				events.Send(llm.StreamEvent{Type: llm.StreamEventError, Error: fmt.Errorf("anthropic: %s", errEvt.Error.Message)})
 			}
 			return
 		}

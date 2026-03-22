@@ -167,9 +167,9 @@ func (p *Provider) CreateStream(ctx context.Context, opts llm.StreamRequest) (<-
 		ResolvedModel:  opts.Model, // For simple providers, resolved = requested
 		StartTime:      startTime,
 	}
-	events := make(chan llm.StreamEvent, 64)
-	go parseStream(ctx, resp.Body, events, meta)
-	return events, nil
+	stream := llm.NewEventStream()
+	go parseStream(ctx, resp.Body, stream, meta)
+	return stream.C(), nil
 }
 
 // --- Request building ---
@@ -358,8 +358,8 @@ type toolAccum struct {
 	argsBuf strings.Builder
 }
 
-func parseStream(ctx context.Context, body io.ReadCloser, events chan<- llm.StreamEvent, meta streamMeta) {
-	defer close(events)
+func parseStream(ctx context.Context, body io.ReadCloser, events *llm.EventStream, meta streamMeta) {
+	defer events.Close()
 	defer body.Close()
 
 	scanner := bufio.NewScanner(body)
@@ -374,10 +374,10 @@ func parseStream(ctx context.Context, body io.ReadCloser, events chan<- llm.Stre
 		// Check for context cancellation
 		select {
 		case <-ctx.Done():
-			events <- llm.StreamEvent{
+			events.Send(llm.StreamEvent{
 				Type:  llm.StreamEventError,
 				Error: ctx.Err(),
-			}
+			})
 			return
 		default:
 		}
@@ -389,7 +389,7 @@ func parseStream(ctx context.Context, body io.ReadCloser, events chan<- llm.Stre
 
 		if data == "[DONE]" {
 			if !doneSent {
-				events <- llm.StreamEvent{Type: llm.StreamEventDone, Usage: usage}
+				events.Send(llm.StreamEvent{Type: llm.StreamEventDone, Usage: usage})
 				doneSent = true
 			}
 			return
@@ -403,7 +403,7 @@ func parseStream(ctx context.Context, body io.ReadCloser, events chan<- llm.Stre
 		// Emit StreamEventStart on first chunk
 		if !startEmitted {
 			startEmitted = true
-			events <- llm.StreamEvent{
+			events.Send(llm.StreamEvent{
 				Type: llm.StreamEventStart,
 				Start: &llm.StreamStart{
 					ModelRequested:    meta.RequestedModel,
@@ -412,14 +412,14 @@ func parseStream(ctx context.Context, body io.ReadCloser, events chan<- llm.Stre
 					ProviderRequestID: chunk.ID,
 					TimeToFirstToken:  time.Since(meta.StartTime),
 				},
-			}
+			})
 		}
 
 		if chunk.Error != nil {
-			events <- llm.StreamEvent{
+			events.Send(llm.StreamEvent{
 				Type:  llm.StreamEventError,
 				Error: fmt.Errorf("openrouter: %s", chunk.Error.Message),
-			}
+			})
 			return
 		}
 
@@ -450,18 +450,18 @@ func parseStream(ctx context.Context, body io.ReadCloser, events chan<- llm.Stre
 
 		// Reasoning content delta.
 		if choice.Delta.ReasoningContent != "" {
-			events <- llm.StreamEvent{
+			events.Send(llm.StreamEvent{
 				Type:      llm.StreamEventReasoning,
 				Reasoning: choice.Delta.ReasoningContent,
-			}
+			})
 		}
 
 		// Text content delta.
 		if choice.Delta.Content != "" {
-			events <- llm.StreamEvent{
+			events.Send(llm.StreamEvent{
 				Type:  llm.StreamEventDelta,
 				Delta: choice.Delta.Content,
-			}
+			})
 		}
 
 		// Tool call deltas.
@@ -491,24 +491,24 @@ func parseStream(ctx context.Context, body io.ReadCloser, events chan<- llm.Stre
 	// If the stream ended without a finish_reason, emit whatever we have.
 	if !doneSent {
 		emitToolCalls(activeTools, events)
-		events <- llm.StreamEvent{Type: llm.StreamEventDone, Usage: usage}
+		events.Send(llm.StreamEvent{Type: llm.StreamEventDone, Usage: usage})
 	}
 }
 
-func emitToolCalls(activeTools map[int]*toolAccum, events chan<- llm.StreamEvent) {
+func emitToolCalls(activeTools map[int]*toolAccum, events *llm.EventStream) {
 	for idx, accum := range activeTools {
 		var args map[string]any
 		if accum.argsBuf.Len() > 0 {
 			_ = json.Unmarshal([]byte(accum.argsBuf.String()), &args)
 		}
-		events <- llm.StreamEvent{
+		events.Send(llm.StreamEvent{
 			Type: llm.StreamEventToolCall,
 			ToolCall: &llm.ToolCall{
 				ID:        accum.id,
 				Name:      accum.name,
 				Arguments: args,
 			},
-		}
+		})
 		delete(activeTools, idx)
 	}
 }

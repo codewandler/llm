@@ -51,12 +51,12 @@ func (p *Provider) streamCompletions(ctx context.Context, opts llm.StreamRequest
 		return nil, fmt.Errorf("completions API error (HTTP %d): %s", resp.StatusCode, string(errBody))
 	}
 
-	events := make(chan llm.StreamEvent, 64)
-	go ccParseStream(ctx, resp.Body, events, ccStreamMeta{
+	stream := llm.NewEventStream()
+	go ccParseStream(ctx, resp.Body, stream, ccStreamMeta{
 		requestedModel: opts.Model,
 		startTime:      startTime,
 	})
-	return events, nil
+	return stream.C(), nil
 }
 
 // --- Request building ---
@@ -243,8 +243,8 @@ type ccToolAccum struct {
 	argsBuf strings.Builder
 }
 
-func ccParseStream(ctx context.Context, body io.ReadCloser, events chan<- llm.StreamEvent, meta ccStreamMeta) {
-	defer close(events)
+func ccParseStream(ctx context.Context, body io.ReadCloser, events *llm.EventStream, meta ccStreamMeta) {
+	defer events.Close()
 	defer body.Close()
 
 	scanner := bufio.NewScanner(body)
@@ -257,7 +257,7 @@ func ccParseStream(ctx context.Context, body io.ReadCloser, events chan<- llm.St
 	for scanner.Scan() {
 		select {
 		case <-ctx.Done():
-			events <- llm.StreamEvent{Type: llm.StreamEventError, Error: ctx.Err()}
+			events.Send(llm.StreamEvent{Type: llm.StreamEventError, Error: ctx.Err()})
 			return
 		default:
 		}
@@ -272,7 +272,7 @@ func ccParseStream(ctx context.Context, body io.ReadCloser, events chan<- llm.St
 			if finalUsage != nil {
 				calculateCost(meta.requestedModel, finalUsage)
 			}
-			events <- llm.StreamEvent{Type: llm.StreamEventDone, Usage: finalUsage}
+			events.Send(llm.StreamEvent{Type: llm.StreamEventDone, Usage: finalUsage})
 			return
 		}
 
@@ -284,7 +284,7 @@ func ccParseStream(ctx context.Context, body io.ReadCloser, events chan<- llm.St
 		// Emit StreamEventStart on first chunk.
 		if !startEmitted {
 			startEmitted = true
-			events <- llm.StreamEvent{
+			events.Send(llm.StreamEvent{
 				Type: llm.StreamEventStart,
 				Start: &llm.StreamStart{
 					ModelRequested:    meta.requestedModel,
@@ -293,7 +293,7 @@ func ccParseStream(ctx context.Context, body io.ReadCloser, events chan<- llm.St
 					ProviderRequestID: chunk.ID,
 					TimeToFirstToken:  time.Since(meta.startTime),
 				},
-			}
+			})
 		}
 
 		// Accumulate usage (arrives on the final chunk before [DONE]).
@@ -334,7 +334,7 @@ func ccParseStream(ctx context.Context, body io.ReadCloser, events chan<- llm.St
 
 		// Text delta.
 		if choice.Delta.Content != "" {
-			events <- llm.StreamEvent{Type: llm.StreamEventDelta, Delta: choice.Delta.Content}
+			events.Send(llm.StreamEvent{Type: llm.StreamEventDelta, Delta: choice.Delta.Content})
 		}
 
 		// Emit completed tool calls on finish_reason == "tool_calls".
@@ -344,26 +344,26 @@ func ccParseStream(ctx context.Context, body io.ReadCloser, events chan<- llm.St
 	}
 
 	if err := scanner.Err(); err != nil {
-		events <- llm.StreamEvent{
+		events.Send(llm.StreamEvent{
 			Type:  llm.StreamEventError,
 			Error: fmt.Errorf("stream scan error: %w", err),
-		}
+		})
 	}
 }
 
-func ccEmitToolCalls(activeTools map[int]*ccToolAccum, events chan<- llm.StreamEvent) {
+func ccEmitToolCalls(activeTools map[int]*ccToolAccum, events *llm.EventStream) {
 	for _, accum := range activeTools {
 		var args map[string]any
 		if accum.argsBuf.Len() > 0 {
 			_ = json.Unmarshal([]byte(accum.argsBuf.String()), &args)
 		}
-		events <- llm.StreamEvent{
+		events.Send(llm.StreamEvent{
 			Type: llm.StreamEventToolCall,
 			ToolCall: &llm.ToolCall{
 				ID:        accum.id,
 				Name:      accum.name,
 				Arguments: args,
 			},
-		}
+		})
 	}
 }

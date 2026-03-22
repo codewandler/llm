@@ -58,12 +58,12 @@ func (p *Provider) streamResponses(ctx context.Context, opts llm.StreamRequest) 
 		return nil, fmt.Errorf("responses API error (HTTP %d): %s", resp.StatusCode, string(errBody))
 	}
 
-	events := make(chan llm.StreamEvent, 64)
-	go respParseStream(ctx, resp.Body, events, respStreamMeta{
+	stream := llm.NewEventStream()
+	go respParseStream(ctx, resp.Body, stream, respStreamMeta{
 		requestedModel: opts.Model,
 		startTime:      startTime,
 	})
-	return events, nil
+	return stream.C(), nil
 }
 
 // --- Request building ---
@@ -288,8 +288,8 @@ type respToolAccum struct {
 	argBuf strings.Builder
 }
 
-func respParseStream(ctx context.Context, body io.ReadCloser, events chan<- llm.StreamEvent, meta respStreamMeta) {
-	defer close(events)
+func respParseStream(ctx context.Context, body io.ReadCloser, events *llm.EventStream, meta respStreamMeta) {
+	defer events.Close()
 	defer body.Close()
 
 	scanner := bufio.NewScanner(body)
@@ -302,7 +302,7 @@ func respParseStream(ctx context.Context, body io.ReadCloser, events chan<- llm.
 	for scanner.Scan() {
 		select {
 		case <-ctx.Done():
-			events <- llm.StreamEvent{Type: llm.StreamEventError, Error: ctx.Err()}
+			events.Send(llm.StreamEvent{Type: llm.StreamEventError, Error: ctx.Err()})
 			return
 		default:
 		}
@@ -319,10 +319,10 @@ func respParseStream(ctx context.Context, body io.ReadCloser, events chan<- llm.
 	}
 
 	if err := scanner.Err(); err != nil {
-		events <- llm.StreamEvent{
+		events.Send(llm.StreamEvent{
 			Type:  llm.StreamEventError,
 			Error: fmt.Errorf("stream scan error: %w", err),
-		}
+		})
 	}
 }
 
@@ -330,7 +330,7 @@ func respHandleEvent(
 	eventName, data string,
 	startEmitted *bool,
 	activeTools map[int]*respToolAccum,
-	events chan<- llm.StreamEvent,
+	events *llm.EventStream,
 	meta respStreamMeta,
 ) {
 	switch eventName {
@@ -341,7 +341,7 @@ func respHandleEvent(
 		}
 		if !*startEmitted {
 			*startEmitted = true
-			events <- llm.StreamEvent{
+			events.Send(llm.StreamEvent{
 				Type: llm.StreamEventStart,
 				Start: &llm.StreamStart{
 					ModelRequested:    meta.requestedModel,
@@ -350,7 +350,7 @@ func respHandleEvent(
 					ProviderRequestID: ev.Response.ID,
 					TimeToFirstToken:  time.Since(meta.startTime),
 				},
-			}
+			})
 		}
 
 	case "response.output_text.delta":
@@ -363,16 +363,16 @@ func respHandleEvent(
 		}
 		if !*startEmitted {
 			*startEmitted = true
-			events <- llm.StreamEvent{
+			events.Send(llm.StreamEvent{
 				Type: llm.StreamEventStart,
 				Start: &llm.StreamStart{
 					ModelRequested:   meta.requestedModel,
 					ModelResolved:    meta.requestedModel,
 					TimeToFirstToken: time.Since(meta.startTime),
 				},
-			}
+			})
 		}
-		events <- llm.StreamEvent{Type: llm.StreamEventDelta, Delta: ev.Delta}
+		events.Send(llm.StreamEvent{Type: llm.StreamEventDelta, Delta: ev.Delta})
 
 	case "response.output_item.added":
 		var ev respOutputItemAdded
@@ -427,19 +427,19 @@ func respHandleEvent(
 			delete(activeTools, ev.OutputIndex)
 		}
 
-		events <- llm.StreamEvent{
+		events.Send(llm.StreamEvent{
 			Type: llm.StreamEventToolCall,
 			ToolCall: &llm.ToolCall{
 				ID:        callID,
 				Name:      name,
 				Arguments: args,
 			},
-		}
+		})
 
 	case "response.completed":
 		var ev respResponseCompleted
 		if err := json.Unmarshal([]byte(data), &ev); err != nil {
-			events <- llm.StreamEvent{Type: llm.StreamEventDone}
+			events.Send(llm.StreamEvent{Type: llm.StreamEventDone})
 			return
 		}
 
@@ -458,7 +458,7 @@ func respHandleEvent(
 			}
 			calculateCost(meta.requestedModel, usage)
 		}
-		events <- llm.StreamEvent{Type: llm.StreamEventDone, Usage: usage}
+		events.Send(llm.StreamEvent{Type: llm.StreamEventDone, Usage: usage})
 
 	case "error":
 		var payload struct {
@@ -474,9 +474,9 @@ func respHandleEvent(
 				msg = fmt.Sprintf("%s (code: %s)", msg, payload.Error.Code)
 			}
 		}
-		events <- llm.StreamEvent{
+		events.Send(llm.StreamEvent{
 			Type:  llm.StreamEventError,
 			Error: fmt.Errorf("%s", msg),
-		}
+		})
 	}
 }
