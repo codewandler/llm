@@ -134,6 +134,12 @@ func (s *EventStream) Routed(r Routed) {
 	s.Send(StreamEvent{Type: StreamEventRouted, Routed: &r})
 }
 
+// Done sends a StreamEventDone event with the given usage statistics.
+// usage may be nil if the provider did not return token counts.
+func (s *EventStream) Done(usage *Usage) {
+	s.Send(StreamEvent{Type: StreamEventDone, Usage: usage})
+}
+
 // Close closes the underlying channel. Safe to call multiple times.
 func (s *EventStream) Close() {
 	s.closeOnce.Do(func() { close(s.ch) })

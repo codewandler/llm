@@ -420,7 +420,7 @@ func respHandleEvent(
 	case "response.completed":
 		var ev respResponseCompleted
 		if err := json.Unmarshal([]byte(data), &ev); err != nil {
-			events.Send(llm.StreamEvent{Type: llm.StreamEventDone})
+			events.Done(nil)
 			return
 		}
 
@@ -439,7 +439,7 @@ func respHandleEvent(
 			}
 			calculateCost(meta.requestedModel, usage)
 		}
-		events.Send(llm.StreamEvent{Type: llm.StreamEventDone, Usage: usage})
+		events.Done(usage)
 
 	case "error":
 		var payload struct {

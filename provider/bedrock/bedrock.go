@@ -9,7 +9,6 @@ import (
 	"os"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -319,7 +318,6 @@ func (p *Provider) CreateStream(ctx context.Context, opts llm.StreamRequest) (<-
 		return nil, llm.NewErrBuildRequest(llm.ProviderNameBedrock, err)
 	}
 
-	startTime := time.Now()
 	output, err := p.client.ConverseStream(ctx, input)
 	if err != nil {
 		return nil, llm.NewErrRequestFailed(llm.ProviderNameBedrock, err)
@@ -328,7 +326,6 @@ func (p *Provider) CreateStream(ctx context.Context, opts llm.StreamRequest) (<-
 	meta := streamMeta{
 		RequestedModel: opts.Model,
 		ResolvedModel:  resolvedModel,
-		StartTime:      startTime,
 		Logger:         p.logger,
 	}
 	stream := llm.NewEventStream()
@@ -574,7 +571,6 @@ func toDocument(v any) (document.Interface, error) {
 type streamMeta struct {
 	RequestedModel string
 	ResolvedModel  string
-	StartTime      time.Time
 	Logger         *slog.Logger
 }
 
@@ -703,10 +699,7 @@ func parseStream(ctx context.Context, output *bedrockruntime.ConverseStreamOutpu
 				}
 				fillCost(meta.ResolvedModel, &usage)
 			}
-			events.Send(llm.StreamEvent{
-				Type:  llm.StreamEventDone,
-				Usage: &usage,
-			})
+			events.Done(&usage)
 			return
 
 		case *types.ConverseStreamOutputMemberMessageStop:

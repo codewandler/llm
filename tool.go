@@ -78,7 +78,7 @@ func ToolDefinitionFor[T any](name, description string) ToolDefinition {
 
 // --- Type-Safe Tool Dispatch ---
 
-// ToolSpec[T] is a type-safe tool specification that pairs a tool name/description
+// ToolSpec is a type-safe tool specification that pairs a tool name/description
 // with a Go struct that defines the parameter schema.
 // It includes a compiled JSON Schema for runtime validation.
 type ToolSpec[T any] struct {
@@ -258,7 +258,7 @@ type ParsedToolCall interface {
 	ToolCallID() string
 }
 
-// TypedToolCall[T] holds a parsed tool call with strongly-typed parameters.
+// TypedToolCall holds a parsed tool call with strongly-typed parameters.
 type TypedToolCall[T any] struct {
 	ID     string // Original tool call ID (for sending results back)
 	Name   string // Tool name

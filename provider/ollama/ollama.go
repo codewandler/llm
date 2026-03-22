@@ -457,10 +457,7 @@ func parseStream(ctx context.Context, body io.ReadCloser, events *llm.EventStrea
 
 		// Handle done
 		if chunk.Done {
-			events.Send(llm.StreamEvent{
-				Type:  llm.StreamEventDone,
-				Usage: &usage,
-			})
+			events.Done(&usage)
 			return
 		}
 	}

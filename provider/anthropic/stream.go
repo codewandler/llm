@@ -157,7 +157,7 @@ func ParseStream(ctx context.Context, body io.ReadCloser, events *llm.EventStrea
 
 		case "message_stop":
 			FillCost(meta.ResolvedModel, &usage)
-			events.Send(llm.StreamEvent{Type: llm.StreamEventDone, Usage: &usage})
+			events.Done(&usage)
 			return
 
 		case "error":

@@ -386,7 +386,7 @@ func parseStream(ctx context.Context, body io.ReadCloser, events *llm.EventStrea
 
 		if data == "[DONE]" {
 			if !doneSent {
-				events.Send(llm.StreamEvent{Type: llm.StreamEventDone, Usage: usage})
+				events.Done(usage)
 				doneSent = true
 			}
 			return
@@ -479,7 +479,7 @@ func parseStream(ctx context.Context, body io.ReadCloser, events *llm.EventStrea
 	// If the stream ended without a finish_reason, emit whatever we have.
 	if !doneSent {
 		emitToolCalls(activeTools, events)
-		events.Send(llm.StreamEvent{Type: llm.StreamEventDone, Usage: usage})
+		events.Done(usage)
 	}
 }
 

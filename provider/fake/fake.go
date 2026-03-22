@@ -34,7 +34,7 @@ func (f *Provider) CreateStream(_ context.Context, opts llm.StreamRequest) (<-ch
 		} else {
 			stream.Send(llm.StreamEvent{Type: llm.StreamEventDelta, Delta: "done"})
 		}
-		stream.Send(llm.StreamEvent{Type: llm.StreamEventDone, Usage: &llm.Usage{InputTokens: 1, OutputTokens: 1, TotalTokens: 2, Cost: 0.01}})
+		stream.Done(&llm.Usage{InputTokens: 1, OutputTokens: 1, TotalTokens: 2, Cost: 0.01})
 	}()
 	return stream.C(), nil
 }

@@ -271,7 +271,7 @@ func ccParseStream(ctx context.Context, body io.ReadCloser, events *llm.EventStr
 			if finalUsage != nil {
 				calculateCost(meta.requestedModel, finalUsage)
 			}
-			events.Send(llm.StreamEvent{Type: llm.StreamEventDone, Usage: finalUsage})
+			events.Done(finalUsage)
 			return
 		}
 
