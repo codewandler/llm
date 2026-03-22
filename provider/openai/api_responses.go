@@ -37,7 +37,7 @@ func (p *Provider) streamResponses(ctx context.Context, opts llm.StreamRequest) 
 
 	body, err := respBuildRequest(opts)
 	if err != nil {
-		return nil, fmt.Errorf("build request: %w", err)
+		return nil, llm.NewErrBuildRequest(llm.ProviderNameOpenAI, err)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, "POST", p.opts.BaseURL+"/v1/responses", bytes.NewReader(body))
@@ -50,12 +50,12 @@ func (p *Provider) streamResponses(ctx context.Context, opts llm.StreamRequest) 
 	startTime := time.Now()
 	resp, err := p.client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("responses API request: %w", err)
+		return nil, llm.NewErrRequestFailed(llm.ProviderNameOpenAI, err)
 	}
 	if resp.StatusCode != http.StatusOK {
 		defer resp.Body.Close()
 		errBody, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("responses API error (HTTP %d): %s", resp.StatusCode, string(errBody))
+		return nil, llm.NewErrAPIError(llm.ProviderNameOpenAI, resp.StatusCode, string(errBody))
 	}
 
 	stream := llm.NewEventStream()
@@ -302,7 +302,7 @@ func respParseStream(ctx context.Context, body io.ReadCloser, events *llm.EventS
 	for scanner.Scan() {
 		select {
 		case <-ctx.Done():
-			events.Send(llm.StreamEvent{Type: llm.StreamEventError, Error: ctx.Err()})
+			events.Error(llm.NewErrContextCancelled(llm.ProviderNameOpenAI, ctx.Err()))
 			return
 		default:
 		}
@@ -319,10 +319,7 @@ func respParseStream(ctx context.Context, body io.ReadCloser, events *llm.EventS
 	}
 
 	if err := scanner.Err(); err != nil {
-		events.Send(llm.StreamEvent{
-			Type:  llm.StreamEventError,
-			Error: fmt.Errorf("stream scan error: %w", err),
-		})
+		events.Error(llm.NewErrStreamRead(llm.ProviderNameOpenAI, err))
 	}
 }
 
@@ -474,9 +471,6 @@ func respHandleEvent(
 				msg = fmt.Sprintf("%s (code: %s)", msg, payload.Error.Code)
 			}
 		}
-		events.Send(llm.StreamEvent{
-			Type:  llm.StreamEventError,
-			Error: fmt.Errorf("%s", msg),
-		})
+		events.Error(llm.NewErrProviderMsg(llm.ProviderNameOpenAI, msg))
 	}
 }

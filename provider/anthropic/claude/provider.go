@@ -202,7 +202,7 @@ func (p *Provider) CreateStream(ctx context.Context, opts llm.StreamRequest) (<-
 	opts.Model = normalizeModel(opts.Model)
 	body, err := p.buildRequest(opts)
 	if err != nil {
-		return nil, fmt.Errorf("build request: %w", err)
+		return nil, llm.NewErrBuildRequest(llm.ProviderNameClaude, err)
 	}
 
 	req, err := p.newAPIRequest(ctx, token.AccessToken, body)
@@ -212,13 +212,13 @@ func (p *Provider) CreateStream(ctx context.Context, opts llm.StreamRequest) (<-
 
 	resp, err := p.client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("claude request: %w", err)
+		return nil, llm.NewErrRequestFailed(llm.ProviderNameClaude, err)
 	}
 
 	if resp.StatusCode != http.StatusOK {
 		defer resp.Body.Close()
 		errBody, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("claude API error (HTTP %d): %s", resp.StatusCode, string(errBody))
+		return nil, llm.NewErrAPIError(llm.ProviderNameClaude, resp.StatusCode, string(errBody))
 	}
 
 	stream := llm.NewEventStream()

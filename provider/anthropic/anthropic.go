@@ -63,7 +63,7 @@ func (p *Provider) CreateStream(ctx context.Context, opts llm.StreamRequest) (<-
 		return nil, err
 	}
 	if apiKey == "" {
-		return nil, fmt.Errorf("anthropic API key is not configured")
+		return nil, llm.NewErrMissingAPIKey(llm.ProviderNameAnthropic)
 	}
 
 	body, err := BuildRequest(RequestOptions{
@@ -71,7 +71,7 @@ func (p *Provider) CreateStream(ctx context.Context, opts llm.StreamRequest) (<-
 		StreamOptions: opts,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("build request: %w", err)
+		return nil, llm.NewErrBuildRequest(llm.ProviderNameAnthropic, err)
 	}
 
 	req, err := p.newAPIRequest(ctx, apiKey, body)
@@ -81,13 +81,13 @@ func (p *Provider) CreateStream(ctx context.Context, opts llm.StreamRequest) (<-
 
 	resp, err := p.client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("anthropic request: %w", err)
+		return nil, llm.NewErrRequestFailed(llm.ProviderNameAnthropic, err)
 	}
 
 	if resp.StatusCode != http.StatusOK {
 		defer resp.Body.Close()
 		errBody, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("anthropic API error (HTTP %d): %s", resp.StatusCode, string(errBody))
+		return nil, llm.NewErrAPIError(llm.ProviderNameAnthropic, resp.StatusCode, string(errBody))
 	}
 
 	stream := llm.NewEventStream()

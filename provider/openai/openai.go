@@ -103,7 +103,7 @@ func (p *Provider) FetchModels(ctx context.Context) ([]llm.Model, error) {
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("openai models API error (HTTP %d): %s", resp.StatusCode, string(body))
+		return nil, llm.NewErrAPIError(llm.ProviderNameOpenAI, resp.StatusCode, string(body))
 	}
 
 	var result struct {

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	gonanoid "github.com/matoous/go-nanoid/v2"
@@ -71,8 +72,9 @@ func NewRequestID() string {
 // event with the same RequestID. Providers create one at the top of CreateStream
 // via NewEventStream, send all events through Send, and return C() to callers.
 type EventStream struct {
-	id string
-	ch chan StreamEvent
+	id        string
+	ch        chan StreamEvent
+	closeOnce sync.Once
 }
 
 // NewEventStream creates an EventStream with a freshly generated RequestID
@@ -90,10 +92,14 @@ func (s *EventStream) Send(ev StreamEvent) {
 	s.ch <- ev
 }
 
-// Close closes the underlying channel. Must be called exactly once, typically
-// via defer at the top of the stream-parsing goroutine.
+// Error sends a StreamEventError event and is a convenience wrapper around Send.
+func (s *EventStream) Error(err error) {
+	s.Send(StreamEvent{Type: StreamEventError, Error: err})
+}
+
+// Close closes the underlying channel. Safe to call multiple times.
 func (s *EventStream) Close() {
-	close(s.ch)
+	s.closeOnce.Do(func() { close(s.ch) })
 }
 
 // C returns the read-only channel to hand back to the caller of CreateStream.

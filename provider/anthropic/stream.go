@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
-	"fmt"
 	"io"
 	"strings"
 	"time"
@@ -59,7 +58,7 @@ func ParseStream(ctx context.Context, body io.ReadCloser, events *llm.EventStrea
 	for scanner.Scan() {
 		select {
 		case <-ctx.Done():
-			events.Send(llm.StreamEvent{Type: llm.StreamEventError, Error: ctx.Err()})
+			events.Error(llm.NewErrContextCancelled(llm.ProviderNameAnthropic, ctx.Err()))
 			return
 		default:
 		}
@@ -174,7 +173,7 @@ func ParseStream(ctx context.Context, body io.ReadCloser, events *llm.EventStrea
 				} `json:"error"`
 			}
 			if err := json.Unmarshal([]byte(data), &errEvt); err == nil {
-				events.Send(llm.StreamEvent{Type: llm.StreamEventError, Error: fmt.Errorf("anthropic: %s", errEvt.Error.Message)})
+				events.Error(llm.NewErrProviderMsg(llm.ProviderNameAnthropic, errEvt.Error.Message))
 			}
 			return
 		}

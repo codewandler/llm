@@ -130,7 +130,7 @@ func (p *Provider) FetchModels(ctx context.Context) ([]llm.Model, error) {
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("ollama models API failed (HTTP %d): %s", resp.StatusCode, string(body))
+		return nil, llm.NewErrAPIError(llm.ProviderNameOllama, resp.StatusCode, string(body))
 	}
 
 	var result struct {
@@ -198,13 +198,13 @@ func (p *Provider) downloadModel(ctx context.Context, modelID string) error {
 
 	resp, err := p.client.Do(req)
 	if err != nil {
-		return fmt.Errorf("pull request: %w", err)
+		return llm.NewErrRequestFailed(llm.ProviderNameOllama, err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		errBody, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("pull API error (HTTP %d): %s", resp.StatusCode, string(errBody))
+		return llm.NewErrAPIError(llm.ProviderNameOllama, resp.StatusCode, string(errBody))
 	}
 
 	// Read the streaming response until done
@@ -246,7 +246,7 @@ func (p *Provider) CreateStream(ctx context.Context, opts llm.StreamRequest) (<-
 	}
 	body, err := buildRequest(opts)
 	if err != nil {
-		return nil, fmt.Errorf("build request: %w", err)
+		return nil, llm.NewErrBuildRequest(llm.ProviderNameOllama, err)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, "POST", p.opts.BaseURL+"/api/chat", bytes.NewReader(body))
@@ -258,13 +258,13 @@ func (p *Provider) CreateStream(ctx context.Context, opts llm.StreamRequest) (<-
 	startTime := time.Now()
 	resp, err := p.client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("ollama request: %w", err)
+		return nil, llm.NewErrRequestFailed(llm.ProviderNameOllama, err)
 	}
 
 	if resp.StatusCode != http.StatusOK {
 		defer resp.Body.Close()
 		errBody, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("ollama API error (HTTP %d): %s", resp.StatusCode, string(errBody))
+		return nil, llm.NewErrAPIError(llm.ProviderNameOllama, resp.StatusCode, string(errBody))
 	}
 
 	meta := streamMeta{
@@ -414,10 +414,7 @@ func parseStream(ctx context.Context, body io.ReadCloser, events *llm.EventStrea
 		// Check for context cancellation
 		select {
 		case <-ctx.Done():
-			events.Send(llm.StreamEvent{
-				Type:  llm.StreamEventError,
-				Error: ctx.Err(),
-			})
+			events.Error(llm.NewErrContextCancelled(llm.ProviderNameOllama, ctx.Err()))
 			return
 		default:
 		}
@@ -428,10 +425,7 @@ func parseStream(ctx context.Context, body io.ReadCloser, events *llm.EventStrea
 
 		var chunk streamChunk
 		if err := json.Unmarshal([]byte(line), &chunk); err != nil {
-			events.Send(llm.StreamEvent{
-				Type:  llm.StreamEventError,
-				Error: fmt.Errorf("parse chunk: %w", err),
-			})
+			events.Error(llm.NewErrStreamDecode(llm.ProviderNameOllama, err))
 			return
 		}
 
@@ -484,9 +478,6 @@ func parseStream(ctx context.Context, body io.ReadCloser, events *llm.EventStrea
 	}
 
 	if err := scanner.Err(); err != nil {
-		events.Send(llm.StreamEvent{
-			Type:  llm.StreamEventError,
-			Error: fmt.Errorf("scan stream: %w", err),
-		})
+		events.Error(llm.NewErrStreamRead(llm.ProviderNameOllama, err))
 	}
 }

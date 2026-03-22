@@ -307,13 +307,13 @@ func (p *Provider) CreateStream(ctx context.Context, opts llm.StreamRequest) (<-
 
 	input, err := buildRequest(resolvedOpts)
 	if err != nil {
-		return nil, fmt.Errorf("build request: %w", err)
+		return nil, llm.NewErrBuildRequest(llm.ProviderNameBedrock, err)
 	}
 
 	startTime := time.Now()
 	output, err := p.client.ConverseStream(ctx, input)
 	if err != nil {
-		return nil, fmt.Errorf("bedrock request: %w", err)
+		return nil, llm.NewErrRequestFailed(llm.ProviderNameBedrock, err)
 	}
 
 	meta := streamMeta{
@@ -616,10 +616,7 @@ func parseStream(ctx context.Context, output *bedrockruntime.ConverseStreamOutpu
 		// Check for context cancellation
 		select {
 		case <-ctx.Done():
-			events.Send(llm.StreamEvent{
-				Type:  llm.StreamEventError,
-				Error: ctx.Err(),
-			})
+			events.Error(llm.NewErrContextCancelled(llm.ProviderNameBedrock, ctx.Err()))
 			return
 		default:
 		}
@@ -722,9 +719,6 @@ func parseStream(ctx context.Context, output *bedrockruntime.ConverseStreamOutpu
 
 	// Check for stream errors
 	if err := stream.Err(); err != nil {
-		events.Send(llm.StreamEvent{
-			Type:  llm.StreamEventError,
-			Error: fmt.Errorf("bedrock stream: %w", err),
-		})
+		events.Error(llm.NewErrStreamRead(llm.ProviderNameBedrock, err))
 	}
 }

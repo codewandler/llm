@@ -100,7 +100,7 @@ func (p *Provider) FetchModels(ctx context.Context) ([]llm.Model, error) {
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("openrouter models API failed (HTTP %d): %s", resp.StatusCode, string(body))
+		return nil, llm.NewErrAPIError(llm.ProviderNameOpenRouter, resp.StatusCode, string(body))
 	}
 
 	var result struct {
@@ -140,7 +140,7 @@ func (p *Provider) CreateStream(ctx context.Context, opts llm.StreamRequest) (<-
 
 	body, err := buildRequest(opts)
 	if err != nil {
-		return nil, fmt.Errorf("build request: %w", err)
+		return nil, llm.NewErrBuildRequest(llm.ProviderNameOpenRouter, err)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, "POST", p.opts.BaseURL+"/v1/chat/completions", bytes.NewReader(body))
@@ -153,13 +153,13 @@ func (p *Provider) CreateStream(ctx context.Context, opts llm.StreamRequest) (<-
 	startTime := time.Now()
 	resp, err := p.client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("openrouter request: %w", err)
+		return nil, llm.NewErrRequestFailed(llm.ProviderNameOpenRouter, err)
 	}
 
 	if resp.StatusCode != http.StatusOK {
 		defer resp.Body.Close()
 		errBody, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("openrouter API request failed (HTTP %d): %s", resp.StatusCode, string(errBody))
+		return nil, llm.NewErrAPIError(llm.ProviderNameOpenRouter, resp.StatusCode, string(errBody))
 	}
 
 	meta := streamMeta{
@@ -374,10 +374,7 @@ func parseStream(ctx context.Context, body io.ReadCloser, events *llm.EventStrea
 		// Check for context cancellation
 		select {
 		case <-ctx.Done():
-			events.Send(llm.StreamEvent{
-				Type:  llm.StreamEventError,
-				Error: ctx.Err(),
-			})
+			events.Error(llm.NewErrContextCancelled(llm.ProviderNameOpenRouter, ctx.Err()))
 			return
 		default:
 		}
@@ -416,10 +413,7 @@ func parseStream(ctx context.Context, body io.ReadCloser, events *llm.EventStrea
 		}
 
 		if chunk.Error != nil {
-			events.Send(llm.StreamEvent{
-				Type:  llm.StreamEventError,
-				Error: fmt.Errorf("openrouter: %s", chunk.Error.Message),
-			})
+			events.Error(llm.NewErrProviderMsg(llm.ProviderNameOpenRouter, chunk.Error.Message))
 			return
 		}
 

@@ -32,7 +32,7 @@ func TestStreamOptions_Validate(t *testing.T) {
 				Model:    "",
 				Messages: Messages{&UserMsg{Content: "Hello"}},
 			},
-			wantErr: "Model is required",
+			wantErr: "model is required",
 		},
 		{
 			name: "invalid - bad ReasoningEffort",

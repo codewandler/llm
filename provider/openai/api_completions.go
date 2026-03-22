@@ -30,7 +30,7 @@ func (p *Provider) streamCompletions(ctx context.Context, opts llm.StreamRequest
 
 	body, err := ccBuildRequest(opts)
 	if err != nil {
-		return nil, fmt.Errorf("build request: %w", err)
+		return nil, llm.NewErrBuildRequest(llm.ProviderNameOpenAI, err)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, "POST", p.opts.BaseURL+"/v1/chat/completions", bytes.NewReader(body))
@@ -43,12 +43,12 @@ func (p *Provider) streamCompletions(ctx context.Context, opts llm.StreamRequest
 	startTime := time.Now()
 	resp, err := p.client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("completions request: %w", err)
+		return nil, llm.NewErrRequestFailed(llm.ProviderNameOpenAI, err)
 	}
 	if resp.StatusCode != http.StatusOK {
 		defer resp.Body.Close()
 		errBody, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("completions API error (HTTP %d): %s", resp.StatusCode, string(errBody))
+		return nil, llm.NewErrAPIError(llm.ProviderNameOpenAI, resp.StatusCode, string(errBody))
 	}
 
 	stream := llm.NewEventStream()
@@ -257,7 +257,7 @@ func ccParseStream(ctx context.Context, body io.ReadCloser, events *llm.EventStr
 	for scanner.Scan() {
 		select {
 		case <-ctx.Done():
-			events.Send(llm.StreamEvent{Type: llm.StreamEventError, Error: ctx.Err()})
+			events.Error(llm.NewErrContextCancelled(llm.ProviderNameOpenAI, ctx.Err()))
 			return
 		default:
 		}
@@ -344,10 +344,7 @@ func ccParseStream(ctx context.Context, body io.ReadCloser, events *llm.EventStr
 	}
 
 	if err := scanner.Err(); err != nil {
-		events.Send(llm.StreamEvent{
-			Type:  llm.StreamEventError,
-			Error: fmt.Errorf("stream scan error: %w", err),
-		})
+		events.Error(llm.NewErrStreamRead(llm.ProviderNameOpenAI, err))
 	}
 }
 
