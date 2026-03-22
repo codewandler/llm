@@ -175,7 +175,7 @@ func TestProviders(t *testing.T) {
 
 			// Test 2: Basic streaming
 			t.Run("streaming", func(t *testing.T) {
-				stream, err := tt.provider.CreateStream(ctx, llm.StreamOptions{
+				stream, err := tt.provider.CreateStream(ctx, llm.StreamRequest{
 					Model: getModelID(),
 					Messages: llm.Messages{
 						&llm.UserMsg{Content: "Hello"},
@@ -232,7 +232,7 @@ func TestProviders(t *testing.T) {
 					llm.ToolDefinitionFor[GetWeatherParams]("get_weather", "Get the weather for a location"),
 				}
 
-				stream, err := tt.provider.CreateStream(ctx, llm.StreamOptions{
+				stream, err := tt.provider.CreateStream(ctx, llm.StreamRequest{
 					Model: getModelID(),
 					Messages: llm.Messages{
 						&llm.UserMsg{Content: "What's the weather?"},
@@ -262,7 +262,7 @@ func TestProviders(t *testing.T) {
 					&llm.UserMsg{Content: "How are you?"},
 				}
 
-				stream, err := tt.provider.CreateStream(ctx, llm.StreamOptions{
+				stream, err := tt.provider.CreateStream(ctx, llm.StreamRequest{
 					Model:    getModelID(),
 					Messages: messages,
 				})
@@ -294,7 +294,7 @@ func TestProviders(t *testing.T) {
 				}
 
 				// First request: try to get a tool call
-				stream, err := tt.provider.CreateStream(ctx, llm.StreamOptions{
+				stream, err := tt.provider.CreateStream(ctx, llm.StreamRequest{
 					Model: getModelID(),
 					Messages: llm.Messages{
 						&llm.UserMsg{Content: "What's the weather in Paris? Use the get_weather tool."},
@@ -323,7 +323,7 @@ func TestProviders(t *testing.T) {
 
 				// Second request: send tool result back
 				toolResult := `{"temperature": 22, "conditions": "sunny"}`
-				stream2, err := tt.provider.CreateStream(ctx, llm.StreamOptions{
+				stream2, err := tt.provider.CreateStream(ctx, llm.StreamRequest{
 					Model: getModelID(),
 					Messages: llm.Messages{
 						&llm.UserMsg{Content: "What's the weather in Paris? Use the get_weather tool."},
@@ -426,7 +426,7 @@ func TestOllamaModels(t *testing.T) {
 			// Test 1: Basic streaming
 			t.Run("streaming", func(t *testing.T) {
 				t.Parallel()
-				stream, err := p.CreateStream(ctx, llm.StreamOptions{
+				stream, err := p.CreateStream(ctx, llm.StreamRequest{
 					Model: modelID,
 					Messages: llm.Messages{
 						&llm.UserMsg{Content: "Say hello"},
@@ -468,7 +468,7 @@ func TestOllamaModels(t *testing.T) {
 			// Test 2: Tool calling
 			t.Run("tools", func(t *testing.T) {
 				t.Parallel()
-				stream, err := p.CreateStream(ctx, llm.StreamOptions{
+				stream, err := p.CreateStream(ctx, llm.StreamRequest{
 					Model: modelID,
 					Messages: llm.Messages{
 						&llm.UserMsg{Content: "What's the weather in Paris? Use the get_weather tool."},
@@ -519,7 +519,7 @@ func TestOllamaModels(t *testing.T) {
 					&llm.UserMsg{Content: "What's 2+2?"},
 				}
 
-				stream, err := p.CreateStream(ctx, llm.StreamOptions{
+				stream, err := p.CreateStream(ctx, llm.StreamRequest{
 					Model:    modelID,
 					Messages: messages,
 				})

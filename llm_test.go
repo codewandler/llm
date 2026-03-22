@@ -15,12 +15,12 @@ func TestStreamOptions_Validate(t *testing.T) {
 
 	tests := []struct {
 		name    string
-		opts    StreamOptions
+		opts    StreamRequest
 		wantErr string
 	}{
 		{
 			name: "valid - no tools, no tool choice",
-			opts: StreamOptions{
+			opts: StreamRequest{
 				Model:    "gpt-4",
 				Messages: Messages{&UserMsg{Content: "Hello"}},
 			},
@@ -28,7 +28,7 @@ func TestStreamOptions_Validate(t *testing.T) {
 		},
 		{
 			name: "invalid - empty model",
-			opts: StreamOptions{
+			opts: StreamRequest{
 				Model:    "",
 				Messages: Messages{&UserMsg{Content: "Hello"}},
 			},
@@ -36,7 +36,7 @@ func TestStreamOptions_Validate(t *testing.T) {
 		},
 		{
 			name: "invalid - bad ReasoningEffort",
-			opts: StreamOptions{
+			opts: StreamRequest{
 				Model:           "gpt-4",
 				Messages:        Messages{&UserMsg{Content: "Hello"}},
 				ReasoningEffort: "invalid_value",
@@ -45,7 +45,7 @@ func TestStreamOptions_Validate(t *testing.T) {
 		},
 		{
 			name: "valid - ReasoningEffort empty (default)",
-			opts: StreamOptions{
+			opts: StreamRequest{
 				Model:           "gpt-4",
 				Messages:        Messages{&UserMsg{Content: "Hello"}},
 				ReasoningEffort: "",
@@ -54,7 +54,7 @@ func TestStreamOptions_Validate(t *testing.T) {
 		},
 		{
 			name: "invalid - tool without name",
-			opts: StreamOptions{
+			opts: StreamRequest{
 				Model:    "gpt-4",
 				Messages: Messages{&UserMsg{Content: "Hello"}},
 				Tools:    []ToolDefinition{{Name: "", Description: "No name"}},
@@ -63,7 +63,7 @@ func TestStreamOptions_Validate(t *testing.T) {
 		},
 		{
 			name: "invalid - tool parameters not object type",
-			opts: StreamOptions{
+			opts: StreamRequest{
 				Model:    "gpt-4",
 				Messages: Messages{&UserMsg{Content: "Hello"}},
 				Tools:    []ToolDefinition{{Name: "bad_tool", Parameters: map[string]any{"type": "string"}}},
@@ -72,7 +72,7 @@ func TestStreamOptions_Validate(t *testing.T) {
 		},
 		{
 			name: "valid - tool with nil parameters",
-			opts: StreamOptions{
+			opts: StreamRequest{
 				Model:    "gpt-4",
 				Messages: Messages{&UserMsg{Content: "Hello"}},
 				Tools:    []ToolDefinition{{Name: "simple_tool", Description: "No params"}},
@@ -81,7 +81,7 @@ func TestStreamOptions_Validate(t *testing.T) {
 		},
 		{
 			name: "valid - tools with nil tool choice (defaults to auto)",
-			opts: StreamOptions{
+			opts: StreamRequest{
 				Model:      "gpt-4",
 				Messages:   Messages{&UserMsg{Content: "Hello"}},
 				Tools:      validTools,
@@ -91,7 +91,7 @@ func TestStreamOptions_Validate(t *testing.T) {
 		},
 		{
 			name: "valid - tools with ToolChoiceAuto",
-			opts: StreamOptions{
+			opts: StreamRequest{
 				Model:      "gpt-4",
 				Messages:   Messages{&UserMsg{Content: "Hello"}},
 				Tools:      validTools,
@@ -101,7 +101,7 @@ func TestStreamOptions_Validate(t *testing.T) {
 		},
 		{
 			name: "valid - tools with ToolChoiceRequired",
-			opts: StreamOptions{
+			opts: StreamRequest{
 				Model:      "gpt-4",
 				Messages:   Messages{&UserMsg{Content: "Hello"}},
 				Tools:      validTools,
@@ -111,7 +111,7 @@ func TestStreamOptions_Validate(t *testing.T) {
 		},
 		{
 			name: "valid - tools with ToolChoiceNone",
-			opts: StreamOptions{
+			opts: StreamRequest{
 				Model:      "gpt-4",
 				Messages:   Messages{&UserMsg{Content: "Hello"}},
 				Tools:      validTools,
@@ -121,7 +121,7 @@ func TestStreamOptions_Validate(t *testing.T) {
 		},
 		{
 			name: "valid - tools with ToolChoiceTool referencing existing tool",
-			opts: StreamOptions{
+			opts: StreamRequest{
 				Model:      "gpt-4",
 				Messages:   Messages{&UserMsg{Content: "Hello"}},
 				Tools:      validTools,
@@ -131,7 +131,7 @@ func TestStreamOptions_Validate(t *testing.T) {
 		},
 		{
 			name: "invalid - ToolChoice set but no tools",
-			opts: StreamOptions{
+			opts: StreamRequest{
 				Model:      "gpt-4",
 				Messages:   Messages{&UserMsg{Content: "Hello"}},
 				Tools:      nil,
@@ -141,7 +141,7 @@ func TestStreamOptions_Validate(t *testing.T) {
 		},
 		{
 			name: "invalid - ToolChoiceTool with empty name",
-			opts: StreamOptions{
+			opts: StreamRequest{
 				Model:      "gpt-4",
 				Messages:   Messages{&UserMsg{Content: "Hello"}},
 				Tools:      validTools,
@@ -151,7 +151,7 @@ func TestStreamOptions_Validate(t *testing.T) {
 		},
 		{
 			name: "invalid - ToolChoiceTool references unknown tool",
-			opts: StreamOptions{
+			opts: StreamRequest{
 				Model:      "gpt-4",
 				Messages:   Messages{&UserMsg{Content: "Hello"}},
 				Tools:      validTools,
@@ -161,7 +161,7 @@ func TestStreamOptions_Validate(t *testing.T) {
 		},
 		{
 			name: "invalid - message validation fails",
-			opts: StreamOptions{
+			opts: StreamRequest{
 				Model:    "gpt-4",
 				Messages: Messages{&UserMsg{Content: ""}}, // empty content is invalid
 			},
@@ -201,7 +201,7 @@ func TestReasoningEffort_Constants(t *testing.T) {
 }
 
 func TestStreamOptions_WithReasoningEffort(t *testing.T) {
-	opts := StreamOptions{
+	opts := StreamRequest{
 		Model:           "gpt-5",
 		Messages:        Messages{&UserMsg{Content: "Hello"}},
 		ReasoningEffort: ReasoningEffortLow,

@@ -29,7 +29,7 @@ import (
 
 // streamResponses sends a Responses API request and returns an event channel.
 // It is called by Provider.Stream for Codex models.
-func (p *Provider) streamResponses(ctx context.Context, opts llm.StreamOptions) (<-chan llm.StreamEvent, error) {
+func (p *Provider) streamResponses(ctx context.Context, opts llm.StreamRequest) (<-chan llm.StreamEvent, error) {
 	apiKey, err := p.opts.APIKeyFunc(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("get API key: %w", err)
@@ -116,7 +116,7 @@ type respTool struct {
 	Parameters  any    `json:"parameters,omitempty"`
 }
 
-func respBuildRequest(opts llm.StreamOptions) ([]byte, error) {
+func respBuildRequest(opts llm.StreamRequest) ([]byte, error) {
 	r := respRequest{
 		Model:  opts.Model,
 		Stream: true,
@@ -344,11 +344,11 @@ func respHandleEvent(
 			events <- llm.StreamEvent{
 				Type: llm.StreamEventStart,
 				Start: &llm.StreamStart{
-					RequestedModel:   meta.requestedModel,
-					ResolvedModel:    meta.requestedModel,
-					ProviderModel:    ev.Response.Model,
-					RequestID:        ev.Response.ID,
-					TimeToFirstToken: time.Since(meta.startTime),
+					ModelRequested:    meta.requestedModel,
+					ModelResolved:     meta.requestedModel,
+					ModelProviderID:   ev.Response.Model,
+					ProviderRequestID: ev.Response.ID,
+					TimeToFirstToken:  time.Since(meta.startTime),
 				},
 			}
 		}
@@ -366,8 +366,8 @@ func respHandleEvent(
 			events <- llm.StreamEvent{
 				Type: llm.StreamEventStart,
 				Start: &llm.StreamStart{
-					RequestedModel:   meta.requestedModel,
-					ResolvedModel:    meta.requestedModel,
+					ModelRequested:   meta.requestedModel,
+					ModelResolved:    meta.requestedModel,
 					TimeToFirstToken: time.Since(meta.startTime),
 				},
 			}

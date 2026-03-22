@@ -68,7 +68,7 @@ func TestCacheIntegration_Claude_TopLevel(t *testing.T) {
 	p := claude.New()
 	model := "claude-haiku-4-5-20251001" // cheapest model that supports caching
 
-	opts := llm.StreamOptions{
+	opts := llm.StreamRequest{
 		Model: model,
 		Messages: llm.Messages{
 			&llm.SystemMsg{Content: largeCacheablePrompt()},
@@ -113,8 +113,8 @@ func TestCacheIntegration_Claude_PerMessageHint(t *testing.T) {
 	p := claude.New()
 	model := "claude-haiku-4-5-20251001"
 
-	makeOpts := func(question string) llm.StreamOptions {
-		return llm.StreamOptions{
+	makeOpts := func(question string) llm.StreamRequest {
+		return llm.StreamRequest{
 			Model: model,
 			Messages: llm.Messages{
 				// Explicit breakpoint on the system message only — user question varies
@@ -155,7 +155,7 @@ func TestCacheIntegration_Claude_ExtendedTTL(t *testing.T) {
 	p := claude.New()
 
 	// claude-haiku-4-5 supports 1h TTL
-	opts := llm.StreamOptions{
+	opts := llm.StreamRequest{
 		Model: "claude-haiku-4-5-20251001",
 		Messages: llm.Messages{
 			&llm.SystemMsg{Content: largeCacheablePrompt()},
@@ -187,7 +187,7 @@ func TestCacheIntegration_AnthropicDirect_TopLevel(t *testing.T) {
 	ctx := context.Background()
 	p := anthropicdirect.New()
 
-	opts := llm.StreamOptions{
+	opts := llm.StreamRequest{
 		Model: "claude-haiku-4-5-20251001",
 		Messages: llm.Messages{
 			&llm.SystemMsg{Content: largeCacheablePrompt()},
@@ -227,7 +227,7 @@ func TestCacheIntegration_Bedrock_TopLevel(t *testing.T) {
 	p := bedrock.New(bedrock.WithRegion(getAWSRegion()))
 	model := bedrock.ModelHaikuLatest
 
-	opts := llm.StreamOptions{
+	opts := llm.StreamRequest{
 		Model: model,
 		Messages: llm.Messages{
 			&llm.SystemMsg{Content: largeCacheablePrompt()},
@@ -268,8 +268,8 @@ func TestCacheIntegration_Bedrock_PerMessageHint(t *testing.T) {
 	p := bedrock.New(bedrock.WithRegion(getAWSRegion()))
 	model := bedrock.ModelHaikuLatest
 
-	makeOpts := func(question string) llm.StreamOptions {
-		return llm.StreamOptions{
+	makeOpts := func(question string) llm.StreamRequest {
+		return llm.StreamRequest{
 			Model: model,
 			Messages: llm.Messages{
 				&llm.SystemMsg{
@@ -310,7 +310,7 @@ func TestCacheIntegration_Bedrock_NonClaudeModel_NoError(t *testing.T) {
 	ctx := context.Background()
 	p := bedrock.New(bedrock.WithRegion(getAWSRegion()))
 
-	opts := llm.StreamOptions{
+	opts := llm.StreamRequest{
 		Model: bedrock.ModelNovaMicro, // non-Claude model
 		Messages: llm.Messages{
 			&llm.UserMsg{Content: "Hello"},

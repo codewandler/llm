@@ -156,7 +156,7 @@ func TestCreateStream(t *testing.T) {
 	// Test that CreateStream correctly resolves model reference
 	// We won't actually send a message, just verify the resolution works
 	ctx := context.Background()
-	opts := llm.StreamOptions{
+	opts := llm.StreamRequest{
 		Model: "ollama/llama3.2:1b",
 		Messages: llm.Messages{
 			&llm.UserMsg{Content: "test"},

@@ -25,7 +25,7 @@ func testMeta(model string) ccStreamMeta {
 // --- Unit tests for ccBuildRequest ---
 
 func TestBuildRequest_Basic(t *testing.T) {
-	opts := llm.StreamOptions{
+	opts := llm.StreamRequest{
 		Model: "gpt-4o",
 		Messages: llm.Messages{
 			&llm.UserMsg{Content: "Hello"},
@@ -54,7 +54,7 @@ func TestBuildRequest_WithTools(t *testing.T) {
 		Location string `json:"location" jsonschema:"description=City name,required"`
 	}
 
-	opts := llm.StreamOptions{
+	opts := llm.StreamRequest{
 		Model: "gpt-4o",
 		Messages: llm.Messages{
 			&llm.UserMsg{Content: "test"},
@@ -79,7 +79,7 @@ func TestBuildRequest_WithTools(t *testing.T) {
 }
 
 func TestBuildRequest_AssistantWithToolCalls(t *testing.T) {
-	opts := llm.StreamOptions{
+	opts := llm.StreamRequest{
 		Model: "gpt-4o",
 		Messages: llm.Messages{
 			&llm.UserMsg{Content: "What's the weather?"},
@@ -114,7 +114,7 @@ func TestBuildRequest_AssistantWithToolCalls(t *testing.T) {
 }
 
 func TestBuildRequest_ToolResults(t *testing.T) {
-	opts := llm.StreamOptions{
+	opts := llm.StreamRequest{
 		Model: "gpt-4o",
 		Messages: llm.Messages{
 			&llm.UserMsg{Content: "What's the weather?"},
@@ -244,13 +244,13 @@ data: [DONE]
 
 func TestCalculateCost(t *testing.T) {
 	tests := []struct {
-		name           string
-		model          string
-		usage          *llm.Usage
-		wantCost       float64
-		wantInputCost  float64
+		name              string
+		model             string
+		usage             *llm.Usage
+		wantCost          float64
+		wantInputCost     float64
 		wantCacheReadCost float64
-		wantOutputCost float64
+		wantOutputCost    float64
 	}{
 		{
 			name:  "gpt-4o basic",
@@ -260,25 +260,25 @@ func TestCalculateCost(t *testing.T) {
 				OutputTokens: 1_000_000,
 			},
 			// $2.50/1M input + $10.00/1M output = $12.50
-			wantCost:       12.50,
-			wantInputCost:  2.50,
+			wantCost:          12.50,
+			wantInputCost:     2.50,
 			wantCacheReadCost: 0,
-			wantOutputCost: 10.00,
+			wantOutputCost:    10.00,
 		},
 		{
 			name:  "gpt-4o with cache",
 			model: "gpt-4o",
 			usage: &llm.Usage{
-				InputTokens:  1_000_000,
-				OutputTokens: 500_000,
+				InputTokens:     1_000_000,
+				OutputTokens:    500_000,
 				CacheReadTokens: 800_000,
 			},
 			// (200k regular * $2.50/1M) + (800k cached * $1.25/1M) + (500k output * $10.00/1M)
 			// = $0.50 + $1.00 + $5.00 = $6.50
-			wantCost:       6.50,
-			wantInputCost:  0.50,
+			wantCost:          6.50,
+			wantInputCost:     0.50,
 			wantCacheReadCost: 1.00,
-			wantOutputCost: 5.00,
+			wantOutputCost:    5.00,
 		},
 		{
 			name:  "gpt-4o-mini cheap",
@@ -288,10 +288,10 @@ func TestCalculateCost(t *testing.T) {
 				OutputTokens: 1_000_000,
 			},
 			// $0.15/1M input + $0.60/1M output = $0.75
-			wantCost:       0.75,
-			wantInputCost:  0.15,
+			wantCost:          0.75,
+			wantInputCost:     0.15,
 			wantCacheReadCost: 0,
-			wantOutputCost: 0.60,
+			wantOutputCost:    0.60,
 		},
 		{
 			name:  "o1-pro expensive",
@@ -301,10 +301,10 @@ func TestCalculateCost(t *testing.T) {
 				OutputTokens: 1_000_000,
 			},
 			// $150/1M input + $600/1M output = $750
-			wantCost:       750.0,
-			wantInputCost:  150.0,
+			wantCost:          750.0,
+			wantInputCost:     150.0,
 			wantCacheReadCost: 0,
-			wantOutputCost: 600.0,
+			wantOutputCost:    600.0,
 		},
 		{
 			name:     "unknown model returns zero",
@@ -550,7 +550,7 @@ func TestMapReasoningEffort_CodexMax(t *testing.T) {
 // feeding into ccBuildRequest.
 
 func TestBuildRequest_ReasoningEffortOmitted(t *testing.T) {
-	opts := llm.StreamOptions{
+	opts := llm.StreamRequest{
 		Model:    "gpt-4o",
 		Messages: llm.Messages{&llm.UserMsg{Content: "Hello"}},
 	}
@@ -566,7 +566,7 @@ func TestBuildRequest_ReasoningEffortOmitted(t *testing.T) {
 
 func TestBuildRequest_ReasoningEffortSet(t *testing.T) {
 	// enrichOpts passes the raw effort string through for pre-GPT51 models.
-	opts, err := enrichOpts(llm.StreamOptions{
+	opts, err := enrichOpts(llm.StreamRequest{
 		Model:           "gpt-5",
 		Messages:        llm.Messages{&llm.UserMsg{Content: "Hello"}},
 		ReasoningEffort: llm.ReasoningEffortLow,
@@ -583,7 +583,7 @@ func TestBuildRequest_ReasoningEffortSet(t *testing.T) {
 
 func TestBuildRequest_ReasoningEffortMapped(t *testing.T) {
 	// enrichOpts maps "minimal" → "low" for gpt-5.1.
-	opts, err := enrichOpts(llm.StreamOptions{
+	opts, err := enrichOpts(llm.StreamRequest{
 		Model:           "gpt-5.1",
 		Messages:        llm.Messages{&llm.UserMsg{Content: "Hello"}},
 		ReasoningEffort: llm.ReasoningEffortMinimal,
@@ -599,7 +599,7 @@ func TestBuildRequest_ReasoningEffortMapped(t *testing.T) {
 }
 
 func TestBuildRequest_ReasoningEffortError(t *testing.T) {
-	_, err := enrichOpts(llm.StreamOptions{
+	_, err := enrichOpts(llm.StreamRequest{
 		Model:           "gpt-5-pro",
 		Messages:        llm.Messages{&llm.UserMsg{Content: "Hello"}},
 		ReasoningEffort: llm.ReasoningEffortLow,
@@ -617,7 +617,7 @@ func TestBuildRequest_PromptCacheRetention_ExtendedSupported(t *testing.T) {
 
 	for _, model := range models {
 		t.Run(model, func(t *testing.T) {
-			opts := llm.StreamOptions{
+			opts := llm.StreamRequest{
 				Model:    model,
 				Messages: llm.Messages{&llm.UserMsg{Content: "Hello"}},
 			}
@@ -645,7 +645,7 @@ func TestBuildRequest_PromptCacheRetention_NotSupported(t *testing.T) {
 
 	for _, model := range models {
 		t.Run(model, func(t *testing.T) {
-			opts := llm.StreamOptions{
+			opts := llm.StreamRequest{
 				Model:    model,
 				Messages: llm.Messages{&llm.UserMsg{Content: "Hello"}},
 			}
@@ -664,14 +664,14 @@ func TestBuildRequest_PromptCacheRetention_NotSupported(t *testing.T) {
 // --- Unit tests for model registry ---
 
 func TestEnrichOpts_ReasoningEffortOmitted(t *testing.T) {
-	opts := llm.StreamOptions{Model: "gpt-4o", Messages: llm.Messages{&llm.UserMsg{Content: "hi"}}}
+	opts := llm.StreamRequest{Model: "gpt-4o", Messages: llm.Messages{&llm.UserMsg{Content: "hi"}}}
 	out, err := enrichOpts(opts)
 	require.NoError(t, err)
 	assert.Empty(t, out.ReasoningEffort)
 }
 
 func TestEnrichOpts_ReasoningEffortMappedMinimalToLow(t *testing.T) {
-	opts := llm.StreamOptions{
+	opts := llm.StreamRequest{
 		Model:           "gpt-5.1",
 		ReasoningEffort: llm.ReasoningEffortMinimal,
 		Messages:        llm.Messages{&llm.UserMsg{Content: "hi"}},
@@ -682,7 +682,7 @@ func TestEnrichOpts_ReasoningEffortMappedMinimalToLow(t *testing.T) {
 }
 
 func TestEnrichOpts_ReasoningEffortErrorProModel(t *testing.T) {
-	opts := llm.StreamOptions{
+	opts := llm.StreamRequest{
 		Model:           "gpt-5-pro",
 		ReasoningEffort: llm.ReasoningEffortLow,
 		Messages:        llm.Messages{&llm.UserMsg{Content: "hi"}},
@@ -701,7 +701,7 @@ func TestWantsExtendedCache_Set(t *testing.T) {
 	}
 	for _, model := range extended {
 		t.Run(model, func(t *testing.T) {
-			opts := llm.StreamOptions{Model: model, Messages: llm.Messages{&llm.UserMsg{Content: "hi"}}}
+			opts := llm.StreamRequest{Model: model, Messages: llm.Messages{&llm.UserMsg{Content: "hi"}}}
 			assert.True(t, wantsExtendedCache(opts), "model %s should want extended cache", model)
 		})
 	}
@@ -711,7 +711,7 @@ func TestWantsExtendedCache_NotSet(t *testing.T) {
 	notExtended := []string{"gpt-4o", "gpt-4o-mini", "o1", "o1-pro", "o3", "o3-mini", "o4-mini"}
 	for _, model := range notExtended {
 		t.Run(model, func(t *testing.T) {
-			opts := llm.StreamOptions{Model: model, Messages: llm.Messages{&llm.UserMsg{Content: "hi"}}}
+			opts := llm.StreamRequest{Model: model, Messages: llm.Messages{&llm.UserMsg{Content: "hi"}}}
 			assert.False(t, wantsExtendedCache(opts), "model %s should not want extended cache", model)
 		})
 	}
@@ -815,7 +815,7 @@ data: [DONE]
 // --- Unit tests for Responses API request building ---
 
 func TestRespBuildRequest_Basic(t *testing.T) {
-	opts := llm.StreamOptions{
+	opts := llm.StreamRequest{
 		Model: "gpt-5.1-codex",
 		Messages: llm.Messages{
 			&llm.UserMsg{Content: "Write a function"},
@@ -837,7 +837,7 @@ func TestRespBuildRequest_Basic(t *testing.T) {
 }
 
 func TestRespBuildRequest_SystemAsInstructions(t *testing.T) {
-	opts := llm.StreamOptions{
+	opts := llm.StreamRequest{
 		Model: "gpt-5.1-codex",
 		Messages: llm.Messages{
 			&llm.SystemMsg{Content: "You are a coding assistant."},
@@ -860,7 +860,7 @@ func TestRespBuildRequest_SystemAsInstructions(t *testing.T) {
 }
 
 func TestRespBuildRequest_MultipleSystemMessages(t *testing.T) {
-	opts := llm.StreamOptions{
+	opts := llm.StreamRequest{
 		Model: "gpt-5.1-codex",
 		Messages: llm.Messages{
 			&llm.SystemMsg{Content: "Primary instructions."},
@@ -886,7 +886,7 @@ func TestRespBuildRequest_MultipleSystemMessages(t *testing.T) {
 }
 
 func TestRespBuildRequest_WithTools(t *testing.T) {
-	opts := llm.StreamOptions{
+	opts := llm.StreamRequest{
 		Model: "gpt-5.1-codex",
 		Messages: llm.Messages{
 			&llm.UserMsg{Content: "test"},
@@ -916,7 +916,7 @@ func TestRespBuildRequest_WithTools(t *testing.T) {
 }
 
 func TestRespBuildRequest_ToolCallsAndResults(t *testing.T) {
-	opts := llm.StreamOptions{
+	opts := llm.StreamRequest{
 		Model: "gpt-5.1-codex",
 		Messages: llm.Messages{
 			&llm.UserMsg{Content: "Run tests"},
@@ -962,7 +962,7 @@ func TestRespBuildRequest_ToolCallsAndResults(t *testing.T) {
 }
 
 func TestRespBuildRequest_ReasoningEffort(t *testing.T) {
-	opts := llm.StreamOptions{
+	opts := llm.StreamRequest{
 		Model:           "gpt-5.1-codex",
 		Messages:        llm.Messages{&llm.UserMsg{Content: "test"}},
 		ReasoningEffort: llm.ReasoningEffortHigh,
@@ -1136,18 +1136,18 @@ data: {"response":{"id":"resp_abc123","model":"gpt-5.1-codex","usage":{"input_to
 	}
 
 	require.NotNil(t, start)
-	assert.Equal(t, "gpt-5.1-codex", start.RequestedModel)
-	assert.Equal(t, "gpt-5.1-codex", start.ProviderModel)
-	assert.Equal(t, "resp_abc123", start.RequestID)
+	assert.Equal(t, "gpt-5.1-codex", start.ModelRequested)
+	assert.Equal(t, "gpt-5.1-codex", start.ModelProviderID)
+	assert.Equal(t, "resp_abc123", start.ProviderRequestID)
 }
 
 // --- Unit tests for enrichOpts ---
 
 func TestWantsExtendedCache_TableDriven(t *testing.T) {
 	tests := []struct {
-		name string
+		name  string
 		model string
-		want bool
+		want  bool
 	}{
 		{"gpt-5.4 supports cache", "gpt-5.4", true},
 		{"gpt-5.1-codex supports cache", "gpt-5.1-codex", true},
@@ -1159,7 +1159,7 @@ func TestWantsExtendedCache_TableDriven(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			opts := llm.StreamOptions{
+			opts := llm.StreamRequest{
 				Model:    tt.model,
 				Messages: llm.Messages{&llm.UserMsg{Content: "test"}},
 			}
@@ -1188,7 +1188,7 @@ func TestEnrichOpts_ReasoningEffortMapping(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			opts := llm.StreamOptions{
+			opts := llm.StreamRequest{
 				Model:           tt.model,
 				Messages:        llm.Messages{&llm.UserMsg{Content: "test"}},
 				ReasoningEffort: tt.effort,

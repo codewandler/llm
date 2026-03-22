@@ -38,7 +38,7 @@ func TestBuildRequest_SystemAndTools(t *testing.T) {
 
 	body, err := BuildRequest(RequestOptions{
 		Model: "claude-sonnet-4-5-20250929",
-		StreamOptions: llm.StreamOptions{
+		StreamOptions: llm.StreamRequest{
 			Model: "claude-sonnet-4-5-20250929",
 			Messages: llm.Messages{
 				&llm.SystemMsg{Content: "system prompt"},
@@ -77,7 +77,7 @@ func TestBuildRequest_MultipleSystemMessages(t *testing.T) {
 	t.Run("consecutive system messages are accumulated", func(t *testing.T) {
 		body, err := BuildRequest(RequestOptions{
 			Model: "claude-sonnet-4-5-20250929",
-			StreamOptions: llm.StreamOptions{
+			StreamOptions: llm.StreamRequest{
 				Model: "claude-sonnet-4-5-20250929",
 				Messages: llm.Messages{
 					&llm.SystemMsg{Content: "first instruction"},
@@ -102,7 +102,7 @@ func TestBuildRequest_MultipleSystemMessages(t *testing.T) {
 	t.Run("mid-conversation system messages are accumulated", func(t *testing.T) {
 		body, err := BuildRequest(RequestOptions{
 			Model: "claude-sonnet-4-5-20250929",
-			StreamOptions: llm.StreamOptions{
+			StreamOptions: llm.StreamRequest{
 				Model: "claude-sonnet-4-5-20250929",
 				Messages: llm.Messages{
 					&llm.SystemMsg{Content: "initial system"},
@@ -129,7 +129,7 @@ func TestBuildRequest_MultipleSystemMessages(t *testing.T) {
 	t.Run("empty system messages are filtered out", func(t *testing.T) {
 		body, err := BuildRequest(RequestOptions{
 			Model: "claude-sonnet-4-5-20250929",
-			StreamOptions: llm.StreamOptions{
+			StreamOptions: llm.StreamRequest{
 				Model: "claude-sonnet-4-5-20250929",
 				Messages: llm.Messages{
 					&llm.SystemMsg{Content: "keep this"},
@@ -153,7 +153,7 @@ func TestBuildRequest_MultipleSystemMessages(t *testing.T) {
 	t.Run("no system messages results in nil system field", func(t *testing.T) {
 		body, err := BuildRequest(RequestOptions{
 			Model: "claude-sonnet-4-5-20250929",
-			StreamOptions: llm.StreamOptions{
+			StreamOptions: llm.StreamRequest{
 				Model: "claude-sonnet-4-5-20250929",
 				Messages: llm.Messages{
 					&llm.UserMsg{Content: "hello"},
@@ -178,7 +178,7 @@ func TestBuildRequest_ToolCallWithNilArguments(t *testing.T) {
 	// the "input" field (as an empty object) because Anthropic API requires it.
 	body, err := BuildRequest(RequestOptions{
 		Model: "claude-sonnet-4-5-20250929",
-		StreamOptions: llm.StreamOptions{
+		StreamOptions: llm.StreamRequest{
 			Model: "claude-sonnet-4-5-20250929",
 			Messages: llm.Messages{
 				&llm.UserMsg{Content: "hello"},

@@ -292,7 +292,7 @@ func (p *Provider) Resolve(modelID string) (llm.Model, error) {
 
 // CreateStream creates a stream by routing to the appropriate provider.
 // It tries each target in order until one succeeds or all fail.
-func (p *Provider) CreateStream(ctx context.Context, opts llm.StreamOptions) (<-chan llm.StreamEvent, error) {
+func (p *Provider) CreateStream(ctx context.Context, opts llm.StreamRequest) (<-chan llm.StreamEvent, error) {
 	if err := opts.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid options: %w", err)
 	}
@@ -338,11 +338,11 @@ func (p *Provider) wrapStream(upstream <-chan llm.StreamEvent, requestedModel st
 			// Transform StreamEventStart to include aggregate context
 			if evt.Type == llm.StreamEventStart && evt.Start != nil {
 				evt.Start = &llm.StreamStart{
-					RequestedModel:   requestedModel,
-					ResolvedModel:    target.fullID,
-					ProviderModel:    evt.Start.ProviderModel,
-					RequestID:        evt.Start.RequestID,
-					TimeToFirstToken: evt.Start.TimeToFirstToken,
+					ModelRequested:    requestedModel,
+					ModelResolved:     target.fullID,
+					ModelProviderID:   evt.Start.ModelProviderID,
+					ProviderRequestID: evt.Start.ProviderRequestID,
+					TimeToFirstToken:  evt.Start.TimeToFirstToken,
 				}
 			}
 			out <- evt

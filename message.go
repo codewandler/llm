@@ -22,21 +22,6 @@ const (
 	RoleTool      Role = "tool"
 )
 
-// Model represents an LLM model.
-type Model struct {
-	ID       string   `json:"id"`
-	Name     string   `json:"name"`
-	Provider string   `json:"provider"`
-	Aliases  []string `json:"aliases,omitempty"`
-}
-
-// Resolver resolves a model alias or ID to its full Model representation.
-type Resolver interface {
-	// Resolve returns the Model for the given model ID or alias.
-	// Returns ErrNotFound if the model is not recognized.
-	Resolve(modelID string) (Model, error)
-}
-
 // --- Message Interface ---
 
 // Message is the interface all message types implement.
@@ -242,7 +227,7 @@ func (ToolChoiceTool) toolChoice() {}
 // It is a provider-neutral instruction: Anthropic and Bedrock translate it to
 // explicit cache breakpoints on content blocks; OpenAI caching is always
 // automatic and ignores per-message hints, but honours TTL on
-// StreamOptions.CacheHint.
+// StreamRequest.CacheHint.
 type CacheHint struct {
 	// Enabled marks this content as a cache breakpoint candidate.
 	// For Anthropic/Bedrock: emits cache_control / cachePoint at this position.
@@ -253,38 +238,6 @@ type CacheHint struct {
 	// Valid values: "" (provider default, typically 5m), "5m", "1h".
 	// The "1h" option requires a supporting model (Claude Haiku/Sonnet/Opus 4.5+).
 	TTL string
-}
-
-// --- ReasoningEffort ---
-
-// ReasoningEffort controls the amount of reasoning for reasoning models.
-// Lower values result in faster responses with fewer reasoning tokens.
-type ReasoningEffort string
-
-const (
-	// ReasoningEffortNone disables reasoning (GPT-5.1+ only).
-	ReasoningEffortNone ReasoningEffort = "none"
-	// ReasoningEffortMinimal uses minimal reasoning effort.
-	ReasoningEffortMinimal ReasoningEffort = "minimal"
-	// ReasoningEffortLow uses low reasoning effort.
-	ReasoningEffortLow ReasoningEffort = "low"
-	// ReasoningEffortMedium uses medium reasoning effort (default for most models before GPT-5.1).
-	ReasoningEffortMedium ReasoningEffort = "medium"
-	// ReasoningEffortHigh uses high reasoning effort.
-	ReasoningEffortHigh ReasoningEffort = "high"
-	// ReasoningEffortXHigh uses extra high reasoning effort (codex-max+ only).
-	ReasoningEffortXHigh ReasoningEffort = "xhigh"
-)
-
-// Valid returns true if the ReasoningEffort is a known valid value or empty.
-func (r ReasoningEffort) Valid() bool {
-	switch r {
-	case "", ReasoningEffortNone, ReasoningEffortMinimal, ReasoningEffortLow,
-		ReasoningEffortMedium, ReasoningEffortHigh, ReasoningEffortXHigh:
-		return true
-	default:
-		return false
-	}
 }
 
 // --- Messages Wrapper ---

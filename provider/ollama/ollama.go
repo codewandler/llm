@@ -240,7 +240,7 @@ func (p *Provider) downloadModel(ctx context.Context, modelID string) error {
 	return nil
 }
 
-func (p *Provider) CreateStream(ctx context.Context, opts llm.StreamOptions) (<-chan llm.StreamEvent, error) {
+func (p *Provider) CreateStream(ctx context.Context, opts llm.StreamRequest) (<-chan llm.StreamEvent, error) {
 	if err := opts.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid options: %w", err)
 	}
@@ -312,7 +312,7 @@ type functionPayload struct {
 	Parameters  any    `json:"parameters"`
 }
 
-func buildRequest(opts llm.StreamOptions) ([]byte, error) {
+func buildRequest(opts llm.StreamRequest) ([]byte, error) {
 	r := request{
 		Model:  opts.Model,
 		Stream: true,
@@ -441,11 +441,11 @@ func parseStream(ctx context.Context, body io.ReadCloser, events chan<- llm.Stre
 			events <- llm.StreamEvent{
 				Type: llm.StreamEventStart,
 				Start: &llm.StreamStart{
-					RequestedModel:   meta.RequestedModel,
-					ResolvedModel:    meta.ResolvedModel,
-					ProviderModel:    "", // Ollama doesn't return model in stream
-					RequestID:        "", // Ollama doesn't return request ID
-					TimeToFirstToken: time.Since(meta.StartTime),
+					ModelRequested:    meta.RequestedModel,
+					ModelResolved:     meta.ResolvedModel,
+					ModelProviderID:   "", // Ollama doesn't return model in stream
+					ProviderRequestID: "", // Ollama doesn't return request ID
+					TimeToFirstToken:  time.Since(meta.StartTime),
 				},
 			}
 		}

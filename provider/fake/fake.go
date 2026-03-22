@@ -15,18 +15,18 @@ type Provider struct {
 
 func (f *Provider) Name() string { return "fake" }
 
-func (f *Provider) CreateStream(_ context.Context, opts llm.StreamOptions) (<-chan llm.StreamEvent, error) {
+func (f *Provider) CreateStream(_ context.Context, opts llm.StreamRequest) (<-chan llm.StreamEvent, error) {
 	ch := make(chan llm.StreamEvent, 16)
 	go func() {
 		// Emit start event first
 		ch <- llm.StreamEvent{
 			Type: llm.StreamEventStart,
 			Start: &llm.StreamStart{
-				RequestedModel:   opts.Model,
-				ResolvedModel:    opts.Model,
-				ProviderModel:    "fake-model-v1",
-				RequestID:        "fake-req-123",
-				TimeToFirstToken: 1 * time.Millisecond,
+				ModelRequested:    opts.Model,
+				ModelResolved:     opts.Model,
+				ModelProviderID:   "fake-model-v1",
+				ProviderRequestID: "fake-req-123",
+				TimeToFirstToken:  1 * time.Millisecond,
 			},
 		}
 

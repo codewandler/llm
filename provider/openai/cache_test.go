@@ -13,7 +13,7 @@ import (
 func TestEnrichOpts_CacheHintTTL_OneHour(t *testing.T) {
 	// CacheHint with TTL "1h" should make wantsExtendedCache return true,
 	// and the built request should carry prompt_cache_retention: "24h".
-	opts := llm.StreamOptions{
+	opts := llm.StreamRequest{
 		Model: "gpt-4o-mini", // doesn't normally support extended cache
 		Messages: llm.Messages{
 			&llm.UserMsg{Content: "Hello"},
@@ -35,7 +35,7 @@ func TestEnrichOpts_CacheHintTTL_OneHour(t *testing.T) {
 func TestEnrichOpts_CacheHintTTL_DefaultDoesNotForceExtended(t *testing.T) {
 	// CacheHint with no TTL should not trigger extended cache on a model
 	// that doesn't support it.
-	opts := llm.StreamOptions{
+	opts := llm.StreamRequest{
 		Model: "gpt-4o-mini",
 		Messages: llm.Messages{
 			&llm.UserMsg{Content: "Hello"},
@@ -56,7 +56,7 @@ func TestEnrichOpts_CacheHintTTL_DefaultDoesNotForceExtended(t *testing.T) {
 }
 
 func TestEnrichOpts_CacheHintDisabled_NoEffect(t *testing.T) {
-	opts := llm.StreamOptions{
+	opts := llm.StreamRequest{
 		Model: "gpt-4o",
 		Messages: llm.Messages{
 			&llm.UserMsg{Content: "Hello"},
@@ -80,7 +80,7 @@ func TestEnrichOpts_CacheHintDisabled_NoEffect(t *testing.T) {
 func TestEnrichOpts_NoCacheHint_ModelBasedDetectionStillWorks(t *testing.T) {
 	// Without CacheHint, model-based auto-detection should still request 24h
 	// for models that support it.
-	opts := llm.StreamOptions{
+	opts := llm.StreamRequest{
 		Model: "gpt-5.1-codex", // known extended-cache model in registry
 		Messages: llm.Messages{
 			&llm.UserMsg{Content: "Hello"},

@@ -103,11 +103,11 @@ func ParseStream(ctx context.Context, body io.ReadCloser, events chan<- llm.Stre
 				events <- llm.StreamEvent{
 					Type: llm.StreamEventStart,
 					Start: &llm.StreamStart{
-						RequestedModel:   meta.RequestedModel,
-						ResolvedModel:    meta.ResolvedModel,
-						ProviderModel:    evt.Message.Model,
-						RequestID:        evt.Message.ID,
-						TimeToFirstToken: time.Since(meta.StartTime),
+						ModelRequested:    meta.RequestedModel,
+						ModelResolved:     meta.ResolvedModel,
+						ModelProviderID:   evt.Message.Model,
+						ProviderRequestID: evt.Message.ID,
+						TimeToFirstToken:  time.Since(meta.StartTime),
 					},
 				}
 			}

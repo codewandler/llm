@@ -22,7 +22,7 @@ import (
 
 // streamCompletions sends a Chat Completions request and returns an event
 // channel. It is called by Provider.Stream for non-Codex models.
-func (p *Provider) streamCompletions(ctx context.Context, opts llm.StreamOptions) (<-chan llm.StreamEvent, error) {
+func (p *Provider) streamCompletions(ctx context.Context, opts llm.StreamRequest) (<-chan llm.StreamEvent, error) {
 	apiKey, err := p.opts.APIKeyFunc(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("get API key: %w", err)
@@ -105,7 +105,7 @@ type ccFunctionPayload struct {
 	Parameters  any    `json:"parameters"`
 }
 
-func ccBuildRequest(opts llm.StreamOptions) ([]byte, error) {
+func ccBuildRequest(opts llm.StreamRequest) ([]byte, error) {
 	r := ccRequest{
 		Model:         opts.Model,
 		Stream:        true,
@@ -287,11 +287,11 @@ func ccParseStream(ctx context.Context, body io.ReadCloser, events chan<- llm.St
 			events <- llm.StreamEvent{
 				Type: llm.StreamEventStart,
 				Start: &llm.StreamStart{
-					RequestedModel:   meta.requestedModel,
-					ResolvedModel:    meta.requestedModel,
-					ProviderModel:    chunk.Model,
-					RequestID:        chunk.ID,
-					TimeToFirstToken: time.Since(meta.startTime),
+					ModelRequested:    meta.requestedModel,
+					ModelResolved:     meta.requestedModel,
+					ModelProviderID:   chunk.Model,
+					ProviderRequestID: chunk.ID,
+					TimeToFirstToken:  time.Since(meta.startTime),
 				},
 			}
 		}

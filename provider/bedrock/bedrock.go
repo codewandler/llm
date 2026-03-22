@@ -285,7 +285,7 @@ func (p *Provider) RegionPrefix() string {
 	return p.regionPrefix
 }
 
-func (p *Provider) CreateStream(ctx context.Context, opts llm.StreamOptions) (<-chan llm.StreamEvent, error) {
+func (p *Provider) CreateStream(ctx context.Context, opts llm.StreamRequest) (<-chan llm.StreamEvent, error) {
 	// Lazy client initialization (thread-safe)
 	if err := p.initClient(ctx); err != nil {
 		return nil, err
@@ -374,7 +374,7 @@ func hasBedrockPerMessageCacheHints(msgs llm.Messages) bool {
 	return false
 }
 
-func buildRequest(opts llm.StreamOptions) (*bedrockruntime.ConverseStreamInput, error) {
+func buildRequest(opts llm.StreamRequest) (*bedrockruntime.ConverseStreamInput, error) {
 	input := &bedrockruntime.ConverseStreamInput{
 		ModelId: aws.String(opts.Model),
 	}
@@ -630,11 +630,11 @@ func parseStream(ctx context.Context, output *bedrockruntime.ConverseStreamOutpu
 			events <- llm.StreamEvent{
 				Type: llm.StreamEventStart,
 				Start: &llm.StreamStart{
-					RequestedModel:   meta.RequestedModel,
-					ResolvedModel:    meta.ResolvedModel,
-					ProviderModel:    "", // Bedrock doesn't return model in stream
-					RequestID:        "", // Bedrock doesn't return request ID in stream
-					TimeToFirstToken: time.Since(meta.StartTime),
+					ModelRequested:    meta.RequestedModel,
+					ModelResolved:     meta.ResolvedModel,
+					ModelProviderID:   "", // Bedrock doesn't return model in stream
+					ProviderRequestID: "", // Bedrock doesn't return request ID in stream
+					TimeToFirstToken:  time.Since(meta.StartTime),
 				},
 			}
 		}

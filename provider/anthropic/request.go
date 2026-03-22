@@ -77,7 +77,7 @@ type RequestOptions struct {
 	MaxTokens     int
 	SystemBlocks  []SystemBlock
 	UserID        string
-	StreamOptions llm.StreamOptions
+	StreamOptions llm.StreamRequest
 }
 
 // buildCacheControl converts a CacheHint to the Anthropic wire type.

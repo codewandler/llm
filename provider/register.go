@@ -38,7 +38,7 @@ func Provider(name string) (llm.Provider, error) {
 	return defaultRegistry.Provider(name)
 }
 
-func CreateStream(ctx context.Context, opts llm.StreamOptions) (<-chan llm.StreamEvent, error) {
+func CreateStream(ctx context.Context, opts llm.StreamRequest) (<-chan llm.StreamEvent, error) {
 	return defaultRegistry.CreateStream(ctx, opts)
 }
 
