@@ -133,14 +133,6 @@ const (
 
 // --- StreamResult ---
 
-// toolExecution holds a completed tool invocation: the original call, the
-// output string (or error) returned by the handler, and whether it failed.
-type toolExecution struct {
-	call    ToolCall
-	output  string
-	isError bool
-}
-
 // StreamResult is the final accumulated result of a processed stream.
 // It is delivered exactly once on the channel returned by StreamResponse.Result().
 type StreamResult struct {
