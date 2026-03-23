@@ -119,6 +119,9 @@ type Usage struct {
 	// Granular cost breakdown in USD (zero if provider/model pricing is unknown).
 	// Sum of InputCost + CacheReadCost + CacheWriteCost + OutputCost == Cost.
 	// Not populated for OpenRouter (API-reported cost is used instead).
+	//
+	// InputCost covers only the non-cached, non-write portion:
+	// InputTokens - CacheReadTokens - CacheWriteTokens tokens at the regular input rate.
 	InputCost      float64 `json:"input_cost,omitempty"`       // Cost of non-cached, non-write input tokens.
 	CacheReadCost  float64 `json:"cache_read_cost,omitempty"`  // Cost of cache-read tokens.
 	CacheWriteCost float64 `json:"cache_write_cost,omitempty"` // Cost of cache-write tokens.

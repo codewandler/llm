@@ -56,9 +56,12 @@ func runInfer(ctx context.Context, userMsg, model, system, reasoning string, ver
 	msgs := make(llm.Messages, 0)
 
 	if system != "" {
-		msgs.AddSystemMsg(system)
+		msgs = append(msgs, &llm.SystemMsg{Content: system, CacheHint: &llm.CacheHint{Enabled: true}})
 	} else {
-		msgs.AddSystemMsg("You are Tessa. Before you do anything -> Introduce yourself! You must complete by calling `complete_turn` tool. This can happen together with adding facts")
+		msgs = append(msgs, &llm.SystemMsg{
+			Content:   "You are Tessa. Before you do anything -> Introduce yourself! You must complete by calling `complete_turn` tool. This can happen together with adding facts",
+			CacheHint: &llm.CacheHint{Enabled: true},
+		})
 	}
 	msgs.AddUserMsg(userMsg)
 

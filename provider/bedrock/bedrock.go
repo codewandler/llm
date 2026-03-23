@@ -732,6 +732,12 @@ func parseStream(ctx context.Context, output *bedrockruntime.ConverseStreamOutpu
 				if e.Value.Usage.CacheWriteInputTokens != nil {
 					usage.CacheWriteTokens = int(*e.Value.Usage.CacheWriteInputTokens)
 				}
+				// InputTokens must be the total tokens seen by the model:
+				// uncached remainder + cache-read tokens + cache-write tokens.
+				// The raw Bedrock field is only the uncached remainder (same as
+				// the Anthropic wire format). Add the cache buckets to match the
+				// Usage.InputTokens contract.
+				usage.InputTokens += usage.CacheReadTokens + usage.CacheWriteTokens
 				fillCost(meta.ResolvedModel, &usage)
 			}
 			events.Done(&usage)
