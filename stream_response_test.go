@@ -19,7 +19,7 @@ func TestStreamResponse_TextAccumulation(t *testing.T) {
 		llmtest.TextEvent("hello"),
 		llmtest.TextEvent(" "),
 		llmtest.TextEvent("world"),
-		llmtest.DoneEvent(nil),
+		llmtest.DoneEvent(llm.StopReasonEndTurn, nil),
 	)
 
 	result := <-llm.Process(context.Background(), ch).Result()
@@ -35,7 +35,7 @@ func TestStreamResponse_ReasoningAccumulation(t *testing.T) {
 		llmtest.ReasoningEvent("step1 "),
 		llmtest.ReasoningEvent("step2"),
 		llmtest.TextEvent("answer"),
-		llmtest.DoneEvent(nil),
+		llmtest.DoneEvent(llm.StopReasonEndTurn, nil),
 	)
 
 	result := <-llm.Process(context.Background(), ch).Result()
@@ -47,7 +47,7 @@ func TestStreamResponse_ReasoningAccumulation(t *testing.T) {
 
 func TestStreamResponse_Usage(t *testing.T) {
 	usage := &llm.Usage{InputTokens: 10, OutputTokens: 5, TotalTokens: 15, Cost: 0.001}
-	ch := llmtest.SendEvents(llmtest.TextEvent("hi"), llmtest.DoneEvent(usage))
+	ch := llmtest.SendEvents(llmtest.TextEvent("hi"), llmtest.DoneEvent(llm.StopReasonEndTurn, usage))
 
 	result := <-llm.Process(context.Background(), ch).Result()
 
@@ -59,7 +59,7 @@ func TestStreamResponse_Usage(t *testing.T) {
 
 func TestStreamResponse_OnTextCallback(t *testing.T) {
 	var received []string
-	ch := llmtest.SendEvents(llmtest.TextEvent("a"), llmtest.TextEvent("b"), llmtest.TextEvent("c"), llmtest.DoneEvent(nil))
+	ch := llmtest.SendEvents(llmtest.TextEvent("a"), llmtest.TextEvent("b"), llmtest.TextEvent("c"), llmtest.DoneEvent(llm.StopReasonEndTurn, nil))
 
 	result := <-llm.Process(context.Background(), ch).
 		OnText(func(s string) { received = append(received, s) }).
@@ -71,7 +71,7 @@ func TestStreamResponse_OnTextCallback(t *testing.T) {
 
 func TestStreamResponse_OnReasoningCallback(t *testing.T) {
 	var received []string
-	ch := llmtest.SendEvents(llmtest.ReasoningEvent("r1"), llmtest.ReasoningEvent("r2"), llmtest.DoneEvent(nil))
+	ch := llmtest.SendEvents(llmtest.ReasoningEvent("r1"), llmtest.ReasoningEvent("r2"), llmtest.DoneEvent(llm.StopReasonEndTurn, nil))
 
 	result := <-llm.Process(context.Background(), ch).
 		OnReasoning(func(s string) { received = append(received, s) }).
@@ -86,7 +86,7 @@ func TestStreamResponse_OnToolDeltaCallback(t *testing.T) {
 	toolDelta := llm.ToolDelta(llm.DeltaIndex(0), "tid", "get_weather", `{"loc`)
 	deltaCh := llmtest.SendEvents(
 		llm.StreamEvent{Type: llm.StreamEventDelta, Delta: toolDelta},
-		llmtest.DoneEvent(nil),
+		llmtest.DoneEvent(llm.StopReasonEndTurn, nil),
 	)
 
 	result := <-llm.Process(context.Background(), deltaCh).
@@ -100,7 +100,7 @@ func TestStreamResponse_OnToolDeltaCallback(t *testing.T) {
 func TestStreamResponse_StopReasonToolUse(t *testing.T) {
 	ch := llmtest.SendEvents(
 		llmtest.ToolEvent("id1", "get_weather", map[string]any{"location": "Berlin"}),
-		llmtest.DoneEvent(nil),
+		llmtest.DoneEvent(llm.StopReasonToolUse, nil),
 	)
 
 	result := <-llm.Process(context.Background(), ch).Result()
@@ -121,7 +121,7 @@ func TestStreamResponse_ToolHandler_Sync(t *testing.T) {
 
 	ch := llmtest.SendEvents(
 		llmtest.ToolEvent("id1", "get_weather", map[string]any{"location": "Berlin"}),
-		llmtest.DoneEvent(nil),
+		llmtest.DoneEvent(llm.StopReasonToolUse, nil),
 	)
 
 	weatherSpec := llm.NewToolSpec[In]("get_weather", "Get weather")
@@ -149,7 +149,7 @@ func TestStreamResponse_ToolHandler_Error(t *testing.T) {
 
 	ch := llmtest.SendEvents(
 		llmtest.ToolEvent("id1", "get_weather", map[string]any{"location": "Berlin"}),
-		llmtest.DoneEvent(nil),
+		llmtest.DoneEvent(llm.StopReasonToolUse, nil),
 	)
 
 	boom := errors.New("service unavailable")
@@ -176,7 +176,7 @@ func TestStreamResponse_ToolHandler_Async(t *testing.T) {
 	ch := llmtest.SendEvents(
 		llmtest.ToolEvent("id1", "double", map[string]any{"n": 3}),
 		llmtest.ToolEvent("id2", "double", map[string]any{"n": 7}),
-		llmtest.DoneEvent(nil),
+		llmtest.DoneEvent(llm.StopReasonToolUse, nil),
 	)
 
 	doubleSpec := llm.NewToolSpec[In]("double", "Double a number")
@@ -197,7 +197,7 @@ func TestStreamResponse_UnhandledToolCall(t *testing.T) {
 	// the conversation history remains valid (model always gets a result back).
 	ch := llmtest.SendEvents(
 		llmtest.ToolEvent("id1", "unknown_tool", map[string]any{}),
-		llmtest.DoneEvent(nil),
+		llmtest.DoneEvent(llm.StopReasonToolUse, nil),
 	)
 
 	result := <-llm.Process(context.Background(), ch).Result()
@@ -239,7 +239,7 @@ func TestStreamResponse_ContextCancellation(t *testing.T) {
 }
 
 func TestStreamResponse_CallbackPanicRecovered(t *testing.T) {
-	ch := llmtest.SendEvents(llmtest.TextEvent("x"), llmtest.DoneEvent(nil))
+	ch := llmtest.SendEvents(llmtest.TextEvent("x"), llmtest.DoneEvent(llm.StopReasonEndTurn, nil))
 
 	result := <-llm.Process(context.Background(), ch).
 		OnText(func(_ string) { panic("boom") }).
@@ -257,7 +257,7 @@ func TestStreamResponse_ToolHandlerPanicRecovered(t *testing.T) {
 
 	ch := llmtest.SendEvents(
 		llmtest.ToolEvent("id1", "explode", map[string]any{}),
-		llmtest.DoneEvent(nil),
+		llmtest.DoneEvent(llm.StopReasonToolUse, nil),
 	)
 
 	explodeSpec := llm.NewToolSpec[In]("explode", "Explode")
@@ -275,7 +275,7 @@ func TestStreamResponse_Message(t *testing.T) {
 	ch := llmtest.SendEvents(
 		llmtest.TextEvent("hello"),
 		llmtest.ToolEvent("id1", "search", map[string]any{"q": "go"}),
-		llmtest.DoneEvent(nil),
+		llmtest.DoneEvent(llm.StopReasonToolUse, nil),
 	)
 
 	result := <-llm.Process(context.Background(), ch).Result()
@@ -298,7 +298,7 @@ func TestStreamResponse_Next(t *testing.T) {
 	ch := llmtest.SendEvents(
 		llmtest.TextEvent("searching..."),
 		llmtest.ToolEvent("id1", "search", map[string]any{"q": "go"}),
-		llmtest.DoneEvent(nil),
+		llmtest.DoneEvent(llm.StopReasonToolUse, nil),
 	)
 
 	searchSpec := llm.NewToolSpec[In]("search", "Search")
@@ -323,7 +323,7 @@ func TestStreamResponse_Next(t *testing.T) {
 }
 
 func TestStreamResponse_Apply(t *testing.T) {
-	ch := llmtest.SendEvents(llmtest.TextEvent("hi"), llmtest.DoneEvent(nil))
+	ch := llmtest.SendEvents(llmtest.TextEvent("hi"), llmtest.DoneEvent(llm.StopReasonEndTurn, nil))
 
 	var msgs llm.Messages
 	msgs.AddUserMsg("hello")
@@ -337,7 +337,7 @@ func TestStreamResponse_Apply(t *testing.T) {
 }
 
 func TestStreamResponse_ResultIdempotent(t *testing.T) {
-	ch := llmtest.SendEvents(llmtest.TextEvent("hi"), llmtest.DoneEvent(nil))
+	ch := llmtest.SendEvents(llmtest.TextEvent("hi"), llmtest.DoneEvent(llm.StopReasonEndTurn, nil))
 
 	r := llm.Process(context.Background(), ch)
 	ch1 := r.Result()
@@ -363,7 +363,7 @@ func TestStreamResponse_HandleTool_BoundSpec(t *testing.T) {
 
 	ch := llmtest.SendEvents(
 		llmtest.ToolEvent("id1", "get_weather", map[string]any{"location": "Paris"}),
-		llmtest.DoneEvent(nil),
+		llmtest.DoneEvent(llm.StopReasonToolUse, nil),
 	)
 
 	result := <-llm.Process(context.Background(), ch).

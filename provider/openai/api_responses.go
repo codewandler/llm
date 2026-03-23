@@ -301,6 +301,7 @@ func respParseStream(ctx context.Context, body io.ReadCloser, events *llm.EventS
 
 	activeTools := make(map[int]*respToolAccum) // keyed by output_index
 	startEmitted := false
+	hadToolCalls := false
 	var pendingEvent string
 
 	for scanner.Scan() {
@@ -317,7 +318,7 @@ func respParseStream(ctx context.Context, body io.ReadCloser, events *llm.EventS
 			pendingEvent = strings.TrimPrefix(line, "event: ")
 		case strings.HasPrefix(line, "data: "):
 			data := strings.TrimPrefix(line, "data: ")
-			respHandleEvent(pendingEvent, data, &startEmitted, activeTools, events, &meta)
+			respHandleEvent(pendingEvent, data, &startEmitted, &hadToolCalls, activeTools, events, &meta)
 			pendingEvent = ""
 		}
 	}
@@ -330,6 +331,7 @@ func respParseStream(ctx context.Context, body io.ReadCloser, events *llm.EventS
 func respHandleEvent(
 	eventName, data string,
 	startEmitted *bool,
+	hadToolCalls *bool,
 	activeTools map[int]*respToolAccum,
 	events *llm.EventStream,
 	meta *respStreamMeta,
@@ -445,11 +447,12 @@ func respHandleEvent(
 			Name:      name,
 			Arguments: args,
 		})
+		*hadToolCalls = true
 
 	case "response.completed":
 		var ev respResponseCompleted
 		if err := json.Unmarshal([]byte(data), &ev); err != nil {
-			events.Done(nil)
+			events.Done(llm.StopReasonEndTurn, nil)
 			return
 		}
 
@@ -477,7 +480,15 @@ func respHandleEvent(
 			}
 			calculateCost(meta.requestedModel, usage)
 		}
-		events.Done(usage)
+
+		// The Responses API does not include a stop_reason in the
+		// response.completed event. Infer from whether tool calls were
+		// emitted during the stream.
+		stopReason := llm.StopReasonEndTurn
+		if *hadToolCalls {
+			stopReason = llm.StopReasonToolUse
+		}
+		events.Done(stopReason, usage)
 
 	case "error":
 		var payload struct {

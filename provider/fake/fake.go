@@ -31,10 +31,11 @@ func (f *Provider) CreateStream(_ context.Context, opts llm.StreamRequest) (<-ch
 				ID:        "bash-1",
 				Arguments: map[string]any{"command": "echo hello"},
 			})
+			stream.Done(llm.StopReasonToolUse, &llm.Usage{InputTokens: 1, OutputTokens: 1, TotalTokens: 2, Cost: 0.01})
 		} else {
 			stream.Delta(llm.TextDelta(nil, "done"))
+			stream.Done(llm.StopReasonEndTurn, &llm.Usage{InputTokens: 1, OutputTokens: 1, TotalTokens: 2, Cost: 0.01})
 		}
-		stream.Done(&llm.Usage{InputTokens: 1, OutputTokens: 1, TotalTokens: 2, Cost: 0.01})
 	}()
 	return stream.C(), nil
 }

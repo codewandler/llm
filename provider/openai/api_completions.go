@@ -257,6 +257,7 @@ func ccParseStream(ctx context.Context, body io.ReadCloser, events *llm.EventStr
 
 	activeTools := make(map[int]*ccToolAccum)
 	var finalUsage *llm.Usage
+	var stopReason llm.StopReason
 	startEmitted := false
 
 	for scanner.Scan() {
@@ -277,7 +278,7 @@ func ccParseStream(ctx context.Context, body io.ReadCloser, events *llm.EventStr
 			if finalUsage != nil {
 				calculateCost(meta.requestedModel, finalUsage)
 			}
-			events.Done(finalUsage)
+			events.Done(stopReason, finalUsage)
 			return
 		}
 
@@ -340,8 +341,11 @@ func ccParseStream(ctx context.Context, body io.ReadCloser, events *llm.EventStr
 		}
 
 		// Emit completed tool calls on finish_reason == "tool_calls".
-		if choice.FinishReason != nil && *choice.FinishReason == "tool_calls" {
-			ccEmitToolCalls(activeTools, events)
+		if choice.FinishReason != nil {
+			stopReason = mapOpenAIFinishReason(*choice.FinishReason)
+			if *choice.FinishReason == "tool_calls" {
+				ccEmitToolCalls(activeTools, events)
+			}
 		}
 	}
 

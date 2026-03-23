@@ -454,7 +454,13 @@ func parseStream(ctx context.Context, body io.ReadCloser, events *llm.EventStrea
 
 		// Handle done
 		if chunk.Done {
-			events.Done(&usage)
+			// Ollama does not report a stop reason. Infer from whether tool
+			// calls were present in the response.
+			stopReason := llm.StopReasonEndTurn
+			if toolCallID > 0 {
+				stopReason = llm.StopReasonToolUse
+			}
+			events.Done(stopReason, &usage)
 			return
 		}
 	}

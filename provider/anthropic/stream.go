@@ -55,6 +55,7 @@ func ParseStream(ctx context.Context, body io.ReadCloser, events *llm.EventStrea
 	}
 	activeTools := make(map[int]*toolBlock)
 	var usage llm.Usage
+	var stopReason llm.StopReason
 
 	for scanner.Scan() {
 		select {
@@ -108,6 +109,9 @@ func ParseStream(ctx context.Context, body io.ReadCloser, events *llm.EventStrea
 
 		case "message_delta":
 			var evt struct {
+				Delta struct {
+					StopReason string `json:"stop_reason"`
+				} `json:"delta"`
 				Usage struct {
 					OutputTokens int `json:"output_tokens"`
 				} `json:"usage"`
@@ -115,6 +119,9 @@ func ParseStream(ctx context.Context, body io.ReadCloser, events *llm.EventStrea
 			if err := json.Unmarshal([]byte(data), &evt); err == nil {
 				usage.OutputTokens = evt.Usage.OutputTokens
 				usage.TotalTokens = usage.InputTokens + usage.OutputTokens
+				if evt.Delta.StopReason != "" {
+					stopReason = mapAnthropicStopReason(evt.Delta.StopReason)
+				}
 			}
 
 		case "content_block_start":
@@ -161,7 +168,7 @@ func ParseStream(ctx context.Context, body io.ReadCloser, events *llm.EventStrea
 
 		case "message_stop":
 			FillCost(meta.ResolvedModel, &usage)
-			events.Done(&usage)
+			events.Done(stopReason, &usage)
 			return
 
 		case "error":
@@ -175,5 +182,20 @@ func ParseStream(ctx context.Context, body io.ReadCloser, events *llm.EventStrea
 			}
 			return
 		}
+	}
+}
+
+// mapAnthropicStopReason converts Anthropic's wire stop_reason string to a
+// typed StopReason.
+func mapAnthropicStopReason(s string) llm.StopReason {
+	switch s {
+	case "end_turn":
+		return llm.StopReasonEndTurn
+	case "tool_use":
+		return llm.StopReasonToolUse
+	case "max_tokens":
+		return llm.StopReasonMaxTokens
+	default:
+		return llm.StopReason(s)
 	}
 }

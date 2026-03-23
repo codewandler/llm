@@ -647,6 +647,7 @@ func parseStream(ctx context.Context, output *bedrockruntime.ConverseStreamOutpu
 	}
 	activeTools := make(map[int]*toolAccum)
 	var usage llm.Usage
+	var stopReason llm.StopReason
 	startEmitted := false
 
 	for event := range stream.Events() {
@@ -740,16 +741,33 @@ func parseStream(ctx context.Context, output *bedrockruntime.ConverseStreamOutpu
 				usage.InputTokens += usage.CacheReadTokens + usage.CacheWriteTokens
 				fillCost(meta.ResolvedModel, &usage)
 			}
-			events.Done(&usage)
+			events.Done(stopReason, &usage)
 			return
 
 		case *types.ConverseStreamOutputMemberMessageStop:
 			logEvent("message_stop", e.Value)
+			stopReason = mapBedrockStopReason(e.Value.StopReason)
 		}
 	}
 
 	// Check for stream errors
 	if err := stream.Err(); err != nil {
 		events.Error(llm.NewErrStreamRead(llm.ProviderNameBedrock, err))
+	}
+}
+
+// mapBedrockStopReason converts the Bedrock SDK StopReason to our typed StopReason.
+func mapBedrockStopReason(r types.StopReason) llm.StopReason {
+	switch r {
+	case types.StopReasonEndTurn:
+		return llm.StopReasonEndTurn
+	case types.StopReasonToolUse:
+		return llm.StopReasonToolUse
+	case types.StopReasonMaxTokens:
+		return llm.StopReasonMaxTokens
+	case types.StopReasonContentFiltered:
+		return llm.StopReasonContentFilter
+	default:
+		return llm.StopReason(r)
 	}
 }

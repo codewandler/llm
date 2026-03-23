@@ -208,10 +208,10 @@ func (s *EventStream) Delta(d *Delta) {
 	s.Send(StreamEvent{Type: StreamEventDelta, Delta: d})
 }
 
-// Done sends a StreamEventDone event with the given usage statistics.
-// usage may be nil if the provider did not return token counts.
-func (s *EventStream) Done(usage *Usage) {
-	s.Send(StreamEvent{Type: StreamEventDone, Usage: usage})
+// Done sends a StreamEventDone event with the given stop reason and usage
+// statistics. usage may be nil if the provider did not return token counts.
+func (s *EventStream) Done(reason StopReason, usage *Usage) {
+	s.Send(StreamEvent{Type: StreamEventDone, StopReason: reason, Usage: usage})
 }
 
 // Close closes the underlying channel. Safe to call multiple times.
@@ -331,6 +331,10 @@ type StreamEvent struct {
 
 	// Routed holds routing metadata. Populated for StreamEventRouted.
 	Routed *Routed `json:"routed,omitempty"`
+
+	// StopReason describes why the model stopped generating.
+	// Populated for StreamEventDone with the provider-reported reason.
+	StopReason StopReason `json:"stop_reason,omitempty"`
 }
 
 // Text returns the text content of the delta if this is a StreamEventDelta

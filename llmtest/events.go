@@ -12,7 +12,7 @@ import (
 //
 //	ch := llmtest.SendEvents(
 //	    llmtest.TextEvent("hello"),
-//	    llmtest.DoneEvent(nil),
+//	    llmtest.DoneEvent(llm.StopReasonEndTurn, nil),
 //	)
 func SendEvents(evs ...llm.StreamEvent) <-chan llm.StreamEvent {
 	ch := make(chan llm.StreamEvent, len(evs))
@@ -39,9 +39,10 @@ func ToolEvent(id, name string, args map[string]any) llm.StreamEvent {
 	return llm.StreamEvent{Type: llm.StreamEventToolCall, ToolCall: &tc}
 }
 
-// DoneEvent returns a StreamEventDone with optional usage statistics.
-func DoneEvent(usage *llm.Usage) llm.StreamEvent {
-	return llm.StreamEvent{Type: llm.StreamEventDone, Usage: usage}
+// DoneEvent returns a StreamEventDone with the given stop reason and optional
+// usage statistics.
+func DoneEvent(reason llm.StopReason, usage *llm.Usage) llm.StreamEvent {
+	return llm.StreamEvent{Type: llm.StreamEventDone, StopReason: reason, Usage: usage}
 }
 
 func ErrorEvent(err *llm.ProviderError) llm.StreamEvent {

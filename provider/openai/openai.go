@@ -169,3 +169,20 @@ func wantsExtendedCache(opts llm.StreamRequest) bool {
 	info, err := getModelInfo(opts.Model)
 	return err == nil && info.SupportsExtendedCache
 }
+
+// mapOpenAIFinishReason converts an OpenAI/OpenRouter finish_reason string to
+// a typed StopReason.
+func mapOpenAIFinishReason(s string) llm.StopReason {
+	switch s {
+	case "stop":
+		return llm.StopReasonEndTurn
+	case "tool_calls":
+		return llm.StopReasonToolUse
+	case "length":
+		return llm.StopReasonMaxTokens
+	case "content_filter":
+		return llm.StopReasonContentFilter
+	default:
+		return llm.StopReason(s)
+	}
+}

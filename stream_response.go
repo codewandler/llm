@@ -405,13 +405,8 @@ func (r *StreamResponse) run() {
 				res.Reasoning = reasoningBuf
 				res.Usage = ev.Usage
 
-				// Infer stop reason: if tools were emitted it's tool_use,
-				// otherwise end_turn.
-				if len(res.ToolCalls) > 0 {
-					res.StopReason = StopReasonToolUse
-				} else {
-					res.StopReason = StopReasonEndTurn
-				}
+				// Use the provider-reported stop reason from the event.
+				res.StopReason = ev.StopReason
 
 				// Execute tool handlers.
 				r.dispatchTools(res)

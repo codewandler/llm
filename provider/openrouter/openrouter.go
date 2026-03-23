@@ -370,6 +370,7 @@ func parseStream(ctx context.Context, body io.ReadCloser, events *llm.EventStrea
 	doneSent := false
 	startEmitted := false
 	var usage *llm.Usage
+	var stopReason llm.StopReason
 
 	for scanner.Scan() {
 		// Check for context cancellation
@@ -387,7 +388,7 @@ func parseStream(ctx context.Context, body io.ReadCloser, events *llm.EventStrea
 
 		if data == "[DONE]" {
 			if !doneSent {
-				events.Done(usage)
+				events.Done(stopReason, usage)
 				doneSent = true
 			}
 			return
@@ -467,15 +468,18 @@ func parseStream(ctx context.Context, body io.ReadCloser, events *llm.EventStrea
 		}
 
 		// Emit tool calls on finish, but keep reading for usage data.
-		if choice.FinishReason != nil && (*choice.FinishReason == "tool_calls" || *choice.FinishReason == "stop") {
-			emitToolCalls(activeTools, events)
+		if choice.FinishReason != nil {
+			stopReason = mapFinishReason(*choice.FinishReason)
+			if *choice.FinishReason == "tool_calls" || *choice.FinishReason == "stop" {
+				emitToolCalls(activeTools, events)
+			}
 		}
 	}
 
 	// If the stream ended without a finish_reason, emit whatever we have.
 	if !doneSent {
 		emitToolCalls(activeTools, events)
-		events.Done(usage)
+		events.Done(stopReason, usage)
 	}
 }
 
@@ -499,5 +503,22 @@ func emitToolCalls(activeTools map[int]*toolAccum, events *llm.EventStream) {
 			Arguments: args,
 		})
 		delete(activeTools, idx)
+	}
+}
+
+// mapFinishReason converts an OpenAI-compatible finish_reason string to a
+// typed StopReason.
+func mapFinishReason(s string) llm.StopReason {
+	switch s {
+	case "stop":
+		return llm.StopReasonEndTurn
+	case "tool_calls":
+		return llm.StopReasonToolUse
+	case "length":
+		return llm.StopReasonMaxTokens
+	case "content_filter":
+		return llm.StopReasonContentFilter
+	default:
+		return llm.StopReason(s)
 	}
 }
