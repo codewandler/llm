@@ -61,20 +61,21 @@ go run ./cmd/llmcli infer -v -m default "Explain Go channels"  # Verbose: tokens
 ```
 llm/
 ├── llm.go              # Provider interface, Streamer interface
-├── stream.go           # StreamEvent, StreamRequest, Delta, EventStream, Usage
+├── stream.go           # StreamEvent, Delta, EventStream, Usage
+├── request.go          # StreamRequest, OutputFormat, ReasoningEffort constants
 ├── stream_response.go  # StreamResponse, Process(), StreamResult
 ├── message.go          # Message types: UserMsg, AssistantMsg, ToolCallResult, etc.
 ├── tool.go             # ToolDefinition, ToolSpec, ToolSet, TypedToolCall
 ├── errors.go           # ProviderError, error sentinels
 ├── model.go            # Model type
 ├── option.go           # Functional options (WithAPIKey, WithHTTPClient, etc.)
-├── reasoning.go        # ReasoningEffort constants
 ├── llmtest/            # Test helpers (SendEvents, TextEvent, etc.)
 │
 └── provider/
     ├── anthropic/      # Direct Anthropic API
     │   └── claude/     # OAuth-based Claude provider (token management)
     ├── bedrock/        # AWS Bedrock
+    ├── minimax/        # MiniMax API (Anthropic-compatible endpoint)
     ├── openai/         # OpenAI API (Chat Completions + Responses API)
     ├── openrouter/     # OpenRouter proxy
     ├── ollama/         # Local Ollama

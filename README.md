@@ -22,6 +22,7 @@ A unified Go library for interacting with multiple LLM providers through a consi
 | Claude OAuth | `claude` | OAuth-based Claude access (auto-detects local credentials) |
 | OpenAI | `openai` | OpenAI GPT models (GPT-4o, GPT-5, o-series, Codex) |
 | AWS Bedrock | `bedrock` | AWS Bedrock models (Claude, Llama, etc.) |
+| MiniMax | `minimax` | MiniMax M2 models via Anthropic-compatible API |
 | Ollama | `ollama` | Local Ollama models |
 | OpenRouter | `openrouter` | 200+ tool-enabled models via OpenRouter proxy |
 | Router | `router` | Combines multiple providers with failover and aliases |
@@ -272,6 +273,7 @@ Error sentinels: `ErrContextCancelled`, `ErrRequestFailed`, `ErrAPIError`,
 
 ```go
 case llm.StreamEventDone:
+    fmt.Println(event.StopReason) // EndTurn, ToolUse, MaxTokens, ContentFilter
     if event.Usage != nil {
         fmt.Printf("in=%d out=%d cost=$%.6f\n",
             event.Usage.InputTokens, event.Usage.OutputTokens, event.Usage.Cost)
@@ -555,20 +557,21 @@ export AWS_SECRET_ACCESS_KEY="your-secret-key"
 ```
 llm/
 ├── llm.go              # Provider interface, Streamer interface
-├── stream.go           # StreamEvent, StreamRequest, Delta, EventStream, Usage
+├── stream.go           # StreamEvent, Delta, EventStream, Usage
+├── request.go          # StreamRequest, OutputFormat, ReasoningEffort constants
 ├── stream_response.go  # StreamResponse, Process(), StreamResult
 ├── message.go          # Message types: UserMsg, AssistantMsg, ToolCallResult, etc.
 ├── tool.go             # ToolDefinition, ToolSpec, ToolSet, TypedToolCall
 ├── errors.go           # ProviderError, error sentinels
 ├── model.go            # Model type
 ├── option.go           # Functional options (WithAPIKey, WithHTTPClient, etc.)
-├── reasoning.go        # ReasoningEffort constants
 ├── llmtest/            # Test helpers (SendEvents, TextEvent, etc.)
 │
 └── provider/
     ├── anthropic/      # Direct Anthropic API
     │   └── claude/     # OAuth-based Claude provider
     ├── bedrock/        # AWS Bedrock
+    ├── minimax/        # MiniMax API (Anthropic-compatible endpoint)
     ├── openai/         # OpenAI API (Chat + Responses API)
     ├── openrouter/     # OpenRouter proxy
     ├── ollama/         # Local Ollama
