@@ -103,7 +103,7 @@ func runInfer(ctx context.Context, userMsg, model, system, reasoning string, ver
 		Model:           model,
 		Messages:        msgs,
 		ReasoningEffort: llm.ReasoningEffort(reasoning),
-		ToolChoice:      llm.ToolChoiceAuto{},
+		ToolChoice:      llm.ToolChoiceRequired{},
 		Tools:           tools,
 	})
 	if err != nil {
