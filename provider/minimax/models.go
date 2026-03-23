@@ -34,16 +34,16 @@ type modelPricing struct {
 }
 
 // modelPricingRegistry maps model IDs to their pricing in USD per million tokens.
-// Standard models: M2.7 input $0.3/output $1.2, M2.5/M2.1/M2 input $0.3/output $1.2
+// Standard models: input $0.30/M, output $1.20/M.
+// Highspeed variants: input $0.60/M, output $2.40/M (2× the standard rate).
 // Source: https://platform.minimax.io/docs/guides/pricing-paygo
-// Highspeed variants: prices marked TODO - verify from MiniMax documentation.
 var modelPricingRegistry = map[string]modelPricing{
 	ModelM27:          {InputPrice: 0.3, OutputPrice: 1.2, CacheReadPrice: 0.06, CacheWritePrice: 0.375},
-	ModelM27Highspeed: {InputPrice: 0.15, OutputPrice: 0.6, CacheReadPrice: 0.03, CacheWritePrice: 0.375}, // TODO: verify
+	ModelM27Highspeed: {InputPrice: 0.6, OutputPrice: 2.4, CacheReadPrice: 0.06, CacheWritePrice: 0.375},
 	ModelM25:          {InputPrice: 0.3, OutputPrice: 1.2, CacheReadPrice: 0.03, CacheWritePrice: 0.375},
-	ModelM25Highspeed: {InputPrice: 0.15, OutputPrice: 0.6, CacheReadPrice: 0.015, CacheWritePrice: 0.375}, // TODO: verify
+	ModelM25Highspeed: {InputPrice: 0.6, OutputPrice: 2.4, CacheReadPrice: 0.03, CacheWritePrice: 0.375},
 	ModelM21:          {InputPrice: 0.3, OutputPrice: 1.2, CacheReadPrice: 0.03, CacheWritePrice: 0.375},
-	ModelM21Highspeed: {InputPrice: 0.15, OutputPrice: 0.6, CacheReadPrice: 0.015, CacheWritePrice: 0.375}, // TODO: verify
+	ModelM21Highspeed: {InputPrice: 0.6, OutputPrice: 2.4, CacheReadPrice: 0.03, CacheWritePrice: 0.375},
 	ModelM2:           {InputPrice: 0.3, OutputPrice: 1.2, CacheReadPrice: 0.03, CacheWritePrice: 0.375},
 }
 

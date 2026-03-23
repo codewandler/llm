@@ -168,23 +168,54 @@ func TestFillCost_UnknownModel(t *testing.T) {
 }
 
 func TestFillCost_HighspeedModels(t *testing.T) {
-	// Test that highspeed models have pricing (even if placeholder)
-	usage := &llm.Usage{
-		InputTokens:      1000,
-		OutputTokens:     500,
-		CacheReadTokens:  0,
-		CacheWriteTokens: 0,
+	// Highspeed variants cost 2× the standard rate: input $0.60/M, output $2.40/M.
+	// Source: https://platform.minimax.io/docs/guides/pricing-paygo
+	tests := []struct {
+		model           string
+		wantInputCost   float64 // 1000 tokens * price/M
+		wantOutputCost  float64 // 500 tokens * price/M
+		wantCacheRead   float64 // cache read price/M
+	}{
+		{
+			// M2.7-highspeed: input $0.60/M, output $2.40/M, cache-read $0.06/M
+			model:          ModelM27Highspeed,
+			wantInputCost:  0.0006,   // 1000 * $0.60/M
+			wantOutputCost: 0.0012,   // 500 * $2.40/M
+			wantCacheRead:  0.000006, // 100 * $0.06/M
+		},
+		{
+			// M2.5-highspeed: input $0.60/M, output $2.40/M, cache-read $0.03/M
+			model:          ModelM25Highspeed,
+			wantInputCost:  0.0006,  // 1000 * $0.60/M
+			wantOutputCost: 0.0012,  // 500 * $2.40/M
+			wantCacheRead:  0.000003, // 100 * $0.03/M
+		},
+		{
+			// M2.1-highspeed: input $0.60/M, output $2.40/M, cache-read $0.03/M
+			model:          ModelM21Highspeed,
+			wantInputCost:  0.0006,  // 1000 * $0.60/M
+			wantOutputCost: 0.0012,  // 500 * $2.40/M
+			wantCacheRead:  0.000003, // 100 * $0.03/M
+		},
 	}
 
-	// These will use placeholder pricing - test that they don't panic
-	FillCost(ModelM27Highspeed, usage)
-	assert.Greater(t, usage.Cost, 0.0)
+	for _, tt := range tests {
+		t.Run(tt.model, func(t *testing.T) {
+			usage := &llm.Usage{
+				InputTokens:      1100,
+				OutputTokens:     500,
+				CacheReadTokens:  100,
+				CacheWriteTokens: 0,
+			}
+			FillCost(tt.model, usage)
 
-	FillCost(ModelM25Highspeed, usage)
-	assert.Greater(t, usage.Cost, 0.0)
-
-	FillCost(ModelM21Highspeed, usage)
-	assert.Greater(t, usage.Cost, 0.0)
+			// regularInput = 1100 - 100 - 0 = 1000
+			assert.InDelta(t, tt.wantInputCost, usage.InputCost, 1e-10)
+			assert.InDelta(t, tt.wantOutputCost, usage.OutputCost, 1e-10)
+			assert.InDelta(t, tt.wantCacheRead, usage.CacheReadCost, 1e-10)
+			assert.Greater(t, usage.Cost, 0.0)
+		})
+	}
 }
 
 func TestFillCost_NegativeRegularInput(t *testing.T) {
