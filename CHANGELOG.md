@@ -1,6 +1,26 @@
 # Changelog
 
-## v0.24.0 (unreleased)
+## v0.24.1 (unreleased)
+
+### Bug Fixes
+
+#### Router — deterministic alias resolution in registration order
+
+The router now walks providers in registration order (from `cfg.Providers` slice)
+when building model indices and alias maps. This ensures that when multiple
+providers share a bare alias like `"default"`, the first registered provider wins
+— matching the documented auto-detect priority and making alias resolution
+deterministic.
+
+#### Auto provider — bedrock removal
+
+Fixed duplicate registration logic; the auto provider no longer includes AWS
+Bedrock unconditionally in the provider list when no explicit credentials are
+available.
+
+---
+
+## v0.24.0
 
 ### New Features
 
