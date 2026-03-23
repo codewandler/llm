@@ -294,6 +294,9 @@ func (p *Provider) Resolve(modelID string) (llm.Model, error) {
 
 // CreateStream creates a stream by routing to the appropriate provider.
 // It tries each target in order until one succeeds or all fail.
+// Failover happens both on connection errors (before the stream starts) and
+// on retriable errors emitted inside the stream (e.g. Anthropic "Overloaded"
+// SSE error events received after a 200 OK).
 func (p *Provider) CreateStream(ctx context.Context, opts llm.StreamRequest) (<-chan llm.StreamEvent, error) {
 	if err := opts.Validate(); err != nil {
 		return nil, llm.NewErrBuildRequest(llm.ProviderNameRouter, err)
@@ -305,7 +308,7 @@ func (p *Provider) CreateStream(ctx context.Context, opts llm.StreamRequest) (<-
 	}
 
 	var triedErrors []error
-	for _, target := range targets {
+	for i, target := range targets {
 		streamOpts := opts
 		streamOpts.Model = target.modelID
 
@@ -326,20 +329,80 @@ func (p *Provider) CreateStream(ctx context.Context, opts llm.StreamRequest) (<-
 			ModelResolved:  target.fullID,
 			Errors:         triedErrors,
 		})
-		go func() {
-			defer out.Close()
-			for evt := range stream {
-				if evt.Type == llm.StreamEventCreated {
-					continue
-				}
-				if evt.Start != nil && evt.Start.Model == "" {
-					evt.Start.Model = target.modelID
-				}
-				out.Send(evt)
-			}
-		}()
+		// remaining holds the targets not yet tried (after this one), so the
+		// forwarding goroutine can attempt them if it receives a retriable error.
+		remaining := targets[i+1:]
+		go p.pipeStream(ctx, opts, stream, target, remaining, triedErrors, out)
 		return out.C(), nil
 	}
 
 	return nil, llm.NewErrNoProviders(llm.ProviderNameRouter)
+}
+
+// pipeStream forwards events from stream to out. If a retriable StreamEventError
+// is received and there are remaining failover targets, it transparently connects
+// to the next target and continues piping — the caller never sees the error event.
+// Non-retriable errors and all other events are forwarded as-is.
+func (p *Provider) pipeStream(
+	ctx context.Context,
+	opts llm.StreamRequest,
+	stream <-chan llm.StreamEvent,
+	target resolvedTarget,
+	remaining []resolvedTarget,
+	triedErrors []error,
+	out *llm.EventStream,
+) {
+	defer out.Close()
+
+	for evt := range stream {
+		// Drop the inner stream's Created event — out already has its own.
+		if evt.Type == llm.StreamEventCreated {
+			continue
+		}
+
+		// Retriable in-stream error: attempt the next target if one exists.
+		if evt.Type == llm.StreamEventError && isRetriableError(evt.Error) && len(remaining) > 0 {
+			nextErrors := append(triedErrors, evt.Error)
+
+			// Walk the remaining targets to find one that connects successfully.
+			for j, next := range remaining {
+				nextOpts := opts
+				nextOpts.Model = next.modelID
+
+				nextStream, err := next.provider.CreateStream(ctx, nextOpts)
+				if err != nil {
+					pe := llm.AsProviderError(next.providerName, err)
+					if isRetriableError(pe) {
+						nextErrors = append(nextErrors, pe)
+						continue
+					}
+					// Non-retriable connect error — surface it and stop.
+					out.Error(pe)
+					return
+				}
+
+				// Found a live target — emit a Routed event and continue piping.
+				out.Routed(llm.Routed{
+					Provider:       next.providerName,
+					ModelRequested: opts.Model,
+					ModelResolved:  next.fullID,
+					Errors:         nextErrors,
+				})
+				// Recurse without defer so we hand off cleanly; remaining is
+				// everything after this newly selected target.
+				p.pipeStream(ctx, opts, nextStream, next, remaining[j+1:], nextErrors, out)
+				return // out.Close() was called by the recursive call
+			}
+
+			// All remaining targets also failed — emit a final no-providers error.
+			out.Error(llm.NewErrNoProviders(llm.ProviderNameRouter))
+			return
+		}
+
+		// Normal event: fix up missing model name and forward.
+		if evt.Start != nil && evt.Start.Model == "" {
+			evt.Start.Model = target.modelID
+		}
+		out.Send(evt)
+	}
 }

@@ -455,6 +455,179 @@ func TestCreateStream(t *testing.T) {
 	})
 }
 
+// makePerInstanceFactory returns a Factory that maps instance names to pre-built providers.
+// This is needed because router.New calls the same factory key for each instance,
+// so we need a stateful factory that vends the right provider per call order.
+func makePerInstanceFactory(provs ...*mockProvider) Factory {
+	idx := 0
+	return func(opts ...llm.Option) llm.Provider {
+		p := provs[idx]
+		idx++
+		return p
+	}
+}
+
+func TestCreateStream_MidStreamFailover(t *testing.T) {
+	t.Run("failover on in-stream overload error", func(t *testing.T) {
+		// prov1 returns a 200 OK but then emits a retriable error event mid-stream
+		// (e.g. Anthropic's "overloaded_error" SSE error event).
+		prov1 := &mockProvider{
+			name: "prov1",
+			streamFunc: func(ctx context.Context, opts llm.StreamRequest) (<-chan llm.StreamEvent, error) {
+				ch := make(chan llm.StreamEvent, 4)
+				go func() {
+					defer close(ch)
+					ch <- llm.StreamEvent{Type: llm.StreamEventCreated}
+					ch <- llm.StreamEvent{
+						Type: llm.StreamEventError,
+						Error: &llm.ProviderError{
+							Sentinel: llm.ErrProviderError,
+							Provider: "prov1",
+							Message:  "Overloaded",
+						},
+					}
+				}()
+				return ch, nil
+			},
+			models: []llm.Model{{ID: "claude", Name: "Claude", Provider: "anthropic"}},
+		}
+
+		prov2 := &mockProvider{
+			name: "prov2",
+			streamFunc: func(ctx context.Context, opts llm.StreamRequest) (<-chan llm.StreamEvent, error) {
+				ch := make(chan llm.StreamEvent, 4)
+				go func() {
+					defer close(ch)
+					ch <- llm.StreamEvent{Type: llm.StreamEventDelta, Delta: llm.TextDelta(nil, "hello from fallback")}
+					ch <- llm.StreamEvent{Type: llm.StreamEventDone}
+				}()
+				return ch, nil
+			},
+			models: []llm.Model{{ID: "claude", Name: "Claude", Provider: "anthropic"}},
+		}
+
+		cfg := Config{
+			Providers: []ProviderInstanceConfig{
+				{Name: "prov1", Type: "anthropic"},
+				{Name: "prov2", Type: "anthropic"},
+			},
+			Aliases: map[string][]AliasTarget{
+				"smart": {
+					{Provider: "prov1", Model: "claude"},
+					{Provider: "prov2", Model: "claude"},
+				},
+			},
+		}
+
+		r, err := New(cfg, map[string]Factory{
+			"anthropic": makePerInstanceFactory(prov1, prov2),
+		})
+		require.NoError(t, err)
+
+		stream, err := r.CreateStream(context.Background(), llm.StreamRequest{
+			Model:    "smart",
+			Messages: llm.Messages{&llm.UserMsg{Content: "hi"}},
+		})
+		require.NoError(t, err)
+
+		var events []llm.StreamEvent
+		for evt := range stream {
+			events = append(events, evt)
+		}
+
+		// Must not contain an error event — failover should have happened
+		for _, evt := range events {
+			assert.NotEqual(t, llm.StreamEventError, evt.Type,
+				"expected failover, got error event: %v", evt.Error)
+		}
+
+		// Must contain the fallback delta
+		var gotFallback bool
+		for _, evt := range events {
+			if evt.Type == llm.StreamEventDelta && evt.Delta != nil && evt.Delta.Text == "hello from fallback" {
+				gotFallback = true
+			}
+		}
+		assert.True(t, gotFallback, "expected delta from fallback provider")
+
+		// Must contain a second Routed event for the fallback
+		var routedCount int
+		for _, evt := range events {
+			if evt.Type == llm.StreamEventRouted {
+				routedCount++
+			}
+		}
+		assert.Equal(t, 2, routedCount, "expected initial routed + failover routed events")
+	})
+
+	t.Run("non-retriable in-stream error is not retried", func(t *testing.T) {
+		prov1 := &mockProvider{
+			name: "prov1",
+			streamFunc: func(ctx context.Context, opts llm.StreamRequest) (<-chan llm.StreamEvent, error) {
+				ch := make(chan llm.StreamEvent, 4)
+				go func() {
+					defer close(ch)
+					ch <- llm.StreamEvent{Type: llm.StreamEventCreated}
+					ch <- llm.StreamEvent{
+						Type: llm.StreamEventError,
+						Error: &llm.ProviderError{
+							Sentinel: llm.ErrProviderError,
+							Provider: "prov1",
+							Message:  "invalid_api_key",
+						},
+					}
+				}()
+				return ch, nil
+			},
+			models: []llm.Model{{ID: "claude", Name: "Claude", Provider: "anthropic"}},
+		}
+		prov2Called := false
+		prov2 := &mockProvider{
+			name: "prov2",
+			streamFunc: func(ctx context.Context, opts llm.StreamRequest) (<-chan llm.StreamEvent, error) {
+				prov2Called = true
+				ch := make(chan llm.StreamEvent, 2)
+				close(ch)
+				return ch, nil
+			},
+			models: []llm.Model{{ID: "claude", Name: "Claude", Provider: "anthropic"}},
+		}
+
+		cfg := Config{
+			Providers: []ProviderInstanceConfig{
+				{Name: "prov1", Type: "anthropic"},
+				{Name: "prov2", Type: "anthropic"},
+			},
+			Aliases: map[string][]AliasTarget{
+				"smart": {
+					{Provider: "prov1", Model: "claude"},
+					{Provider: "prov2", Model: "claude"},
+				},
+			},
+		}
+
+		r, err := New(cfg, map[string]Factory{
+			"anthropic": makePerInstanceFactory(prov1, prov2),
+		})
+		require.NoError(t, err)
+
+		stream, err := r.CreateStream(context.Background(), llm.StreamRequest{
+			Model:    "smart",
+			Messages: llm.Messages{&llm.UserMsg{Content: "hi"}},
+		})
+		require.NoError(t, err)
+
+		var gotError bool
+		for evt := range stream {
+			if evt.Type == llm.StreamEventError {
+				gotError = true
+			}
+		}
+		assert.True(t, gotError, "expected error event to be forwarded")
+		assert.False(t, prov2Called, "prov2 should not be called for non-retriable error")
+	})
+}
+
 func TestIsRetriableError(t *testing.T) {
 	mkpe := func(msg string, statusCode int) *llm.ProviderError {
 		return &llm.ProviderError{
