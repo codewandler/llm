@@ -18,7 +18,7 @@ const defaultName = "auto"
 //
 // Without options, it auto-detects available providers:
 //   - Claude local (~/.claude credentials)
-//   - AWS Bedrock (always included)
+//   - AWS Bedrock (if AWS_ACCESS_KEY_ID, AWS_PROFILE, or container credentials are set)
 //   - Anthropic direct API (if ANTHROPIC_API_KEY is set)
 //   - OpenAI (if OPENAI_API_KEY or OPENAI_KEY is set)
 //   - OpenRouter (if OPENROUTER_API_KEY is set)

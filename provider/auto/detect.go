@@ -34,23 +34,28 @@ func detectProviders(httpClient *http.Client, llmOpts []llm.Option) []providerEn
 		})
 	}
 
-	// 2. Bedrock (always included - fails at runtime if no AWS creds)
-	providers = append(providers, providerEntry{
-		name:         ProviderBedrock,
-		providerType: ProviderBedrock,
-		factory: func(opts ...llm.Option) llm.Provider {
-			bedrockOpts := []bedrock.Option{}
-			if httpClient != nil {
-				bedrockOpts = append(bedrockOpts, bedrock.WithLLMOptions(llm.WithHTTPClient(httpClient)))
-			}
-			if len(llmOpts) > 0 {
-				bedrockOpts = append(bedrockOpts, bedrock.WithLLMOptions(llmOpts...))
-			}
-			return bedrock.New(bedrockOpts...)
-		},
-		modelAliases: bedrock.ModelAliases,
-		hasAliases:   true,
-	})
+	// 2. Bedrock — only when AWS credentials are present in the environment.
+	// AWS credentials can come from env vars (AWS_ACCESS_KEY_ID),
+	// ~/.aws/credentials, IAM roles, or container metadata. We check the
+	// common env vars; the full credential chain is resolved at call time.
+	if os.Getenv("AWS_ACCESS_KEY_ID") != "" || os.Getenv("AWS_PROFILE") != "" || os.Getenv("AWS_CONTAINER_CREDENTIALS_RELATIVE_URI") != "" {
+		providers = append(providers, providerEntry{
+			name:         ProviderBedrock,
+			providerType: ProviderBedrock,
+			factory: func(opts ...llm.Option) llm.Provider {
+				bedrockOpts := []bedrock.Option{}
+				if httpClient != nil {
+					bedrockOpts = append(bedrockOpts, bedrock.WithLLMOptions(llm.WithHTTPClient(httpClient)))
+				}
+				if len(llmOpts) > 0 {
+					bedrockOpts = append(bedrockOpts, bedrock.WithLLMOptions(llmOpts...))
+				}
+				return bedrock.New(bedrockOpts...)
+			},
+			modelAliases: bedrock.ModelAliases,
+			hasAliases:   true,
+		})
+	}
 
 	// 3. Direct Anthropic API
 	if os.Getenv(EnvAnthropicKey) != "" {
