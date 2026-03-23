@@ -38,7 +38,7 @@ func TestBuildRequest_SystemAndTools(t *testing.T) {
 
 	body, err := BuildRequest(RequestOptions{
 		Model: "claude-sonnet-4-5-20250929",
-		StreamOptions: llm.StreamRequest{
+		StreamOptions: llm.Request{
 			Model: "claude-sonnet-4-5-20250929",
 			Messages: llm.Messages{
 				&llm.SystemMsg{Content: "system prompt"},
@@ -71,13 +71,97 @@ func TestBuildRequest_SystemAndTools(t *testing.T) {
 	require.NotNil(t, req["tool_choice"])
 }
 
+func TestBuildRequest_TopKAndTopP(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		opts    llm.Request
+		checkFn func(*testing.T, map[string]any)
+	}{
+		{
+			name: "TopK set when positive",
+			opts: llm.Request{
+				Model: "claude-sonnet-4-5-20250929",
+				Messages: llm.Messages{
+					&llm.UserMsg{Content: "hello"},
+				},
+				TopK: 10,
+			},
+			checkFn: func(t *testing.T, req map[string]any) {
+				assert.Equal(t, float64(10), req["top_k"])
+			},
+		},
+		{
+			name: "TopP set when positive",
+			opts: llm.Request{
+				Model: "claude-sonnet-4-5-20250929",
+				Messages: llm.Messages{
+					&llm.UserMsg{Content: "hello"},
+				},
+				TopP: 0.9,
+			},
+			checkFn: func(t *testing.T, req map[string]any) {
+				assert.Equal(t, 0.9, req["top_p"])
+			},
+		},
+		{
+			name: "both TopK and TopP set together",
+			opts: llm.Request{
+				Model: "claude-sonnet-4-5-20250929",
+				Messages: llm.Messages{
+					&llm.UserMsg{Content: "hello"},
+				},
+				TopK: 5,
+				TopP: 0.8,
+			},
+			checkFn: func(t *testing.T, req map[string]any) {
+				assert.Equal(t, float64(5), req["top_k"])
+				assert.Equal(t, 0.8, req["top_p"])
+			},
+		},
+		{
+			name: "zero values omitted",
+			opts: llm.Request{
+				Model: "claude-sonnet-4-5-20250929",
+				Messages: llm.Messages{
+					&llm.UserMsg{Content: "hello"},
+				},
+				TopK: 0,
+				TopP: 0,
+			},
+			checkFn: func(t *testing.T, req map[string]any) {
+				_, hasTopK := req["top_k"]
+				_, hasTopP := req["top_p"]
+				assert.False(t, hasTopK, "top_k should be omitted when 0")
+				assert.False(t, hasTopP, "top_p should be omitted when 0")
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			body, err := BuildRequest(RequestOptions{
+				Model:         tt.opts.Model,
+				StreamOptions: tt.opts,
+			})
+			require.NoError(t, err)
+
+			var req map[string]any
+			require.NoError(t, json.Unmarshal(body, &req))
+
+			tt.checkFn(t, req)
+		})
+	}
+}
+
 func TestBuildRequest_MultipleSystemMessages(t *testing.T) {
 	t.Parallel()
 
 	t.Run("consecutive system messages are accumulated", func(t *testing.T) {
 		body, err := BuildRequest(RequestOptions{
 			Model: "claude-sonnet-4-5-20250929",
-			StreamOptions: llm.StreamRequest{
+			StreamOptions: llm.Request{
 				Model: "claude-sonnet-4-5-20250929",
 				Messages: llm.Messages{
 					&llm.SystemMsg{Content: "first instruction"},
@@ -102,7 +186,7 @@ func TestBuildRequest_MultipleSystemMessages(t *testing.T) {
 	t.Run("mid-conversation system messages are accumulated", func(t *testing.T) {
 		body, err := BuildRequest(RequestOptions{
 			Model: "claude-sonnet-4-5-20250929",
-			StreamOptions: llm.StreamRequest{
+			StreamOptions: llm.Request{
 				Model: "claude-sonnet-4-5-20250929",
 				Messages: llm.Messages{
 					&llm.SystemMsg{Content: "initial system"},
@@ -129,7 +213,7 @@ func TestBuildRequest_MultipleSystemMessages(t *testing.T) {
 	t.Run("empty system messages are filtered out", func(t *testing.T) {
 		body, err := BuildRequest(RequestOptions{
 			Model: "claude-sonnet-4-5-20250929",
-			StreamOptions: llm.StreamRequest{
+			StreamOptions: llm.Request{
 				Model: "claude-sonnet-4-5-20250929",
 				Messages: llm.Messages{
 					&llm.SystemMsg{Content: "keep this"},
@@ -153,7 +237,7 @@ func TestBuildRequest_MultipleSystemMessages(t *testing.T) {
 	t.Run("no system messages results in nil system field", func(t *testing.T) {
 		body, err := BuildRequest(RequestOptions{
 			Model: "claude-sonnet-4-5-20250929",
-			StreamOptions: llm.StreamRequest{
+			StreamOptions: llm.Request{
 				Model: "claude-sonnet-4-5-20250929",
 				Messages: llm.Messages{
 					&llm.UserMsg{Content: "hello"},
@@ -178,7 +262,7 @@ func TestBuildRequest_ToolCallWithNilArguments(t *testing.T) {
 	// the "input" field (as an empty object) because Anthropic API requires it.
 	body, err := BuildRequest(RequestOptions{
 		Model: "claude-sonnet-4-5-20250929",
-		StreamOptions: llm.StreamRequest{
+		StreamOptions: llm.Request{
 			Model: "claude-sonnet-4-5-20250929",
 			Messages: llm.Messages{
 				&llm.UserMsg{Content: "hello"},

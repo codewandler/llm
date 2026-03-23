@@ -10,7 +10,7 @@ import (
 // Request types for Anthropic API
 
 type thinking struct {
-	Type         string `json:"type"`                    // always "enabled"
+	Type         string `json:"type"` // always "enabled"
 	BudgetTokens int    `json:"budget_tokens,omitempty"`
 }
 
@@ -25,6 +25,18 @@ type request struct {
 	Thinking     *thinking        `json:"thinking,omitempty"`
 	Metadata     *metadata        `json:"metadata,omitempty"`
 	CacheControl *cacheControl    `json:"cache_control,omitempty"`
+	TopK         int              `json:"top_k,omitempty"`
+	TopP         float64          `json:"top_p,omitempty"`
+	OutputConfig *outputConfig    `json:"output_config,omitempty"`
+}
+
+type outputConfig struct {
+	Format *jsonOutputFormat `json:"format,omitempty"`
+}
+
+type jsonOutputFormat struct {
+	Type   string `json:"type"`
+	Schema any    `json:"schema,omitempty"`
 }
 
 type metadata struct {
@@ -83,7 +95,7 @@ type RequestOptions struct {
 	MaxTokens     int
 	SystemBlocks  []SystemBlock
 	UserID        string
-	StreamOptions llm.StreamRequest
+	StreamOptions llm.Request
 }
 
 // buildCacheControl converts a CacheHint to the Anthropic wire type.
@@ -127,12 +139,31 @@ func hasPerMessageCacheHints(msgs llm.Messages) bool {
 // BuildRequest builds a JSON request body for the Anthropic API.
 func BuildRequest(reqOpts RequestOptions) ([]byte, error) {
 	opts := reqOpts.StreamOptions
+	// Use MaxTokens from RequestOptions, fall back to StreamOptions, then default to 16384.
 	maxTokens := reqOpts.MaxTokens
+	if maxTokens == 0 {
+		maxTokens = opts.MaxTokens
+	}
 	if maxTokens == 0 {
 		maxTokens = 16384
 	}
 
 	r := request{Model: reqOpts.Model, MaxTokens: maxTokens, Stream: true}
+
+	// Generation parameters
+	if opts.TopK > 0 {
+		r.TopK = opts.TopK
+	}
+	if opts.TopP > 0 {
+		r.TopP = opts.TopP
+	}
+	if opts.OutputFormat == llm.OutputFormatJSON {
+		r.OutputConfig = &outputConfig{
+			Format: &jsonOutputFormat{
+				Type: "json_schema",
+			},
+		}
+	}
 
 	// Use provided system blocks or collect from messages
 	if len(reqOpts.SystemBlocks) > 0 {
