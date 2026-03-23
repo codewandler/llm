@@ -25,7 +25,7 @@ func testMeta(model string) ccStreamMeta {
 // --- Unit tests for ccBuildRequest ---
 
 func TestBuildRequest_Basic(t *testing.T) {
-	opts := llm.StreamRequest{
+	opts := llm.Request{
 		Model: "gpt-4o",
 		Messages: llm.Messages{
 			&llm.UserMsg{Content: "Hello"},
@@ -49,12 +49,196 @@ func TestBuildRequest_Basic(t *testing.T) {
 	assert.True(t, req.StreamOptions.IncludeUsage)
 }
 
+func TestBuildRequest_GenerationParameters(t *testing.T) {
+	tests := []struct {
+		name    string
+		opts    llm.Request
+		checkFn func(*ccRequest)
+	}{
+		{
+			name: "MaxTokens set when positive",
+			opts: llm.Request{
+				Model: "gpt-4o",
+				Messages: llm.Messages{
+					&llm.UserMsg{Content: "Hello"},
+				},
+				MaxTokens: 1000,
+			},
+			checkFn: func(r *ccRequest) {
+				assert.Equal(t, 1000, r.MaxTokens)
+			},
+		},
+		{
+			name: "Temperature set when positive",
+			opts: llm.Request{
+				Model: "gpt-4o",
+				Messages: llm.Messages{
+					&llm.UserMsg{Content: "Hello"},
+				},
+				Temperature: 0.7,
+			},
+			checkFn: func(r *ccRequest) {
+				assert.Equal(t, 0.7, r.Temperature)
+			},
+		},
+		{
+			name: "TopP set when positive",
+			opts: llm.Request{
+				Model: "gpt-4o",
+				Messages: llm.Messages{
+					&llm.UserMsg{Content: "Hello"},
+				},
+				TopP: 0.9,
+			},
+			checkFn: func(r *ccRequest) {
+				assert.Equal(t, 0.9, r.TopP)
+			},
+		},
+		{
+			name: "TopK set when positive",
+			opts: llm.Request{
+				Model: "gpt-4o",
+				Messages: llm.Messages{
+					&llm.UserMsg{Content: "Hello"},
+				},
+				TopK: 40,
+			},
+			checkFn: func(r *ccRequest) {
+				assert.Equal(t, 40, r.TopK)
+			},
+		},
+		{
+			name: "all parameters set together",
+			opts: llm.Request{
+				Model: "gpt-4o",
+				Messages: llm.Messages{
+					&llm.UserMsg{Content: "Hello"},
+				},
+				MaxTokens:   2000,
+				Temperature: 0.5,
+				TopP:        0.8,
+				TopK:        50,
+			},
+			checkFn: func(r *ccRequest) {
+				assert.Equal(t, 2000, r.MaxTokens)
+				assert.Equal(t, 0.5, r.Temperature)
+				assert.Equal(t, 0.8, r.TopP)
+				assert.Equal(t, 50, r.TopK)
+			},
+		},
+		{
+			name: "zero values omitted",
+			opts: llm.Request{
+				Model: "gpt-4o",
+				Messages: llm.Messages{
+					&llm.UserMsg{Content: "Hello"},
+				},
+				MaxTokens:   0,
+				Temperature: 0,
+				TopP:        0,
+				TopK:        0,
+			},
+			checkFn: func(r *ccRequest) {
+				// Unmarshal to map to check field presence
+				var reqMap map[string]any
+				body, _ := json.Marshal(r)
+				json.Unmarshal(body, &reqMap)
+				_, hasMaxTokens := reqMap["max_tokens"]
+				_, hasTemperature := reqMap["temperature"]
+				_, hasTopP := reqMap["top_p"]
+				_, hasTopK := reqMap["top_k"]
+				assert.False(t, hasMaxTokens, "MaxTokens should be omitted when 0")
+				assert.False(t, hasTemperature, "Temperature should be omitted when 0")
+				assert.False(t, hasTopP, "TopP should be omitted when 0")
+				assert.False(t, hasTopK, "TopK should be omitted when 0")
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			body, err := ccBuildRequest(tt.opts)
+			require.NoError(t, err)
+
+			var req ccRequest
+			err = json.Unmarshal(body, &req)
+			require.NoError(t, err)
+
+			tt.checkFn(&req)
+		})
+	}
+}
+
+func TestBuildRequest_OutputFormat(t *testing.T) {
+	tests := []struct {
+		name    string
+		opts    llm.Request
+		checkFn func(*testing.T, map[string]any)
+	}{
+		{
+			name: "JSON format",
+			opts: llm.Request{
+				Model: "gpt-4o",
+				Messages: llm.Messages{
+					&llm.UserMsg{Content: "Return JSON"},
+				},
+				OutputFormat: llm.OutputFormatJSON,
+			},
+			checkFn: func(t *testing.T, req map[string]any) {
+				respFormat, ok := req["response_format"].(map[string]any)
+				require.True(t, ok, "response_format should be present")
+				assert.Equal(t, "json_object", respFormat["type"])
+			},
+		},
+		{
+			name: "text format",
+			opts: llm.Request{
+				Model: "gpt-4o",
+				Messages: llm.Messages{
+					&llm.UserMsg{Content: "Return text"},
+				},
+				OutputFormat: llm.OutputFormatText,
+			},
+			checkFn: func(t *testing.T, req map[string]any) {
+				// Text format should not include response_format (it's the default)
+				_, hasFormat := req["response_format"]
+				assert.False(t, hasFormat, "response_format should be omitted for text format")
+			},
+		},
+		{
+			name: "no format specified",
+			opts: llm.Request{
+				Model: "gpt-4o",
+				Messages: llm.Messages{
+					&llm.UserMsg{Content: "Hello"},
+				},
+			},
+			checkFn: func(t *testing.T, req map[string]any) {
+				_, hasFormat := req["response_format"]
+				assert.False(t, hasFormat, "response_format should be omitted when not specified")
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			body, err := ccBuildRequest(tt.opts)
+			require.NoError(t, err)
+
+			var req map[string]any
+			require.NoError(t, json.Unmarshal(body, &req))
+
+			tt.checkFn(t, req)
+		})
+	}
+}
+
 func TestBuildRequest_WithTools(t *testing.T) {
 	type GetWeatherParams struct {
 		Location string `json:"location" jsonschema:"description=City name,required"`
 	}
 
-	opts := llm.StreamRequest{
+	opts := llm.Request{
 		Model: "gpt-4o",
 		Messages: llm.Messages{
 			&llm.UserMsg{Content: "test"},
@@ -79,7 +263,7 @@ func TestBuildRequest_WithTools(t *testing.T) {
 }
 
 func TestBuildRequest_AssistantWithToolCalls(t *testing.T) {
-	opts := llm.StreamRequest{
+	opts := llm.Request{
 		Model: "gpt-4o",
 		Messages: llm.Messages{
 			&llm.UserMsg{Content: "What's the weather?"},
@@ -114,7 +298,7 @@ func TestBuildRequest_AssistantWithToolCalls(t *testing.T) {
 }
 
 func TestBuildRequest_ToolResults(t *testing.T) {
-	opts := llm.StreamRequest{
+	opts := llm.Request{
 		Model: "gpt-4o",
 		Messages: llm.Messages{
 			&llm.UserMsg{Content: "What's the weather?"},
@@ -590,7 +774,7 @@ func TestMapReasoningEffort_CodexMax(t *testing.T) {
 // feeding into ccBuildRequest.
 
 func TestBuildRequest_ReasoningEffortOmitted(t *testing.T) {
-	opts := llm.StreamRequest{
+	opts := llm.Request{
 		Model:    "gpt-4o",
 		Messages: llm.Messages{&llm.UserMsg{Content: "Hello"}},
 	}
@@ -606,7 +790,7 @@ func TestBuildRequest_ReasoningEffortOmitted(t *testing.T) {
 
 func TestBuildRequest_ReasoningEffortSet(t *testing.T) {
 	// enrichOpts passes the raw effort string through for pre-GPT51 models.
-	opts, err := enrichOpts(llm.StreamRequest{
+	opts, err := enrichOpts(llm.Request{
 		Model:           "gpt-5",
 		Messages:        llm.Messages{&llm.UserMsg{Content: "Hello"}},
 		ReasoningEffort: llm.ReasoningEffortLow,
@@ -623,7 +807,7 @@ func TestBuildRequest_ReasoningEffortSet(t *testing.T) {
 
 func TestBuildRequest_ReasoningEffortMapped(t *testing.T) {
 	// enrichOpts maps "minimal" → "low" for gpt-5.1.
-	opts, err := enrichOpts(llm.StreamRequest{
+	opts, err := enrichOpts(llm.Request{
 		Model:           "gpt-5.1",
 		Messages:        llm.Messages{&llm.UserMsg{Content: "Hello"}},
 		ReasoningEffort: llm.ReasoningEffortMinimal,
@@ -639,7 +823,7 @@ func TestBuildRequest_ReasoningEffortMapped(t *testing.T) {
 }
 
 func TestBuildRequest_ReasoningEffortError(t *testing.T) {
-	_, err := enrichOpts(llm.StreamRequest{
+	_, err := enrichOpts(llm.Request{
 		Model:           "gpt-5-pro",
 		Messages:        llm.Messages{&llm.UserMsg{Content: "Hello"}},
 		ReasoningEffort: llm.ReasoningEffortLow,
@@ -657,7 +841,7 @@ func TestBuildRequest_PromptCacheRetention_ExtendedSupported(t *testing.T) {
 
 	for _, model := range models {
 		t.Run(model, func(t *testing.T) {
-			opts := llm.StreamRequest{
+			opts := llm.Request{
 				Model:    model,
 				Messages: llm.Messages{&llm.UserMsg{Content: "Hello"}},
 			}
@@ -685,7 +869,7 @@ func TestBuildRequest_PromptCacheRetention_NotSupported(t *testing.T) {
 
 	for _, model := range models {
 		t.Run(model, func(t *testing.T) {
-			opts := llm.StreamRequest{
+			opts := llm.Request{
 				Model:    model,
 				Messages: llm.Messages{&llm.UserMsg{Content: "Hello"}},
 			}
@@ -704,14 +888,14 @@ func TestBuildRequest_PromptCacheRetention_NotSupported(t *testing.T) {
 // --- Unit tests for model registry ---
 
 func TestEnrichOpts_ReasoningEffortOmitted(t *testing.T) {
-	opts := llm.StreamRequest{Model: "gpt-4o", Messages: llm.Messages{&llm.UserMsg{Content: "hi"}}}
+	opts := llm.Request{Model: "gpt-4o", Messages: llm.Messages{&llm.UserMsg{Content: "hi"}}}
 	out, err := enrichOpts(opts)
 	require.NoError(t, err)
 	assert.Empty(t, out.ReasoningEffort)
 }
 
 func TestEnrichOpts_ReasoningEffortMappedMinimalToLow(t *testing.T) {
-	opts := llm.StreamRequest{
+	opts := llm.Request{
 		Model:           "gpt-5.1",
 		ReasoningEffort: llm.ReasoningEffortMinimal,
 		Messages:        llm.Messages{&llm.UserMsg{Content: "hi"}},
@@ -722,7 +906,7 @@ func TestEnrichOpts_ReasoningEffortMappedMinimalToLow(t *testing.T) {
 }
 
 func TestEnrichOpts_ReasoningEffortErrorProModel(t *testing.T) {
-	opts := llm.StreamRequest{
+	opts := llm.Request{
 		Model:           "gpt-5-pro",
 		ReasoningEffort: llm.ReasoningEffortLow,
 		Messages:        llm.Messages{&llm.UserMsg{Content: "hi"}},
@@ -741,7 +925,7 @@ func TestWantsExtendedCache_Set(t *testing.T) {
 	}
 	for _, model := range extended {
 		t.Run(model, func(t *testing.T) {
-			opts := llm.StreamRequest{Model: model, Messages: llm.Messages{&llm.UserMsg{Content: "hi"}}}
+			opts := llm.Request{Model: model, Messages: llm.Messages{&llm.UserMsg{Content: "hi"}}}
 			assert.True(t, wantsExtendedCache(opts), "model %s should want extended cache", model)
 		})
 	}
@@ -751,7 +935,7 @@ func TestWantsExtendedCache_NotSet(t *testing.T) {
 	notExtended := []string{"gpt-4o", "gpt-4o-mini", "o1", "o1-pro", "o3", "o3-mini", "o4-mini"}
 	for _, model := range notExtended {
 		t.Run(model, func(t *testing.T) {
-			opts := llm.StreamRequest{Model: model, Messages: llm.Messages{&llm.UserMsg{Content: "hi"}}}
+			opts := llm.Request{Model: model, Messages: llm.Messages{&llm.UserMsg{Content: "hi"}}}
 			assert.False(t, wantsExtendedCache(opts), "model %s should not want extended cache", model)
 		})
 	}
@@ -855,7 +1039,7 @@ data: [DONE]
 // --- Unit tests for Responses API request building ---
 
 func TestRespBuildRequest_Basic(t *testing.T) {
-	opts := llm.StreamRequest{
+	opts := llm.Request{
 		Model: "gpt-5.1-codex",
 		Messages: llm.Messages{
 			&llm.UserMsg{Content: "Write a function"},
@@ -877,7 +1061,7 @@ func TestRespBuildRequest_Basic(t *testing.T) {
 }
 
 func TestRespBuildRequest_SystemAsInstructions(t *testing.T) {
-	opts := llm.StreamRequest{
+	opts := llm.Request{
 		Model: "gpt-5.1-codex",
 		Messages: llm.Messages{
 			&llm.SystemMsg{Content: "You are a coding assistant."},
@@ -900,7 +1084,7 @@ func TestRespBuildRequest_SystemAsInstructions(t *testing.T) {
 }
 
 func TestRespBuildRequest_MultipleSystemMessages(t *testing.T) {
-	opts := llm.StreamRequest{
+	opts := llm.Request{
 		Model: "gpt-5.1-codex",
 		Messages: llm.Messages{
 			&llm.SystemMsg{Content: "Primary instructions."},
@@ -926,7 +1110,7 @@ func TestRespBuildRequest_MultipleSystemMessages(t *testing.T) {
 }
 
 func TestRespBuildRequest_WithTools(t *testing.T) {
-	opts := llm.StreamRequest{
+	opts := llm.Request{
 		Model: "gpt-5.1-codex",
 		Messages: llm.Messages{
 			&llm.UserMsg{Content: "test"},
@@ -956,7 +1140,7 @@ func TestRespBuildRequest_WithTools(t *testing.T) {
 }
 
 func TestRespBuildRequest_ToolCallsAndResults(t *testing.T) {
-	opts := llm.StreamRequest{
+	opts := llm.Request{
 		Model: "gpt-5.1-codex",
 		Messages: llm.Messages{
 			&llm.UserMsg{Content: "Run tests"},
@@ -1002,7 +1186,7 @@ func TestRespBuildRequest_ToolCallsAndResults(t *testing.T) {
 }
 
 func TestRespBuildRequest_ReasoningEffort(t *testing.T) {
-	opts := llm.StreamRequest{
+	opts := llm.Request{
 		Model:           "gpt-5.1-codex",
 		Messages:        llm.Messages{&llm.UserMsg{Content: "test"}},
 		ReasoningEffort: llm.ReasoningEffortHigh,
@@ -1200,7 +1384,7 @@ func TestWantsExtendedCache_TableDriven(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			opts := llm.StreamRequest{
+			opts := llm.Request{
 				Model:    tt.model,
 				Messages: llm.Messages{&llm.UserMsg{Content: "test"}},
 			}
@@ -1229,7 +1413,7 @@ func TestEnrichOpts_ReasoningEffortMapping(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			opts := llm.StreamRequest{
+			opts := llm.Request{
 				Model:           tt.model,
 				Messages:        llm.Messages{&llm.UserMsg{Content: "test"}},
 				ReasoningEffort: tt.effort,

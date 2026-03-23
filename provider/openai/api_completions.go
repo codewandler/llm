@@ -22,7 +22,7 @@ import (
 
 // streamCompletions sends a Chat Completions request and returns an event
 // channel. It is called by Provider.Stream for non-Codex models.
-func (p *Provider) streamCompletions(ctx context.Context, opts llm.StreamRequest) (<-chan llm.StreamEvent, error) {
+func (p *Provider) streamCompletions(ctx context.Context, opts llm.Request) (<-chan llm.StreamEvent, error) {
 	apiKey, err := p.opts.APIKeyFunc(ctx)
 	if err != nil {
 		return nil, llm.NewErrMissingAPIKey(llm.ProviderNameOpenAI)
@@ -68,8 +68,17 @@ type ccRequest struct {
 	ToolChoice           any                `json:"tool_choice,omitempty"`
 	ReasoningEffort      string             `json:"reasoning_effort,omitempty"`
 	PromptCacheRetention string             `json:"prompt_cache_retention,omitempty"`
+	MaxTokens            int                `json:"max_tokens,omitempty"`
+	Temperature          float64            `json:"temperature,omitempty"`
+	TopP                 float64            `json:"top_p,omitempty"`
+	TopK                 int                `json:"top_k,omitempty"`
+	ResponseFormat       *ccResponseFormat  `json:"response_format,omitempty"`
 	Stream               bool               `json:"stream"`
 	StreamOptions        *ccStreamOptions   `json:"stream_options,omitempty"`
+}
+
+type ccResponseFormat struct {
+	Type string `json:"type"`
 }
 
 type ccStreamOptions struct {
@@ -105,11 +114,28 @@ type ccFunctionPayload struct {
 	Parameters  any    `json:"parameters"`
 }
 
-func ccBuildRequest(opts llm.StreamRequest) ([]byte, error) {
+func ccBuildRequest(opts llm.Request) ([]byte, error) {
 	r := ccRequest{
 		Model:         opts.Model,
 		Stream:        true,
 		StreamOptions: &ccStreamOptions{IncludeUsage: true},
+	}
+
+	// Generation parameters
+	if opts.MaxTokens > 0 {
+		r.MaxTokens = opts.MaxTokens
+	}
+	if opts.Temperature > 0 {
+		r.Temperature = opts.Temperature
+	}
+	if opts.TopP > 0 {
+		r.TopP = opts.TopP
+	}
+	if opts.TopK > 0 {
+		r.TopK = opts.TopK
+	}
+	if opts.OutputFormat == llm.OutputFormatJSON {
+		r.ResponseFormat = &ccResponseFormat{Type: "json_object"}
 	}
 
 	// Tools

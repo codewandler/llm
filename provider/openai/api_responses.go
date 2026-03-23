@@ -29,7 +29,7 @@ import (
 
 // streamResponses sends a Responses API request and returns an event channel.
 // It is called by Provider.Stream for Codex models.
-func (p *Provider) streamResponses(ctx context.Context, opts llm.StreamRequest) (<-chan llm.StreamEvent, error) {
+func (p *Provider) streamResponses(ctx context.Context, opts llm.Request) (<-chan llm.StreamEvent, error) {
 	apiKey, err := p.opts.APIKeyFunc(ctx)
 	if err != nil {
 		return nil, llm.NewErrMissingAPIKey(llm.ProviderNameOpenAI)
@@ -70,13 +70,22 @@ func (p *Provider) streamResponses(ctx context.Context, opts llm.StreamRequest) 
 
 // respRequest is the top-level JSON body sent to /v1/responses.
 type respRequest struct {
-	Model        string      `json:"model"`
-	Input        []respInput `json:"input"`
-	Instructions string      `json:"instructions,omitempty"`
-	Tools        []respTool  `json:"tools,omitempty"`
-	ToolChoice   any         `json:"tool_choice,omitempty"`
-	Reasoning    *respReason `json:"reasoning,omitempty"`
-	Stream       bool        `json:"stream"`
+	Model          string              `json:"model"`
+	Input          []respInput         `json:"input"`
+	Instructions   string              `json:"instructions,omitempty"`
+	Tools          []respTool          `json:"tools,omitempty"`
+	ToolChoice     any                 `json:"tool_choice,omitempty"`
+	Reasoning      *respReason         `json:"reasoning,omitempty"`
+	MaxTokens      int                 `json:"max_tokens,omitempty"`
+	Temperature    float64             `json:"temperature,omitempty"`
+	TopP           float64             `json:"top_p,omitempty"`
+	TopK           int                 `json:"top_k,omitempty"`
+	ResponseFormat *respResponseFormat `json:"response_format,omitempty"`
+	Stream         bool                `json:"stream"`
+}
+
+type respResponseFormat struct {
+	Type string `json:"type"`
 }
 
 // respReason holds the reasoning configuration for reasoning models.
@@ -117,10 +126,27 @@ type respTool struct {
 	Parameters  any    `json:"parameters,omitempty"`
 }
 
-func respBuildRequest(opts llm.StreamRequest) ([]byte, error) {
+func respBuildRequest(opts llm.Request) ([]byte, error) {
 	r := respRequest{
 		Model:  opts.Model,
 		Stream: true,
+	}
+
+	// Generation parameters
+	if opts.MaxTokens > 0 {
+		r.MaxTokens = opts.MaxTokens
+	}
+	if opts.Temperature > 0 {
+		r.Temperature = opts.Temperature
+	}
+	if opts.TopP > 0 {
+		r.TopP = opts.TopP
+	}
+	if opts.TopK > 0 {
+		r.TopK = opts.TopK
+	}
+	if opts.OutputFormat == llm.OutputFormatJSON {
+		r.ResponseFormat = &respResponseFormat{Type: "json_object"}
 	}
 
 	// Build input items from messages.
