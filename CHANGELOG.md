@@ -1,6 +1,25 @@
 # Changelog
 
-## v0.24.1 (unreleased)
+## v0.24.2 (unreleased)
+
+### Bug Fixes
+
+#### Stop reason propagated through stream pipeline
+
+`StreamEvent.Done.StopReason` is now correctly populated for all providers.
+Previously the stop reason was parsed but not forwarded through the router's
+pipe, so consumers always saw an empty `StopReason`.
+
+### Chores
+
+#### `llmcli infer` uses `ToolChoiceRequired` by default
+
+The `llmcli infer` command now sets `ToolChoiceRequired` when tools are
+provided, ensuring the model calls a tool rather than responding in plain text.
+
+---
+
+## v0.24.1
 
 ### Bug Fixes
 
