@@ -372,7 +372,10 @@ func respHandleEvent(
 		}
 		if !*startEmitted {
 			*startEmitted = true
-			events.Start(llm.StreamStartOpts{})
+			events.Start(llm.StreamStartOpts{
+				Model:     meta.responseModel,
+				RequestID: meta.responseID,
+			})
 		}
 		events.Delta(llm.TextDelta(llm.DeltaIndex(ev.OutputIndex), ev.Delta))
 
@@ -448,6 +451,15 @@ func respHandleEvent(
 		if err := json.Unmarshal([]byte(data), &ev); err != nil {
 			events.Done(nil)
 			return
+		}
+
+		// Emit Start if no content events fired (e.g. empty response or tool-only).
+		if !*startEmitted {
+			*startEmitted = true
+			events.Start(llm.StreamStartOpts{
+				Model:     ev.Response.Model,
+				RequestID: ev.Response.ID,
+			})
 		}
 
 		var usage *llm.Usage

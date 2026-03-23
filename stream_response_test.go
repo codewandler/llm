@@ -9,52 +9,17 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/codewandler/llm"
+	"github.com/codewandler/llm/llmtest"
 )
-
-// --- helpers ---
-
-// sendEvents builds a fake event channel pre-populated with evs, then closed.
-func sendEvents(evs ...llm.StreamEvent) <-chan llm.StreamEvent {
-	ch := make(chan llm.StreamEvent, len(evs))
-	for _, ev := range evs {
-		ch <- ev
-	}
-	close(ch)
-	return ch
-}
-
-func textEvent(s string) llm.StreamEvent {
-	return llm.StreamEvent{Type: llm.StreamEventDelta, Delta: llm.TextDelta(nil, s)}
-}
-
-func reasoningEvent(s string) llm.StreamEvent {
-	return llm.StreamEvent{Type: llm.StreamEventDelta, Delta: llm.ReasoningDelta(nil, s)}
-}
-
-func toolEvent(id, name string, args map[string]any) llm.StreamEvent {
-	tc := llm.ToolCall{ID: id, Name: name, Arguments: args}
-	return llm.StreamEvent{Type: llm.StreamEventToolCall, ToolCall: &tc}
-}
-
-func doneEvent(usage *llm.Usage) llm.StreamEvent {
-	return llm.StreamEvent{Type: llm.StreamEventDone, Usage: usage}
-}
-
-func errorEvent(msg string) llm.StreamEvent {
-	return llm.StreamEvent{
-		Type:  llm.StreamEventError,
-		Error: llm.NewErrProviderMsg("test", msg),
-	}
-}
 
 // --- tests ---
 
 func TestStreamResponse_TextAccumulation(t *testing.T) {
-	ch := sendEvents(
-		textEvent("hello"),
-		textEvent(" "),
-		textEvent("world"),
-		doneEvent(nil),
+	ch := llmtest.SendEvents(
+		llmtest.TextEvent("hello"),
+		llmtest.TextEvent(" "),
+		llmtest.TextEvent("world"),
+		llmtest.DoneEvent(nil),
 	)
 
 	result := <-llm.Process(context.Background(), ch).Result()
@@ -66,11 +31,11 @@ func TestStreamResponse_TextAccumulation(t *testing.T) {
 }
 
 func TestStreamResponse_ReasoningAccumulation(t *testing.T) {
-	ch := sendEvents(
-		reasoningEvent("step1 "),
-		reasoningEvent("step2"),
-		textEvent("answer"),
-		doneEvent(nil),
+	ch := llmtest.SendEvents(
+		llmtest.ReasoningEvent("step1 "),
+		llmtest.ReasoningEvent("step2"),
+		llmtest.TextEvent("answer"),
+		llmtest.DoneEvent(nil),
 	)
 
 	result := <-llm.Process(context.Background(), ch).Result()
@@ -82,7 +47,7 @@ func TestStreamResponse_ReasoningAccumulation(t *testing.T) {
 
 func TestStreamResponse_Usage(t *testing.T) {
 	usage := &llm.Usage{InputTokens: 10, OutputTokens: 5, TotalTokens: 15, Cost: 0.001}
-	ch := sendEvents(textEvent("hi"), doneEvent(usage))
+	ch := llmtest.SendEvents(llmtest.TextEvent("hi"), llmtest.DoneEvent(usage))
 
 	result := <-llm.Process(context.Background(), ch).Result()
 
@@ -94,7 +59,7 @@ func TestStreamResponse_Usage(t *testing.T) {
 
 func TestStreamResponse_OnTextCallback(t *testing.T) {
 	var received []string
-	ch := sendEvents(textEvent("a"), textEvent("b"), textEvent("c"), doneEvent(nil))
+	ch := llmtest.SendEvents(llmtest.TextEvent("a"), llmtest.TextEvent("b"), llmtest.TextEvent("c"), llmtest.DoneEvent(nil))
 
 	result := <-llm.Process(context.Background(), ch).
 		OnText(func(s string) { received = append(received, s) }).
@@ -106,7 +71,7 @@ func TestStreamResponse_OnTextCallback(t *testing.T) {
 
 func TestStreamResponse_OnReasoningCallback(t *testing.T) {
 	var received []string
-	ch := sendEvents(reasoningEvent("r1"), reasoningEvent("r2"), doneEvent(nil))
+	ch := llmtest.SendEvents(llmtest.ReasoningEvent("r1"), llmtest.ReasoningEvent("r2"), llmtest.DoneEvent(nil))
 
 	result := <-llm.Process(context.Background(), ch).
 		OnReasoning(func(s string) { received = append(received, s) }).
@@ -119,9 +84,9 @@ func TestStreamResponse_OnReasoningCallback(t *testing.T) {
 func TestStreamResponse_OnToolDeltaCallback(t *testing.T) {
 	var received []string
 	toolDelta := llm.ToolDelta(llm.DeltaIndex(0), "tid", "get_weather", `{"loc`)
-	deltaCh := sendEvents(
+	deltaCh := llmtest.SendEvents(
 		llm.StreamEvent{Type: llm.StreamEventDelta, Delta: toolDelta},
-		doneEvent(nil),
+		llmtest.DoneEvent(nil),
 	)
 
 	result := <-llm.Process(context.Background(), deltaCh).
@@ -133,9 +98,9 @@ func TestStreamResponse_OnToolDeltaCallback(t *testing.T) {
 }
 
 func TestStreamResponse_StopReasonToolUse(t *testing.T) {
-	ch := sendEvents(
-		toolEvent("id1", "get_weather", map[string]any{"location": "Berlin"}),
-		doneEvent(nil),
+	ch := llmtest.SendEvents(
+		llmtest.ToolEvent("id1", "get_weather", map[string]any{"location": "Berlin"}),
+		llmtest.DoneEvent(nil),
 	)
 
 	result := <-llm.Process(context.Background(), ch).Result()
@@ -154,9 +119,9 @@ func TestStreamResponse_ToolHandler_Sync(t *testing.T) {
 		Temp int `json:"temp"`
 	}
 
-	ch := sendEvents(
-		toolEvent("id1", "get_weather", map[string]any{"location": "Berlin"}),
-		doneEvent(nil),
+	ch := llmtest.SendEvents(
+		llmtest.ToolEvent("id1", "get_weather", map[string]any{"location": "Berlin"}),
+		llmtest.DoneEvent(nil),
 	)
 
 	weatherSpec := llm.NewToolSpec[In]("get_weather", "Get weather")
@@ -175,12 +140,16 @@ func TestStreamResponse_ToolHandler_Sync(t *testing.T) {
 }
 
 func TestStreamResponse_ToolHandler_Error(t *testing.T) {
-	type In struct{ Location string `json:"location"` }
-	type Out struct{ Temp int `json:"temp"` }
+	type In struct {
+		Location string `json:"location"`
+	}
+	type Out struct {
+		Temp int `json:"temp"`
+	}
 
-	ch := sendEvents(
-		toolEvent("id1", "get_weather", map[string]any{"location": "Berlin"}),
-		doneEvent(nil),
+	ch := llmtest.SendEvents(
+		llmtest.ToolEvent("id1", "get_weather", map[string]any{"location": "Berlin"}),
+		llmtest.DoneEvent(nil),
 	)
 
 	boom := errors.New("service unavailable")
@@ -197,13 +166,17 @@ func TestStreamResponse_ToolHandler_Error(t *testing.T) {
 }
 
 func TestStreamResponse_ToolHandler_Async(t *testing.T) {
-	type In struct{ N int `json:"n"` }
-	type Out struct{ N int `json:"n"` }
+	type In struct {
+		N int `json:"n"`
+	}
+	type Out struct {
+		N int `json:"n"`
+	}
 
-	ch := sendEvents(
-		toolEvent("id1", "double", map[string]any{"n": 3}),
-		toolEvent("id2", "double", map[string]any{"n": 7}),
-		doneEvent(nil),
+	ch := llmtest.SendEvents(
+		llmtest.ToolEvent("id1", "double", map[string]any{"n": 3}),
+		llmtest.ToolEvent("id2", "double", map[string]any{"n": 7}),
+		llmtest.DoneEvent(nil),
 	)
 
 	doubleSpec := llm.NewToolSpec[In]("double", "Double a number")
@@ -222,9 +195,9 @@ func TestStreamResponse_ToolHandler_Async(t *testing.T) {
 func TestStreamResponse_UnhandledToolCall(t *testing.T) {
 	// Tool call with no handler registered — gets an error ToolCallResult so
 	// the conversation history remains valid (model always gets a result back).
-	ch := sendEvents(
-		toolEvent("id1", "unknown_tool", map[string]any{}),
-		doneEvent(nil),
+	ch := llmtest.SendEvents(
+		llmtest.ToolEvent("id1", "unknown_tool", map[string]any{}),
+		llmtest.DoneEvent(nil),
 	)
 
 	result := <-llm.Process(context.Background(), ch).Result()
@@ -238,9 +211,9 @@ func TestStreamResponse_UnhandledToolCall(t *testing.T) {
 }
 
 func TestStreamResponse_StreamError(t *testing.T) {
-	ch := sendEvents(
-		textEvent("partial"),
-		errorEvent("upstream failed"),
+	ch := llmtest.SendEvents(
+		llmtest.TextEvent("partial"),
+		llmtest.ErrorEvent(llm.NewErrProviderMsg("test", "foo")),
 	)
 
 	result := <-llm.Process(context.Background(), ch).Result()
@@ -266,7 +239,7 @@ func TestStreamResponse_ContextCancellation(t *testing.T) {
 }
 
 func TestStreamResponse_CallbackPanicRecovered(t *testing.T) {
-	ch := sendEvents(textEvent("x"), doneEvent(nil))
+	ch := llmtest.SendEvents(llmtest.TextEvent("x"), llmtest.DoneEvent(nil))
 
 	result := <-llm.Process(context.Background(), ch).
 		OnText(func(_ string) { panic("boom") }).
@@ -282,9 +255,9 @@ func TestStreamResponse_ToolHandlerPanicRecovered(t *testing.T) {
 	type In struct{}
 	type Out struct{}
 
-	ch := sendEvents(
-		toolEvent("id1", "explode", map[string]any{}),
-		doneEvent(nil),
+	ch := llmtest.SendEvents(
+		llmtest.ToolEvent("id1", "explode", map[string]any{}),
+		llmtest.DoneEvent(nil),
 	)
 
 	explodeSpec := llm.NewToolSpec[In]("explode", "Explode")
@@ -299,10 +272,10 @@ func TestStreamResponse_ToolHandlerPanicRecovered(t *testing.T) {
 }
 
 func TestStreamResponse_Message(t *testing.T) {
-	ch := sendEvents(
-		textEvent("hello"),
-		toolEvent("id1", "search", map[string]any{"q": "go"}),
-		doneEvent(nil),
+	ch := llmtest.SendEvents(
+		llmtest.TextEvent("hello"),
+		llmtest.ToolEvent("id1", "search", map[string]any{"q": "go"}),
+		llmtest.DoneEvent(nil),
 	)
 
 	result := <-llm.Process(context.Background(), ch).Result()
@@ -315,13 +288,17 @@ func TestStreamResponse_Message(t *testing.T) {
 }
 
 func TestStreamResponse_Next(t *testing.T) {
-	type In struct{ Q string `json:"q"` }
-	type Out struct{ Results []string `json:"results"` }
+	type In struct {
+		Q string `json:"q"`
+	}
+	type Out struct {
+		Results []string `json:"results"`
+	}
 
-	ch := sendEvents(
-		textEvent("searching..."),
-		toolEvent("id1", "search", map[string]any{"q": "go"}),
-		doneEvent(nil),
+	ch := llmtest.SendEvents(
+		llmtest.TextEvent("searching..."),
+		llmtest.ToolEvent("id1", "search", map[string]any{"q": "go"}),
+		llmtest.DoneEvent(nil),
 	)
 
 	searchSpec := llm.NewToolSpec[In]("search", "Search")
@@ -346,7 +323,7 @@ func TestStreamResponse_Next(t *testing.T) {
 }
 
 func TestStreamResponse_Apply(t *testing.T) {
-	ch := sendEvents(textEvent("hi"), doneEvent(nil))
+	ch := llmtest.SendEvents(llmtest.TextEvent("hi"), llmtest.DoneEvent(nil))
 
 	var msgs llm.Messages
 	msgs.AddUserMsg("hello")
@@ -360,7 +337,7 @@ func TestStreamResponse_Apply(t *testing.T) {
 }
 
 func TestStreamResponse_ResultIdempotent(t *testing.T) {
-	ch := sendEvents(textEvent("hi"), doneEvent(nil))
+	ch := llmtest.SendEvents(llmtest.TextEvent("hi"), llmtest.DoneEvent(nil))
 
 	r := llm.Process(context.Background(), ch)
 	ch1 := r.Result()
@@ -384,9 +361,9 @@ func TestStreamResponse_HandleTool_BoundSpec(t *testing.T) {
 
 	spec := llm.NewToolSpec[In]("get_weather", "Get weather")
 
-	ch := sendEvents(
-		toolEvent("id1", "get_weather", map[string]any{"location": "Paris"}),
-		doneEvent(nil),
+	ch := llmtest.SendEvents(
+		llmtest.ToolEvent("id1", "get_weather", map[string]any{"location": "Paris"}),
+		llmtest.DoneEvent(nil),
 	)
 
 	result := <-llm.Process(context.Background(), ch).
