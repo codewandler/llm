@@ -240,7 +240,7 @@ func (p *Provider) downloadModel(ctx context.Context, modelID string) error {
 	return nil
 }
 
-func (p *Provider) CreateStream(ctx context.Context, opts llm.StreamRequest) (<-chan llm.StreamEvent, error) {
+func (p *Provider) CreateStream(ctx context.Context, opts llm.Request) (<-chan llm.StreamEvent, error) {
 	if err := opts.Validate(); err != nil {
 		return nil, llm.NewErrBuildRequest(llm.ProviderNameOllama, err)
 	}
@@ -280,10 +280,15 @@ func (p *Provider) CreateStream(ctx context.Context, opts llm.StreamRequest) (<-
 // --- Request building ---
 
 type request struct {
-	Model    string           `json:"model"`
-	Messages []messagePayload `json:"messages"`
-	Tools    []toolPayload    `json:"tools,omitempty"`
-	Stream   bool             `json:"stream"`
+	Model       string           `json:"model"`
+	Messages    []messagePayload `json:"messages"`
+	Tools       []toolPayload    `json:"tools,omitempty"`
+	MaxTokens   int              `json:"num_predict,omitempty"`
+	Temperature float64          `json:"temperature,omitempty"`
+	TopP        float64          `json:"top_p,omitempty"`
+	TopK        int              `json:"top_k,omitempty"`
+	Format      string           `json:"format,omitempty"`
+	Stream      bool             `json:"stream"`
 }
 
 type messagePayload struct {
@@ -312,10 +317,27 @@ type functionPayload struct {
 	Parameters  any    `json:"parameters"`
 }
 
-func buildRequest(opts llm.StreamRequest) ([]byte, error) {
+func buildRequest(opts llm.Request) ([]byte, error) {
 	r := request{
 		Model:  opts.Model,
 		Stream: true,
+	}
+
+	// Generation parameters
+	if opts.MaxTokens > 0 {
+		r.MaxTokens = opts.MaxTokens
+	}
+	if opts.Temperature > 0 {
+		r.Temperature = opts.Temperature
+	}
+	if opts.TopP > 0 {
+		r.TopP = opts.TopP
+	}
+	if opts.TopK > 0 {
+		r.TopK = opts.TopK
+	}
+	if opts.OutputFormat == llm.OutputFormatJSON {
+		r.Format = "json"
 	}
 
 	// Note: Ollama does not support tool_choice parameter.
