@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"github.com/codewandler/llm"
-	"github.com/codewandler/llm/tokencount"
 )
 
 // Compile-time assertion that *Provider implements llm.TokenCounter.
@@ -19,7 +18,7 @@ var _ llm.TokenCounter = (*Provider)(nil)
 // Bedrock does not expose a server-side token counting endpoint.
 func (p *Provider) CountTokens(_ context.Context, req llm.TokenCountRequest) (*llm.TokenCount, error) {
 	tc := &llm.TokenCount{}
-	if err := llm.CountMessagesAndTools(tc, req, tokencount.EncodingCL100K, 0, 0); err != nil {
+	if err := llm.CountMessagesAndToolsAnthropic(tc, req); err != nil {
 		return nil, fmt.Errorf("bedrock: %w", err)
 	}
 	return tc, nil

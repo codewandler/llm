@@ -47,10 +47,11 @@ Examples:
 
 func runInfer(ctx context.Context, userMsg, model, system, reasoning string, verbose bool, root *RootFlags) error {
 	httpClient, logHandler := root.BuildHTTPClient()
-	provider, err := createProvider(ctx, httpClient, root.BuildLLMOptions(logHandler)...)
+	concreteProvider, err := createProvider(ctx, httpClient, root.BuildLLMOptions(logHandler)...)
 	if err != nil {
 		return err
 	}
+	var provider llm.Provider = concreteProvider
 
 	msgs := make(llm.Messages, 0)
 
@@ -74,15 +75,33 @@ func runInfer(ctx context.Context, userMsg, model, system, reasoning string, ver
 		}
 	)
 
+	tools := llm.NewToolSet(
+		llm.NewToolSpec[addFactParams]("add_fact", "Store a single fact"),
+		llm.NewToolSpec[completeTurnParams]("complete_turn", "Complete the current turn."),
+	).Definitions()
+
+	// --- Token estimate (verbose only) ---
+	var tokenEstimate *llm.TokenCount
+	if verbose {
+		if tc, ok := provider.(llm.TokenCounter); ok {
+			est, err := tc.CountTokens(ctx, llm.TokenCountRequest{
+				Model:    model,
+				Messages: msgs,
+				Tools:    tools,
+			})
+			if err == nil {
+				tokenEstimate = est
+				printTokenEstimate(est)
+			}
+		}
+	}
+
 	stream, err := provider.CreateStream(ctx, llm.StreamRequest{
 		Model:           model,
 		Messages:        msgs,
 		ReasoningEffort: llm.ReasoningEffort(reasoning),
 		ToolChoice:      llm.ToolChoiceAuto{},
-		Tools: llm.NewToolSet(
-			llm.NewToolSpec[addFactParams]("add_fact", "Store a single fact"),
-			llm.NewToolSpec[completeTurnParams]("complete_turn", "Complete the current turn."),
-		).Definitions(),
+		Tools:           tools,
 	})
 	if err != nil {
 		return fmt.Errorf("create stream: %w", err)
@@ -161,14 +180,57 @@ func runInfer(ctx context.Context, userMsg, model, system, reasoning string, ver
 	}
 
 	if verbose {
-		printVerboseInfo(result)
+		printVerboseInfo(result, tokenEstimate)
 	}
 
 	return nil
 }
 
+// printTokenEstimate prints the pre-request token estimate section when running
+// in verbose mode. Called before CreateStream.
+func printTokenEstimate(est *llm.TokenCount) {
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintf(os.Stderr, "%s── token estimate ──%s\n", ansiDim, ansiReset)
+
+	type field struct {
+		label string
+		value string
+	}
+	fields := []field{
+		{"input (est)", fmt.Sprintf("%d", est.InputTokens)},
+	}
+	if est.SystemTokens > 0 {
+		fields = append(fields, field{"  system", fmt.Sprintf("%d", est.SystemTokens)})
+	}
+	if est.UserTokens > 0 {
+		fields = append(fields, field{"  user", fmt.Sprintf("%d", est.UserTokens)})
+	}
+	if est.AssistantTokens > 0 {
+		fields = append(fields, field{"  assistant", fmt.Sprintf("%d", est.AssistantTokens)})
+	}
+	if est.ToolResultTokens > 0 {
+		fields = append(fields, field{"  tool_results", fmt.Sprintf("%d", est.ToolResultTokens)})
+	}
+	if est.ToolsTokens > 0 {
+		fields = append(fields, field{"  tools", fmt.Sprintf("%d", est.ToolsTokens)})
+		for name, n := range est.PerTool {
+			fields = append(fields, field{fmt.Sprintf("    %s", name), fmt.Sprintf("%d", n)})
+		}
+	}
+
+	maxWidth := 0
+	for _, f := range fields {
+		if len(f.label) > maxWidth {
+			maxWidth = len(f.label)
+		}
+	}
+	for _, f := range fields {
+		fmt.Fprintf(os.Stderr, "%*s: %s\n", maxWidth, f.label, f.value)
+	}
+}
+
 // printVerboseInfo prints multi-line verbose metadata with right-aligned labels.
-func printVerboseInfo(result *llm.StreamResult) {
+func printVerboseInfo(result *llm.StreamResult, est *llm.TokenCount) {
 	type field struct {
 		label string
 		value string
@@ -224,7 +286,19 @@ func printVerboseInfo(result *llm.StreamResult) {
 
 	// Token usage
 	if usage != nil {
-		fields = append(fields, field{"tokens", fmt.Sprintf("%d in, %d out", usage.InputTokens, usage.OutputTokens)})
+		tokLine := fmt.Sprintf("%d in, %d out", usage.InputTokens, usage.OutputTokens)
+		if est != nil {
+			drift := 0.0
+			if usage.InputTokens > 0 {
+				diff := float64(est.InputTokens - usage.InputTokens)
+				if diff < 0 {
+					diff = -diff
+				}
+				drift = diff / float64(usage.InputTokens) * 100
+			}
+			tokLine += fmt.Sprintf("  (est %d in, drift %.1f%%)", est.InputTokens, drift)
+		}
+		fields = append(fields, field{"tokens", tokLine})
 	}
 
 	// Cache usage (shown only when provider returned cache data)

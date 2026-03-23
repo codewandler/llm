@@ -68,5 +68,7 @@ func TestProvider_CountTokens_Tools(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.Greater(t, got.ToolsTokens, 0)
-	assert.Equal(t, got.ToolsTokens, got.PerTool["fetch"])
+	// ToolsTokens includes Anthropic's hidden tool preamble + framing overhead.
+	assert.Greater(t, got.ToolsTokens, got.PerTool["fetch"],
+		"ToolsTokens must exceed raw per-tool count due to Anthropic overhead")
 }

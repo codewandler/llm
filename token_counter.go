@@ -44,8 +44,13 @@ type TokenCounter interface {
 // Invariants:
 //   - len(PerMessage) == len(StreamRequest.Messages)
 //   - SystemTokens + UserTokens + AssistantTokens + ToolResultTokens == sum(PerMessage)
-//   - sum(values(PerTool)) == ToolsTokens
 //   - InputTokens == sum(PerMessage) + ToolsTokens + provider-specific overhead
+//
+// Note: sum(values(PerTool)) == ToolsTokens holds for OpenAI and OpenRouter.
+// For Anthropic-family providers (anthropic, bedrock, claude), ToolsTokens
+// additionally includes Anthropic's hidden tool-use system preamble and
+// per-tool serialisation framing, so sum(PerTool) < ToolsTokens when tools
+// are present.
 type TokenCount struct {
 	// InputTokens is the total estimated input token count:
 	// all messages + all tool definitions + any provider-specific overhead.
