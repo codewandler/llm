@@ -293,7 +293,7 @@ func (p *Provider) RegionPrefix() string {
 	return p.regionPrefix
 }
 
-func (p *Provider) CreateStream(ctx context.Context, opts llm.StreamRequest) (<-chan llm.StreamEvent, error) {
+func (p *Provider) CreateStream(ctx context.Context, opts llm.Request) (<-chan llm.StreamEvent, error) {
 	// Lazy client initialization (thread-safe)
 	if err := p.initClient(ctx); err != nil {
 		return nil, llm.NewErrRequestFailed(llm.ProviderNameBedrock, err)
@@ -380,7 +380,7 @@ func hasBedrockPerMessageCacheHints(msgs llm.Messages) bool {
 	return false
 }
 
-func buildRequest(opts llm.StreamRequest) (*bedrockruntime.ConverseStreamInput, error) {
+func buildRequest(opts llm.Request) (*bedrockruntime.ConverseStreamInput, error) {
 	input := &bedrockruntime.ConverseStreamInput{
 		ModelId: aws.String(opts.Model),
 	}
@@ -555,6 +555,31 @@ func buildRequest(opts llm.StreamRequest) (*bedrockruntime.ConverseStreamInput, 
 		}
 	}
 
+	// Build additional model request fields for parameters not in inferenceConfig.
+	// Some models support topK and other extended parameters via additional fields.
+	// We merge these with reasoning_config if both are specified.
+	var additionalFields map[string]any
+
+	// Some models support topK via additional request fields.
+	// Note: Not all Bedrock models support topK.
+	if opts.TopK > 0 {
+		if additionalFields == nil {
+			additionalFields = make(map[string]any)
+		}
+		additionalFields["top_k"] = opts.TopK
+	}
+
+	// Some Bedrock models support output_format via additional request fields.
+	// This is passed as {"outputSchema": {...}} for models that support it.
+	if opts.OutputFormat == llm.OutputFormatJSON {
+		if additionalFields == nil {
+			additionalFields = make(map[string]any)
+		}
+		additionalFields["output_schema"] = map[string]any{
+			"type": "json_object",
+		}
+	}
+
 	// Wire reasoning/thinking via additionalModelRequestFields.
 	// Bedrock uses reasoning_config: {type: "enabled", budget_tokens: N}.
 	// Map ReasoningEffort to sensible token budgets.
@@ -568,16 +593,38 @@ func buildRequest(opts llm.StreamRequest) (*bedrockruntime.ConverseStreamInput, 
 		case llm.ReasoningEffortHigh:
 			budgetTokens = 16000
 		}
-		reasoningCfg, err := toDocument(map[string]any{
-			"reasoning_config": map[string]any{
-				"type":         "enabled",
-				"budget_tokens": budgetTokens,
-			},
-		})
-		if err != nil {
-			return nil, fmt.Errorf("marshal reasoning config: %w", err)
+		if additionalFields == nil {
+			additionalFields = make(map[string]any)
 		}
-		input.AdditionalModelRequestFields = reasoningCfg
+		additionalFields["reasoning_config"] = map[string]any{
+			"type":          "enabled",
+			"budget_tokens": budgetTokens,
+		}
+	}
+
+	// Set additional fields if any were collected
+	if len(additionalFields) > 0 {
+		fieldsDoc, err := toDocument(additionalFields)
+		if err != nil {
+			return nil, fmt.Errorf("marshal additional request fields: %w", err)
+		}
+		input.AdditionalModelRequestFields = fieldsDoc
+	}
+
+	// Set inference configuration (temperature, topP, maxTokens).
+	// Only set when at least one parameter is configured.
+	if opts.Temperature > 0 || opts.TopP > 0 || opts.MaxTokens > 0 {
+		inferenceConfig := &types.InferenceConfiguration{}
+		if opts.MaxTokens > 0 {
+			inferenceConfig.MaxTokens = aws.Int32(int32(opts.MaxTokens))
+		}
+		if opts.Temperature > 0 {
+			inferenceConfig.Temperature = aws.Float32(float32(opts.Temperature))
+		}
+		if opts.TopP > 0 {
+			inferenceConfig.TopP = aws.Float32(float32(opts.TopP))
+		}
+		input.InferenceConfig = inferenceConfig
 	}
 
 	return input, nil
