@@ -204,6 +204,11 @@ func ccBuildRequest(opts llm.StreamRequest) ([]byte, error) {
 type ccStreamMeta struct {
 	requestedModel string
 	startTime      time.Time
+	// responseID and responseModel are set by the Responses API parser when
+	// response.created arrives, and used when emitting StreamEventStart on
+	// first actual content.
+	responseID    string
+	responseModel string
 }
 
 type ccStreamChunk struct {

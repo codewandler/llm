@@ -203,9 +203,11 @@ func respBuildRequest(opts llm.StreamRequest) ([]byte, error) {
 		}
 	}
 
-	// Reasoning effort — Responses API wraps it in {"reasoning": {"effort": "..."}}
+	// Reasoning effort
 	if opts.ReasoningEffort != "" {
-		r.Reasoning = &respReason{Effort: string(opts.ReasoningEffort)}
+		r.Reasoning = &respReason{
+			Effort: string(opts.ReasoningEffort),
+		}
 	}
 
 	return json.Marshal(r)
@@ -315,7 +317,7 @@ func respParseStream(ctx context.Context, body io.ReadCloser, events *llm.EventS
 			pendingEvent = strings.TrimPrefix(line, "event: ")
 		case strings.HasPrefix(line, "data: "):
 			data := strings.TrimPrefix(line, "data: ")
-			respHandleEvent(pendingEvent, data, &startEmitted, activeTools, events, meta)
+			respHandleEvent(pendingEvent, data, &startEmitted, activeTools, events, &meta)
 			pendingEvent = ""
 		}
 	}
@@ -330,7 +332,7 @@ func respHandleEvent(
 	startEmitted *bool,
 	activeTools map[int]*respToolAccum,
 	events *llm.EventStream,
-	meta respStreamMeta,
+	meta *respStreamMeta,
 ) {
 	switch eventName {
 	case "response.created":
@@ -338,13 +340,11 @@ func respHandleEvent(
 		if err := json.Unmarshal([]byte(data), &ev); err != nil {
 			return
 		}
-		if !*startEmitted {
-			*startEmitted = true
-			events.Start(llm.StreamStartOpts{
-				Model:     ev.Response.Model,
-				RequestID: ev.Response.ID,
-			})
-		}
+		// Store the response ID and model for when we emit Start on first content.
+		// We don't emit Start here because TTFT should measure time to first token,
+		// not time to HTTP response headers.
+		meta.responseID = ev.Response.ID
+		meta.responseModel = ev.Response.Model
 
 	case "response.reasoning_summary_text.delta":
 		var ev respTextDelta
@@ -352,6 +352,13 @@ func respHandleEvent(
 			return
 		}
 		if ev.Delta != "" {
+			if !*startEmitted {
+				*startEmitted = true
+				events.Start(llm.StreamStartOpts{
+					Model:     meta.responseModel,
+					RequestID: meta.responseID,
+				})
+			}
 			events.Delta(llm.ReasoningDelta(llm.DeltaIndex(ev.OutputIndex), ev.Delta))
 		}
 
@@ -375,6 +382,13 @@ func respHandleEvent(
 			return
 		}
 		if ev.Item.Type == "function_call" {
+			if !*startEmitted {
+				*startEmitted = true
+				events.Start(llm.StreamStartOpts{
+					Model:     meta.responseModel,
+					RequestID: meta.responseID,
+				})
+			}
 			activeTools[ev.OutputIndex] = &respToolAccum{
 				id:   ev.Item.CallID,
 				name: ev.Item.Name,

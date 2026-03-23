@@ -53,9 +53,11 @@ func runInfer(ctx context.Context, userMsg, model, system, reasoning string, ver
 	}
 
 	msgs := make(llm.Messages, 0)
-	msgs.AddSystemMsg("You must complete by calling `complete_turn` tool. This can happen together with adding facts")
+
 	if system != "" {
 		msgs.AddSystemMsg(system)
+	} else {
+		msgs.AddSystemMsg("You are Tessa. Before you do anything -> Introduce yourself! You must complete by calling `complete_turn` tool. This can happen together with adding facts")
 	}
 	msgs.AddUserMsg(userMsg)
 
@@ -64,12 +66,13 @@ func runInfer(ctx context.Context, userMsg, model, system, reasoning string, ver
 			Fact string `json:"fact"`
 		}
 		completeTurnParams struct {
-			Successful bool `json:"successful"`
+			Success bool `json:"success"`
+		}
+		DefaultToolResult struct {
+			Message string `json:"message"`
+			Success bool   `json:"success"`
 		}
 	)
-
-	d, _ := json.MarshalIndent(msgs, "", "  ")
-	println(string(d))
 
 	stream, err := provider.CreateStream(ctx, llm.StreamRequest{
 		Model:           model,
@@ -85,82 +88,95 @@ func runInfer(ctx context.Context, userMsg, model, system, reasoning string, ver
 		return fmt.Errorf("create stream: %w", err)
 	}
 
-	var startInfo *llm.StreamStart
-	var hadTokenOutput bool
 	var inReasoning bool
-	seenTools := make(map[string]bool)
+	var hadTokenOutput bool
+	var seenTools = make(map[string]bool)
 
-	for event := range stream {
-		if root.LogEvents {
-			logStreamEvent(event)
-		}
-		switch event.Type {
-		case llm.StreamEventStart:
-			startInfo = event.Start
-		case llm.StreamEventDelta:
-			if event.Delta != nil {
-				switch event.Delta.Type {
-				case llm.DeltaTypeText:
-					if inReasoning {
-						fmt.Print(ansiReset)
-						inReasoning = false
-					}
-					fmt.Print(event.Delta.Text)
-					hadTokenOutput = true
-					if logHandler != nil {
-						logHandler.MarkTokenOutput()
-					}
-				case llm.DeltaTypeTool:
-					if inReasoning {
-						fmt.Print(ansiReset)
-						inReasoning = false
-					}
-					if !seenTools[event.Delta.ToolID] {
-						seenTools[event.Delta.ToolID] = true
-						if hadTokenOutput {
-							fmt.Println()
-						}
-						fmt.Printf("[tool:%s id:%s] ", event.Delta.ToolName, event.Delta.ToolID)
-					}
-					fmt.Print(event.Delta.ToolArgs)
-					hadTokenOutput = true
-					if logHandler != nil {
-						logHandler.MarkTokenOutput()
-					}
-				case llm.DeltaTypeReasoning:
-					if !inReasoning {
-						fmt.Print(ansiDim)
-						inReasoning = true
-					}
-					fmt.Print(event.Delta.Reasoning)
-				}
-			}
-		case llm.StreamEventDone:
+	proc := llm.Process(ctx, stream).
+		HandleTool(
+			llm.NewToolHandler("complete_turn", func(ctx context.Context, in completeTurnParams) (*DefaultToolResult, error) {
+				return &DefaultToolResult{Message: "Turn complete", Success: in.Success}, nil
+			}),
+			llm.NewToolHandler("add_fact", func(ctx context.Context, in addFactParams) (*DefaultToolResult, error) {
+				return &DefaultToolResult{
+					Message: fmt.Sprintf("Fact added: %s", in.Fact),
+					Success: true,
+				}, nil
+			}),
+		).
+		OnText(func(chunk string) {
 			if inReasoning {
 				fmt.Print(ansiReset)
 				inReasoning = false
 			}
-			if hadTokenOutput {
-				fmt.Println()
+			fmt.Print(chunk)
+			hadTokenOutput = true
+			if logHandler != nil {
+				logHandler.MarkTokenOutput()
 			}
-			if verbose {
-				printVerboseInfo(startInfo, event.Usage)
+		}).
+		OnReasoning(func(chunk string) {
+			if !inReasoning {
+				fmt.Print(ansiDim)
+				inReasoning = true
 			}
-		case llm.StreamEventError:
-			return event.Error
-		}
+			fmt.Print(chunk)
+		}).
+		OnToolDelta(func(d *llm.Delta) {
+			if inReasoning {
+				fmt.Print(ansiReset)
+				inReasoning = false
+			}
+			if !seenTools[d.ToolID] {
+				seenTools[d.ToolID] = true
+				if hadTokenOutput {
+					fmt.Println()
+				}
+				fmt.Printf("[tool:%s id:%s] ", d.ToolName, d.ToolID)
+			}
+			fmt.Print(d.ToolArgs)
+			hadTokenOutput = true
+			if logHandler != nil {
+				logHandler.MarkTokenOutput()
+			}
+		})
+
+	if root.LogEvents {
+		proc.OnStart(func(s *llm.StreamStart) {
+			logStreamEvent(llm.StreamEvent{Type: llm.StreamEventStart, Start: s})
+		})
+	}
+
+	result := <-proc.Result()
+
+	if inReasoning {
+		fmt.Print(ansiReset)
+	}
+	if hadTokenOutput {
+		fmt.Println()
+	}
+
+	if result.Error() != nil {
+		return result.Error()
+	}
+
+	if verbose {
+		printVerboseInfo(result)
 	}
 
 	return nil
 }
 
 // printVerboseInfo prints multi-line verbose metadata with right-aligned labels.
-func printVerboseInfo(start *llm.StreamStart, usage *llm.Usage) {
+func printVerboseInfo(result *llm.StreamResult) {
 	type field struct {
 		label string
 		value string
 	}
 	var fields []field
+
+	start := result.Start
+	usage := result.Usage
 
 	// Request ID (from the upstream API)
 	if start != nil && start.RequestID != "" {
@@ -170,6 +186,40 @@ func printVerboseInfo(start *llm.StreamStart, usage *llm.Usage) {
 	// API model (what the provider returned)
 	if start != nil && start.Model != "" {
 		fields = append(fields, field{"api_model", start.Model})
+	}
+
+	// Stop reason
+	if result.StopReason != "" {
+		fields = append(fields, field{"stop_reason", string(result.StopReason)})
+	}
+
+	// Reasoning summary (character count — full text already streamed live)
+	if result.Reasoning != "" {
+		fields = append(fields, field{"reasoning", fmt.Sprintf("%d chars", len(result.Reasoning))})
+	}
+
+	// Tool calls
+	if len(result.ToolCalls) > 0 {
+		for i, tc := range result.ToolCalls {
+			argsJSON, _ := json.Marshal(tc.Arguments)
+			label := fmt.Sprintf("tool[%d]", i)
+			fields = append(fields, field{label, fmt.Sprintf("%s(%s) id:%s", tc.Name, argsJSON, tc.ID)})
+		}
+	}
+
+	// Tool results
+	if len(result.ToolResults) > 0 {
+		for i, tr := range result.ToolResults {
+			label := fmt.Sprintf("result[%d]", i)
+			value := tr.Output
+			if tr.IsError {
+				value = "(error) " + value
+			}
+			if len(value) > 120 {
+				value = value[:120] + "…"
+			}
+			fields = append(fields, field{label, value})
+		}
 	}
 
 	// Token usage
@@ -219,6 +269,20 @@ func printVerboseInfo(start *llm.StreamStart, usage *llm.Usage) {
 	fmt.Println()
 	for _, f := range fields {
 		fmt.Printf("%*s: %s\n", maxWidth, f.label, f.value)
+	}
+
+	// Next messages (what would be appended to the conversation history)
+	if next := result.Next(); len(next) > 0 {
+		fmt.Println()
+		fmt.Println("next messages:")
+		for _, msg := range next {
+			b, err := json.MarshalIndent(msg, "  ", "  ")
+			if err != nil {
+				fmt.Printf("  (marshal error: %v)\n", err)
+				continue
+			}
+			fmt.Printf("  %s\n", b)
+		}
 	}
 }
 
