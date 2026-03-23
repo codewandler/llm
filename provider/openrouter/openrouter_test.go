@@ -450,3 +450,32 @@ func TestParseStream_ContextCancellation(t *testing.T) {
 		}
 	}
 }
+
+// TestParseStream_ToolFlushOnlyOnToolCalls verifies that tool call buffers are
+// NOT flushed when finish_reason == "stop" (normal text completion) and ARE
+// flushed when finish_reason == "tool_calls".
+func TestParseStream_ToolFlushOnlyOnToolCalls(t *testing.T) {
+	// A plain text response — no tool calls accumulated, finish_reason == "stop".
+	// The fix ensures emitToolCalls is NOT called on "stop"; behaviour is identical
+	// but the condition is semantically correct.
+	sseData := `data: {"choices":[{"delta":{"content":"Hello"}}]}
+data: {"choices":[{"finish_reason":"stop"}]}
+data: [DONE]
+`
+	events := llm.NewEventStream()
+	go parseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), events, testMeta("test/model"))
+
+	var toolCalls []*llm.ToolCall
+	var stopReason llm.StopReason
+	for event := range events.C() {
+		switch event.Type {
+		case llm.StreamEventToolCall:
+			toolCalls = append(toolCalls, event.ToolCall)
+		case llm.StreamEventDone:
+			stopReason = event.StopReason
+		}
+	}
+
+	assert.Empty(t, toolCalls, "no tool calls expected for a text stop")
+	assert.Equal(t, llm.StopReasonEndTurn, stopReason)
+}

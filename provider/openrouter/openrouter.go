@@ -496,7 +496,7 @@ func parseStream(ctx context.Context, body io.ReadCloser, events *llm.EventStrea
 		// Emit tool calls on finish, but keep reading for usage data.
 		if choice.FinishReason != nil {
 			stopReason = mapFinishReason(*choice.FinishReason)
-			if *choice.FinishReason == "tool_calls" || *choice.FinishReason == "stop" {
+			if *choice.FinishReason == "tool_calls" {
 				emitToolCalls(activeTools, events)
 			}
 		}

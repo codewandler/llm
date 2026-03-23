@@ -418,7 +418,8 @@ type streamChunk struct {
 			} `json:"function"`
 		} `json:"tool_calls,omitempty"`
 	} `json:"message"`
-	Done bool `json:"done"`
+	Done       bool   `json:"done"`
+	DoneReason string `json:"done_reason,omitempty"`
 }
 
 func parseStream(ctx context.Context, body io.ReadCloser, events *llm.EventStream, meta streamMeta) {
@@ -476,11 +477,22 @@ func parseStream(ctx context.Context, body io.ReadCloser, events *llm.EventStrea
 
 		// Handle done
 		if chunk.Done {
-			// Ollama does not report a stop reason. Infer from whether tool
-			// calls were present in the response.
+			// Map done_reason when provided; fall back to inference from
+			// whether tool calls were present (for older Ollama versions).
 			stopReason := llm.StopReasonEndTurn
-			if toolCallID > 0 {
-				stopReason = llm.StopReasonToolUse
+			switch chunk.DoneReason {
+			case "length":
+				stopReason = llm.StopReasonMaxTokens
+			case "stop":
+				// explicit stop — check for tool use
+				if toolCallID > 0 {
+					stopReason = llm.StopReasonToolUse
+				}
+			default:
+				// DoneReason absent or unknown — infer from tool calls
+				if toolCallID > 0 {
+					stopReason = llm.StopReasonToolUse
+				}
 			}
 			events.Done(stopReason, &usage)
 			return

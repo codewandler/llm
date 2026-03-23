@@ -296,8 +296,12 @@ type respOutputItemDone struct {
 
 type respResponseCompleted struct {
 	Response struct {
-		ID    string `json:"id"`
-		Model string `json:"model"`
+		ID     string `json:"id"`
+		Model  string `json:"model"`
+		Status string `json:"status"` // "completed", "incomplete", "failed"
+		IncompleteDetails *struct {
+			Reason string `json:"reason"` // "max_output_tokens", "content_filter"
+		} `json:"incomplete_details,omitempty"`
 		Usage *struct {
 			InputTokens        int `json:"input_tokens"`
 			OutputTokens       int `json:"output_tokens"`
@@ -507,11 +511,18 @@ func respHandleEvent(
 			calculateCost(meta.requestedModel, usage)
 		}
 
-		// The Responses API does not include a stop_reason in the
-		// response.completed event. Infer from whether tool calls were
-		// emitted during the stream.
+		// Derive stop reason. For incomplete responses the API reports
+		// status == "incomplete" with an incomplete_details.reason field.
+		// Fall back to inference from tool call presence otherwise.
 		stopReason := llm.StopReasonEndTurn
-		if *hadToolCalls {
+		if ev.Response.Status == "incomplete" && ev.Response.IncompleteDetails != nil {
+			switch ev.Response.IncompleteDetails.Reason {
+			case "max_output_tokens":
+				stopReason = llm.StopReasonMaxTokens
+			case "content_filter":
+				stopReason = llm.StopReasonContentFilter
+			}
+		} else if *hadToolCalls {
 			stopReason = llm.StopReasonToolUse
 		}
 		events.Done(stopReason, usage)

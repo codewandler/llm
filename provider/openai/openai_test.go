@@ -1458,3 +1458,41 @@ func TestIsCodexModel(t *testing.T) {
 		})
 	}
 }
+
+func TestRespParseStream_StopReasonMaxTokens(t *testing.T) {
+	sseData := `event: response.created
+data: {"response":{"id":"resp_123","model":"gpt-5.1-codex"}}
+event: response.output_text.delta
+data: {"output_index":0,"delta":"Hello"}
+event: response.completed
+data: {"response":{"id":"resp_123","model":"gpt-5.1-codex","status":"incomplete","incomplete_details":{"reason":"max_output_tokens"},"usage":{"input_tokens":10,"output_tokens":5}}}
+`
+	events := llm.NewEventStream()
+	go respParseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), events, testMeta("gpt-5.1-codex"))
+
+	var stopReason llm.StopReason
+	for event := range events.C() {
+		if event.Type == llm.StreamEventDone {
+			stopReason = event.StopReason
+		}
+	}
+	assert.Equal(t, llm.StopReasonMaxTokens, stopReason)
+}
+
+func TestRespParseStream_StopReasonContentFilter(t *testing.T) {
+	sseData := `event: response.created
+data: {"response":{"id":"resp_456","model":"gpt-5.1-codex"}}
+event: response.completed
+data: {"response":{"id":"resp_456","model":"gpt-5.1-codex","status":"incomplete","incomplete_details":{"reason":"content_filter"},"usage":{"input_tokens":10,"output_tokens":0}}}
+`
+	events := llm.NewEventStream()
+	go respParseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), events, testMeta("gpt-5.1-codex"))
+
+	var stopReason llm.StopReason
+	for event := range events.C() {
+		if event.Type == llm.StreamEventDone {
+			stopReason = event.StopReason
+		}
+	}
+	assert.Equal(t, llm.StopReasonContentFilter, stopReason)
+}
