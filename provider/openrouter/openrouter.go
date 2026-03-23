@@ -125,7 +125,7 @@ func (p *Provider) FetchModels(ctx context.Context) ([]llm.Model, error) {
 	return models, nil
 }
 
-func (p *Provider) CreateStream(ctx context.Context, opts llm.StreamRequest) (<-chan llm.StreamEvent, error) {
+func (p *Provider) CreateStream(ctx context.Context, opts llm.Request) (<-chan llm.StreamEvent, error) {
 	if err := opts.Validate(); err != nil {
 		return nil, llm.NewErrBuildRequest(llm.ProviderNameOpenRouter, err)
 	}
@@ -181,9 +181,18 @@ type request struct {
 	Tools            []toolPayload    `json:"tools,omitempty"`
 	ToolChoice       any              `json:"tool_choice,omitempty"`
 	ReasoningEffort  string           `json:"reasoning_effort,omitempty"`
+	MaxTokens        int              `json:"max_tokens,omitempty"`
+	Temperature      float64          `json:"temperature,omitempty"`
+	TopP             float64          `json:"top_p,omitempty"`
+	TopK             int              `json:"top_k,omitempty"`
+	ResponseFormat   *respFormat      `json:"response_format,omitempty"`
 	Stream           bool             `json:"stream"`
 	StreamOptions    *streamOptions   `json:"stream_options,omitempty"`
 	IncludeReasoning bool             `json:"include_reasoning,omitempty"`
+}
+
+type respFormat struct {
+	Type string `json:"type"`
 }
 
 type streamOptions struct {
@@ -219,12 +228,29 @@ type functionPayload struct {
 	Parameters  map[string]any `json:"parameters"`
 }
 
-func buildRequest(opts llm.StreamRequest) ([]byte, error) {
+func buildRequest(opts llm.Request) ([]byte, error) {
 	r := request{
 		Model:            opts.Model,
 		Stream:           true,
 		StreamOptions:    &streamOptions{IncludeUsage: true},
 		IncludeReasoning: true,
+	}
+
+	// Generation parameters
+	if opts.MaxTokens > 0 {
+		r.MaxTokens = opts.MaxTokens
+	}
+	if opts.Temperature > 0 {
+		r.Temperature = opts.Temperature
+	}
+	if opts.TopP > 0 {
+		r.TopP = opts.TopP
+	}
+	if opts.TopK > 0 {
+		r.TopK = opts.TopK
+	}
+	if opts.OutputFormat == llm.OutputFormatJSON {
+		r.ResponseFormat = &respFormat{Type: "json_object"}
 	}
 
 	for _, t := range opts.Tools {
