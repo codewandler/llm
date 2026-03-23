@@ -15,14 +15,14 @@ type mockProvider struct {
 	name       string
 	models     []llm.Model
 	returnErr  error
-	streamFunc func(ctx context.Context, opts llm.StreamRequest) (<-chan llm.StreamEvent, error)
+	streamFunc func(ctx context.Context, opts llm.Request) (<-chan llm.StreamEvent, error)
 }
 
 func (m *mockProvider) Name() string { return m.name }
 
 func (m *mockProvider) Models() []llm.Model { return m.models }
 
-func (m *mockProvider) CreateStream(ctx context.Context, opts llm.StreamRequest) (<-chan llm.StreamEvent, error) {
+func (m *mockProvider) CreateStream(ctx context.Context, opts llm.Request) (<-chan llm.StreamEvent, error) {
 	if m.returnErr != nil {
 		return nil, m.returnErr
 	}
@@ -265,7 +265,7 @@ func TestCreateStream(t *testing.T) {
 	t.Run("successful stream", func(t *testing.T) {
 		prov := &mockProvider{
 			name: "prov1",
-			streamFunc: func(ctx context.Context, opts llm.StreamRequest) (<-chan llm.StreamEvent, error) {
+			streamFunc: func(ctx context.Context, opts llm.Request) (<-chan llm.StreamEvent, error) {
 				ch := make(chan llm.StreamEvent, 1)
 				go func() {
 					ch <- llm.StreamEvent{Type: llm.StreamEventDelta, Delta: llm.TextDelta(nil, "hello")}
@@ -287,7 +287,7 @@ func TestCreateStream(t *testing.T) {
 		agg, err := New(cfg, factories)
 		require.NoError(t, err)
 
-		stream, err := agg.CreateStream(context.Background(), llm.StreamRequest{
+		stream, err := agg.CreateStream(context.Background(), llm.Request{
 			Model:    "gpt-4",
 			Messages: llm.Messages{&llm.UserMsg{Content: "hi"}},
 		})
@@ -312,7 +312,7 @@ func TestCreateStream(t *testing.T) {
 		}
 		prov2 := &mockProvider{
 			name: "prov2",
-			streamFunc: func(ctx context.Context, opts llm.StreamRequest) (<-chan llm.StreamEvent, error) {
+			streamFunc: func(ctx context.Context, opts llm.Request) (<-chan llm.StreamEvent, error) {
 				ch := make(chan llm.StreamEvent, 1)
 				go func() {
 					ch <- llm.StreamEvent{Type: llm.StreamEventDone}
@@ -343,7 +343,7 @@ func TestCreateStream(t *testing.T) {
 		agg, err := New(cfg, factories)
 		require.NoError(t, err)
 
-		stream, err := agg.CreateStream(context.Background(), llm.StreamRequest{
+		stream, err := agg.CreateStream(context.Background(), llm.Request{
 			Model:    "smart",
 			Messages: llm.Messages{&llm.UserMsg{Content: "hi"}},
 		})
@@ -382,7 +382,7 @@ func TestCreateStream(t *testing.T) {
 		agg, err := New(cfg, factories)
 		require.NoError(t, err)
 
-		_, err = agg.CreateStream(context.Background(), llm.StreamRequest{
+		_, err = agg.CreateStream(context.Background(), llm.Request{
 			Model:    "smart",
 			Messages: llm.Messages{&llm.UserMsg{Content: "hi"}},
 		})
@@ -422,7 +422,7 @@ func TestCreateStream(t *testing.T) {
 		agg, err := New(cfg, factories)
 		require.NoError(t, err)
 
-		_, err = agg.CreateStream(context.Background(), llm.StreamRequest{
+		_, err = agg.CreateStream(context.Background(), llm.Request{
 			Model:    "smart",
 			Messages: llm.Messages{&llm.UserMsg{Content: "hi"}},
 		})
@@ -446,7 +446,7 @@ func TestCreateStream(t *testing.T) {
 		agg, err := New(cfg, factories)
 		require.NoError(t, err)
 
-		_, err = agg.CreateStream(context.Background(), llm.StreamRequest{
+		_, err = agg.CreateStream(context.Background(), llm.Request{
 			Model:    "unknown",
 			Messages: llm.Messages{&llm.UserMsg{Content: "hi"}},
 		})

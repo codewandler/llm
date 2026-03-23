@@ -53,7 +53,7 @@ func testTokenCounterDrift(t *testing.T, provider llm.Provider, model string, ms
 	require.NotNil(t, est)
 
 	// Step 2 — actual from API
-	stream, err := provider.CreateStream(ctx, llm.StreamRequest{
+	stream, err := provider.CreateStream(ctx, llm.Request{
 		Model:    model,
 		Messages: msgs,
 		Tools:    tools,

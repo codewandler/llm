@@ -18,14 +18,14 @@ func TestProviderBasicStreaming(t *testing.T) {
 
 	tests := []struct {
 		name          string
-		opts          llm.StreamRequest
+		opts          llm.Request
 		wantToolCall  bool
 		wantTextDelta bool
 		wantDone      bool
 	}{
 		{
 			name: "first call returns tool call",
-			opts: llm.StreamRequest{
+			opts: llm.Request{
 				Model: "fake-model",
 				Messages: llm.Messages{
 					&llm.UserMsg{Content: "test message"},
@@ -37,7 +37,7 @@ func TestProviderBasicStreaming(t *testing.T) {
 		},
 		{
 			name: "second call returns text",
-			opts: llm.StreamRequest{
+			opts: llm.Request{
 				Model: "fake-model",
 				Messages: llm.Messages{
 					&llm.UserMsg{Content: "another message"},
@@ -97,7 +97,7 @@ func TestProviderContextCancellation(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()
 
-	stream, err := p.CreateStream(ctx, llm.StreamRequest{
+	stream, err := p.CreateStream(ctx, llm.Request{
 		Model:    "fake-model",
 		Messages: llm.Messages{&llm.UserMsg{Content: "test"}},
 	})
@@ -119,7 +119,7 @@ func TestProviderToolCallStructure(t *testing.T) {
 	ctx := context.Background()
 	p := NewProvider()
 
-	stream, err := p.CreateStream(ctx, llm.StreamRequest{
+	stream, err := p.CreateStream(ctx, llm.Request{
 		Model: "fake-model",
 		Messages: llm.Messages{
 			&llm.UserMsg{Content: "test"},
@@ -169,7 +169,7 @@ func TestProviderWithTools(t *testing.T) {
 		},
 	}
 
-	stream, err := p.CreateStream(ctx, llm.StreamRequest{
+	stream, err := p.CreateStream(ctx, llm.Request{
 		Model:    "fake-model",
 		Messages: llm.Messages{&llm.UserMsg{Content: "What's the weather?"}},
 		Tools:    tools,
@@ -200,7 +200,7 @@ func TestProviderMultipleMessages(t *testing.T) {
 		&llm.UserMsg{Content: "How are you?"},
 	}
 
-	stream, err := p.CreateStream(ctx, llm.StreamRequest{
+	stream, err := p.CreateStream(ctx, llm.Request{
 		Model:    "fake-model",
 		Messages: messages,
 	})
@@ -237,7 +237,7 @@ func BenchmarkProviderStreaming(b *testing.B) {
 	ctx := context.Background()
 	p := NewProvider()
 
-	opts := llm.StreamRequest{
+	opts := llm.Request{
 		Model:    "fake-model",
 		Messages: llm.Messages{&llm.UserMsg{Content: "benchmark test"}},
 	}
@@ -260,7 +260,7 @@ func BenchmarkStreamEventProcessing(b *testing.B) {
 	ctx := context.Background()
 	p := NewProvider()
 
-	opts := llm.StreamRequest{
+	opts := llm.Request{
 		Model:    "fake-model",
 		Messages: llm.Messages{&llm.UserMsg{Content: "benchmark"}},
 	}
@@ -289,7 +289,7 @@ func Example() {
 	ctx := context.Background()
 	p := NewProvider()
 
-	stream, err := p.CreateStream(ctx, llm.StreamRequest{
+	stream, err := p.CreateStream(ctx, llm.Request{
 		Model: "fake-model",
 		Messages: llm.Messages{
 			&llm.UserMsg{Content: "Hello!"},

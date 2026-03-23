@@ -133,7 +133,7 @@ func (p *Provider) FetchModels(ctx context.Context) ([]llm.Model, error) {
 // Reasoning effort is validated and mapped before the request is forwarded.
 // Unknown models (not in the registry) default to Chat Completions so that
 // newly released non-Codex models work without a registry update.
-func (p *Provider) CreateStream(ctx context.Context, opts llm.StreamRequest) (<-chan llm.StreamEvent, error) {
+func (p *Provider) CreateStream(ctx context.Context, opts llm.Request) (<-chan llm.StreamEvent, error) {
 	enriched, err := enrichOpts(opts)
 	if err != nil {
 		return nil, err
@@ -148,7 +148,7 @@ func (p *Provider) CreateStream(ctx context.Context, opts llm.StreamRequest) (<-
 // enrichOpts resolves model-specific fields before dispatch.
 // Currently handles reasoning effort mapping only; cache retention is
 // determined at request-build time by wantsExtendedCache.
-func enrichOpts(opts llm.StreamRequest) (llm.StreamRequest, error) {
+func enrichOpts(opts llm.Request) (llm.Request, error) {
 	if opts.ReasoningEffort != "" {
 		mapped, err := mapReasoningEffort(opts.Model, opts.ReasoningEffort)
 		if err != nil {
@@ -162,7 +162,7 @@ func enrichOpts(opts llm.StreamRequest) (llm.StreamRequest, error) {
 // wantsExtendedCache reports whether the request should use 24h prompt cache
 // retention. An explicit CacheHint with TTL "1h" takes priority; otherwise
 // the model registry is consulted for automatic extended-cache support.
-func wantsExtendedCache(opts llm.StreamRequest) bool {
+func wantsExtendedCache(opts llm.Request) bool {
 	if opts.CacheHint != nil && opts.CacheHint.Enabled && opts.CacheHint.TTL == "1h" {
 		return true
 	}

@@ -8,6 +8,7 @@ import (
 	"github.com/codewandler/llm/provider/anthropic"
 	"github.com/codewandler/llm/provider/anthropic/claude"
 	"github.com/codewandler/llm/provider/bedrock"
+	"github.com/codewandler/llm/provider/minimax"
 	"github.com/codewandler/llm/provider/openai"
 	"github.com/codewandler/llm/provider/openrouter"
 )
@@ -103,6 +104,19 @@ func detectProviders(httpClient *http.Client, llmOpts []llm.Option) []providerEn
 			},
 			modelAliases: nil,
 			hasAliases:   false,
+		})
+	}
+
+	// 6. MiniMax
+	if os.Getenv(EnvMiniMaxKey) != "" {
+		providers = append(providers, providerEntry{
+			name:         ProviderMiniMax,
+			providerType: ProviderMiniMax,
+			factory: func(opts ...llm.Option) llm.Provider {
+				return minimax.New(minimax.WithLLMOpts(opts...))
+			},
+			modelAliases: minimax.ModelAliases,
+			hasAliases:   true,
 		})
 	}
 

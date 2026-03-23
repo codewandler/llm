@@ -14,7 +14,7 @@ type Provider struct {
 
 func (f *Provider) Name() string { return "fake" }
 
-func (f *Provider) CreateStream(_ context.Context, opts llm.StreamRequest) (<-chan llm.StreamEvent, error) {
+func (f *Provider) CreateStream(_ context.Context, opts llm.Request) (<-chan llm.StreamEvent, error) {
 	stream := llm.NewEventStream()
 	go func() {
 		defer stream.Close()

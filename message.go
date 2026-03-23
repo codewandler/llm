@@ -221,7 +221,7 @@ func (ToolChoiceTool) toolChoice() {}
 // It is a provider-neutral instruction: Anthropic and Bedrock translate it to
 // explicit cache breakpoints on content blocks; OpenAI caching is always
 // automatic and ignores per-message hints, but honours TTL on
-// StreamRequest.CacheHint.
+// Request.CacheHint.
 type CacheHint struct {
 	// Enabled marks this content as a cache breakpoint candidate.
 	// For Anthropic/Bedrock: emits cache_control / cachePoint at this position.

@@ -1,10 +1,11 @@
 package auto
 
 import (
-	"github.com/codewandler/llm/provider/router"
 	"github.com/codewandler/llm/provider/anthropic"
 	"github.com/codewandler/llm/provider/bedrock"
+	"github.com/codewandler/llm/provider/minimax"
 	"github.com/codewandler/llm/provider/openai"
+	"github.com/codewandler/llm/provider/router"
 )
 
 // aliasModels defines which model to use for each global alias per provider.
@@ -39,6 +40,11 @@ var providerAliasModels = map[string]aliasModels{
 		powerful: openai.ModelO3,
 		codex:    openai.ModelGPT53Codex,
 	},
+	ProviderMiniMax: {
+		fast:     minimax.ModelM27,
+		normal:   minimax.ModelM27,
+		powerful: minimax.ModelM27,
+	},
 }
 
 // buildAliasTargets creates alias targets for a provider instance.
@@ -69,6 +75,8 @@ func modelAliasesForProvider(providerType string) map[string]string {
 		return openai.ModelAliases
 	case ProviderBedrock:
 		return bedrock.ModelAliases
+	case ProviderMiniMax:
+		return minimax.ModelAliases
 	default:
 		return nil
 	}

@@ -99,7 +99,7 @@ func runInfer(ctx context.Context, userMsg, model, system, reasoning string, ver
 		}
 	}
 
-	stream, err := provider.CreateStream(ctx, llm.StreamRequest{
+	stream, err := provider.CreateStream(ctx, llm.Request{
 		Model:           model,
 		Messages:        msgs,
 		ReasoningEffort: llm.ReasoningEffort(reasoning),

@@ -30,7 +30,7 @@ func TestBuildRequest_ToolDefinitions(t *testing.T) {
 		Location string `json:"location" jsonschema:"description=City name,required"`
 	}
 
-	opts := llm.StreamRequest{
+	opts := llm.Request{
 		Model: "test/model",
 		Messages: llm.Messages{
 			&llm.UserMsg{Content: "test"},
@@ -63,7 +63,7 @@ func TestBuildRequest_ToolDefinitions(t *testing.T) {
 }
 
 func TestBuildRequest_AssistantWithToolCalls(t *testing.T) {
-	opts := llm.StreamRequest{
+	opts := llm.Request{
 		Model: "test/model",
 		Messages: llm.Messages{
 			&llm.UserMsg{Content: "What's the weather?"},
@@ -108,7 +108,7 @@ func TestBuildRequest_AssistantWithToolCalls(t *testing.T) {
 }
 
 func TestBuildRequest_ToolResults(t *testing.T) {
-	opts := llm.StreamRequest{
+	opts := llm.Request{
 		Model: "test/model",
 		Messages: llm.Messages{
 			&llm.UserMsg{Content: "What's the weather?"},
@@ -141,7 +141,7 @@ func TestBuildRequest_ToolResults(t *testing.T) {
 }
 
 func TestBuildRequest_ToolResultEmptyContent(t *testing.T) {
-	opts := llm.StreamRequest{
+	opts := llm.Request{
 		Model: "test/model",
 		Messages: llm.Messages{
 			&llm.UserMsg{Content: "test"},
@@ -172,7 +172,7 @@ func TestBuildRequest_ToolResultEmptyContent(t *testing.T) {
 }
 
 func TestBuildRequest_MultipleToolResults(t *testing.T) {
-	opts := llm.StreamRequest{
+	opts := llm.Request{
 		Model: "test/model",
 		Messages: llm.Messages{
 			&llm.UserMsg{Content: "test"},
@@ -208,7 +208,7 @@ func TestBuildRequest_MultipleToolResults(t *testing.T) {
 }
 
 func TestBuildRequest_FullConversationFlow(t *testing.T) {
-	opts := llm.StreamRequest{
+	opts := llm.Request{
 		Model: "test/model",
 		Messages: llm.Messages{
 			&llm.SystemMsg{Content: "You are a helpful assistant."},

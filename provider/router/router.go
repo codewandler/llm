@@ -294,7 +294,7 @@ func (p *Provider) Resolve(modelID string) (llm.Model, error) {
 
 // CreateStream creates a stream by routing to the appropriate provider.
 // It tries each target in order until one succeeds or all fail.
-func (p *Provider) CreateStream(ctx context.Context, opts llm.StreamRequest) (<-chan llm.StreamEvent, error) {
+func (p *Provider) CreateStream(ctx context.Context, opts llm.Request) (<-chan llm.StreamEvent, error) {
 	if err := opts.Validate(); err != nil {
 		return nil, llm.NewErrBuildRequest(llm.ProviderNameRouter, err)
 	}

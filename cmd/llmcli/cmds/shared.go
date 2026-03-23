@@ -7,8 +7,8 @@ import (
 
 	"github.com/codewandler/llm"
 	"github.com/codewandler/llm/cmd/llmcli/store"
-	"github.com/codewandler/llm/provider/router"
 	"github.com/codewandler/llm/provider/auto"
+	"github.com/codewandler/llm/provider/router"
 )
 
 // RootFlags holds flags defined on the root command that are shared across
@@ -67,6 +67,7 @@ func createProvider(ctx context.Context, httpClient *http.Client, llmOpts ...llm
 	autoOpts := []auto.Option{
 		auto.WithName("llmcli"),
 		auto.WithClaude(tokenStore),
+		auto.WithGlobalAlias("minimax", "minimax/minimax:2.7"),
 	}
 
 	if httpClient != nil {

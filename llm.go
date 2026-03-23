@@ -3,7 +3,7 @@ package llm
 import "context"
 
 type Streamer interface {
-	CreateStream(ctx context.Context, opts StreamRequest) (<-chan StreamEvent, error)
+	CreateStream(ctx context.Context, opts Request) (<-chan StreamEvent, error)
 }
 
 // Provider is the interface each LLM backend must implement.

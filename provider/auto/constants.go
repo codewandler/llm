@@ -8,6 +8,7 @@ const (
 	ProviderOpenAI     = "openai"
 	ProviderOpenRouter = "openrouter"
 	ProviderAnthropic  = "anthropic"
+	ProviderMiniMax    = "minimax"
 )
 
 // Environment variable names.
@@ -16,6 +17,7 @@ const (
 	EnvOpenAIKeyAlt  = "OPENAI_KEY"
 	EnvOpenRouterKey = "OPENROUTER_API_KEY"
 	EnvAnthropicKey  = "ANTHROPIC_API_KEY"
+	EnvMiniMaxKey    = "MINIMAX_API_KEY"
 )
 
 // Global model aliases.

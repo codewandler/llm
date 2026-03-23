@@ -46,7 +46,7 @@ func TestBuildBedrockCachePoint_OneHourTTL(t *testing.T) {
 }
 
 func TestBuildRequest_CachePoint_SystemBlock(t *testing.T) {
-	opts := llm.StreamRequest{
+	opts := llm.Request{
 		Model: "anthropic.claude-sonnet-4-5-20250929-v1:0",
 		Messages: llm.Messages{
 			&llm.SystemMsg{Content: "Big system", CacheHint: &llm.CacheHint{Enabled: true}},
@@ -66,7 +66,7 @@ func TestBuildRequest_CachePoint_SystemBlock(t *testing.T) {
 }
 
 func TestBuildRequest_CachePoint_UserMessage(t *testing.T) {
-	opts := llm.StreamRequest{
+	opts := llm.Request{
 		Model: "anthropic.claude-sonnet-4-5-20250929-v1:0",
 		Messages: llm.Messages{
 			&llm.UserMsg{Content: "Hello", CacheHint: &llm.CacheHint{Enabled: true}},
@@ -88,7 +88,7 @@ func TestBuildRequest_CachePoint_UserMessage(t *testing.T) {
 
 func TestBuildRequest_CachePoint_TopLevel_AutoMode(t *testing.T) {
 	// Top-level CacheHint with no per-message hints: cachePoint appended to last message.
-	opts := llm.StreamRequest{
+	opts := llm.Request{
 		Model: "anthropic.claude-sonnet-4-5-20250929-v1:0",
 		Messages: llm.Messages{
 			&llm.UserMsg{Content: "Hello"},
@@ -111,7 +111,7 @@ func TestBuildRequest_CachePoint_TopLevel_AutoMode(t *testing.T) {
 
 func TestBuildRequest_CachePoint_TopLevelIgnoredWhenPerMessageHintsExist(t *testing.T) {
 	// If per-message hints exist, top-level hint is ignored.
-	opts := llm.StreamRequest{
+	opts := llm.Request{
 		Model: "anthropic.claude-sonnet-4-5-20250929-v1:0",
 		Messages: llm.Messages{
 			&llm.UserMsg{Content: "Hello", CacheHint: &llm.CacheHint{Enabled: true}},
@@ -130,7 +130,7 @@ func TestBuildRequest_CachePoint_TopLevelIgnoredWhenPerMessageHintsExist(t *test
 }
 
 func TestBuildRequest_NoCacheHint_NoExtraBlocks(t *testing.T) {
-	opts := llm.StreamRequest{
+	opts := llm.Request{
 		Model: "anthropic.claude-sonnet-4-5-20250929-v1:0",
 		Messages: llm.Messages{
 			&llm.UserMsg{Content: "Hello"},
@@ -150,7 +150,7 @@ func TestBuildRequest_NoCacheHint_NoExtraBlocks(t *testing.T) {
 
 func TestBuildRequest_CachePoint_NonClaudeModel_Ignored(t *testing.T) {
 	// cachePoints should NOT be injected for non-Claude models
-	opts := llm.StreamRequest{
+	opts := llm.Request{
 		Model: "amazon.nova-pro-v1:0",
 		Messages: llm.Messages{
 			&llm.UserMsg{Content: "Hello"},

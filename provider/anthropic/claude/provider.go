@@ -182,7 +182,7 @@ func (p *Provider) Models() []llm.Model {
 }
 
 // CreateStream implements llm.Provider.
-func (p *Provider) CreateStream(ctx context.Context, opts llm.StreamRequest) (<-chan llm.StreamEvent, error) {
+func (p *Provider) CreateStream(ctx context.Context, opts llm.Request) (<-chan llm.StreamEvent, error) {
 	startTime := time.Now()
 	requestedModel := opts.Model
 
@@ -256,7 +256,7 @@ func (p *Provider) newAPIRequest(ctx context.Context, accessToken string, body [
 	return req, nil
 }
 
-func (p *Provider) buildRequest(opts llm.StreamRequest) ([]byte, error) {
+func (p *Provider) buildRequest(opts llm.Request) ([]byte, error) {
 	// Prepend Claude-specific system blocks
 	userBlocks := anthropic.CollectSystemBlocks(opts.Messages)
 	systemBlocks := anthropic.PrependSystemBlocks(

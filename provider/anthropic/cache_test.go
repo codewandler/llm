@@ -86,7 +86,7 @@ func TestBuildRequest_CacheHint_TopLevel(t *testing.T) {
 	opts := RequestOptions{
 		Model:     "claude-sonnet-4-6",
 		MaxTokens: 100,
-		StreamOptions: llm.StreamRequest{
+		StreamOptions: llm.Request{
 			Messages: llm.Messages{
 				&llm.UserMsg{Content: "Hello"},
 			},
@@ -110,7 +110,7 @@ func TestBuildRequest_CacheHint_NoTopLevelWhenPerMessageHintsExist(t *testing.T)
 	opts := RequestOptions{
 		Model:     "claude-sonnet-4-6",
 		MaxTokens: 100,
-		StreamOptions: llm.StreamRequest{
+		StreamOptions: llm.Request{
 			Messages: llm.Messages{
 				&llm.UserMsg{Content: "Hello", CacheHint: &llm.CacheHint{Enabled: true}},
 			},
@@ -133,7 +133,7 @@ func TestBuildRequest_CacheHint_PerMessageUser(t *testing.T) {
 	opts := RequestOptions{
 		Model:     "claude-sonnet-4-6",
 		MaxTokens: 100,
-		StreamOptions: llm.StreamRequest{
+		StreamOptions: llm.Request{
 			Messages: llm.Messages{
 				&llm.UserMsg{Content: "Hello", CacheHint: &llm.CacheHint{Enabled: true}},
 			},
@@ -162,7 +162,7 @@ func TestBuildRequest_CacheHint_SystemBlock(t *testing.T) {
 	opts := RequestOptions{
 		Model:     "claude-sonnet-4-6",
 		MaxTokens: 100,
-		StreamOptions: llm.StreamRequest{
+		StreamOptions: llm.Request{
 			Messages: llm.Messages{
 				&llm.SystemMsg{Content: "Big prompt", CacheHint: &llm.CacheHint{Enabled: true}},
 				&llm.UserMsg{Content: "Hello"},
@@ -189,7 +189,7 @@ func TestBuildRequest_CacheHint_ExtendedTTL(t *testing.T) {
 	opts := RequestOptions{
 		Model:     "claude-sonnet-4-6",
 		MaxTokens: 100,
-		StreamOptions: llm.StreamRequest{
+		StreamOptions: llm.Request{
 			Messages: llm.Messages{
 				&llm.UserMsg{Content: "Hello"},
 			},
@@ -212,7 +212,7 @@ func TestBuildRequest_NoCacheHint_NoTopLevelField(t *testing.T) {
 	opts := RequestOptions{
 		Model:     "claude-sonnet-4-6",
 		MaxTokens: 100,
-		StreamOptions: llm.StreamRequest{
+		StreamOptions: llm.Request{
 			Messages: llm.Messages{
 				&llm.UserMsg{Content: "Hello"},
 			},

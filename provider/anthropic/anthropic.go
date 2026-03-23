@@ -50,7 +50,7 @@ func (p *Provider) Models() []llm.Model {
 	}
 }
 
-func (p *Provider) CreateStream(ctx context.Context, opts llm.StreamRequest) (<-chan llm.StreamEvent, error) {
+func (p *Provider) CreateStream(ctx context.Context, opts llm.Request) (<-chan llm.StreamEvent, error) {
 	startTime := time.Now()
 
 	if err := opts.Validate(); err != nil {
