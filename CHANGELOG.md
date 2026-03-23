@@ -1,8 +1,62 @@
 # Changelog
 
-## v0.24.2 (unreleased)
+## v0.25.0 (unreleased)
+
+### New Features
+
+#### MiniMax — new provider
+
+Added `provider/minimax`, a new LLM backend using MiniMax's Anthropic-compatible
+API endpoint (`https://api.minimax.io/anthropic`). The provider delegates stream
+parsing to the existing Anthropic parser, so all Anthropic features (tools,
+reasoning, caching) are available out of the box. Full generation parameter
+support: MaxTokens, TopP, TopK, OutputFormat.
+
+Available models include the MiniMax-M2 family with standard and highspeed
+variants.
+
+#### StreamRequest — generation parameters across all providers
+
+Added new fields to `llm.StreamRequest` for controlling model output, now
+wired up in all providers:
+
+- **MaxTokens** (`int`) — limits the maximum number of tokens in the response.
+  When 0, the provider's default is used.
+- **Temperature** (`float64`) — controls randomness in sampling (0.0–2.0).
+- **TopP** (`float64`) — nucleus sampling threshold (0.0–1.0).
+- **TopK** (`int`) — restricts token selection to the K most likely tokens.
+- **OutputFormat** (`OutputFormat`) — `OutputFormatText` (default) or
+  `OutputFormatJSON` to constrain the model to produce valid JSON.
+
+**Provider support matrix:**
+
+| Parameter | OpenAI | Ollama | Anthropic | MiniMax | Bedrock | OpenRouter |
+|-----------|--------|--------|-----------|---------|---------|------------|
+| MaxTokens | ✅ | ✅ | ✅ (default 16384) | ✅ | ✅ | ✅ |
+| Temperature | ✅ | ✅ | ❌ | ❌ | ✅ | ✅ |
+| TopP | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| TopK | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| OutputFormat | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| ReasoningEffort | ✅ | ❌ | ✅ | ✅ | ✅ | ✅ |
 
 ### Bug Fixes
+
+#### StopReason correctness across providers
+
+Fixed `StopReasonMaxTokens` and `StopReasonContentFilter` being silently
+swallowed in two providers:
+
+- **OpenAI Responses API** — `response.completed` events now parse
+  `status`/`incomplete_details.reason` to emit `StopReasonMaxTokens` or
+  `StopReasonContentFilter`. Previously both cases fell back to
+  `StopReasonEndTurn`.
+- **Ollama** — the `done_reason` field (`"length"`, `"stop"`) is now parsed
+  from the final stream chunk. `"length"` maps to `StopReasonMaxTokens`.
+  Falls back to tool-call inference for older Ollama versions that omit the
+  field.
+- **OpenRouter** — tool call accumulations are now flushed only on
+  `finish_reason == "tool_calls"`, not on `"stop"`, aligning with the OpenAI
+  completions parser.
 
 #### Stop reason propagated through stream pipeline
 
@@ -10,7 +64,20 @@
 Previously the stop reason was parsed but not forwarded through the router's
 pipe, so consumers always saw an empty `StopReason`.
 
+#### MiniMax — correct cache cost calculation
+
+`FillCost` now calculates `InputCost` using only non-cache input tokens
+(`InputTokens - CacheReadTokens - CacheWriteTokens`), avoiding double-counting
+cache tokens at the full input price. Cache reads and writes are now correctly
+charged at their respective `CacheReadPrice` and `CacheWritePrice` rates.
+
 ### Chores
+
+#### Core refactor — `request.go` extraction
+
+Moved generation parameter types (`OutputFormat`, `ReasoningEffort`, etc.) and
+`StreamRequest` field definitions into a dedicated `request.go` file, reducing
+the size of `stream.go` and making the request API easier to navigate.
 
 #### `llmcli infer` uses `ToolChoiceRequired` by default
 
