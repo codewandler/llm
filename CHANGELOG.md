@@ -3,7 +3,7 @@
 ## v0.23.0 (unreleased)
 
 This is a large release with significant API changes. Several types and packages
-were renamed or restructured. See the **Migration** section below.
+were renamed or restructured. See the **Breaking Changes** and **Migration** sections.
 
 ---
 
@@ -12,89 +12,101 @@ were renamed or restructured. See the **Migration** section below.
 #### `StreamResponse` — client-side stream processor with typed tool dispatch
 
 `Process(ctx, ch)` returns a `*StreamResponse` that accumulates a stream and
-dispatches tool calls to registered handlers. Tool results are collected into
-`StreamResult` with correct ordering even when tools run concurrently.
+dispatches tool calls to registered handlers. Results are collected into
+`*StreamResult` delivered on a channel from `.Result()`.
 
 ```go
-result, err := llm.Process(ctx, ch).
+result := <-llm.Process(ctx, ch).
     HandleTool(llm.Handle(weatherSpec, func(ctx context.Context, in WeatherParams) (*WeatherResult, error) {
         return fetchWeather(in.Location)
     })).
     HandleTool(llm.NewToolHandler("ping", func(ctx context.Context, in PingParams) (*PingResult, error) {
         return &PingResult{OK: true}, nil
     })).
-    Await()
+    Result()
 ```
 
 - `ToolDispatchSync` (default) — executes handlers sequentially in emission order
-- `ToolDispatchAsync` — executes all handlers concurrently, collects results in order
+- `ToolDispatchAsync` — executes all handlers concurrently via `.DispatchAsync()`, collects results in order
 - `BoundToolSpec[In, Out]` — binds a `ToolSpec` to a handler function via `llm.Handle(spec, fn)`
-- `NewToolHandler[In, Out](name, fn)` — lightweight handler without a spec
-- `StreamResult` — final accumulated state: `Text`, `Reasoning`, `ToolCalls`, `ToolResults`, `Usage`, `StopReason`
+- `NewToolHandler[In, Out](name, fn)` — lightweight named handler without a spec
+- `StreamResult` — final accumulated state: `Text`, `Reasoning`, `ToolCalls`, `ToolResults`, `Usage`, `StopReason`, `Start`
+- Callback hooks: `OnStart(fn)`, `OnText(fn)`, `OnReasoning(fn)`, `OnToolDelta(fn)`
 
-#### Structured `Delta` type
+#### Structured `Delta` type replacing plain string deltas
 
-Token deltas are now a first-class structured type instead of a plain string.
+Token content is now carried in a `*Delta` struct instead of the plain `Delta string`
+and `Reasoning string` fields on `StreamEvent`.
 
 ```go
-// Before
-event.Content  // string
+// Reading text tokens:
+if ev.Type == llm.StreamEventDelta {
+    print(ev.Text())          // DeltaTypeText content
+    print(ev.ReasoningText()) // DeltaTypeReasoning content
+}
 
-// After
-event.Delta.Type       // DeltaTypeText | DeltaTypeReasoning | DeltaTypeTool
-event.Delta.Text       // text content
-event.Delta.Reasoning  // reasoning/thinking content
-event.Delta.Index      // *uint32 block index (provider-dependent)
-event.Text()           // convenience method: returns Delta.Text or ""
-event.ReasoningText()  // convenience method: returns Delta.Reasoning or ""
+// Or access the struct directly:
+ev.Delta.Type      // DeltaTypeText | DeltaTypeReasoning
+ev.Delta.Text
+ev.Delta.Reasoning
+ev.Delta.Index     // *uint32 block index, provider-dependent
 ```
 
-Helper constructors: `TextDelta(idx, text)`, `ReasoningDelta(idx, text)`, `ToolDelta(idx, id, name, argsFragment)`, `DeltaIndex(i)`.
+Helper constructors: `TextDelta(idx, text)`, `ReasoningDelta(idx, text)`,
+`ToolDelta(idx, id, name, argsFragment)`, `DeltaIndex(i)`.
 
-#### Reasoning / extended thinking support
+#### `StreamEventReasoning` removed — reasoning now carried by `StreamEventDelta`
 
-`DeltaTypeReasoning` deltas carry model reasoning tokens (Anthropic extended
-thinking, OpenAI o-series, Bedrock). Accumulated into `StreamResult.Reasoning`.
+The dedicated `StreamEventReasoning` event type is gone. Reasoning tokens are
+now `StreamEventDelta` events with `Delta.Type == DeltaTypeReasoning`.
 
-#### `EventStream` helper
+#### New event types: `StreamEventCreated` and `StreamEventRouted`
 
-All providers now create streams via `NewEventStream()` which:
-- Generates a unique `RequestID` (nanoid) for every stream
-- Stamps every event with `RequestID`, monotonic `Seq`, and `Timestamp`
-- Emits `StreamEventCreated` immediately on construction
-- Provides typed send helpers: `Start()`, `Delta()`, `Reasoning()`, `ToolCall()`, `Done()`, `Error()`, `Routed()`
+- `StreamEventCreated` — emitted immediately when `NewEventStream()` is called,
+  before any HTTP request is made.
+- `StreamEventRouted` — emitted by the router provider when a backend has been
+  selected. Carries `Routed{Provider, ModelRequested, ModelResolved, Errors}`.
 
-#### `StreamEventCreated` and `StreamEventRouted`
+#### Every event stamped with `RequestID`, `Seq`, and `Timestamp`
 
-Two new event types:
+`EventStream` generates a nanoid `RequestID` once per `CreateStream` call and
+stamps it on every emitted event. Events also carry a monotonic `Seq` counter
+and wall-clock `Timestamp`.
 
-- `StreamEventCreated` — emitted immediately when a stream is opened, before
-  any request is sent. Carries `RequestID` and `Timestamp`.
-- `StreamEventRouted` — emitted by the `router` provider when a request has
-  been dispatched to a backend. Carries `Routed{Provider, ModelRequested, ModelResolved, Errors}`.
+#### `StreamStart` fields simplified
+
+The `StreamStart` struct (carried by `StreamEventStart`) was simplified.
+`RequestedModel`, `ResolvedModel`, and `ProviderModel` are replaced by a single
+`Model` field (the model ID returned by the upstream API):
+
+| v0.22 field | v0.23 field |
+|---|---|
+| `RequestedModel` | removed |
+| `ResolvedModel` | removed |
+| `ProviderModel` | `Model` |
+| `RequestID` | `RequestID` (unchanged) |
+| `TimeToFirstToken` | `TimeToFirstToken` (unchanged) |
 
 #### Structured `ProviderError`
 
-Errors from all providers are now `*ProviderError` with a sentinel that works
-with `errors.Is`:
+`StreamEvent.Error` changed from `error` to `*ProviderError`. All providers now
+emit structured errors with a sentinel for `errors.Is` matching:
 
 ```go
-if errors.Is(err, llm.ErrAPIError) { ... }
-if errors.Is(err, llm.ErrContextCancelled) { ... }
+if errors.Is(ev.Error, llm.ErrAPIError) { ... }
+if errors.Is(ev.Error, llm.ErrContextCancelled) { ... }
 ```
 
-Sentinel constants: `ErrContextCancelled`, `ErrRequestFailed`, `ErrAPIError`,
+Sentinels: `ErrContextCancelled`, `ErrRequestFailed`, `ErrAPIError`,
 `ErrStreamRead`, `ErrStreamDecode`, `ErrProviderError`, `ErrMissingAPIKey`,
 `ErrBuildRequest`, `ErrUnknownModel`, `ErrNoProviders`, `ErrUnknown`.
 
-Constructor helpers: `NewErrAPIError`, `NewErrContextCancelled`, `NewErrProviderMsg`, etc.
-
-`StreamEvent.Error` is now `*ProviderError` instead of `error`.
+`ProviderError` fields: `Sentinel`, `Provider`, `Message`, `Cause`,
+`StatusCode` (API errors only), `Body` (API errors only).
 
 #### `llmtest` package
 
-New `github.com/codewandler/llm/llmtest` package for testing stream consumers,
-following the `net/http/httptest` convention:
+New `github.com/codewandler/llm/llmtest` package for testing stream consumers:
 
 ```go
 ch := llmtest.SendEvents(
@@ -108,58 +120,50 @@ Functions: `SendEvents`, `TextEvent`, `ReasoningEvent`, `ToolEvent`, `DoneEvent`
 
 #### `Messages` helpers
 
-Convenience constructors on the `Messages` type:
+New mutating convenience methods on `Messages`:
 
 ```go
-msgs := llm.Messages{}.
-    WithSystem("You are helpful.").
-    AppendUser("Hello").
-    AppendAssistant("Hi there")
+var msgs llm.Messages
+msgs.AddSystemMsg("You are helpful.")
+msgs.AddUserMsg("Hello")
+msgs.AddAssistantMsg("Hi there")
+msgs.AddToolCallResult(callID, output, false)
+msgs.Append(msg)
 ```
 
-#### Router provider (renamed from `aggregate`)
+#### `provider/auto` — zero-config multi-provider setup
 
-The `provider/aggregate` package is now `provider/router`. It provides
-failover routing across multiple backends and emits `StreamEventRouted` when
-a backend is selected.
+`auto.New(ctx, ...Option)` auto-detects configured providers from environment
+variables and returns a ready-to-use `llm.Provider`. Replaces the old
+`provider.NewDefaultRegistry()` pattern.
 
-#### Model aliases
+```go
+p, err := auto.New(ctx,
+    auto.WithBedrock(),
+    auto.WithOpenAI(),
+    auto.WithOpenRouter(),
+    auto.WithAnthropic(),
+    auto.WithClaudeLocal(),
+)
+```
 
-New model alias `codex` added alongside `fast`, `default`, and `powerful`.
+#### Model alias `codex` (OpenAI only)
 
-#### `CacheHint` on `StreamRequest`
-
-Top-level prompt caching hint. Behaviour is provider-specific:
-- Anthropic: auto cache-control mode
-- Bedrock: trailing `cachePoint` insertion
-- OpenAI: extended cache retention
+New global alias `codex` resolves to the OpenAI Codex model. Existing aliases
+`fast`, `default`, and `powerful` are unchanged.
 
 #### OpenAI fixes
 
-- Parallel tool calls from OpenAI and OpenRouter are now emitted in
-  LLM-production order (the order the model produced them), not insertion order.
-- `StreamEventStart` is now correctly emitted for empty responses (no text/tool
-  deltas) on the Responses API — it fires at `response.completed`.
+- Parallel tool calls are now emitted in LLM-production order (the order the
+  model produced them), not hash-map insertion order.
+- `StreamEventStart` is now correctly emitted for responses with no text or
+  tool deltas (fires at `response.completed` instead of never).
 
 ---
 
 ### Breaking Changes
 
-#### 1. Package `provider/aggregate` → `provider/router`
-
-```go
-// Before
-import "github.com/codewandler/llm/provider/aggregate"
-p := aggregate.New(...)
-
-// After
-import "github.com/codewandler/llm/provider/router"
-p := router.New(...)
-```
-
-#### 2. `StreamOptions` → `StreamRequest`
-
-The request type passed to `CreateStream` was renamed.
+#### 1. `StreamOptions` → `StreamRequest`
 
 ```go
 // Before
@@ -169,10 +173,37 @@ provider.CreateStream(ctx, llm.StreamOptions{Model: "...", Messages: msgs})
 provider.CreateStream(ctx, llm.StreamRequest{Model: "...", Messages: msgs})
 ```
 
-#### 3. `StreamEvent.Error` is now `*ProviderError`
+#### 2. `StreamEvent.Delta` (string) and `StreamEvent.Reasoning` (string) removed
 
-The `Error` field changed from `error` to `*ProviderError`. Code that directly
-accessed `.Error` must be updated.
+The plain string fields are gone. All delta content is now in `StreamEvent.Delta *Delta`.
+
+```go
+// Before
+if ev.Type == llm.StreamEventDelta {
+    print(ev.Delta)     // string
+}
+if ev.Type == llm.StreamEventReasoning {
+    print(ev.Reasoning) // string
+}
+
+// After
+if ev.Type == llm.StreamEventDelta {
+    print(ev.Text())          // DeltaTypeText
+    print(ev.ReasoningText()) // DeltaTypeReasoning
+}
+```
+
+#### 3. `StreamEventReasoning` event type removed
+
+`StreamEventReasoning` no longer exists. Reasoning tokens arrive as
+`StreamEventDelta` with `ev.Delta.Type == llm.DeltaTypeReasoning`.
+
+#### 4. `StreamEvent.Error` is now `*ProviderError`, not `error`
+
+The field type changed from `error` to `*ProviderError`. It still satisfies the
+`error` interface, so `.Error()` calls continue to work. Code that passes
+`ev.Error` to a parameter typed `error` needs no change. Code that uses
+`errors.As` to unwrap it should now use the sentinel constants.
 
 ```go
 // Before
@@ -180,78 +211,98 @@ if ev.Type == llm.StreamEventError {
     log.Println(ev.Error.Error())
 }
 
-// After — same call, just a different underlying type
+// After — same, plus new capabilities
 if ev.Type == llm.StreamEventError {
-    log.Println(ev.Error.Error())         // still works
-    log.Println(ev.Error.Provider)        // new: identify which provider errored
-    errors.Is(ev.Error, llm.ErrAPIError)  // new: sentinel matching
+    log.Println(ev.Error.Error())                    // unchanged
+    log.Println(ev.Error.Provider)                   // which provider
+    errors.Is(ev.Error, llm.ErrAPIError)             // sentinel matching
 }
 ```
 
-#### 4. Token deltas are `*Delta`, not a string
+#### 5. `StreamStart` fields `RequestedModel`, `ResolvedModel`, `ProviderModel` changed
 
-`StreamEvent` no longer has a plain text field. Delta content is under `StreamEvent.Delta`.
+`RequestedModel` and `ResolvedModel` are removed. `ProviderModel` is renamed to `Model`.
 
 ```go
 // Before
-if ev.Type == llm.StreamEventDelta {
-    print(ev.Content)
-}
+ev.Start.RequestedModel
+ev.Start.ResolvedModel
+ev.Start.ProviderModel
 
 // After
-if ev.Type == llm.StreamEventDelta {
-    print(ev.Text())         // text tokens
-    print(ev.ReasoningText()) // reasoning tokens
-}
+ev.Start.Model  // replaces ProviderModel; RequestedModel and ResolvedModel are gone
 ```
 
-#### 5. Provider `Registry` removed
+#### 6. `Registry` and `MaybeRegister` removed
 
-The global `Registry` and `MaybeRegister` call sites were removed. Construct
-providers directly and pass them to `router.New(...)` or your own dispatch logic.
+The `llm.Registry`, `llm.NewRegistry()`, `llm.RegisterFunc`, per-provider
+`MaybeRegister` functions, and `provider.NewDefaultRegistry()` /
+`provider.CreateStream()` are all removed.
 
 ```go
 // Before
-llm.MaybeRegister(anthropic.New())
-p, _ := llm.ResolveModel("anthropic/claude-sonnet-4-5")
+reg := provider.NewDefaultRegistry()
+ch, err := reg.CreateStream(ctx, llm.StreamOptions{Model: "anthropic/claude-sonnet-4-5", ...})
 
 // After
-r := router.New(
-    anthropic.New(),
-    openai.New(),
-)
-ch, err := r.CreateStream(ctx, llm.StreamRequest{Model: "anthropic/claude-sonnet-4-5", ...})
+p, err := auto.New(ctx)
+ch, err := p.CreateStream(ctx, llm.StreamRequest{Model: "anthropic/claude-sonnet-4-5", ...})
 ```
 
-#### 6. `llmtest.ErrorEvent` takes `*llm.ProviderError`
+#### 7. `provider/aggregate` → `provider/router`
+
+The package was renamed. The constructor signature (`New(cfg Config, factories map[string]Factory)`) is unchanged.
 
 ```go
 // Before
-llmtest.ErrorEvent("something went wrong")
+import "github.com/codewandler/llm/provider/aggregate"
+p, err := aggregate.New(cfg, factories)
 
 // After
-llmtest.ErrorEvent(llm.NewErrProviderMsg("test", "something went wrong"))
+import "github.com/codewandler/llm/provider/router"
+p, err := router.New(cfg, factories)
 ```
 
 ---
 
 ### Migration Guide
 
-1. **Rename the import path** for the aggregate/router provider:
-   `provider/aggregate` → `provider/router`, `aggregate.New` → `router.New`.
+**Step 1 — Rename `StreamOptions` to `StreamRequest`**
 
-2. **Rename `StreamOptions` to `StreamRequest`** everywhere you construct a request.
+Global find-and-replace: `llm.StreamOptions` → `llm.StreamRequest`.
 
-3. **Update delta reading**: replace any `ev.Content` access with `ev.Text()` or
-   `ev.Delta.Text` / `ev.Delta.Reasoning`. Switch on `ev.Delta.Type` if you need
-   to distinguish text from reasoning.
+**Step 2 — Update delta reading**
 
-4. **Update error handling**: `StreamEvent.Error` is now `*ProviderError`. The
-   `.Error()` method still works. Use `errors.Is(ev.Error, llm.ErrAPIError)` etc.
-   for typed matching instead of string checks.
+Replace `ev.Delta` (string access) with `ev.Text()`. Replace
+`ev.Reasoning` (string) with `ev.ReasoningText()`. Remove any `case
+llm.StreamEventReasoning` — reasoning now arrives as `StreamEventDelta` with
+`ev.Delta.Type == llm.DeltaTypeReasoning`.
 
-5. **Remove Registry usage**: construct providers explicitly and wire them through
-   `router.New(...)`.
+**Step 3 — Update `StreamStart` field references**
 
-6. **Update `llmtest.ErrorEvent` calls** to pass a `*llm.ProviderError` (e.g.
-   `llm.NewErrProviderMsg("test", "msg")`) instead of a plain string.
+Replace `ev.Start.ProviderModel` with `ev.Start.Model`. Remove references to
+`ev.Start.RequestedModel` and `ev.Start.ResolvedModel`.
+
+**Step 4 — Update error handling**
+
+`ev.Error` is `*ProviderError` — it satisfies `error`, so most call sites need
+no change. Replace any string-based error matching with sentinel constants:
+`llm.ErrAPIError`, `llm.ErrContextCancelled`, etc.
+
+**Step 5 — Replace Registry with `auto.New`**
+
+Remove all `provider.NewDefaultRegistry()`, `reg.RegisterAll(...)`, and
+per-provider `MaybeRegister` calls. Replace with:
+
+```go
+import "github.com/codewandler/llm/provider/auto"
+
+p, err := auto.New(ctx) // auto-detects from environment variables
+```
+
+Or pass explicit options (`auto.WithOpenAI()`, `auto.WithBedrock()`, etc.) for
+full control.
+
+**Step 6 — Rename `provider/aggregate` to `provider/router`**
+
+Update the import path and rename `aggregate.New` to `router.New`.
