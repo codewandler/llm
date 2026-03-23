@@ -168,6 +168,8 @@ matching the Anthropic provider and the documented contract.
 
 
 
+## v0.23.0
+
 This is a large release with significant API changes. Several types and packages
 were renamed or restructured. See the **Breaking Changes** and **Migration** sections.
 
