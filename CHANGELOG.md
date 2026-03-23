@@ -1,6 +1,172 @@
 # Changelog
 
-## v0.23.0 (unreleased)
+## v0.24.0 (unreleased)
+
+### New Features
+
+#### `TokenCounter` — offline per-provider token estimation
+
+All five providers now implement the optional `llm.TokenCounter` interface,
+enabling callers to estimate input token usage before sending a request —
+with no network call.
+
+```go
+if tc, ok := provider.(llm.TokenCounter); ok {
+    count, err := tc.CountTokens(ctx, llm.TokenCountRequest{
+        Model:    "claude-sonnet-4-5",
+        Messages: messages,
+        Tools:    tools,
+    })
+    if err == nil && count.InputTokens > maxTokens {
+        return fmt.Errorf("request too large: %d tokens", count.InputTokens)
+    }
+}
+```
+
+**`TokenCountRequest`** — separate from `StreamRequest`; `Model` is required
+(the provider uses it to select the correct BPE encoding).
+
+**`TokenCount`** — full breakdown:
+
+```go
+type TokenCount struct {
+    InputTokens      int            // grand total (messages + tools + overhead)
+    PerMessage       []int          // [i] mirrors Messages[i], same index order
+    SystemTokens     int            // Σ system messages
+    UserTokens       int            // Σ user messages
+    AssistantTokens  int            // Σ assistant messages
+    ToolResultTokens int            // Σ tool result messages
+    ToolsTokens      int            // raw tool definition tokens (sum of PerTool values)
+    PerTool          map[string]int // per tool name → raw token count
+    OverheadTokens   int            // provider-injected tokens the caller did not supply
+}
+```
+
+**Provider accuracy:**
+
+| Provider | Tokenizer | Notes |
+|---|---|---|
+| `openai` | tiktoken exact (`o200k_base` / `cl100k_base`) | +4/msg +3 reply-priming overhead |
+| `openrouter` | tiktoken, model-prefix encoding detection | no per-message overhead |
+| `anthropic` | `cl100k_base` approximation (±5-10%) | Anthropic's tokenizer is not public |
+| `bedrock` | `cl100k_base` approximation (±5-10%) | no counting API on Bedrock |
+| `ollama` | `cl100k_base` approximation (±10%) | no public tokenize endpoint |
+| `claude` (OAuth) | `cl100k_base` + injected system blocks | includes billing/identity headers |
+
+**Anthropic tool overhead compensation** — when tools are present, the
+Anthropic, Bedrock, and Claude providers add the empirically-measured hidden
+tool-use system preamble and per-tool framing to `OverheadTokens`:
+- +330 tokens (preamble, once per request)
+- +126 tokens (first tool serialisation framing)
+- +85 tokens per additional tool
+
+This reduces tool-heavy estimate drift from ~85% to ~3-8%.
+
+**`OverheadTokens`** separates provider-injected tokens from caller-supplied
+content. `ToolsTokens` is now purely the raw JSON token count of tool schemas
+— `sum(PerTool) == ToolsTokens` holds for all providers. Anthropic preamble
+and Claude OAuth system blocks go into `OverheadTokens` instead.
+
+**`router.Provider`** implements `TokenCounter` by delegating to the first
+resolved target's underlying provider with the native model ID. `auto.New`
+gets `TokenCounter` for free since it returns `*router.Provider`.
+
+**Convenience functions** for per-item counting (useful for context-budget
+managers that count messages individually):
+
+```go
+n, err := llm.CountText("claude-sonnet-4-5", "some text")
+n, err := llm.CountMessage("gpt-4o", msg)
+```
+
+**`tokencount` package** — shared offline BPE wrapper using
+`github.com/pkoukk/tiktoken-go` with embedded offline loader (zero runtime
+downloads). Exported for use by provider authors:
+
+```go
+enc, known := tokencount.EncodingForModel("gpt-4o") // "o200k_base", true
+n, err    := tokencount.CountText(enc, "hello")
+```
+
+#### `StreamResult.Routed`
+
+`StreamResult` now captures the `StreamEventRouted` event emitted by the
+router. The `Routed` field exposes the selected backend provider, the
+originally requested model alias, the resolved native model ID, and any
+errors from targets that were tried and skipped before this one.
+
+```go
+result := <-llm.Process(ctx, stream).Result()
+if r := result.Routed; r != nil {
+    fmt.Println(r.Provider)       // "bedrock"
+    fmt.Println(r.ModelRequested) // "fast"
+    fmt.Println(r.ModelResolved)  // "anthropic.claude-haiku-4-5-20251001-v1:0"
+}
+```
+
+#### `llmcli` verbose improvements
+
+`llmcli infer -v` now shows two new sections:
+
+**Token estimate** (printed before the request is sent):
+```
+── token estimate ──
+ input (est): 684
+      system: 32
+        user: 1
+       tools: 56
+    add_fact: 28
+complete_turn: 28
+    overhead: 595
+```
+
+**Routing** (in the post-response metadata block):
+```
+routed_to: claude  fast → claude-haiku-4-5-20251001
+```
+
+**Drift** (appended to the `tokens` line):
+```
+tokens: 661 in, 142 out  (est 684 in, drift 3.5%)
+```
+
+**Prompt caching** — the system message is now sent with
+`CacheHint{Enabled: true}` so caching activates automatically on providers
+that support it once the system prompt exceeds the minimum token threshold.
+
+---
+
+### Bug Fixes
+
+#### `Usage.InputTokens` contract enforced on Bedrock
+
+`Usage.InputTokens` is defined as the total input tokens seen by the model,
+including cache-read and cache-write tokens. The Anthropic provider always
+honoured this. The Bedrock provider was mapping the raw wire field directly
+(which is only the uncached remainder), causing `InputTokens` to show 340
+instead of 2066 on a cached request.
+
+Bedrock now adds `CacheReadTokens + CacheWriteTokens` to the wire value,
+matching the Anthropic provider and the documented contract.
+
+---
+
+### Clarifications
+
+#### `Usage` field semantics
+
+| Field | Meaning |
+|---|---|
+| `InputTokens` | **Total** tokens seen by the model: uncached + cache-read + cache-write |
+| `CacheReadTokens` | Subset of `InputTokens` served from an existing cache entry |
+| `CacheWriteTokens` | Subset of `InputTokens` written to a new cache entry |
+| `InputCost` | Cost of `InputTokens - CacheReadTokens - CacheWriteTokens` at regular rate |
+| `CacheReadCost` | Cost of `CacheReadTokens` at the reduced cache-read rate |
+| `CacheWriteCost` | Cost of `CacheWriteTokens` at the cache-write rate |
+
+---
+
+
 
 This is a large release with significant API changes. Several types and packages
 were renamed or restructured. See the **Breaking Changes** and **Migration** sections.
