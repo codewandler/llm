@@ -2,7 +2,6 @@ package llm
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -353,76 +352,4 @@ func (e StreamEvent) ReasoningText() string {
 		return e.Delta.Reasoning
 	}
 	return ""
-}
-
-// StreamRequest configures a provider CreateStream call.
-type StreamRequest struct {
-	// Model is the model identifier or alias to use, e.g. "fast", "anthropic/claude-sonnet-4-5".
-	Model string `json:"model"`
-
-	// Messages is the conversation history to send to the model.
-	Messages Messages `json:"messages"`
-
-	// Tools is the set of tools the model may call during the response.
-	Tools []ToolDefinition `json:"tools,omitempty"`
-
-	// ToolChoice controls how the model selects tools. Defaults to Auto when Tools are provided.
-	ToolChoice ToolChoice `json:"tool_choice,omitempty"`
-
-	// ReasoningEffort controls the depth of reasoning for models that support it (e.g. OpenAI o-series).
-	ReasoningEffort ReasoningEffort `json:"reasoning_effort,omitempty"`
-
-	// CacheHint is a top-level prompt caching hint. Behaviour is provider-specific:
-	// Anthropic auto mode, Bedrock trailing cachePoint, OpenAI extended retention.
-	CacheHint *CacheHint `json:"cache_hint,omitempty"`
-}
-
-// Validate checks that the options are valid.
-func (o StreamRequest) Validate() error {
-	// Validate Model
-	if o.Model == "" {
-		return errors.New("model is required")
-	}
-
-	// Validate ReasoningEffort
-	if !o.ReasoningEffort.Valid() {
-		return fmt.Errorf("invalid ReasoningEffort %q", o.ReasoningEffort)
-	}
-
-	// Validate Tools
-	for i, tool := range o.Tools {
-		if err := tool.Validate(); err != nil {
-			return fmt.Errorf("tools[%d]: %w", i, err)
-		}
-	}
-
-	// Validate messages
-	for i, msg := range o.Messages {
-		if err := msg.Validate(); err != nil {
-			return fmt.Errorf("messages[%d]: %w", i, err)
-		}
-	}
-
-	// Validate ToolChoice
-	if o.ToolChoice != nil && len(o.Tools) == 0 {
-		return errors.New("ToolChoice set but no Tools provided")
-	}
-
-	if tc, ok := o.ToolChoice.(ToolChoiceTool); ok {
-		if tc.Name == "" {
-			return errors.New("ToolChoiceTool.Name is required")
-		}
-		found := false
-		for _, t := range o.Tools {
-			if t.Name == tc.Name {
-				found = true
-				break
-			}
-		}
-		if !found {
-			return fmt.Errorf("ToolChoiceTool references unknown tool %q", tc.Name)
-		}
-	}
-
-	return nil
 }
