@@ -16,10 +16,10 @@ const defaultName = "auto"
 
 // New creates an aggregate provider with auto-detected or explicitly configured providers.
 //
-// Without options, it auto-detects available providers:
+// Without options, it auto-detects available providers in priority order:
 //   - Claude local (~/.claude credentials)
-//   - AWS Bedrock (if AWS_ACCESS_KEY_ID, AWS_PROFILE, or container credentials are set)
 //   - Anthropic direct API (if ANTHROPIC_API_KEY is set)
+//   - AWS Bedrock (if AWS_ACCESS_KEY_ID, AWS_PROFILE, or container credentials are set)
 //   - OpenAI (if OPENAI_API_KEY or OPENAI_KEY is set)
 //   - OpenRouter (if OPENROUTER_API_KEY is set)
 //

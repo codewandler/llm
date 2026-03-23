@@ -34,10 +34,26 @@ func detectProviders(httpClient *http.Client, llmOpts []llm.Option) []providerEn
 		})
 	}
 
-	// 2. Bedrock — only when AWS credentials are present in the environment.
-	// AWS credentials can come from env vars (AWS_ACCESS_KEY_ID),
-	// ~/.aws/credentials, IAM roles, or container metadata. We check the
-	// common env vars; the full credential chain is resolved at call time.
+	// 2. Direct Anthropic API
+	if os.Getenv(EnvAnthropicKey) != "" {
+		providers = append(providers, providerEntry{
+			name:         ProviderAnthropic,
+			providerType: ProviderAnthropic,
+			factory: func(opts ...llm.Option) llm.Provider {
+				anthropicOpts := []llm.Option{llm.APIKeyFromEnv(EnvAnthropicKey)}
+				if httpClient != nil {
+					anthropicOpts = append(anthropicOpts, llm.WithHTTPClient(httpClient))
+				}
+				return anthropic.New(anthropicOpts...)
+			},
+			modelAliases: anthropic.ModelAliases,
+			hasAliases:   true,
+		})
+	}
+
+	// 3. Bedrock — after all Claude-family providers since it also serves Claude
+	// models but with higher latency and different pricing.
+	// Only included when AWS credentials are present in the environment.
 	if os.Getenv("AWS_ACCESS_KEY_ID") != "" || os.Getenv("AWS_PROFILE") != "" || os.Getenv("AWS_CONTAINER_CREDENTIALS_RELATIVE_URI") != "" {
 		providers = append(providers, providerEntry{
 			name:         ProviderBedrock,
@@ -53,23 +69,6 @@ func detectProviders(httpClient *http.Client, llmOpts []llm.Option) []providerEn
 				return bedrock.New(bedrockOpts...)
 			},
 			modelAliases: bedrock.ModelAliases,
-			hasAliases:   true,
-		})
-	}
-
-	// 3. Direct Anthropic API
-	if os.Getenv(EnvAnthropicKey) != "" {
-		providers = append(providers, providerEntry{
-			name:         ProviderAnthropic,
-			providerType: ProviderAnthropic,
-			factory: func(opts ...llm.Option) llm.Provider {
-				anthropicOpts := []llm.Option{llm.APIKeyFromEnv(EnvAnthropicKey)}
-				if httpClient != nil {
-					anthropicOpts = append(anthropicOpts, llm.WithHTTPClient(httpClient))
-				}
-				return anthropic.New(anthropicOpts...)
-			},
-			modelAliases: anthropic.ModelAliases,
 			hasAliases:   true,
 		})
 	}
