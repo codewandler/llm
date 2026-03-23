@@ -80,9 +80,11 @@ func New(cfg Config, factories map[string]Factory) (*Provider, error) {
 	modelIndex := make(map[string]int)
 	aliasMap := make(map[string][]resolvedTarget)
 
-	// First, collect all underlying models
-	for instName, prov := range providers {
-		provType := providerTypes[instName]
+	// Collect all underlying models in registration order (cfg.Providers is a slice)
+	// so that when multiple providers share a bare alias (e.g. "default"), the first
+	// registered provider wins — matching the documented auto-detect priority.
+	for _, pcfg := range cfg.Providers {
+		instName, prov, provType := pcfg.Name, providers[pcfg.Name], providerTypes[pcfg.Name]
 		for _, m := range prov.Models() {
 			fullID := buildModelPath(instName, provType, m.ID)
 
@@ -177,10 +179,10 @@ func New(cfg Config, factories map[string]Factory) (*Provider, error) {
 		}
 	}
 
-	// Add resolution entries for model IDs
-	for instName := range providers {
-		provType := providerTypes[instName]
-		prov := providers[instName]
+	// Add resolution entries for model IDs.
+	// Walk in registration order for the same reason as above.
+	for _, pcfg := range cfg.Providers {
+		instName, prov, provType := pcfg.Name, providers[pcfg.Name], providerTypes[pcfg.Name]
 		for _, m := range prov.Models() {
 			fullID := buildModelPath(instName, provType, m.ID)
 			target := resolvedTarget{
