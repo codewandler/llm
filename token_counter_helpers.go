@@ -7,6 +7,31 @@ import (
 	"github.com/codewandler/llm/tokencount"
 )
 
+// CountText returns the number of tokens in text for the given model.
+// The encoding is selected automatically based on the model ID:
+// o200k_base for GPT-4o/o-series, cl100k_base for everything else.
+//
+// This is a convenience function for callers that need to count raw text
+// without constructing a full TokenCountRequest — for example, context-budget
+// managers that count individual history entries.
+func CountText(model, text string) (int, error) {
+	enc, _ := tokencount.EncodingForModel(model)
+	return tokencount.CountText(enc, text)
+}
+
+// CountMessage returns the number of tokens for a single Message for the
+// given model. The message is converted to its text representation using the
+// same logic as CountTokens (role content + tool call names/args for
+// AssistantMsg, output for ToolCallResult, etc.).
+//
+// This is a convenience function for callers that count messages individually
+// rather than as a batch — for example, per-entry token estimates in a
+// conversation history manager.
+func CountMessage(model string, msg Message) (int, error) {
+	enc, _ := tokencount.EncodingForModel(model)
+	return tokencount.CountText(enc, messageText(msg))
+}
+
 // messageText returns the text content of a message for token counting purposes.
 // For AssistantMsg it concatenates text content and serialised tool call names/args.
 // For ToolCallResult it uses the output.
@@ -69,10 +94,11 @@ func CountMessagesAndToolsAnthropic(tc *TokenCount, req TokenCountRequest) error
 		return err
 	}
 	if len(req.Tools) > 0 {
-		// Add preamble once + first-tool framing + additional-tool framing.
+		// Track the preamble + framing as provider overhead, separate from the
+		// raw tool JSON counts in ToolsTokens. This keeps sum(PerTool)==ToolsTokens.
 		toolOverhead := anthropicToolPreamble + anthropicToolFirstOverhead +
 			(len(req.Tools)-1)*anthropicToolAdditionalOverhead
-		tc.ToolsTokens += toolOverhead
+		tc.OverheadTokens += toolOverhead
 		tc.InputTokens += toolOverhead
 	}
 	return nil

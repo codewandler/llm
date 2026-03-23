@@ -71,8 +71,7 @@ func TestProvider_CountTokens_Tools(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.Greater(t, got.ToolsTokens, 0)
-	// ToolsTokens includes Anthropic's hidden tool preamble + framing overhead
-	// on top of the raw JSON token count, so it must be > the raw PerTool value.
-	assert.Greater(t, got.ToolsTokens, got.PerTool["lookup"],
-		"ToolsTokens must exceed raw per-tool count due to Anthropic overhead")
+	// ToolsTokens is now raw JSON only; overhead is in OverheadTokens.
+	assert.Equal(t, got.ToolsTokens, got.PerTool["lookup"])
+	assert.Greater(t, got.OverheadTokens, 0, "Anthropic tool preamble must appear in OverheadTokens")
 }

@@ -157,6 +157,11 @@ type StreamResult struct {
 	// Nil if the provider did not emit a start event.
 	Start *StreamStart
 
+	// Routed holds routing metadata emitted by meta-providers (e.g. router).
+	// Populated when the stream passed through a router that selected a backend.
+	// Nil when the request was sent directly to a provider.
+	Routed *Routed
+
 	// StopReason describes why the stream ended.
 	StopReason StopReason
 
@@ -349,6 +354,9 @@ func (r *StreamResponse) run() {
 			}
 
 			switch ev.Type {
+			case StreamEventRouted:
+				res.Routed = ev.Routed
+
 			case StreamEventStart:
 				res.Start = ev.Start
 				safecall(func() {

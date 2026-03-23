@@ -43,10 +43,10 @@ func TestProvider_CountTokens_IncludesInjectedSystemBlocks(t *testing.T) {
 	assert.Greater(t, withUserSystem.InputTokens, onlyInjected.InputTokens,
 		"adding a user system message should increase InputTokens")
 
-	// The injected blocks alone must contribute a non-trivial number of tokens.
+	// The injected blocks must appear in OverheadTokens, not SystemTokens.
 	// billingHeader + systemCore + systemIdentity is ~40-60 tokens in cl100k_base.
-	assert.Greater(t, onlyInjected.SystemTokens, 30,
-		"injected system blocks should contribute >30 tokens")
+	assert.Greater(t, onlyInjected.OverheadTokens, 30,
+		"injected system blocks should contribute >30 tokens in OverheadTokens")
 }
 
 func TestProvider_CountTokens_PerMessageLen(t *testing.T) {
@@ -111,7 +111,7 @@ func TestProvider_CountTokens_Tools(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.Greater(t, got.ToolsTokens, 0)
-	// ToolsTokens includes Anthropic's hidden tool preamble + framing overhead.
-	assert.Greater(t, got.ToolsTokens, got.PerTool["lookup"],
-		"ToolsTokens must exceed raw per-tool count due to Anthropic overhead")
+	// ToolsTokens is now raw JSON only; overhead is in OverheadTokens.
+	assert.Equal(t, got.ToolsTokens, got.PerTool["lookup"])
+	assert.Greater(t, got.OverheadTokens, 0, "Anthropic tool preamble must appear in OverheadTokens")
 }

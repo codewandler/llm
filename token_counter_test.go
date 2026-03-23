@@ -7,7 +7,95 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestApplyRoleBreakdown_Invariant verifies role sums equal sum(PerMessage).
+func sumInts(s []int) int {
+	n := 0
+	for _, v := range s {
+		n += v
+	}
+	return n
+}
+
+// TestCountText_ModelRouting verifies encoding selection and basic counting.
+func TestCountText_ModelRouting(t *testing.T) {
+	tests := []struct {
+		model string
+		text  string
+	}{
+		{"gpt-4o", "Hello, world!"},
+		{"claude-sonnet-4-5", "Hello, world!"},
+		{"gpt-4", "Hello, world!"},
+		{"unknown-model", "Hello, world!"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.model, func(t *testing.T) {
+			n, err := CountText(tc.model, tc.text)
+			require.NoError(t, err)
+			assert.Greater(t, n, 0)
+		})
+	}
+}
+
+func TestCountText_EmptyText(t *testing.T) {
+	n, err := CountText("gpt-4o", "")
+	require.NoError(t, err)
+	assert.Equal(t, 0, n)
+}
+
+// TestCountMessage_AllRoles verifies each message type is counted correctly.
+func TestCountMessage_AllRoles(t *testing.T) {
+	model := "gpt-4o"
+
+	tests := []struct {
+		name string
+		msg  Message
+	}{
+		{"system", &SystemMsg{Content: "You are helpful."}},
+		{"user", &UserMsg{Content: "Hello there!"}},
+		{"assistant", &AssistantMsg{Content: "Hi back!"}},
+		{"tool_result", &ToolCallResult{ToolCallID: "c1", Output: "42"}},
+		{"assistant_with_tool_calls", &AssistantMsg{
+			Content: "Let me check.",
+			ToolCalls: []ToolCall{
+				{ID: "c1", Name: "get_weather", Arguments: map[string]any{"location": "Berlin"}},
+			},
+		}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			n, err := CountMessage(model, tc.msg)
+			require.NoError(t, err)
+			assert.Greater(t, n, 0, "expected >0 tokens for %s", tc.name)
+		})
+	}
+}
+
+// TestCountMessage_ConsistentWithCountTokens verifies CountMessage produces
+// the same per-message values as CountTokens for the same messages.
+func TestCountMessage_ConsistentWithCountTokens(t *testing.T) {
+	model := "gpt-4o"
+	msgs := Messages{
+		&SystemMsg{Content: "You are helpful."},
+		&UserMsg{Content: "What is 2+2?"},
+		&AssistantMsg{Content: "It is 4."},
+	}
+
+	// Get per-message counts from the batch API
+	tc := &TokenCount{}
+	err := CountMessagesAndTools(tc, TokenCountRequest{
+		Model:    model,
+		Messages: msgs,
+	}, "o200k_base", 0, 0)
+	require.NoError(t, err)
+
+	// CountMessage should match each entry exactly
+	for i, msg := range msgs {
+		n, err := CountMessage(model, msg)
+		require.NoError(t, err)
+		assert.Equal(t, tc.PerMessage[i], n,
+			"CountMessage[%d] must match CountTokens PerMessage[%d]", i, i)
+	}
+}
+
 func TestApplyRoleBreakdown_Invariant(t *testing.T) {
 	msgs := Messages{
 		&SystemMsg{Content: "be helpful"},
@@ -70,8 +158,7 @@ func TestCountMessagesAndTools_PerMessageLen(t *testing.T) {
 }
 
 // TestCountMessagesAndToolsAnthropic_OverheadApplied verifies that when tools
-// are present, ToolsTokens > sum(PerTool values) due to the injected preamble
-// and per-tool framing overhead.
+// are present, OverheadTokens is populated and ToolsTokens == sum(PerTool).
 func TestCountMessagesAndToolsAnthropic_OverheadApplied(t *testing.T) {
 	tools := []ToolDefinition{
 		{Name: "tool_a", Description: "First tool", Parameters: map[string]any{"type": "object"}},
@@ -85,18 +172,21 @@ func TestCountMessagesAndToolsAnthropic_OverheadApplied(t *testing.T) {
 	})
 	require.NoError(t, err)
 
+	// ToolsTokens must equal sum(PerTool) — raw JSON counts only, no overhead.
 	rawSum := 0
 	for _, n := range tc.PerTool {
 		rawSum += n
 	}
+	assert.Equal(t, rawSum, tc.ToolsTokens,
+		"ToolsTokens must equal sum(PerTool) — overhead is in OverheadTokens")
 
-	assert.Greater(t, tc.ToolsTokens, rawSum,
-		"ToolsTokens must exceed sum(PerTool) due to Anthropic preamble+framing overhead")
-
-	overhead := tc.ToolsTokens - rawSum
+	// Overhead must be at least preamble + first + one additional tool framing.
 	expectedMinOverhead := anthropicToolPreamble + anthropicToolFirstOverhead + anthropicToolAdditionalOverhead
-	assert.GreaterOrEqual(t, overhead, expectedMinOverhead,
-		"overhead must be at least preamble + first + one additional tool framing")
+	assert.GreaterOrEqual(t, tc.OverheadTokens, expectedMinOverhead,
+		"OverheadTokens must be at least preamble + first + one additional tool framing")
+
+	// InputTokens must equal the sum of all parts.
+	assert.Equal(t, tc.InputTokens, rawSum+tc.OverheadTokens+sumInts(tc.PerMessage))
 }
 
 // TestCountMessagesAndToolsAnthropic_NoTools verifies no overhead is added

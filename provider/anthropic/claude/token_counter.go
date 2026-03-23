@@ -40,9 +40,11 @@ func (p *Provider) CountTokens(_ context.Context, req llm.TokenCountRequest) (*l
 		return nil, fmt.Errorf("claude: %w", err)
 	}
 
-	// Add the injected system tokens to the total and the system breakdown.
+	// The injected system blocks are provider overhead — the caller did not
+	// supply them. Track them in OverheadTokens rather than SystemTokens so
+	// SystemTokens reflects only what the caller sent.
+	tc.OverheadTokens += injectedTokens
 	tc.InputTokens += injectedTokens
-	tc.SystemTokens += injectedTokens
 
 	return tc, nil
 }

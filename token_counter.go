@@ -42,23 +42,18 @@ type TokenCounter interface {
 // TokenCount holds the result of a CountTokens call.
 //
 // Invariants:
-//   - len(PerMessage) == len(StreamRequest.Messages)
+//   - len(PerMessage) == len(TokenCountRequest.Messages)
 //   - SystemTokens + UserTokens + AssistantTokens + ToolResultTokens == sum(PerMessage)
-//   - InputTokens == sum(PerMessage) + ToolsTokens + provider-specific overhead
-//
-// Note: sum(values(PerTool)) == ToolsTokens holds for OpenAI and OpenRouter.
-// For Anthropic-family providers (anthropic, bedrock, claude), ToolsTokens
-// additionally includes Anthropic's hidden tool-use system preamble and
-// per-tool serialisation framing, so sum(PerTool) < ToolsTokens when tools
-// are present.
+//   - sum(values(PerTool)) == ToolsTokens (raw tool JSON counts only, no overhead)
+//   - InputTokens == sum(PerMessage) + ToolsTokens + OverheadTokens + provider-specific per-message overhead
 type TokenCount struct {
 	// InputTokens is the total estimated input token count:
 	// all messages + all tool definitions + any provider-specific overhead.
 	InputTokens int
 
-	// PerMessage contains the token count for each entry in StreamRequest.Messages,
+	// PerMessage contains the token count for each entry in TokenCountRequest.Messages,
 	// in the same index order. Does not include tool definitions or overhead.
-	// len(PerMessage) == len(StreamRequest.Messages) is guaranteed.
+	// len(PerMessage) == len(TokenCountRequest.Messages) is guaranteed.
 	PerMessage []int
 
 	// Role breakdowns — derived from PerMessage, provided for convenience.
@@ -68,12 +63,26 @@ type TokenCount struct {
 	AssistantTokens  int // sum of PerMessage for all RoleAssistant messages
 	ToolResultTokens int // sum of PerMessage for all RoleTool (ToolCallResult) messages
 
-	// ToolsTokens is the total estimated tokens for all tool definitions combined.
+	// ToolsTokens is the total raw token count for all tool definitions combined,
+	// derived purely from the JSON-serialised tool schemas.
+	// sum(values(PerTool)) == ToolsTokens.
 	ToolsTokens int
 
-	// PerTool maps each tool definition's Name to its individual token count.
+	// PerTool maps each tool definition's Name to its individual raw token count.
 	// sum(values(PerTool)) == ToolsTokens.
 	PerTool map[string]int
+
+	// OverheadTokens is the number of tokens the provider adds on top of the
+	// caller-supplied content — tokens the caller did not write and cannot
+	// control. Examples:
+	//   - Anthropic: hidden tool-use system preamble + per-tool framing (~330+126+85×n)
+	//   - Claude OAuth: injected billing/identity system blocks (~45 tokens)
+	//
+	// Zero for providers that add no hidden content (OpenAI, OpenRouter, Ollama).
+	//
+	// The invariant: InputTokens == sum(PerMessage) + ToolsTokens + OverheadTokens
+	// (plus any per-message overhead, e.g. +4/msg for OpenAI).
+	OverheadTokens int
 }
 
 // applyRoleBreakdown fills tc.SystemTokens, tc.UserTokens, tc.AssistantTokens,

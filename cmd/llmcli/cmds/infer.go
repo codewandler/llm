@@ -217,6 +217,9 @@ func printTokenEstimate(est *llm.TokenCount) {
 			fields = append(fields, field{fmt.Sprintf("    %s", name), fmt.Sprintf("%d", n)})
 		}
 	}
+	if est.OverheadTokens > 0 {
+		fields = append(fields, field{"  overhead", fmt.Sprintf("%d", est.OverheadTokens)})
+	}
 
 	maxWidth := 0
 	for _, f := range fields {
@@ -248,6 +251,22 @@ func printVerboseInfo(result *llm.StreamResult, est *llm.TokenCount) {
 	// API model (what the provider returned)
 	if start != nil && start.Model != "" {
 		fields = append(fields, field{"api_model", start.Model})
+	}
+
+	// Routing metadata (router / auto provider only)
+	if r := result.Routed; r != nil {
+		routedVal := r.Provider
+		if r.ModelResolved != "" && r.ModelResolved != r.ModelRequested {
+			routedVal += fmt.Sprintf("  %s → %s", r.ModelRequested, r.ModelResolved)
+		} else if r.ModelResolved != "" {
+			routedVal += "  " + r.ModelResolved
+		}
+		fields = append(fields, field{"routed_to", routedVal})
+		if len(r.Errors) > 0 {
+			for i, e := range r.Errors {
+				fields = append(fields, field{fmt.Sprintf("  skipped[%d]", i), e.Error()})
+			}
+		}
 	}
 
 	// Stop reason
