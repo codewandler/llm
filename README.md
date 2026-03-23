@@ -1,15 +1,18 @@
 # LLM Provider Abstraction Library
 
-A unified Go library for interacting with multiple LLM providers through a consistent interface. Supports streaming responses, tool calling, and automatic provider registration.
+A unified Go library for interacting with multiple LLM providers through a consistent interface. Supports streaming responses, tool calling, reasoning, prompt caching, and zero-config multi-provider setup.
 
 ## Features
 
-- **Unified Provider Interface** - Single API for multiple LLM providers
-- **Streaming Support** - Channel-based streaming for all providers
-- **Tool Calling** - Consistent tool/function calling across providers
-- **Context Cancellation** - Proper cancellation support for long-running streams
-- **Registry Pattern** - Automatic provider discovery with `provider/model` format
-- **Production Ready** - Race-free, tested with comprehensive integration tests
+- **Unified Provider Interface** — Single API for multiple LLM providers
+- **Streaming Support** — Channel-based streaming with structured delta events
+- **Tool Calling** — Consistent tool/function calling across providers
+- **Typed Tool Dispatch** — `StreamResponse` handles tool calls with strongly-typed handlers
+- **Reasoning Support** — Extended thinking / reasoning tokens (Anthropic, OpenAI o-series, Bedrock)
+- **Prompt Caching** — Transparent cache control for Anthropic, Bedrock, and OpenAI
+- **Context Cancellation** — Proper cancellation support for long-running streams
+- **Zero-config Setup** — `provider/auto` auto-detects providers from environment variables
+- **`llmtest` Package** — Test helpers for stream consumers (`net/http/httptest` style)
 
 ## Supported Providers
 
@@ -17,11 +20,11 @@ A unified Go library for interacting with multiple LLM providers through a consi
 |----------|------|-------------|
 | Anthropic API | `anthropic` | Direct Anthropic API with API key |
 | Claude OAuth | `claude` | OAuth-based Claude access (auto-detects local credentials) |
-| OpenAI | `openai` | OpenAI GPT models (GPT-4, GPT-4o, etc.) |
+| OpenAI | `openai` | OpenAI GPT models (GPT-4o, GPT-5, o-series, Codex) |
 | AWS Bedrock | `bedrock` | AWS Bedrock models (Claude, Llama, etc.) |
-| Ollama | `ollama` | Local Ollama models (11 curated defaults) |
-| OpenRouter | `openrouter` | 229 tool-enabled models via OpenRouter proxy |
-| Aggregate | `aggregate` | Combines multiple providers with failover and aliases |
+| Ollama | `ollama` | Local Ollama models |
+| OpenRouter | `openrouter` | 200+ tool-enabled models via OpenRouter proxy |
+| Router | `router` | Combines multiple providers with failover and aliases |
 
 ## Installation
 
@@ -31,32 +34,28 @@ go get github.com/codewandler/llm
 
 ## Quick Start
 
-### Using the Default Registry
-
-The simplest way to use the library is with the default registry:
-
 ```go
 package main
 
 import (
     "context"
     "fmt"
-    "os"
 
     "github.com/codewandler/llm"
-    "github.com/codewandler/llm/provider"
+    "github.com/codewandler/llm/provider/auto"
 )
 
 func main() {
-    // Set environment variables for providers
-    os.Setenv("OPENAI_KEY", "your-api-key")
-    os.Setenv("OPENROUTER_API_KEY", "your-api-key")
-    
     ctx := context.Background()
-    
-    // Create a stream using provider/model format
-    events, err := provider.CreateStream(ctx, llm.StreamOptions{
-        Model: "ollama/glm-4.7-flash",
+
+    // Auto-detects providers from environment variables
+    p, err := auto.New(ctx)
+    if err != nil {
+        panic(err)
+    }
+
+    events, err := p.CreateStream(ctx, llm.StreamRequest{
+        Model: "anthropic/claude-sonnet-4-5",
         Messages: llm.Messages{
             &llm.UserMsg{Content: "What is the capital of France?"},
         },
@@ -64,16 +63,15 @@ func main() {
     if err != nil {
         panic(err)
     }
-    
-    // Process streaming response
+
     for event := range events {
         switch event.Type {
         case llm.StreamEventDelta:
-            fmt.Print(event.Delta)
+            fmt.Print(event.Text())
         case llm.StreamEventDone:
-            fmt.Println("\nDone!")
+            fmt.Println()
             if event.Usage != nil {
-                fmt.Printf("Tokens: %d input, %d output\n", 
+                fmt.Printf("Tokens: %d in, %d out\n",
                     event.Usage.InputTokens, event.Usage.OutputTokens)
             }
         case llm.StreamEventError:
@@ -83,699 +81,458 @@ func main() {
 }
 ```
 
-### Creating a Custom Registry
+## Provider Setup
 
-For more control, create your own registry:
+### `provider/auto` — Zero-Config Multi-Provider
+
+`auto.New(ctx, ...Option)` auto-detects providers from environment variables
+and returns a ready-to-use `llm.Provider`:
 
 ```go
-import (
-    "github.com/codewandler/llm/provider"
-    "github.com/codewandler/llm/provider/ollama"
-    "github.com/codewandler/llm/provider/openai"
-    "github.com/codewandler/llm/provider/openrouter"
+import "github.com/codewandler/llm/provider/auto"
+
+// Auto-detect everything from environment variables
+p, err := auto.New(ctx)
+
+// Or explicitly opt in to specific providers
+p, err := auto.New(ctx,
+    auto.WithAnthropic(),     // ANTHROPIC_API_KEY
+    auto.WithOpenAI(),        // OPENAI_KEY or OPENAI_API_KEY
+    auto.WithBedrock(),       // AWS credentials
+    auto.WithOpenRouter(),    // OPENROUTER_API_KEY
+    auto.WithClaudeLocal(),   // ~/.claude/.credentials.json
 )
 
-// Create empty registry
-reg := llm.NewRegistry()
+// Add a Claude OAuth account from a token store
+p, err := auto.New(ctx, auto.WithClaude(myTokenStore))
 
-// Register specific providers
-reg.Register(ollama.New("http://localhost:11434"))
-reg.Register(openai.New("your-api-key"))
-reg.Register(openrouter.New("your-api-key"))
-
-// Use the registry
-events, err := reg.CreateStream(ctx, llm.StreamOptions{
-    Model: "openrouter/anthropic/claude-sonnet-4.5",
-    Messages: llm.Messages{
-        &llm.UserMsg{Content: "Hello!"},
-    },
-})
+// Custom global aliases with failover
+p, err := auto.New(ctx,
+    auto.WithOpenAI(),
+    auto.WithOpenRouter(),
+    auto.WithGlobalAlias("o3", "openai/o3", "openrouter/openai/o3"),
+)
 ```
 
-## Provider-Specific Usage
+### Direct Provider Usage
 
-### Anthropic API (Direct)
-
-Direct API access with API key:
+Each provider can also be used directly without `auto`:
 
 ```go
 import "github.com/codewandler/llm/provider/anthropic"
 
-provider := anthropic.New(llm.WithAPIKey("your-api-key"))
+p := anthropic.New(llm.APIKeyFromEnv("ANTHROPIC_API_KEY"))
 
-events, err := provider.CreateStream(ctx, llm.StreamOptions{
-    Model: "claude-sonnet-4-6",
-    Messages: llm.Messages{
-        &llm.UserMsg{Content: "Hello!"},
-    },
+events, err := p.CreateStream(ctx, llm.StreamRequest{
+    Model:    "claude-sonnet-4-5",
+    Messages: llm.Messages{&llm.UserMsg{Content: "Hello!"}},
 })
 ```
 
-### Claude OAuth Provider
+```go
+import "github.com/codewandler/llm/provider/openai"
 
-OAuth-based access with automatic token refresh. By default, auto-detects credentials from your local Claude installation (`~/.claude/.credentials.json`):
+p := openai.New(llm.APIKeyFromEnv("OPENAI_KEY"))
+```
+
+```go
+import "github.com/codewandler/llm/provider/bedrock"
+
+p := bedrock.New() // uses default AWS credential chain
+p := bedrock.New(bedrock.WithRegion("us-east-1"))
+```
+
+```go
+import "github.com/codewandler/llm/provider/ollama"
+
+p := ollama.New("http://localhost:11434")
+```
+
+```go
+import "github.com/codewandler/llm/provider/openrouter"
+
+p := openrouter.New(llm.APIKeyFromEnv("OPENROUTER_API_KEY"))
+```
+
+### Claude OAuth Provider
 
 ```go
 import "github.com/codewandler/llm/provider/anthropic/claude"
 
 // Auto-detect local Claude credentials (default)
-provider := claude.New()
+p := claude.New()
 
 // Or with explicit token provider
-provider := claude.New(
+p := claude.New(
     claude.WithManagedTokenProvider("my-key", tokenStore, nil),
 )
-
-events, err := provider.CreateStream(ctx, llm.StreamOptions{
-    Model: "claude-sonnet-4-6",
-    Messages: llm.Messages{
-        &llm.UserMsg{Content: "Hello!"},
-    },
-})
 ```
 
 Token management interfaces:
-- `TokenStore` - Stores and retrieves tokens (implement for your storage backend)
-- `LocalTokenStore` - Reads from `~/.claude/.credentials.json`
-- `ManagedTokenProvider` - Wraps a TokenStore with automatic refresh
+- `TokenStore` — stores and retrieves tokens (implement for your storage backend)
+- `LocalTokenStore` — reads from `~/.claude/.credentials.json`
+- `ManagedTokenProvider` — wraps a TokenStore with automatic refresh
 
-### OpenAI
+### Router Provider
 
-Access OpenAI models including GPT-5, GPT-4o, and reasoning models:
+For custom multi-provider routing with failover:
 
 ```go
-import "github.com/codewandler/llm/provider/openai"
+import "github.com/codewandler/llm/provider/router"
 
-provider := openai.New("your-api-key")
-
-events, err := provider.CreateStream(ctx, llm.StreamOptions{
-    Model: "gpt-4o-mini",
-    Messages: llm.Messages{
-        &llm.UserMsg{Content: "Hello!"},
-    },
-})
+p, err := router.New(cfg, factories)
 ```
 
-Popular OpenAI models:
-- **GPT-5 series** - `gpt-5`, `gpt-5.2`, `gpt-5.2-pro`, `gpt-5-mini`, `gpt-5-nano`
-- **GPT-4.1 series** - `gpt-4.1`, `gpt-4.1-mini`, `gpt-4.1-nano`
-- **GPT-4o series** - `gpt-4o`, `gpt-4o-mini` (default), `gpt-4-turbo`
-- **Reasoning models** - `o3`, `o3-mini`, `o3-pro`, `o1`, `o1-pro`
-- **Specialized** - `gpt-5.1-codex`, `gpt-5.2-codex` (code generation)
-
-### Ollama (Local Models)
+## Stream Events
 
 ```go
-import "github.com/codewandler/llm/provider/ollama"
+type StreamEvent struct {
+    // Metadata stamped on every event
+    RequestID string
+    Seq       uint64
+    Timestamp time.Time
 
-provider := ollama.New("http://localhost:11434")
-
-// Download a model if needed
-if err := provider.Download(ctx, "llama3.2:1b"); err != nil {
-    // Handle error
+    Type     StreamEventType
+    Start    *StreamStart  // StreamEventStart
+    Delta    *Delta        // StreamEventDelta
+    ToolCall *ToolCall     // StreamEventToolCall
+    Routed   *Routed       // StreamEventRouted
+    Usage    *Usage        // StreamEventDone
+    Error    *ProviderError // StreamEventError
 }
 
-// Use the model
-events, err := provider.CreateStream(ctx, llm.StreamOptions{
-    Model: "llama3.2:1b",
-    Messages: llm.Messages{
-        &llm.UserMsg{Content: "Hello!"},
-    },
-})
+const (
+    StreamEventCreated  // emitted immediately when stream is opened
+    StreamEventStart    // first content event; carries request metadata
+    StreamEventDelta    // text or reasoning token
+    StreamEventToolCall // completed tool call
+    StreamEventRouted   // router selected a backend
+    StreamEventDone     // stream complete; carries usage
+    StreamEventError    // error occurred
+)
 ```
 
-**Curated Ollama Models** (all tested with tool calling):
-- `glm-4.7-flash` (default)
-- `ministral-3:8b`
-- `rnj-1`
-- `functiongemma`
-- `devstral-small-2`
-- `nemotron-3-nano:30b`
-- `llama3.2:1b`, `qwen3:1.7b`, `qwen3:0.6b`, `granite3.1-moe:1b`, `qwen2.5:0.5b`
-
-### AWS Bedrock
-
-Access AWS Bedrock models with AWS credentials:
+### Reading Deltas
 
 ```go
-import "github.com/codewandler/llm/provider/bedrock"
-
-// Uses default AWS credential chain (env vars, ~/.aws/credentials, IAM role)
-provider := bedrock.New()
-
-// Or with explicit region
-provider := bedrock.New(bedrock.WithRegion("us-east-1"))
-
-events, err := provider.CreateStream(ctx, llm.StreamOptions{
-    Model: "anthropic.claude-3-5-sonnet-20241022-v2:0",
-    Messages: llm.Messages{
-        &llm.UserMsg{Content: "Hello!"},
-    },
-})
+for event := range stream {
+    switch event.Type {
+    case llm.StreamEventDelta:
+        fmt.Print(event.Text())          // text tokens
+        fmt.Print(event.ReasoningText()) // reasoning tokens (thinking models)
+    }
+}
 ```
 
-Supported Bedrock models include Claude, Llama, Mistral, and other models available in your AWS region.
-
-### OpenRouter (Multi-Provider Proxy)
-
-Access 229 tool-enabled models:
+`event.Delta` is a `*Delta` struct:
 
 ```go
-import "github.com/codewandler/llm/provider/openrouter"
-
-provider := openrouter.New("your-api-key")
-
-events, err := provider.CreateStream(ctx, llm.StreamOptions{
-    Model: "anthropic/claude-sonnet-4.5",
-    Messages: llm.Messages{
-        &llm.UserMsg{Content: "Hello!"},
-    },
-})
+type Delta struct {
+    Type      DeltaType // DeltaTypeText | DeltaTypeReasoning
+    Text      string
+    Reasoning string
+    Index     *uint32   // block index, provider-dependent
+}
 ```
 
-Popular OpenRouter models:
-- `anthropic/claude-sonnet-4.5`
-- `google/gemini-2.0-flash-001`
-- `openai/gpt-4-turbo`
-- `meta-llama/llama-3.1-70b-instruct`
-
-See [provider/openrouter/README.md](provider/openrouter/README.md) for full model list.
-
-### Aggregate Provider
-
-Combine multiple providers with failover routing and model aliases:
+### StreamStart Metadata
 
 ```go
-import "github.com/codewandler/llm/provider/aggregate"
+case llm.StreamEventStart:
+    fmt.Printf("Request ID: %s\n", event.Start.RequestID)
+    fmt.Printf("Model: %s\n", event.Start.Model)
+    fmt.Printf("TTFT: %s\n", event.Start.TimeToFirstToken)
+```
 
-cfg := aggregate.Config{
-    Name: "my-aggregate",
-    Providers: []aggregate.ProviderInstanceConfig{
-        {Name: "primary", Type: "anthropic"},
-        {Name: "fallback", Type: "openai"},
-    },
-    Aliases: map[string][]aggregate.AliasTarget{
-        "fast":     {{Provider: "primary", Model: "claude-haiku-4-5"}},
-        "default":  {{Provider: "primary", Model: "claude-sonnet-4-6"}},
-        "powerful": {{Provider: "primary", Model: "claude-opus-4-6"}},
-    },
+### Error Handling
+
+```go
+events, err := p.CreateStream(ctx, req)
+if err != nil {
+    // Initial request failed (auth, bad params, etc.)
 }
 
-provider, _ := aggregate.New(cfg, factories)
-
-// Use aliases instead of full model names
-events, _ := provider.CreateStream(ctx, llm.StreamOptions{
-    Model: "default",  // Resolves to claude-sonnet-4-6
-    Messages: messages,
-})
+for event := range events {
+    if event.Type == llm.StreamEventError {
+        if errors.Is(event.Error, llm.ErrAPIError) {
+            fmt.Printf("API error %d: %s\n", event.Error.StatusCode, event.Error.Body)
+        }
+        if errors.Is(event.Error, llm.ErrContextCancelled) {
+            fmt.Println("cancelled")
+        }
+    }
+}
 ```
 
-**Standard aliases:**
-- `fast` - Fastest/cheapest model (e.g., Haiku)
-- `default` - Balanced performance (e.g., Sonnet)
-- `powerful` - Most capable model (e.g., Opus)
+Error sentinels: `ErrContextCancelled`, `ErrRequestFailed`, `ErrAPIError`,
+`ErrStreamRead`, `ErrStreamDecode`, `ErrMissingAPIKey`, `ErrBuildRequest`,
+`ErrUnknownModel`, `ErrNoProviders`.
 
-The aggregate provider tries each target in order until one succeeds, providing automatic failover across accounts or providers.
+### Usage Information
+
+```go
+case llm.StreamEventDone:
+    if event.Usage != nil {
+        fmt.Printf("in=%d out=%d cost=$%.6f\n",
+            event.Usage.InputTokens, event.Usage.OutputTokens, event.Usage.Cost)
+        fmt.Printf("cache read=%d write=%d\n",
+            event.Usage.CacheReadTokens, event.Usage.CacheWriteTokens)
+        fmt.Printf("reasoning=%d\n", event.Usage.ReasoningTokens)
+    }
+```
 
 ## Tool Calling
 
-All providers support tool/function calling with automatic tool call ID tracking.
+### Typed Tool Dispatch with `StreamResponse`
 
-### Type-Safe Tool Dispatch (Recommended)
-
-The best way to work with tools is using `ToolSpec` and `ToolSet`, which provide:
-- Automatic JSON Schema generation from Go structs
-- Runtime validation of tool arguments
-- Type-safe parameter access via generics
-- Clean type-switch dispatch
+The recommended approach for agentic tool use. `Process` accumulates the stream
+and dispatches tool calls to typed handlers:
 
 ```go
-// 1. Define parameter structs
 type GetWeatherParams struct {
     Location string `json:"location" jsonschema:"description=City name,required"`
-    Unit     string `json:"unit" jsonschema:"description=Temperature unit,enum=celsius,enum=fahrenheit"`
+    Unit     string `json:"unit"     jsonschema:"description=Unit,enum=celsius,enum=fahrenheit"`
 }
 
-type SearchParams struct {
-    Query string `json:"query" jsonschema:"description=Search query,required"`
-    Limit int    `json:"limit" jsonschema:"description=Max results,minimum=1,maximum=100"`
+type GetWeatherResult struct {
+    Temp int    `json:"temp"`
+    Desc string `json:"desc"`
 }
 
-// 2. Create ToolSet
-tools := llm.NewToolSet(
-    llm.NewToolSpec[GetWeatherParams]("get_weather", "Get weather for a location"),
-    llm.NewToolSpec[SearchParams]("search", "Search the web"),
-)
+spec := llm.NewToolSpec[GetWeatherParams]("get_weather", "Get current weather")
 
-// 3. Send to LLM
-stream, _ := provider.CreateStream(ctx, llm.StreamOptions{
-    Model:    "openrouter/moonshotai/kimi-k2-0905",
+result := <-llm.Process(ctx, stream).
+    HandleTool(llm.Handle(spec, func(ctx context.Context, p GetWeatherParams) (*GetWeatherResult, error) {
+        return &GetWeatherResult{Temp: 22, Desc: "sunny"}, nil
+    })).
+    Result()
+
+fmt.Println(result.Text)
+fmt.Println(result.ToolResults) // []ToolCallResult ready to append to messages
+```
+
+For concurrent tool execution:
+
+```go
+result := <-llm.Process(ctx, stream).
+    DispatchAsync().
+    HandleTool(...).
+    Result()
+```
+
+Callback hooks:
+
+```go
+result := <-llm.Process(ctx, stream).
+    OnText(func(s string) { fmt.Print(s) }).
+    OnReasoning(func(s string) { /* handle thinking */ }).
+    OnStart(func(s *llm.StreamStart) { log.Println(s.RequestID) }).
+    HandleTool(...).
+    Result()
+```
+
+`StreamResult` fields: `Text`, `Reasoning`, `ToolCalls`, `ToolResults`, `Usage`, `StopReason`, `Start`.
+
+### Low-Level Tool Definitions
+
+For manual tool management:
+
+```go
+tools := []llm.ToolDefinition{
+    llm.ToolDefinitionFor[GetWeatherParams]("get_weather", "Get current weather"),
+}
+
+events, err := p.CreateStream(ctx, llm.StreamRequest{
+    Model:    "anthropic/claude-sonnet-4-5",
     Messages: messages,
-    Tools:    tools.Definitions(),  // Returns []ToolDefinition
+    Tools:    tools,
 })
 
-// 4. Collect tool calls from stream
-var rawCalls []llm.ToolCall
-for event := range stream {
+for event := range events {
     if event.Type == llm.StreamEventToolCall {
-        rawCalls = append(rawCalls, *event.ToolCall)
+        tc := event.ToolCall
+        // tc.ID, tc.Name, tc.Arguments (map[string]any)
     }
 }
+```
 
-// 5. Parse with validation
-calls, err := tools.Parse(rawCalls)
-if err != nil {
-    log.Printf("parse warnings: %v", err)  // Non-fatal: you still get valid calls
-}
+### ToolSet — Type-Safe Parse + Dispatch
 
-// 6. Type-safe dispatch
+```go
+toolset := llm.NewToolSet(
+    llm.NewToolSpec[GetWeatherParams]("get_weather", "Get weather"),
+)
+
+stream, _ := p.CreateStream(ctx, llm.StreamRequest{
+    Tools: toolset.Definitions(),
+    ...
+})
+
+// collect raw tool calls from stream, then:
+calls, err := toolset.Parse(rawToolCalls)
 for _, call := range calls {
     switch c := call.(type) {
     case *llm.TypedToolCall[GetWeatherParams]:
-        // c.Params is strongly typed!
-        fmt.Printf("Weather for: %s (unit: %s)\n", c.Params.Location, c.Params.Unit)
-        result := getWeather(c.Params.Location, c.Params.Unit)
-        
-        // Send result back
-        messages = append(messages,
-            &llm.AssistantMsg{ToolCalls: []llm.ToolCall{{
-                ID: c.ID, Name: c.Name, Arguments: map[string]any{
-                    "location": c.Params.Location,
-                    "unit": c.Params.Unit,
-                },
-            }}},
-            &llm.ToolCallResult{ToolCallID: c.ID, Output: result},
-        )
-        
-    case *llm.TypedToolCall[SearchParams]:
-        fmt.Printf("Search: %s (limit: %d)\n", c.Params.Query, c.Params.Limit)
-        // ... handle search
+        fmt.Println(c.Params.Location) // strongly typed
     }
 }
 ```
 
-**Benefits:**
-- Arguments are validated against JSON Schema (required fields, types, enums, ranges)
-- Type-safe access: `c.Params.Location` instead of `c.Arguments["location"].(string)`
-- Compile-time checking of parameter struct fields
-- Parse errors are non-fatal - you get all successfully parsed calls
-
-### Quick Example (Type-Safe with Generics)
-
-The recommended way is using `ToolDefinitionFor[T]()` which generates JSON Schema from Go structs:
+### Tool Choice
 
 ```go
-// Define parameter struct with struct tags
-type GetWeatherParams struct {
-    Location string `json:"location" jsonschema:"description=City name or coordinates,required"`
-    Unit     string `json:"unit" jsonschema:"description=Temperature unit,enum=celsius,enum=fahrenheit"`
-}
+// Model decides (default)
+llm.StreamRequest{ToolChoice: llm.ToolChoiceAuto{}}
 
-// Create tool definition from struct
-tools := []llm.ToolDefinition{
-    llm.ToolDefinitionFor[GetWeatherParams]("get_weather", "Get current weather for a location"),
-}
+// Must call at least one tool
+llm.StreamRequest{ToolChoice: llm.ToolChoiceRequired{}}
 
-// Step 1: Send initial request with tools
-events, err := provider.CreateStream(ctx, llm.StreamOptions{
-    Model:    "ollama/glm-4.7-flash",
-    Messages: llm.Messages{
-        &llm.UserMsg{Content: "What's the weather in Paris?"},
-    },
-    Tools: tools,
-})
+// Cannot call any tools
+llm.StreamRequest{ToolChoice: llm.ToolChoiceNone{}}
 
-// Step 2: Process tool calls
-var toolCall *llm.ToolCall
-for event := range events {
-    if event.Type == llm.StreamEventToolCall {
-        toolCall = event.ToolCall
-        // Arguments are automatically parsed into map[string]any
-        fmt.Printf("Tool: %s\n", toolCall.Name)
-        fmt.Printf("Location: %s\n", toolCall.Arguments["location"])
-    }
-}
-
-// Step 3: Execute the tool
-result := fmt.Sprintf(`{"temp": 22, "conditions": "sunny"}`)
-
-// Step 4: Send tool result back
-events2, _ := provider.CreateStream(ctx, llm.StreamOptions{
-    Model: "ollama/glm-4.7-flash",
-    Messages: llm.Messages{
-        &llm.UserMsg{Content: "What's the weather in Paris?"},
-        &llm.AssistantMsg{ToolCalls: []llm.ToolCall{*toolCall}},
-        &llm.ToolCallResult{ToolCallID: toolCall.ID, Output: result},
-    },
-    Tools: tools,
-})
-
-// Step 5: Get final response
-for event := range events2 {
-    if event.Type == llm.StreamEventDelta {
-        fmt.Print(event.Delta)
-    }
-}
+// Must call a specific tool
+llm.StreamRequest{ToolChoice: llm.ToolChoiceTool{Name: "get_weather"}}
 ```
+
+| Type | OpenAI | Anthropic | Ollama |
+|------|--------|-----------|--------|
+| `ToolChoiceAuto{}` | `"auto"` | `{"type":"auto"}` | ignored |
+| `ToolChoiceRequired{}` | `"required"` | `{"type":"any"}` | ignored |
+| `ToolChoiceNone{}` | `"none"` | omitted | ignored |
+| `ToolChoiceTool{Name:"X"}` | `{"type":"function",...}` | `{"type":"tool","name":"X"}` | ignored |
 
 ### Struct Tag Reference
 
-The `ToolDefinitionFor[T]()` function uses these tags:
-
-- `json:"fieldName"` - Parameter name (required)
-- `jsonschema:"description=..."` - Parameter description
-- `jsonschema:"required"` - Mark parameter as required
-- `jsonschema:"enum=val1,enum=val2"` - Restrict to specific values
-- `jsonschema:"minimum=1,maximum=10"` - Numeric constraints
-- `jsonschema:"pattern=^[a-z]+$"` - String pattern (regex)
-
-### Manual Tool Definition
-
-You can also define tools manually:
-
 ```go
-tools := []llm.ToolDefinition{
-    {
-        Name:        "get_weather",
-        Description: "Get current weather for a location",
-        Parameters: map[string]any{
-            "type": "object",
-            "properties": map[string]any{
-                "location": map[string]any{
-                    "type":        "string",
-                    "description": "City name",
-                },
-            },
-            "required": []string{"location"},
-        },
-    },
+type Params struct {
+    Location string  `json:"location" jsonschema:"description=City name,required"`
+    Unit     string  `json:"unit"     jsonschema:"description=Unit,enum=celsius,enum=fahrenheit"`
+    Limit    int     `json:"limit"    jsonschema:"minimum=1,maximum=100"`
+    Pattern  string  `json:"pattern"  jsonschema:"pattern=^[a-z]+$"`
 }
 ```
 
-**Important:** Tool result messages must include `ToolCallID` to link them to the original tool call.
-
-## Tool Choice
-
-Control whether and which tools the model should call using `ToolChoice`:
+## Messages
 
 ```go
-// Let the model decide (default behavior)
-stream, _ := provider.CreateStream(ctx, llm.StreamOptions{
-    Model:      "openai/gpt-4o",
-    Messages:   messages,
-    Tools:      tools,
-    ToolChoice: llm.ToolChoiceAuto{},  // or nil for the same behavior
-})
-
-// Force the model to call at least one tool
-stream, _ := provider.CreateStream(ctx, llm.StreamOptions{
-    Model:      "openai/gpt-4o",
-    Messages:   messages,
-    Tools:      tools,
-    ToolChoice: llm.ToolChoiceRequired{},
-})
-
-// Force the model to call a specific tool
-stream, _ := provider.CreateStream(ctx, llm.StreamOptions{
-    Model:      "openai/gpt-4o",
-    Messages:   messages,
-    Tools:      tools,
-    ToolChoice: llm.ToolChoiceTool{Name: "get_weather"},
-})
-
-// Prevent the model from calling any tools
-stream, _ := provider.CreateStream(ctx, llm.StreamOptions{
-    Model:      "openai/gpt-4o",
-    Messages:   messages,
-    Tools:      tools,
-    ToolChoice: llm.ToolChoiceNone{},
-})
+var msgs llm.Messages
+msgs.AddSystemMsg("You are helpful.")
+msgs.AddUserMsg("Hello")
+msgs.AddAssistantMsg("Hi there")
+msgs.AddToolCallResult(callID, output, false /* isError */)
+msgs.Append(msg)
 ```
 
-### ToolChoice Types
-
-| Type | Description | OpenAI | Anthropic | Ollama |
-|------|-------------|--------|-----------|--------|
-| `nil` / `ToolChoiceAuto{}` | Model decides | `"auto"` | `{"type":"auto"}` | (ignored) |
-| `ToolChoiceRequired{}` | Must call ≥1 tool | `"required"` | `{"type":"any"}` | (ignored) |
-| `ToolChoiceNone{}` | Cannot call tools | `"none"` | (omitted) | (ignored) |
-| `ToolChoiceTool{Name:"X"}` | Must call tool "X" | `{"type":"function",...}` | `{"type":"tool","name":"X"}` | (ignored) |
-
-**Note:** Ollama does not support `tool_choice`. All ToolChoice settings are silently ignored and treated as auto behavior.
-
-### Validation
-
-The library validates ToolChoice at request time:
-- `ToolChoice` cannot be set without `Tools`
-- `ToolChoiceTool{Name: "X"}` must reference an existing tool in `Tools`
+Or construct inline:
 
 ```go
-opts := llm.StreamOptions{
-    Model:      "gpt-4o",
-    Messages:   messages,
-    Tools:      tools,
-    ToolChoice: llm.ToolChoiceTool{Name: "unknown_tool"},
+msgs := llm.Messages{
+    &llm.SystemMsg{Content: "You are helpful."},
+    &llm.UserMsg{Content: "Hello"},
+    &llm.AssistantMsg{ToolCalls: []llm.ToolCall{tc}},
+    &llm.ToolCallResult{ToolCallID: tc.ID, Output: result},
 }
-err := opts.Validate()  // Error: ToolChoiceTool references unknown tool "unknown_tool"
 ```
 
-## Reasoning Effort
-
-Control how many reasoning tokens OpenAI models generate before producing a response. Lower reasoning effort means faster responses and fewer tokens used.
+## Reasoning Effort (OpenAI)
 
 ```go
-// Use low reasoning for faster responses
-stream, _ := provider.CreateStream(ctx, llm.StreamOptions{
-    Model:           "openai/gpt-5",
-    Messages:        messages,
-    ReasoningEffort: llm.ReasoningEffortLow,
-})
-
-// Use high reasoning for complex tasks
-stream, _ := provider.CreateStream(ctx, llm.StreamOptions{
+stream, _ := p.CreateStream(ctx, llm.StreamRequest{
     Model:           "openai/o3",
     Messages:        messages,
     ReasoningEffort: llm.ReasoningEffortHigh,
 })
 
-// Disable reasoning entirely (GPT-5.1+ only)
-stream, _ := provider.CreateStream(ctx, llm.StreamOptions{
-    Model:           "openai/gpt-5.1",
-    Messages:        messages,
-    ReasoningEffort: llm.ReasoningEffortNone,
-})
+// Reasoning tokens arrive as StreamEventDelta with DeltaTypeReasoning
+for event := range stream {
+    if event.Type == llm.StreamEventDelta {
+        fmt.Print(event.Text())          // response text
+        fmt.Print(event.ReasoningText()) // thinking tokens
+    }
+}
 ```
 
-### ReasoningEffort Values
-
-| Value | Constant | Description |
-|-------|----------|-------------|
-| `"none"` | `ReasoningEffortNone` | No reasoning (GPT-5.1+ only) |
-| `"minimal"` | `ReasoningEffortMinimal` | Minimal reasoning (pre-5.1 models only) |
-| `"low"` | `ReasoningEffortLow` | Low reasoning |
-| `"medium"` | `ReasoningEffortMedium` | Medium reasoning (OpenAI API default for pre-5.1) |
-| `"high"` | `ReasoningEffortHigh` | High reasoning |
-| `"xhigh"` | `ReasoningEffortXHigh` | Maximum reasoning (codex-max+ only) |
-
-### Model-Specific Support
-
-The OpenAI provider maps `ReasoningEffort` values to valid API values per model:
-
-| Model Category | Supported Values | Default | Notes |
-|----------------|------------------|---------|-------|
-| Non-reasoning (gpt-4o, gpt-4, gpt-3.5) | N/A | N/A | Parameter ignored |
-| Pre-5.1 reasoning (gpt-5, o1, o3) | minimal, low, medium, high | medium | `none` not supported |
-| gpt-5.1 | none, low, medium, high | none | `minimal` mapped to `low` |
-| Pro models (gpt-5-pro, o3-pro) | high only | high | Other values error |
-| Codex models (gpt-5.1-codex+) | none, low, medium, high, xhigh | varies | `minimal` mapped to `low` |
-
-### Provider Support
-
-| Provider | Behavior |
-|----------|----------|
-| **OpenAI** | Model-specific mapping with validation (see above) |
-| **OpenRouter** | Passed through if specified, no default |
-| **Anthropic** | Ignored (uses different `thinking.budget_tokens` approach) |
-| **Ollama** | Ignored |
-
-**Note:** If not specified, the parameter is omitted and the OpenAI API uses its default for the model.
+| Constant | Value | Notes |
+|----------|-------|-------|
+| `ReasoningEffortNone` | `"none"` | GPT-5.1+ only |
+| `ReasoningEffortLow` | `"low"` | |
+| `ReasoningEffortMedium` | `"medium"` | Default for pre-5.1 |
+| `ReasoningEffortHigh` | `"high"` | |
+| `ReasoningEffortXHigh` | `"xhigh"` | Codex-max+ only |
 
 ## Prompt Caching
 
-Prompt caching reduces cost and latency on repeated requests by reusing previously
-processed input tokens. Behaviour varies by provider — for most use cases, set a
-`CacheHint` on `StreamOptions` or on individual messages and the library handles the rest.
-
-### Quick Start
-
 ```go
-import "github.com/codewandler/llm"
-
-// Enable automatic caching for the entire conversation prefix.
-// Works for Anthropic, Bedrock (Claude), and OpenAI (always automatic).
-events, err := provider.CreateStream(ctx, llm.StreamOptions{
-    Model: "anthropic/claude-sonnet-4-6",
-    Messages: llm.Messages{
-        &llm.SystemMsg{Content: largeSystemPrompt},
-        &llm.UserMsg{Content: "Hello!"},
-    },
+// Top-level hint: cache the entire conversation prefix
+events, err := p.CreateStream(ctx, llm.StreamRequest{
+    Model:     "anthropic/claude-sonnet-4-5",
+    Messages:  messages,
     CacheHint: &llm.CacheHint{Enabled: true},
 })
-```
 
-On the **first call**, the provider writes the prompt prefix to cache
-(`CacheWriteTokens > 0`). On **subsequent calls within the TTL window** with the same
-prefix, the provider reads from cache (`CacheReadTokens > 0`, cost and latency drop
-significantly).
-
-Inspect cache usage via the `StreamEventDone` event:
-
-```go
-for event := range events {
-    if event.Type == llm.StreamEventDone && event.Usage != nil {
-        fmt.Printf("cached read:  %d tokens\n", event.Usage.CacheReadTokens)
-        fmt.Printf("cached write: %d tokens\n", event.Usage.CacheWriteTokens)
-        fmt.Printf("cost:         $%.6f\n",     event.Usage.Cost)
-    }
-}
-```
-
-### Controlling Cache TTL
-
-The default TTL is **5 minutes** (refreshed on each cache hit, at no extra cost).
-For workloads with longer processing times, request a **1-hour TTL**:
-
-```go
-events, err := provider.CreateStream(ctx, llm.StreamOptions{
-    Model:     "anthropic/claude-sonnet-4-6",
-    Messages:  messages,
-    CacheHint: &llm.CacheHint{Enabled: true, TTL: "1h"},
-})
-```
-
-> ⚠️ 1-hour TTL is only available on Claude Haiku 4.5, Sonnet 4.5, and Opus 4.5
-> (Anthropic direct and Bedrock). For other models the `TTL: "1h"` hint silently falls
-> back to the default 5-minute TTL.
-
-### Fine-Grained Cache Breakpoints (Advanced)
-
-For requests with multiple sections that change at different rates — e.g. static tool
-definitions and a growing conversation — attach a `CacheHint` directly to individual
-messages. The provider caches everything up to each marked block (up to 4 breakpoints
-per request on Anthropic and Bedrock).
-
-```go
-events, err := provider.CreateStream(ctx, llm.StreamOptions{
-    Model: "anthropic/claude-sonnet-4-6",
-    Messages: llm.Messages{
-        // Cache the large static system prompt at this breakpoint
-        &llm.SystemMsg{
-            Content:   largeSystemPrompt,
-            CacheHint: &llm.CacheHint{Enabled: true},
-        },
-        &llm.UserMsg{Content: "Turn 1"},
-        &llm.AssistantMsg{Content: "Response 1"},
-        // Also cache up to the last user turn
-        &llm.UserMsg{
-            Content:   "Turn 2",
-            CacheHint: &llm.CacheHint{Enabled: true},
-        },
+// Per-message breakpoints (advanced)
+msgs := llm.Messages{
+    &llm.SystemMsg{
+        Content:   largeSystemPrompt,
+        CacheHint: &llm.CacheHint{Enabled: true},
     },
-})
+    &llm.UserMsg{Content: "Hello"},
+}
 ```
 
-Per-message hints and `StreamOptions.CacheHint` are mutually exclusive: if any message
-carries a `CacheHint`, the top-level field is ignored.
-
-### Provider Support Summary
-
-| Provider | Mode | Annotation required | TTL options |
-|---|---|---|---|
-| **Anthropic** (direct) | Explicit breakpoints | `CacheHint` on messages or `StreamOptions` | `"5m"` (default), `"1h"` (selected models) |
-| **Bedrock** (Claude) | Explicit breakpoints | `CacheHint` on messages or `StreamOptions` | `"5m"` (default), `"1h"` (selected models) |
-| **OpenAI** | Fully automatic | None (always active) | `"in_memory"` default, `"1h"` via `CacheHint{TTL: "1h"}` |
-| **Claude OAuth** | Same as Anthropic | Same as Anthropic | Same as Anthropic |
-| **Ollama / OpenRouter** | Not supported | Ignored | — |
-
-### Minimum Token Threshold
-
-Providers only cache prompts above a minimum token count:
-
-| Provider | Minimum |
-|---|---|
-| Anthropic direct | 1,024 tokens |
-| Bedrock (Claude) | 2,048 tokens (varies by model) |
-| OpenAI | 1,024 tokens |
-
-Cache hints on smaller prompts are silently ignored — no error is returned. The
-`CacheWriteTokens` and `CacheReadTokens` fields in `Usage` will be `0`.
-
-### Pricing
-
-Cache reads are significantly cheaper than regular input tokens:
-
-| Provider | Cache write (relative) | Cache read (relative) |
+| Provider | Mode | TTL options |
 |---|---|---|
-| Anthropic | 1.25× input price | 0.1× input price |
-| Bedrock (Claude) | 1.25× input price | 0.1× input price |
-| OpenAI | 1× input price (first call) | 0.5× input price |
+| **Anthropic** | Explicit breakpoints | 5 min (default), 1 h (selected models) |
+| **Bedrock** (Claude) | Explicit breakpoints | 5 min (default), 1 h (selected models) |
+| **OpenAI** | Fully automatic | in-memory (default), 1 h via `CacheHint{TTL:"1h"}` |
+| **Ollama / OpenRouter** | Not supported | — |
 
-`Usage.Cost` in the `StreamEventDone` event accounts for cache read and write pricing
-automatically.
+Cache usage is reported in `event.Usage.CacheReadTokens` / `CacheWriteTokens`.
 
-## Multi-Turn Conversations
+## Model Reference Format
 
-Build conversations by appending messages:
+```
+anthropic/claude-sonnet-4-5           # Direct Anthropic API
+claude/claude-sonnet-4-5              # Claude OAuth provider
+openai/gpt-4o                         # OpenAI
+bedrock/anthropic.claude-3-5-sonnet   # AWS Bedrock
+ollama/llama3.2:1b                    # Local Ollama
+openrouter/anthropic/claude-sonnet-4.5  # OpenRouter proxy
+```
+
+Global aliases (configured via `auto.WithGlobalAlias`):
+- `fast` — fastest/cheapest model
+- `default` — balanced performance
+- `powerful` — most capable model
+- `codex` — OpenAI Codex model
+
+## Testing with `llmtest`
 
 ```go
-messages := llm.Messages{
-    &llm.UserMsg{Content: "Hello!"},
-}
+import "github.com/codewandler/llm/llmtest"
 
-// First turn
-events, _ := provider.CreateStream(ctx, llm.StreamOptions{
-    Model:    "ollama/glm-4.7-flash",
-    Messages: messages,
-})
+ch := llmtest.SendEvents(
+    llmtest.TextEvent("hello"),
+    llmtest.ToolEvent("call_1", "get_weather", map[string]any{"location": "Berlin"}),
+    llmtest.DoneEvent(nil),
+)
 
-var response string
-for event := range events {
-    if event.Type == llm.StreamEventDelta {
-        response += event.Delta
-    }
-}
-
-// Add assistant response to history
-messages = append(messages, &llm.AssistantMsg{Content: response})
-
-// Second turn
-messages = append(messages, &llm.UserMsg{Content: "Tell me more about that"})
-
-events, _ = provider.CreateStream(ctx, llm.StreamOptions{
-    Model:    "ollama/glm-4.7-flash",
-    Messages: messages,
-})
+result := <-llm.Process(ctx, ch).HandleTool(...).Result()
 ```
+
+Functions: `SendEvents`, `TextEvent`, `ReasoningEvent`, `ToolEvent`, `DoneEvent`, `ErrorEvent`.
 
 ## Context Cancellation
-
-All stream parsers support context cancellation:
 
 ```go
 ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 defer cancel()
 
-events, err := provider.CreateStream(ctx, llm.StreamOptions{
-    Model: "ollama/glm-4.7-flash",
-    Messages: llm.Messages{
-        &llm.UserMsg{Content: "Write a very long essay"},
-    },
-})
-
+events, err := p.CreateStream(ctx, llm.StreamRequest{...})
 for event := range events {
     if event.Type == llm.StreamEventError {
-        if errors.Is(event.Error, context.DeadlineExceeded) {
-            fmt.Println("Request timed out")
+        if errors.Is(event.Error, llm.ErrContextCancelled) {
+            fmt.Println("timed out")
         }
     }
 }
@@ -783,231 +540,62 @@ for event := range events {
 
 ## Environment Variables
 
-Configure providers via environment variables:
-
 ```bash
-# Anthropic (API key)
 export ANTHROPIC_API_KEY="your-api-key"
-
-# OpenAI
 export OPENAI_KEY="your-api-key"
-
-# OpenRouter
 export OPENROUTER_API_KEY="your-api-key"
-
-# Ollama (optional, defaults to http://localhost:11434)
-export OLLAMA_BASE_URL="http://localhost:11434"
-
-# AWS Bedrock (uses standard AWS credential chain)
+export OLLAMA_BASE_URL="http://localhost:11434"  # optional, default shown
 export AWS_REGION="us-east-1"
 export AWS_ACCESS_KEY_ID="your-access-key"
 export AWS_SECRET_ACCESS_KEY="your-secret-key"
-```
-
-**Note:** The Claude OAuth provider auto-detects credentials from `~/.claude/.credentials.json` (created by Claude Code CLI).
-
-## Model Reference Format
-
-Use the `provider/model` format with the registry:
-
-```
-anthropic/claude-sonnet-4-6           # Direct Anthropic API
-claude/claude-sonnet-4-6              # Claude OAuth provider
-openai/gpt-4o                         # OpenAI
-openai/gpt-4o-mini                    # OpenAI
-bedrock/anthropic.claude-3-5-sonnet   # AWS Bedrock
-ollama/glm-4.7-flash                  # Local Ollama
-ollama/llama3.2:1b                    # Local Ollama
-openrouter/anthropic/claude-sonnet-4.5  # OpenRouter proxy
-openrouter/google/gemini-2.0-flash-001  # OpenRouter proxy
-```
-
-## Stream Event Types
-
-```go
-type StreamEvent struct {
-    Type     StreamEventType
-    Start    *StreamStart     // For StreamEventStart
-    Delta    string           // For StreamEventDelta
-    ToolCall *ToolCall        // For StreamEventToolCall
-    Usage    *Usage           // For StreamEventDone
-    Error    error            // For StreamEventError
-}
-
-// Event types
-const (
-    StreamEventStart    // Stream metadata (first event)
-    StreamEventDelta    // Text delta from model
-    StreamEventToolCall // Tool call request
-    StreamEventDone     // Stream complete (includes usage)
-    StreamEventError    // Error occurred
-)
-```
-
-### Stream Start Metadata
-
-The `StreamEventStart` event is emitted first and contains request metadata:
-
-```go
-type StreamStart struct {
-    RequestID        string        // Provider request ID (e.g., "msg_01XFDUDYJgAACzvnptvVoYEL")
-    RequestedModel   string        // Model requested by caller
-    ResolvedModel    string        // Model after alias resolution
-    ProviderModel    string        // Actual model from API response
-    TimeToFirstToken time.Duration // Time until first content token
-}
-```
-
-**Usage:**
-
-```go
-for event := range stream {
-    switch event.Type {
-    case llm.StreamEventStart:
-        fmt.Printf("Request ID: %s\n", event.Start.RequestID)
-        fmt.Printf("Model: %s -> %s\n", event.Start.RequestedModel, event.Start.ProviderModel)
-    case llm.StreamEventDelta:
-        fmt.Print(event.Delta)
-    }
-}
-```
-
-### Usage Information
-
-The `Usage` struct provides token counts and detailed breakdown:
-
-```go
-type Usage struct {
-    InputTokens     int     // Total input tokens (uncached + cache-read + cache-write)
-    OutputTokens    int     // Completion tokens
-    TotalTokens     int     // InputTokens + OutputTokens
-    Cost            float64 // Cost in USD (Anthropic, OpenRouter)
-
-    // Detailed breakdown (provider-specific, may be zero)
-    CacheReadTokens  int // Input tokens served from an existing cache entry
-    CacheWriteTokens int // Input tokens written to a new cache entry
-    ReasoningTokens  int // Tokens used for model reasoning
-}
-```
-
-**Usage in streaming:**
-
-```go
-for event := range stream {
-    if event.Type == llm.StreamEventDone && event.Usage != nil {
-        fmt.Printf("Tokens: %d in, %d out\n",
-            event.Usage.InputTokens, event.Usage.OutputTokens)
-
-        if event.Usage.CacheReadTokens > 0 {
-            fmt.Printf("Cache hit: %d tokens\n", event.Usage.CacheReadTokens)
-        }
-        if event.Usage.ReasoningTokens > 0 {
-            fmt.Printf("Reasoning: %d tokens\n", event.Usage.ReasoningTokens)
-        }
-    }
-}
-```
-
-| Field | Description | Providers |
-|-------|-------------|-----------|
-| `InputTokens` | Total input tokens processed (uncached + cache-read + cache-write) | All |
-| `OutputTokens` | Completion tokens | All |
-| `TotalTokens` | InputTokens + OutputTokens | All |
-| `Cost` | Cost in USD | Anthropic (calculated), OpenRouter |
-| `CacheReadTokens` | Input tokens served from an existing cache entry | Anthropic, Bedrock, OpenAI, OpenRouter |
-| `CacheWriteTokens` | Input tokens written to a new cache entry | Anthropic, Bedrock |
-| `ReasoningTokens` | Tokens used for reasoning | OpenAI, OpenRouter (reasoning models) |
-
-## Error Handling
-
-```go
-events, err := provider.CreateStream(ctx, opts)
-if err != nil {
-    // Initial request failed (invalid params, auth error, etc.)
-    return fmt.Errorf("create stream: %w", err)
-}
-
-for event := range events {
-    if event.Type == llm.StreamEventError {
-        // Stream error (network issue, parse error, etc.)
-        return fmt.Errorf("stream error: %w", event.Error)
-    }
-}
-```
-
-## Testing
-
-The library includes comprehensive tests:
-
-```bash
-# Run all tests
-go test ./...
-
-# Run with race detector
-go test -race ./...
-
-# Run integration tests (requires providers)
-go test -v ./... -run TestProviders
-
-# Run Ollama compatibility test
-go test -v ./... -run TestOllamaModels
 ```
 
 ## Architecture
 
 ```
 llm/
-├── api.go              # Core types: Message, Model, Role, ToolCall
-├── provider.go         # Provider interface, StreamEvent, StreamOptions
-├── registry.go         # Provider registry, model resolution
-├── tool.go             # ToolDefinition
+├── llm.go              # Provider interface, Streamer interface
+├── stream.go           # StreamEvent, StreamRequest, Delta, EventStream, Usage
+├── stream_response.go  # StreamResponse, Process(), StreamResult
+├── message.go          # Message types: UserMsg, AssistantMsg, ToolCallResult, etc.
+├── tool.go             # ToolDefinition, ToolSpec, ToolSet, TypedToolCall
+├── errors.go           # ProviderError, error sentinels
+├── model.go            # Model type
+├── option.go           # Functional options (WithAPIKey, WithHTTPClient, etc.)
+├── reasoning.go        # ReasoningEffort constants
+├── llmtest/            # Test helpers (SendEvents, TextEvent, etc.)
 │
-├── provider/
-│   ├── register.go     # Default registry with env-based config
-│   ├── aggregate/      # Multi-provider aggregation with failover
-│   ├── anthropic/      # Direct Anthropic API
-│   │   └── claude/     # OAuth-based Claude provider
-│   ├── bedrock/        # AWS Bedrock
-│   ├── openai/         # OpenAI API
-│   ├── ollama/         # Local Ollama integration
-│   ├── openrouter/     # OpenRouter proxy (229 models)
-│   └── fake/           # Test provider
-│
-└── cmd/llmcli/         # CLI tool for testing and OAuth management
+└── provider/
+    ├── anthropic/      # Direct Anthropic API
+    │   └── claude/     # OAuth-based Claude provider
+    ├── bedrock/        # AWS Bedrock
+    ├── openai/         # OpenAI API (Chat + Responses API)
+    ├── openrouter/     # OpenRouter proxy
+    ├── ollama/         # Local Ollama
+    ├── auto/           # Zero-config multi-provider setup
+    ├── router/         # Multi-provider routing with failover
+    └── fake/           # Test provider
 ```
 
 ## CLI Tool
 
-The `llmcli` tool provides quick testing and OAuth credential management:
-
 ```bash
-# Check auth status (uses ~/.claude/.credentials.json)
-go run ./cmd/llmcli auth status
-
-# Quick inference
-go run ./cmd/llmcli infer "Hello, how are you?"
-
-# Verbose output with model info, tokens, cost, and timing
-go run ./cmd/llmcli infer -v -m default "Explain Go channels"
-
-# Model aliases: fast (haiku), default (sonnet), powerful (opus)
-go run ./cmd/llmcli infer -m powerful "Complex analysis task"
+go run ./cmd/llmcli auth status          # Check Claude OAuth credentials
+go run ./cmd/llmcli infer "Hello"        # Quick inference test
+go run ./cmd/llmcli infer -v -m default "Explain Go channels"  # Verbose
 ```
 
 ## Contributing
 
-Contributions welcome! Please ensure:
-- All tests pass: `go test ./...`
-- No race conditions: `go test -race ./...`
-- Code is formatted: `go fmt ./...`
-- Follow existing patterns (see [AGENTS.md](AGENTS.md))
+```bash
+go test ./...         # run all tests
+go test -race ./...   # race detector
+go fmt ./...          # format
+go vet ./...          # vet
+```
+
+See [AGENTS.md](AGENTS.md) for architecture and coding conventions.
 
 ## License
 
-MIT License - see [LICENSE](LICENSE) file for details
-
-## See Also
-
-- [Provider-Specific Documentation](provider/)
-- [OpenRouter Models](provider/openrouter/README.md)
-- [Developer Guide](AGENTS.md)
+MIT — see [LICENSE](LICENSE).
