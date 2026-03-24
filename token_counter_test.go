@@ -84,7 +84,7 @@ func TestCountMessage_ConsistentWithCountTokens(t *testing.T) {
 	err := CountMessagesAndTools(tc, TokenCountRequest{
 		Model:    model,
 		Messages: msgs,
-	}, "o200k_base", 0, 0)
+	}, CountOpts{Encoding: "o200k_base"})
 	require.NoError(t, err)
 
 	// CountMessage should match each entry exactly
@@ -136,7 +136,7 @@ func TestCountMessagesAndTools_EmptyModel(t *testing.T) {
 	tc := &TokenCount{}
 	err := CountMessagesAndTools(tc, TokenCountRequest{
 		Messages: Messages{&UserMsg{Content: "hello"}},
-	}, "cl100k_base", 0, 0)
+	}, CountOpts{Encoding: "cl100k_base"})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "model is required")
 }
@@ -152,7 +152,7 @@ func TestCountMessagesAndTools_PerMessageLen(t *testing.T) {
 	err := CountMessagesAndTools(tc, TokenCountRequest{
 		Model:    "gpt-4o",
 		Messages: msgs,
-	}, "cl100k_base", 0, 0)
+	}, CountOpts{Encoding: "cl100k_base"})
 	require.NoError(t, err)
 	assert.Len(t, tc.PerMessage, len(msgs))
 }

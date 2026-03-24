@@ -37,7 +37,11 @@ func (p *Provider) CountTokens(_ context.Context, req llm.TokenCountRequest) (*l
 	const perMsgOverhead = 4
 	const replyPriming = 3
 
-	if err := llm.CountMessagesAndTools(tc, req, enc, perMsgOverhead, replyPriming); err != nil {
+	if err := llm.CountMessagesAndTools(tc, req, llm.CountOpts{
+		Encoding:       enc,
+		PerMsgOverhead: perMsgOverhead,
+		ReplyPriming:   replyPriming,
+	}); err != nil {
 		return nil, fmt.Errorf("openai: %w", err)
 	}
 	return tc, nil

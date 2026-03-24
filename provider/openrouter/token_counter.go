@@ -21,7 +21,7 @@ func (p *Provider) CountTokens(_ context.Context, req llm.TokenCountRequest) (*l
 	enc, _ := tokencount.EncodingForModel(req.Model)
 
 	tc := &llm.TokenCount{}
-	if err := llm.CountMessagesAndTools(tc, req, enc, 0, 0); err != nil {
+	if err := llm.CountMessagesAndTools(tc, req, llm.CountOpts{Encoding: enc}); err != nil {
 		return nil, fmt.Errorf("openrouter: %w", err)
 	}
 	return tc, nil

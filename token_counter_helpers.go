@@ -82,6 +82,21 @@ const anthropicToolFirstOverhead = 126
 // tokens → delta = 85 tokens per additional tool.
 const anthropicToolAdditionalOverhead = 85
 
+// CountOpts configures the shared CountMessagesAndTools helper.
+type CountOpts struct {
+	// Encoding is the BPE encoding to use for token counting
+	// (e.g. "cl100k_base", "o200k_base", "minimax_bpe").
+	Encoding string
+
+	// PerMsgOverhead is added to InputTokens once per message. For example,
+	// OpenAI adds 4 tokens per message for role/framing overhead.
+	PerMsgOverhead int
+
+	// ReplyPriming is a fixed addend for reply-priming tokens. For example,
+	// OpenAI adds 3 tokens for the "assistant" token prepended by the API.
+	ReplyPriming int
+}
+
 // CountMessagesAndToolsAnthropic is like CountMessagesAndTools but applies
 // Anthropic-specific tool overhead constants: the hidden tool-use system
 // preamble (~330 tokens, paid once) plus per-tool serialisation framing
@@ -90,18 +105,31 @@ const anthropicToolAdditionalOverhead = 85
 //
 // Use this for anthropic, bedrock, and claude providers.
 func CountMessagesAndToolsAnthropic(tc *TokenCount, req TokenCountRequest) error {
-	if err := CountMessagesAndTools(tc, req, tokencount.EncodingCL100K, 0, 0); err != nil {
+	if err := CountMessagesAndTools(tc, req, CountOpts{Encoding: tokencount.EncodingCL100K}); err != nil {
 		return err
 	}
 	if len(req.Tools) > 0 {
-		// Track the preamble + framing as provider overhead, separate from the
-		// raw tool JSON counts in ToolsTokens. This keeps sum(PerTool)==ToolsTokens.
-		toolOverhead := anthropicToolPreamble + anthropicToolFirstOverhead +
-			(len(req.Tools)-1)*anthropicToolAdditionalOverhead
-		tc.OverheadTokens += toolOverhead
-		tc.InputTokens += toolOverhead
+		ApplyAnthropicToolOverhead(tc, len(req.Tools))
 	}
 	return nil
+}
+
+// ApplyAnthropicToolOverhead adds the Anthropic tool-use preamble and per-tool
+// serialisation framing to tc.OverheadTokens and tc.InputTokens.
+//
+// This is exported so that providers using the Anthropic API format (e.g. MiniMax)
+// can apply the same overhead after calling CountMessagesAndTools with their own
+// encoding.
+func ApplyAnthropicToolOverhead(tc *TokenCount, numTools int) {
+	if numTools <= 0 {
+		return
+	}
+	// Track the preamble + framing as provider overhead, separate from the
+	// raw tool JSON counts in ToolsTokens. This keeps sum(PerTool)==ToolsTokens.
+	toolOverhead := anthropicToolPreamble + anthropicToolFirstOverhead +
+		(numTools-1)*anthropicToolAdditionalOverhead
+	tc.OverheadTokens += toolOverhead
+	tc.InputTokens += toolOverhead
 }
 
 // CountMessagesAndTools is a low-level helper for provider TokenCounter
@@ -113,12 +141,7 @@ func CountMessagesAndToolsAnthropic(tc *TokenCount, req TokenCountRequest) error
 // the role breakdown fields.
 //
 // Returns an error if req.Model is empty.
-//
-// perMsgOverhead is added to InputTokens once per message (e.g. 4 for the
-// OpenAI cookbook formula; 0 for approximation-only providers).
-// replyPriming is a fixed addend for reply-priming tokens (e.g. 3 for OpenAI;
-// 0 for others).
-func CountMessagesAndTools(tc *TokenCount, req TokenCountRequest, encoding string, perMsgOverhead int, replyPriming int) error {
+func CountMessagesAndTools(tc *TokenCount, req TokenCountRequest, opts CountOpts) error {
 	if req.Model == "" {
 		return fmt.Errorf("llm: CountTokens: model is required")
 	}
@@ -133,12 +156,12 @@ func CountMessagesAndTools(tc *TokenCount, req TokenCountRequest, encoding strin
 	// Count each message
 	for i, msg := range msgs {
 		text := messageText(msg)
-		n, err := tokencount.CountText(encoding, text)
+		n, err := tokencount.CountText(opts.Encoding, text)
 		if err != nil {
 			return fmt.Errorf("llm: count tokens for message[%d]: %w", i, err)
 		}
 		tc.PerMessage[i] = n
-		total += n + perMsgOverhead
+		total += n + opts.PerMsgOverhead
 	}
 
 	// Count each tool definition
@@ -148,7 +171,7 @@ func CountMessagesAndTools(tc *TokenCount, req TokenCountRequest, encoding strin
 		if err != nil {
 			return fmt.Errorf("llm: marshal tool %q: %w", tool.Name, err)
 		}
-		n, err := tokencount.CountText(encoding, string(b))
+		n, err := tokencount.CountText(opts.Encoding, string(b))
 		if err != nil {
 			return fmt.Errorf("llm: count tokens for tool %q: %w", tool.Name, err)
 		}
@@ -156,7 +179,7 @@ func CountMessagesAndTools(tc *TokenCount, req TokenCountRequest, encoding strin
 		toolTotal += n
 	}
 	tc.ToolsTokens = toolTotal
-	total += toolTotal + replyPriming
+	total += toolTotal + opts.ReplyPriming
 
 	tc.InputTokens = total
 	applyRoleBreakdown(tc, msgs)

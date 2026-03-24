@@ -20,7 +20,7 @@ var _ llm.TokenCounter = (*Provider)(nil)
 // gives a rough ±10% estimate for English text.
 func (p *Provider) CountTokens(_ context.Context, req llm.TokenCountRequest) (*llm.TokenCount, error) {
 	tc := &llm.TokenCount{}
-	if err := llm.CountMessagesAndTools(tc, req, tokencount.EncodingCL100K, 0, 0); err != nil {
+	if err := llm.CountMessagesAndTools(tc, req, llm.CountOpts{Encoding: tokencount.EncodingCL100K}); err != nil {
 		return nil, fmt.Errorf("ollama: %w", err)
 	}
 	return tc, nil
