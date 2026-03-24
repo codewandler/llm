@@ -55,7 +55,7 @@ func New(ctx context.Context, opts ...Option) (*router.Provider, error) {
 
 	// Auto-detect available providers (unless disabled)
 	if cfg.autoDetect {
-		detected := detectProviders(cfg.httpClient, cfg.llmOpts)
+		detected := detectProviders(cfg.httpClient, cfg.llmOpts, cfg.disabledTypes)
 		allProviders = append(allProviders, detected...)
 	}
 

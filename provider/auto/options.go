@@ -28,13 +28,14 @@ type claudeStoreEntry struct {
 
 // config holds the auto provider configuration.
 type config struct {
-	name          string
-	providers     []providerEntry
-	claudeStores  []claudeStoreEntry // stores to enumerate accounts from
-	autoDetect    bool
-	globalAliases map[string][]string // user-defined global aliases: alias -> []targets
-	httpClient    *http.Client        // optional shared HTTP client for all providers
-	llmOpts       []llm.Option        // optional shared llm.Options for all providers (e.g. logger)
+	name           string
+	providers      []providerEntry
+	claudeStores   []claudeStoreEntry // stores to enumerate accounts from
+	autoDetect     bool
+	disabledTypes  map[string]bool     // provider types excluded from auto-detection
+	globalAliases  map[string][]string // user-defined global aliases: alias -> []targets
+	httpClient     *http.Client        // optional shared HTTP client for all providers
+	llmOpts        []llm.Option        // optional shared llm.Options for all providers (e.g. logger)
 }
 
 // Option configures the auto provider.
@@ -69,6 +70,29 @@ func WithoutAutoDetect() Option {
 	return func(c *config) {
 		c.autoDetect = false
 	}
+}
+
+// WithoutProvider excludes a provider type from auto-detection.
+// Auto-detection remains enabled for all other provider types.
+// Use the Provider* constants (e.g. ProviderBedrock, ProviderOpenAI).
+//
+// Example:
+//
+//	auto.New(ctx, auto.WithoutProvider(auto.ProviderBedrock))
+func WithoutProvider(providerType string) Option {
+	return func(c *config) {
+		if c.disabledTypes == nil {
+			c.disabledTypes = make(map[string]bool)
+		}
+		c.disabledTypes[providerType] = true
+	}
+}
+
+// WithoutBedrock is a convenience shorthand for WithoutProvider(ProviderBedrock).
+// It prevents AWS Bedrock from being auto-detected even when AWS credentials
+// are present in the environment.
+func WithoutBedrock() Option {
+	return WithoutProvider(ProviderBedrock)
 }
 
 // WithClaude adds all Claude OAuth accounts from a TokenStore.

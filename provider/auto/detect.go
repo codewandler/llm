@@ -15,11 +15,12 @@ import (
 
 // detectProviders returns provider entries for all auto-detectable providers.
 // Detection order determines failover priority.
-func detectProviders(httpClient *http.Client, llmOpts []llm.Option) []providerEntry {
+// Provider types listed in disabled are skipped.
+func detectProviders(httpClient *http.Client, llmOpts []llm.Option, disabled map[string]bool) []providerEntry {
 	var providers []providerEntry
 
 	// 1. Claude local (highest priority for Claude models)
-	if claude.LocalTokenProviderAvailable() {
+	if !disabled[ProviderClaude] && claude.LocalTokenProviderAvailable() {
 		providers = append(providers, providerEntry{
 			name:         "local",
 			providerType: ProviderClaude,
@@ -36,7 +37,7 @@ func detectProviders(httpClient *http.Client, llmOpts []llm.Option) []providerEn
 	}
 
 	// 2. Direct Anthropic API
-	if os.Getenv(EnvAnthropicKey) != "" {
+	if !disabled[ProviderAnthropic] && os.Getenv(EnvAnthropicKey) != "" {
 		providers = append(providers, providerEntry{
 			name:         ProviderAnthropic,
 			providerType: ProviderAnthropic,
@@ -55,7 +56,7 @@ func detectProviders(httpClient *http.Client, llmOpts []llm.Option) []providerEn
 	// 3. Bedrock — after all Claude-family providers since it also serves Claude
 	// models but with higher latency and different pricing.
 	// Only included when AWS credentials are present in the environment.
-	if os.Getenv("AWS_ACCESS_KEY_ID") != "" || os.Getenv("AWS_PROFILE") != "" || os.Getenv("AWS_CONTAINER_CREDENTIALS_RELATIVE_URI") != "" {
+	if !disabled[ProviderBedrock] && (os.Getenv("AWS_ACCESS_KEY_ID") != "" || os.Getenv("AWS_PROFILE") != "" || os.Getenv("AWS_CONTAINER_CREDENTIALS_RELATIVE_URI") != "") {
 		providers = append(providers, providerEntry{
 			name:         ProviderBedrock,
 			providerType: ProviderBedrock,
@@ -75,7 +76,7 @@ func detectProviders(httpClient *http.Client, llmOpts []llm.Option) []providerEn
 	}
 
 	// 4. OpenAI
-	if os.Getenv(EnvOpenAIKey) != "" || os.Getenv(EnvOpenAIKeyAlt) != "" {
+	if !disabled[ProviderOpenAI] && (os.Getenv(EnvOpenAIKey) != "" || os.Getenv(EnvOpenAIKeyAlt) != "") {
 		providers = append(providers, providerEntry{
 			name:         ProviderOpenAI,
 			providerType: ProviderOpenAI,
@@ -91,7 +92,7 @@ func detectProviders(httpClient *http.Client, llmOpts []llm.Option) []providerEn
 	}
 
 	// 5. OpenRouter
-	if os.Getenv(EnvOpenRouterKey) != "" {
+	if !disabled[ProviderOpenRouter] && os.Getenv(EnvOpenRouterKey) != "" {
 		providers = append(providers, providerEntry{
 			name:         ProviderOpenRouter,
 			providerType: ProviderOpenRouter,
@@ -108,7 +109,7 @@ func detectProviders(httpClient *http.Client, llmOpts []llm.Option) []providerEn
 	}
 
 	// 6. MiniMax
-	if os.Getenv(EnvMiniMaxKey) != "" {
+	if !disabled[ProviderMiniMax] && os.Getenv(EnvMiniMaxKey) != "" {
 		providers = append(providers, providerEntry{
 			name:         ProviderMiniMax,
 			providerType: ProviderMiniMax,
