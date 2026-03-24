@@ -1,4 +1,4 @@
-package llm_test
+package integration_test
 
 // token_counter_drift_test.go — integration tests that verify the token count
 // estimates produced by TokenCounter are close to the actual input_tokens
@@ -19,6 +19,7 @@ import (
 	"github.com/codewandler/llm"
 	anthropicprovider "github.com/codewandler/llm/provider/anthropic"
 	"github.com/codewandler/llm/provider/bedrock"
+	minimaxprovider "github.com/codewandler/llm/provider/minimax"
 	"github.com/codewandler/llm/provider/openai"
 )
 
@@ -221,4 +222,58 @@ func requireEnv(t *testing.T, name string) string {
 		t.Skipf("requires %s env var", name)
 	}
 	return v
+}
+
+// --- MiniMax ---
+
+func TestTokenCounterDrift_MiniMax(t *testing.T) {
+	key := requireEnv(t, "MINIMAX_API_KEY")
+	p := minimaxprovider.New(minimaxprovider.WithLLMOpts(llm.WithAPIKey(key)))
+	model := minimaxprovider.ModelM27
+
+	t.Run("simple", func(t *testing.T) {
+		msgs := llm.Messages{
+			&llm.SystemMsg{Content: "You are a helpful assistant."},
+			&llm.UserMsg{Content: "What is the capital of France?"},
+		}
+		// MiniMax uses a proprietary BPE (200K vocab). The tokenizer data is
+		// downloaded from HuggingFace so encoding is correct, but message framing
+		// overhead varies. 40% tolerance matches the Anthropic baseline.
+		testTokenCounterDrift(t, p, model, msgs, nil, 40.0)
+	})
+
+	t.Run("multi_turn", func(t *testing.T) {
+		msgs := llm.Messages{
+			&llm.SystemMsg{Content: "You are a helpful assistant."},
+			&llm.UserMsg{Content: "What is 2+2?"},
+			&llm.AssistantMsg{Content: "2+2 equals 4."},
+			&llm.UserMsg{Content: "What about 3+3?"},
+		}
+		testTokenCounterDrift(t, p, model, msgs, nil, 40.0)
+	})
+
+	t.Run("with_tools", func(t *testing.T) {
+		msgs := llm.Messages{
+			&llm.UserMsg{Content: "What is the weather in Berlin?"},
+		}
+		tools := []llm.ToolDefinition{
+			{
+				Name:        "get_weather",
+				Description: "Get the current weather for a location.",
+				Parameters: map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"location": map[string]any{
+							"type":        "string",
+							"description": "City name",
+						},
+					},
+					"required": []string{"location"},
+				},
+			},
+		}
+		// MiniMax uses Anthropic API format, so tool schemas are tokenized
+		// similarly. 90% tolerance matches the Anthropic baseline.
+		testTokenCounterDrift(t, p, model, msgs, tools, 90.0)
+	})
 }

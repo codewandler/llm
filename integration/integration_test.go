@@ -1,4 +1,4 @@
-package llm_test
+package integration_test
 
 import (
 	"context"
@@ -15,6 +15,7 @@ import (
 	"github.com/codewandler/llm/provider/anthropic/claude"
 	"github.com/codewandler/llm/provider/bedrock"
 	"github.com/codewandler/llm/provider/fake"
+	"github.com/codewandler/llm/provider/minimax"
 	"github.com/codewandler/llm/provider/ollama"
 	"github.com/codewandler/llm/provider/openai"
 	"github.com/codewandler/llm/provider/openrouter"
@@ -126,6 +127,13 @@ func TestProviders(t *testing.T) {
 			model:    bedrock.ModelHaikuLatest,
 			skip:     !isBedrockAvailable(),
 			skipMsg:  "requires AWS credentials (AWS_ACCESS_KEY_ID or ~/.aws/credentials)",
+		},
+		{
+			name:     "minimax",
+			provider: minimax.New(),
+			model:    minimax.ModelM27,
+			skip:     os.Getenv("MINIMAX_API_KEY") == "",
+			skipMsg:  "requires MINIMAX_API_KEY",
 		},
 		/*{
 			name:     "ollama",
