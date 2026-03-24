@@ -37,6 +37,13 @@ func TestEncodingForModel(t *testing.T) {
 		{"llama3.2:1b", EncodingCL100K, false},
 		{"mistral", EncodingCL100K, false},
 		{"some-unknown-model", EncodingCL100K, false},
+		// minimax_bpe
+		{"minimax-m2.7", EncodingMinimax, true},
+		{"minimax-m2.5-highspeed", EncodingMinimax, true},
+		{"minimax-m2.1", EncodingMinimax, true},
+		{"minimax-m2", EncodingMinimax, true},
+		// negative — must NOT match minimax
+		{"my-not-minimax-provider", EncodingCL100K, false},
 	}
 
 	for _, tc := range tests {
@@ -93,4 +100,10 @@ func TestEncodingForModel_CaseInsensitive(t *testing.T) {
 	enc1, _ := EncodingForModel("GPT-4O")
 	enc2, _ := EncodingForModel("gpt-4o")
 	assert.Equal(t, enc1, enc2)
+
+	// MiniMax models are case-insensitive too
+	enc3, _ := EncodingForModel("MiniMax-M2.7")
+	enc4, _ := EncodingForModel("minimax-m2.7")
+	assert.Equal(t, enc3, enc4)
+	assert.Equal(t, EncodingMinimax, enc3)
 }

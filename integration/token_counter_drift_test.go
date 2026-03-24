@@ -236,10 +236,11 @@ func TestTokenCounterDrift_MiniMax(t *testing.T) {
 			&llm.SystemMsg{Content: "You are a helpful assistant."},
 			&llm.UserMsg{Content: "What is the capital of France?"},
 		}
-		// MiniMax uses a proprietary BPE (200K vocab). The tokenizer data is
-		// downloaded from HuggingFace so encoding is correct, but message framing
-		// overhead varies. 40% tolerance matches the Anthropic baseline.
-		testTokenCounterDrift(t, p, model, msgs, nil, 40.0)
+		// MiniMax uses a proprietary BPE (200K vocab). With a system message present
+		// the hidden default system prompt is suppressed, so the only unaccounted
+		// overhead is minor per-message framing rounding. Measured: 7.4% drift.
+		// 15% gives a comfortable safety margin above the observed maximum.
+		testTokenCounterDrift(t, p, model, msgs, nil, 15.0)
 	})
 
 	t.Run("multi_turn", func(t *testing.T) {
@@ -249,7 +250,8 @@ func TestTokenCounterDrift_MiniMax(t *testing.T) {
 			&llm.AssistantMsg{Content: "2+2 equals 4."},
 			&llm.UserMsg{Content: "What about 3+3?"},
 		}
-		testTokenCounterDrift(t, p, model, msgs, nil, 40.0)
+		// Perfect match in calibration (0.0% drift). 10% safety margin.
+		testTokenCounterDrift(t, p, model, msgs, nil, 10.0)
 	})
 
 	t.Run("with_tools", func(t *testing.T) {
@@ -272,8 +274,8 @@ func TestTokenCounterDrift_MiniMax(t *testing.T) {
 				},
 			},
 		}
-		// MiniMax uses Anthropic API format, so tool schemas are tokenized
-		// similarly. 90% tolerance matches the Anthropic baseline.
-		testTokenCounterDrift(t, p, model, msgs, tools, 90.0)
+		// Tool framing is fully accounted for (measured: 0.0% drift).
+		// 5% safety margin for minor API non-determinism.
+		testTokenCounterDrift(t, p, model, msgs, tools, 5.0)
 	})
 }

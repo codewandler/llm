@@ -42,8 +42,7 @@ func DefaultOptions() []llm.Option {
 
 // New creates a new MiniMax provider.
 func New(opts ...Option) *Provider {
-	allLLMOpts := append(DefaultOptions())
-	cfg := llm.Apply(allLLMOpts...)
+	cfg := llm.Apply(DefaultOptions()...)
 	client := cfg.HTTPClient
 	if client == nil {
 		client = llm.DefaultHttpClient()
