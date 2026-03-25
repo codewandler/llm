@@ -25,11 +25,13 @@ import (
 	"time"
 
 	"github.com/codewandler/llm"
+	"github.com/codewandler/llm/sortmap"
+	"github.com/codewandler/llm/tool"
 )
 
 // streamResponses sends a Responses API request and returns an event channel.
-// It is called by Provider.Stream for Codex models.
-func (p *Provider) streamResponses(ctx context.Context, opts llm.Request) (<-chan llm.StreamEvent, error) {
+// It is called by Provider.Publisher for Codex models.
+func (p *Provider) streamResponses(ctx context.Context, opts llm.Request) (llm.Stream, error) {
 	apiKey, err := p.opts.APIKeyFunc(ctx)
 	if err != nil {
 		return nil, llm.NewErrMissingAPIKey(llm.ProviderNameOpenAI)
@@ -58,12 +60,12 @@ func (p *Provider) streamResponses(ctx context.Context, opts llm.Request) (<-cha
 		return nil, llm.NewErrAPIError(llm.ProviderNameOpenAI, resp.StatusCode, string(errBody))
 	}
 
-	stream := llm.NewEventStream()
-	go respParseStream(ctx, resp.Body, stream, respStreamMeta{
+	pub, ch := llm.NewEventPublisher()
+	go respParseStream(ctx, resp.Body, pub, respStreamMeta{
 		requestedModel: opts.Model,
 		startTime:      startTime,
 	})
-	return stream.C(), nil
+	return ch, nil
 }
 
 // --- Request building ---
@@ -155,49 +157,48 @@ func respBuildRequest(opts llm.Request) ([]byte, error) {
 	instructionsSet := false
 	for _, msg := range opts.Messages {
 		switch m := msg.(type) {
-		case *llm.SystemMsg:
+		case llm.SystemMessage:
 			if !instructionsSet {
-				r.Instructions = m.Content
+				r.Instructions = m.Content()
 				instructionsSet = true
 			} else {
 				r.Input = append(r.Input, respInput{
 					Role:    "developer",
-					Content: m.Content,
+					Content: m.Content(),
 				})
 			}
 
-		case *llm.UserMsg:
+		case llm.UserMessage:
 			r.Input = append(r.Input, respInput{
 				Role:    "user",
-				Content: m.Content,
+				Content: m.Content(),
 			})
 
-		case *llm.AssistantMsg:
-			if m.Content != "" {
+		case llm.AssistantMessage:
+			if m.Content() != "" {
 				r.Input = append(r.Input, respInput{
 					Role:    "assistant",
-					Content: m.Content,
+					Content: m.Content(),
 				})
 			}
-			// Each tool call becomes a separate function_call item.
-			for _, tc := range m.ToolCalls {
-				argsJSON, err := json.Marshal(tc.Arguments)
+			for _, tc := range m.ToolCalls() {
+				argsJSON, err := json.Marshal(tc.ToolArgs())
 				if err != nil {
 					return nil, fmt.Errorf("marshal tool call arguments: %w", err)
 				}
 				r.Input = append(r.Input, respInput{
 					Type:      "function_call",
-					CallID:    tc.ID,
-					Name:      tc.Name,
+					CallID:    tc.ToolCallID(),
+					Name:      tc.ToolName(),
 					Arguments: string(argsJSON),
 				})
 			}
 
-		case *llm.ToolCallResult:
+		case llm.ToolMessage:
 			r.Input = append(r.Input, respInput{
 				Type:   "function_call_output",
-				CallID: m.ToolCallID,
-				Output: m.Output,
+				CallID: m.ToolCallID(),
+				Output: m.ToolOutput(),
 			})
 		}
 	}
@@ -208,7 +209,7 @@ func respBuildRequest(opts llm.Request) ([]byte, error) {
 			Type:        "function",
 			Name:        t.Name,
 			Description: t.Description,
-			Parameters:  llm.NewSortedMap(t.Parameters),
+			Parameters:  sortmap.NewSortedMap(t.Parameters),
 		})
 	}
 
@@ -296,9 +297,9 @@ type respOutputItemDone struct {
 
 type respResponseCompleted struct {
 	Response struct {
-		ID     string `json:"id"`
-		Model  string `json:"model"`
-		Status string `json:"status"` // "completed", "incomplete", "failed"
+		ID                string `json:"id"`
+		Model             string `json:"model"`
+		Status            string `json:"status"` // "completed", "incomplete", "failed"
 		IncompleteDetails *struct {
 			Reason string `json:"reason"` // "max_output_tokens", "content_filter"
 		} `json:"incomplete_details,omitempty"`
@@ -322,14 +323,14 @@ type respToolAccum struct {
 	argBuf strings.Builder
 }
 
-func respParseStream(ctx context.Context, body io.ReadCloser, events *llm.EventStream, meta respStreamMeta) {
-	defer events.Close()
+func respParseStream(ctx context.Context, body io.ReadCloser, pub llm.Publisher, meta respStreamMeta) {
+	defer pub.Close()
 	defer body.Close()
 
 	scanner := bufio.NewScanner(body)
 	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 
-	activeTools := make(map[int]*respToolAccum) // keyed by output_index
+	activeTools := make(map[int]*respToolAccum)
 	startEmitted := false
 	hadToolCalls := false
 	var pendingEvent string
@@ -337,7 +338,7 @@ func respParseStream(ctx context.Context, body io.ReadCloser, events *llm.EventS
 	for scanner.Scan() {
 		select {
 		case <-ctx.Done():
-			events.Error(llm.NewErrContextCancelled(llm.ProviderNameOpenAI, ctx.Err()))
+			pub.Error(llm.NewErrContextCancelled(llm.ProviderNameOpenAI, ctx.Err()))
 			return
 		default:
 		}
@@ -348,13 +349,13 @@ func respParseStream(ctx context.Context, body io.ReadCloser, events *llm.EventS
 			pendingEvent = strings.TrimPrefix(line, "event: ")
 		case strings.HasPrefix(line, "data: "):
 			data := strings.TrimPrefix(line, "data: ")
-			respHandleEvent(pendingEvent, data, &startEmitted, &hadToolCalls, activeTools, events, &meta)
+			respHandleEvent(pendingEvent, data, &startEmitted, &hadToolCalls, activeTools, pub, &meta)
 			pendingEvent = ""
 		}
 	}
 
 	if err := scanner.Err(); err != nil {
-		events.Error(llm.NewErrStreamRead(llm.ProviderNameOpenAI, err))
+		pub.Error(llm.NewErrStreamRead(llm.ProviderNameOpenAI, err))
 	}
 }
 
@@ -363,7 +364,7 @@ func respHandleEvent(
 	startEmitted *bool,
 	hadToolCalls *bool,
 	activeTools map[int]*respToolAccum,
-	events *llm.EventStream,
+	pub llm.Publisher,
 	meta *respStreamMeta,
 ) {
 	switch eventName {
@@ -372,9 +373,6 @@ func respHandleEvent(
 		if err := json.Unmarshal([]byte(data), &ev); err != nil {
 			return
 		}
-		// Store the response ID and model for when we emit Start on first content.
-		// We don't emit Start here because TTFT should measure time to first token,
-		// not time to HTTP response headers.
 		meta.responseID = ev.Response.ID
 		meta.responseModel = ev.Response.Model
 
@@ -386,12 +384,12 @@ func respHandleEvent(
 		if ev.Delta != "" {
 			if !*startEmitted {
 				*startEmitted = true
-				events.Start(llm.StreamStartOpts{
+				pub.Started(llm.StreamStartedEvent{
 					Model:     meta.responseModel,
 					RequestID: meta.responseID,
 				})
 			}
-			events.Delta(llm.ReasoningDelta(llm.DeltaIndex(ev.OutputIndex), ev.Delta))
+			pub.Delta(llm.ReasoningDelta(ev.Delta).WithIndex(uint32(ev.OutputIndex)))
 		}
 
 	case "response.output_text.delta":
@@ -404,12 +402,12 @@ func respHandleEvent(
 		}
 		if !*startEmitted {
 			*startEmitted = true
-			events.Start(llm.StreamStartOpts{
+			pub.Started(llm.StreamStartedEvent{
 				Model:     meta.responseModel,
 				RequestID: meta.responseID,
 			})
 		}
-		events.Delta(llm.TextDelta(llm.DeltaIndex(ev.OutputIndex), ev.Delta))
+		pub.Delta(llm.TextDelta(ev.Delta).WithIndex(uint32(ev.OutputIndex)))
 
 	case "response.output_item.added":
 		var ev respOutputItemAdded
@@ -419,7 +417,7 @@ func respHandleEvent(
 		if ev.Item.Type == "function_call" {
 			if !*startEmitted {
 				*startEmitted = true
-				events.Start(llm.StreamStartOpts{
+				pub.Started(llm.StreamStartedEvent{
 					Model:     meta.responseModel,
 					RequestID: meta.responseID,
 				})
@@ -437,7 +435,7 @@ func respHandleEvent(
 		}
 		if accum, ok := activeTools[ev.OutputIndex]; ok {
 			accum.argBuf.WriteString(ev.Delta)
-			events.Delta(llm.ToolDelta(llm.DeltaIndex(ev.OutputIndex), accum.id, accum.name, ev.Delta))
+			pub.Delta(llm.ToolDelta(accum.id, accum.name, ev.Delta).WithIndex(uint32(ev.OutputIndex)))
 		}
 
 	case "response.output_item.done":
@@ -448,7 +446,6 @@ func respHandleEvent(
 		if ev.Item.Type != "function_call" {
 			return
 		}
-		// The done event contains the authoritative final arguments string.
 		argStr := ev.Item.Arguments
 		if argStr == "" {
 			if accum, ok := activeTools[ev.OutputIndex]; ok {
@@ -472,24 +469,19 @@ func respHandleEvent(
 			delete(activeTools, ev.OutputIndex)
 		}
 
-		events.ToolCall(llm.ToolCall{
-			ID:        callID,
-			Name:      name,
-			Arguments: args,
-		})
+		pub.ToolCall(tool.NewToolCall(callID, name, args))
 		*hadToolCalls = true
 
 	case "response.completed":
 		var ev respResponseCompleted
 		if err := json.Unmarshal([]byte(data), &ev); err != nil {
-			events.Done(llm.StopReasonEndTurn, nil)
+			pub.Completed(llm.CompletedEvent{StopReason: llm.StopReasonEndTurn})
 			return
 		}
 
-		// Emit Start if no content events fired (e.g. empty response or tool-only).
 		if !*startEmitted {
 			*startEmitted = true
-			events.Start(llm.StreamStartOpts{
+			pub.Started(llm.StreamStartedEvent{
 				Model:     ev.Response.Model,
 				RequestID: ev.Response.ID,
 			})
@@ -511,9 +503,6 @@ func respHandleEvent(
 			calculateCost(meta.requestedModel, usage)
 		}
 
-		// Derive stop reason. For incomplete responses the API reports
-		// status == "incomplete" with an incomplete_details.reason field.
-		// Fall back to inference from tool call presence otherwise.
 		stopReason := llm.StopReasonEndTurn
 		if ev.Response.Status == "incomplete" && ev.Response.IncompleteDetails != nil {
 			switch ev.Response.IncompleteDetails.Reason {
@@ -525,7 +514,10 @@ func respHandleEvent(
 		} else if *hadToolCalls {
 			stopReason = llm.StopReasonToolUse
 		}
-		events.Done(stopReason, usage)
+		if usage != nil {
+			pub.Usage(*usage)
+		}
+		pub.Completed(llm.CompletedEvent{StopReason: stopReason})
 
 	case "error":
 		var payload struct {
@@ -541,6 +533,6 @@ func respHandleEvent(
 				msg = fmt.Sprintf("%s (code: %s)", msg, payload.Error.Code)
 			}
 		}
-		events.Error(llm.NewErrProviderMsg(llm.ProviderNameOpenAI, msg))
+		pub.Error(llm.NewErrProviderMsg(llm.ProviderNameOpenAI, msg))
 	}
 }

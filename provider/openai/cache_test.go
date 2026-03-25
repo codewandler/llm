@@ -16,7 +16,7 @@ func TestEnrichOpts_CacheHintTTL_OneHour(t *testing.T) {
 	opts := llm.Request{
 		Model: "gpt-4o-mini", // doesn't normally support extended cache
 		Messages: llm.Messages{
-			&llm.UserMsg{Content: "Hello"},
+			llm.User("Hello"),
 		},
 		CacheHint: &llm.CacheHint{Enabled: true, TTL: "1h"},
 	}
@@ -38,7 +38,7 @@ func TestEnrichOpts_CacheHintTTL_DefaultDoesNotForceExtended(t *testing.T) {
 	opts := llm.Request{
 		Model: "gpt-4o-mini",
 		Messages: llm.Messages{
-			&llm.UserMsg{Content: "Hello"},
+			llm.User("Hello"),
 		},
 		CacheHint: &llm.CacheHint{Enabled: true}, // no TTL
 	}
@@ -59,7 +59,7 @@ func TestEnrichOpts_CacheHintDisabled_NoEffect(t *testing.T) {
 	opts := llm.Request{
 		Model: "gpt-4o",
 		Messages: llm.Messages{
-			&llm.UserMsg{Content: "Hello"},
+			llm.User("Hello"),
 		},
 		CacheHint: &llm.CacheHint{Enabled: false, TTL: "1h"},
 	}
@@ -83,7 +83,7 @@ func TestEnrichOpts_NoCacheHint_ModelBasedDetectionStillWorks(t *testing.T) {
 	opts := llm.Request{
 		Model: "gpt-5.1-codex", // known extended-cache model in registry
 		Messages: llm.Messages{
-			&llm.UserMsg{Content: "Hello"},
+			llm.User("Hello"),
 		},
 	}
 

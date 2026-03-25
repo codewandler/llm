@@ -5,16 +5,16 @@ import (
 	"testing"
 
 	"github.com/codewandler/llm"
+	"github.com/codewandler/llm/tool"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestProvider_CountTokens_MissingModel(t *testing.T) {
 	p := New()
-	// model is empty on request AND defaultModel is overridden to empty — must error
 	p2 := p.WithDefaultModel("")
 	_, err := p2.CountTokens(context.Background(), llm.TokenCountRequest{
-		Messages: llm.Messages{&llm.UserMsg{Content: "hello"}},
+		Messages: llm.Messages{llm.User("hello")},
 	})
 	require.Error(t, err)
 }
@@ -22,9 +22,9 @@ func TestProvider_CountTokens_MissingModel(t *testing.T) {
 func TestProvider_CountTokens_PerMessageLen(t *testing.T) {
 	p := New()
 	msgs := llm.Messages{
-		&llm.SystemMsg{Content: "You are helpful."},
-		&llm.UserMsg{Content: "What is 2+2?"},
-		&llm.AssistantMsg{Content: "It is 4."},
+		llm.System("You are helpful."),
+		llm.User("What is 2+2?"),
+		llm.Assistant("It is 4."),
 	}
 	got, err := p.CountTokens(context.Background(), llm.TokenCountRequest{
 		Model:    "gpt-4o",
@@ -37,10 +37,10 @@ func TestProvider_CountTokens_PerMessageLen(t *testing.T) {
 func TestProvider_CountTokens_RoleBreakdown(t *testing.T) {
 	p := New()
 	msgs := llm.Messages{
-		&llm.SystemMsg{Content: "You are helpful."},
-		&llm.UserMsg{Content: "What is 2+2?"},
-		&llm.AssistantMsg{Content: "It is 4."},
-		&llm.ToolCallResult{ToolCallID: "c1", Output: "done"},
+		llm.System("You are helpful."),
+		llm.User("What is 2+2?"),
+		llm.Assistant("It is 4."),
+		llm.ToolResult(tool.NewResult("c1", "done", false)),
 	}
 	got, err := p.CountTokens(context.Background(), llm.TokenCountRequest{
 		Model:    "gpt-4o",
@@ -48,7 +48,6 @@ func TestProvider_CountTokens_RoleBreakdown(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Role breakdown must sum to sum(PerMessage)
 	sumPerMsg := 0
 	for _, n := range got.PerMessage {
 		sumPerMsg += n
@@ -64,7 +63,7 @@ func TestProvider_CountTokens_RoleBreakdown(t *testing.T) {
 
 func TestProvider_CountTokens_Tools(t *testing.T) {
 	p := New()
-	tools := []llm.ToolDefinition{
+	tools := []tool.Definition{
 		{Name: "get_weather", Description: "Get current weather", Parameters: map[string]any{
 			"type": "object",
 			"properties": map[string]any{
@@ -80,7 +79,7 @@ func TestProvider_CountTokens_Tools(t *testing.T) {
 	}
 	got, err := p.CountTokens(context.Background(), llm.TokenCountRequest{
 		Model:    "gpt-4o",
-		Messages: llm.Messages{&llm.UserMsg{Content: "hello"}},
+		Messages: llm.Messages{llm.User("hello")},
 		Tools:    tools,
 	})
 	require.NoError(t, err)
@@ -90,7 +89,6 @@ func TestProvider_CountTokens_Tools(t *testing.T) {
 	assert.Greater(t, got.PerTool["get_weather"], 0)
 	assert.Greater(t, got.PerTool["search"], 0)
 
-	// PerTool values must sum to ToolsTokens
 	sum := 0
 	for _, n := range got.PerTool {
 		sum += n
@@ -102,7 +100,7 @@ func TestProvider_CountTokens_InputTokensPositive(t *testing.T) {
 	p := New()
 	got, err := p.CountTokens(context.Background(), llm.TokenCountRequest{
 		Model:    "gpt-4o-mini",
-		Messages: llm.Messages{&llm.UserMsg{Content: "Hello, how are you?"}},
+		Messages: llm.Messages{llm.User("Hello, how are you?")},
 	})
 	require.NoError(t, err)
 	assert.Greater(t, got.InputTokens, 0)
@@ -110,7 +108,7 @@ func TestProvider_CountTokens_InputTokensPositive(t *testing.T) {
 
 func TestProvider_CountTokens_EncodingVariants(t *testing.T) {
 	p := New()
-	msgs := llm.Messages{&llm.UserMsg{Content: "Hello world"}}
+	msgs := llm.Messages{llm.User("Hello world")}
 
 	for _, model := range []string{"gpt-4o", "gpt-4", "gpt-3.5-turbo", "o1-mini", "o3"} {
 		t.Run(model, func(t *testing.T) {

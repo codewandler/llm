@@ -133,7 +133,7 @@ func (p *Provider) FetchModels(ctx context.Context) ([]llm.Model, error) {
 // Reasoning effort is validated and mapped before the request is forwarded.
 // Unknown models (not in the registry) default to Chat Completions so that
 // newly released non-Codex models work without a registry update.
-func (p *Provider) CreateStream(ctx context.Context, opts llm.Request) (<-chan llm.StreamEvent, error) {
+func (p *Provider) CreateStream(ctx context.Context, opts llm.Request) (llm.Stream, error) {
 	enriched, err := enrichOpts(opts)
 	if err != nil {
 		return nil, err

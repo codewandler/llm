@@ -18,11 +18,13 @@ import (
 	"time"
 
 	"github.com/codewandler/llm"
+	"github.com/codewandler/llm/sortmap"
+	"github.com/codewandler/llm/tool"
 )
 
 // streamCompletions sends a Chat Completions request and returns an event
-// channel. It is called by Provider.Stream for non-Codex models.
-func (p *Provider) streamCompletions(ctx context.Context, opts llm.Request) (<-chan llm.StreamEvent, error) {
+// channel. It is called by Provider.Publisher for non-Codex models.
+func (p *Provider) streamCompletions(ctx context.Context, opts llm.Request) (llm.Stream, error) {
 	apiKey, err := p.opts.APIKeyFunc(ctx)
 	if err != nil {
 		return nil, llm.NewErrMissingAPIKey(llm.ProviderNameOpenAI)
@@ -51,12 +53,12 @@ func (p *Provider) streamCompletions(ctx context.Context, opts llm.Request) (<-c
 		return nil, llm.NewErrAPIError(llm.ProviderNameOpenAI, resp.StatusCode, string(errBody))
 	}
 
-	stream := llm.NewEventStream()
-	go ccParseStream(ctx, resp.Body, stream, ccStreamMeta{
+	pub, ch := llm.NewEventPublisher()
+	go ccParseStream(ctx, resp.Body, pub, ccStreamMeta{
 		requestedModel: opts.Model,
 		startTime:      startTime,
 	})
-	return stream.C(), nil
+	return ch, nil
 }
 
 // --- Request building ---
@@ -145,7 +147,7 @@ func ccBuildRequest(opts llm.Request) ([]byte, error) {
 			Function: ccFunctionPayload{
 				Name:        t.Name,
 				Description: t.Description,
-				Parameters:  llm.NewSortedMap(t.Parameters),
+				Parameters:  sortmap.NewSortedMap(t.Parameters),
 			},
 		})
 	}
@@ -169,7 +171,7 @@ func ccBuildRequest(opts llm.Request) ([]byte, error) {
 		}
 	}
 
-	// Reasoning effort (already mapped/validated by Provider.Stream).
+	// Reasoning effort (already mapped/validated by Provider.Publisher).
 	if opts.ReasoningEffort != "" {
 		r.ReasoningEffort = string(opts.ReasoningEffort)
 	}
@@ -183,41 +185,41 @@ func ccBuildRequest(opts llm.Request) ([]byte, error) {
 	// Messages
 	for _, msg := range opts.Messages {
 		switch m := msg.(type) {
-		case *llm.SystemMsg:
+		case llm.SystemMessage:
 			r.Messages = append(r.Messages, ccMessagePayload{
 				Role:    "system",
-				Content: m.Content,
+				Content: m.Content(),
 			})
 
-		case *llm.UserMsg:
+		case llm.UserMessage:
 			r.Messages = append(r.Messages, ccMessagePayload{
 				Role:    "user",
-				Content: m.Content,
+				Content: m.Content(),
 			})
 
-		case *llm.AssistantMsg:
+		case llm.AssistantMessage:
 			mp := ccMessagePayload{
 				Role:    "assistant",
-				Content: m.Content,
+				Content: m.Content(),
 			}
-			for _, tc := range m.ToolCalls {
-				argsJSON, _ := json.Marshal(tc.Arguments)
+			for _, tc := range m.ToolCalls() {
+				argsJSON, _ := json.Marshal(tc.ToolArgs())
 				mp.ToolCalls = append(mp.ToolCalls, ccToolCall{
-					ID:   tc.ID,
+					ID:   tc.ToolCallID(),
 					Type: "function",
 					Function: ccFunctionCall{
-						Name:      tc.Name,
+						Name:      tc.ToolName(),
 						Arguments: string(argsJSON),
 					},
 				})
 			}
 			r.Messages = append(r.Messages, mp)
 
-		case *llm.ToolCallResult:
+		case llm.ToolMessage:
 			r.Messages = append(r.Messages, ccMessagePayload{
 				Role:       "tool",
-				Content:    m.Output,
-				ToolCallID: m.ToolCallID,
+				Content:    m.ToolOutput(),
+				ToolCallID: m.ToolCallID(),
 			})
 		}
 	}
@@ -274,8 +276,8 @@ type ccToolAccum struct {
 	argsBuf strings.Builder
 }
 
-func ccParseStream(ctx context.Context, body io.ReadCloser, events *llm.EventStream, meta ccStreamMeta) {
-	defer events.Close()
+func ccParseStream(ctx context.Context, body io.ReadCloser, pub llm.Publisher, meta ccStreamMeta) {
+	defer pub.Close()
 	defer body.Close()
 
 	scanner := bufio.NewScanner(body)
@@ -289,7 +291,7 @@ func ccParseStream(ctx context.Context, body io.ReadCloser, events *llm.EventStr
 	for scanner.Scan() {
 		select {
 		case <-ctx.Done():
-			events.Error(llm.NewErrContextCancelled(llm.ProviderNameOpenAI, ctx.Err()))
+			pub.Error(llm.NewErrContextCancelled(llm.ProviderNameOpenAI, ctx.Err()))
 			return
 		default:
 		}
@@ -304,7 +306,10 @@ func ccParseStream(ctx context.Context, body io.ReadCloser, events *llm.EventStr
 			if finalUsage != nil {
 				calculateCost(meta.requestedModel, finalUsage)
 			}
-			events.Done(stopReason, finalUsage)
+			if finalUsage != nil {
+				pub.Usage(*finalUsage)
+			}
+			pub.Completed(llm.CompletedEvent{StopReason: stopReason})
 			return
 		}
 
@@ -313,16 +318,14 @@ func ccParseStream(ctx context.Context, body io.ReadCloser, events *llm.EventStr
 			continue
 		}
 
-		// Emit StreamEventStart on first chunk.
 		if !startEmitted {
 			startEmitted = true
-			events.Start(llm.StreamStartOpts{
+			pub.Started(llm.StreamStartedEvent{
 				Model:     chunk.Model,
 				RequestID: chunk.ID,
 			})
 		}
 
-		// Accumulate usage (arrives on the final chunk before [DONE]).
 		if chunk.Usage != nil {
 			finalUsage = &llm.Usage{
 				InputTokens:  chunk.Usage.PromptTokens,
@@ -342,7 +345,6 @@ func ccParseStream(ctx context.Context, body io.ReadCloser, events *llm.EventStr
 		}
 		choice := chunk.Choices[0]
 
-		// Accumulate tool call argument chunks.
 		for _, tc := range choice.Delta.ToolCalls {
 			accum, ok := activeTools[tc.Index]
 			if !ok {
@@ -357,31 +359,28 @@ func ccParseStream(ctx context.Context, body io.ReadCloser, events *llm.EventStr
 			}
 			if tc.Function.Arguments != "" {
 				accum.argsBuf.WriteString(tc.Function.Arguments)
-				events.Delta(llm.ToolDelta(llm.DeltaIndex(tc.Index), accum.id, accum.name, tc.Function.Arguments))
+				pub.Delta(llm.ToolDelta(accum.id, accum.name, tc.Function.Arguments).WithIndex(uint32(tc.Index)))
 			}
 		}
 
-		// Text delta.
 		if choice.Delta.Content != "" {
-			events.Delta(llm.TextDelta(nil, choice.Delta.Content))
+			pub.Delta(llm.TextDelta(choice.Delta.Content))
 		}
 
-		// Emit completed tool calls on finish_reason == "tool_calls".
 		if choice.FinishReason != nil {
 			stopReason = mapOpenAIFinishReason(*choice.FinishReason)
 			if *choice.FinishReason == "tool_calls" {
-				ccEmitToolCalls(activeTools, events)
+				ccEmitToolCalls(activeTools, pub)
 			}
 		}
 	}
 
 	if err := scanner.Err(); err != nil {
-		events.Error(llm.NewErrStreamRead(llm.ProviderNameOpenAI, err))
+		pub.Error(llm.NewErrStreamRead(llm.ProviderNameOpenAI, err))
 	}
 }
 
-func ccEmitToolCalls(activeTools map[int]*ccToolAccum, events *llm.EventStream) {
-	// Collect indices and sort so tool calls are emitted in LLM-production order.
+func ccEmitToolCalls(activeTools map[int]*ccToolAccum, pub llm.Publisher) {
 	indices := make([]int, 0, len(activeTools))
 	for idx := range activeTools {
 		indices = append(indices, idx)
@@ -394,10 +393,6 @@ func ccEmitToolCalls(activeTools map[int]*ccToolAccum, events *llm.EventStream) 
 		if accum.argsBuf.Len() > 0 {
 			_ = json.Unmarshal([]byte(accum.argsBuf.String()), &args)
 		}
-		events.ToolCall(llm.ToolCall{
-			ID:        accum.id,
-			Name:      accum.name,
-			Arguments: args,
-		})
+		pub.ToolCall(tool.NewToolCall(accum.id, accum.name, args))
 	}
 }

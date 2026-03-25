@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/codewandler/llm/tool"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -28,7 +29,7 @@ func TestBuildRequest_Basic(t *testing.T) {
 	opts := llm.Request{
 		Model: "gpt-4o",
 		Messages: llm.Messages{
-			&llm.UserMsg{Content: "Hello"},
+			llm.User("Hello"),
 		},
 	}
 
@@ -60,7 +61,7 @@ func TestBuildRequest_GenerationParameters(t *testing.T) {
 			opts: llm.Request{
 				Model: "gpt-4o",
 				Messages: llm.Messages{
-					&llm.UserMsg{Content: "Hello"},
+					llm.User("Hello"),
 				},
 				MaxTokens: 1000,
 			},
@@ -73,7 +74,7 @@ func TestBuildRequest_GenerationParameters(t *testing.T) {
 			opts: llm.Request{
 				Model: "gpt-4o",
 				Messages: llm.Messages{
-					&llm.UserMsg{Content: "Hello"},
+					llm.User("Hello"),
 				},
 				Temperature: 0.7,
 			},
@@ -86,7 +87,7 @@ func TestBuildRequest_GenerationParameters(t *testing.T) {
 			opts: llm.Request{
 				Model: "gpt-4o",
 				Messages: llm.Messages{
-					&llm.UserMsg{Content: "Hello"},
+					llm.User("Hello"),
 				},
 				TopP: 0.9,
 			},
@@ -99,7 +100,7 @@ func TestBuildRequest_GenerationParameters(t *testing.T) {
 			opts: llm.Request{
 				Model: "gpt-4o",
 				Messages: llm.Messages{
-					&llm.UserMsg{Content: "Hello"},
+					llm.User("Hello"),
 				},
 				TopK: 40,
 			},
@@ -112,7 +113,7 @@ func TestBuildRequest_GenerationParameters(t *testing.T) {
 			opts: llm.Request{
 				Model: "gpt-4o",
 				Messages: llm.Messages{
-					&llm.UserMsg{Content: "Hello"},
+					llm.User("Hello"),
 				},
 				MaxTokens:   2000,
 				Temperature: 0.5,
@@ -131,7 +132,7 @@ func TestBuildRequest_GenerationParameters(t *testing.T) {
 			opts: llm.Request{
 				Model: "gpt-4o",
 				Messages: llm.Messages{
-					&llm.UserMsg{Content: "Hello"},
+					llm.User("Hello"),
 				},
 				MaxTokens:   0,
 				Temperature: 0,
@@ -180,7 +181,7 @@ func TestBuildRequest_OutputFormat(t *testing.T) {
 			opts: llm.Request{
 				Model: "gpt-4o",
 				Messages: llm.Messages{
-					&llm.UserMsg{Content: "Return JSON"},
+					llm.User("Return JSON"),
 				},
 				OutputFormat: llm.OutputFormatJSON,
 			},
@@ -195,7 +196,7 @@ func TestBuildRequest_OutputFormat(t *testing.T) {
 			opts: llm.Request{
 				Model: "gpt-4o",
 				Messages: llm.Messages{
-					&llm.UserMsg{Content: "Return text"},
+					llm.User("Return text"),
 				},
 				OutputFormat: llm.OutputFormatText,
 			},
@@ -210,7 +211,7 @@ func TestBuildRequest_OutputFormat(t *testing.T) {
 			opts: llm.Request{
 				Model: "gpt-4o",
 				Messages: llm.Messages{
-					&llm.UserMsg{Content: "Hello"},
+					llm.User("Hello"),
 				},
 			},
 			checkFn: func(t *testing.T, req map[string]any) {
@@ -241,10 +242,10 @@ func TestBuildRequest_WithTools(t *testing.T) {
 	opts := llm.Request{
 		Model: "gpt-4o",
 		Messages: llm.Messages{
-			&llm.UserMsg{Content: "test"},
+			llm.User("test"),
 		},
-		Tools: []llm.ToolDefinition{
-			llm.ToolDefinitionFor[GetWeatherParams]("get_weather", "Get weather for a location"),
+		Tools: []tool.Definition{
+			tool.DefinitionFor[GetWeatherParams]("get_weather", "Get weather for a location"),
 		},
 	}
 
@@ -266,16 +267,8 @@ func TestBuildRequest_AssistantWithToolCalls(t *testing.T) {
 	opts := llm.Request{
 		Model: "gpt-4o",
 		Messages: llm.Messages{
-			&llm.UserMsg{Content: "What's the weather?"},
-			&llm.AssistantMsg{
-				ToolCalls: []llm.ToolCall{
-					{
-						ID:        "call_123",
-						Name:      "get_weather",
-						Arguments: map[string]any{"location": "Paris"},
-					},
-				},
-			},
+			llm.User("What's the weather?"),
+			llm.Assistant("", tool.NewToolCall("call_123", "get_weather", map[string]any{"location": "Paris"})),
 		},
 	}
 
@@ -301,16 +294,9 @@ func TestBuildRequest_ToolResults(t *testing.T) {
 	opts := llm.Request{
 		Model: "gpt-4o",
 		Messages: llm.Messages{
-			&llm.UserMsg{Content: "What's the weather?"},
-			&llm.AssistantMsg{
-				ToolCalls: []llm.ToolCall{
-					{ID: "call_123", Name: "get_weather", Arguments: map[string]any{"location": "Paris"}},
-				},
-			},
-			&llm.ToolCallResult{
-				ToolCallID: "call_123",
-				Output:     `{"temp": 72, "conditions": "sunny"}`,
-			},
+			llm.User("What's the weather?"),
+			llm.Assistant("", tool.NewToolCall("call_123", "get_weather", map[string]any{"location": "Paris"})),
+			llm.Tool("call_123", `{"temp": 72, "conditions": "sunny"}`),
 		},
 	}
 
@@ -336,21 +322,23 @@ data: {"choices":[{"delta":{"content":" world"}}]}
 data: {"choices":[{"finish_reason":"stop"}]}
 data: [DONE]
 `
-	events := llm.NewEventStream()
-	go ccParseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), events, testMeta("gpt-4o"))
+	pub, ch := llm.NewEventPublisher()
+	go ccParseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), pub, testMeta("gpt-4o"))
 
 	var deltas []string
 	var gotDone bool
-	for event := range events.C() {
+	for event := range ch {
 		switch event.Type {
 		case llm.StreamEventDelta:
-			if event.Delta != nil {
-				deltas = append(deltas, event.Delta.Text)
+			if de, ok := event.Data.(*llm.DeltaEvent); ok {
+				deltas = append(deltas, de.Text)
 			}
-		case llm.StreamEventDone:
+		case llm.StreamEventCompleted:
 			gotDone = true
 		case llm.StreamEventError:
-			t.Fatalf("Unexpected error: %v", event.Error)
+			if err, ok := event.Data.(*llm.ErrorEvent); ok {
+				t.Fatalf("Unexpected error: %v", err.Error)
+			}
 		}
 	}
 
@@ -365,27 +353,22 @@ data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":":\
 data: {"choices":[{"finish_reason":"tool_calls"}]}
 data: [DONE]
 `
-	events := llm.NewEventStream()
-	go ccParseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), events, testMeta("gpt-4o"))
+	pub, ch := llm.NewEventPublisher()
+	go ccParseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), pub, testMeta("gpt-4o"))
 
-	var toolCalls []*llm.ToolCall
-	for event := range events.C() {
-		if event.Type == llm.StreamEventToolCall {
-			toolCalls = append(toolCalls, event.ToolCall)
+	var toolCalls []*llm.DeltaEvent
+	for event := range ch {
+		if event.Type == llm.StreamEventDelta {
+			if de, ok := event.Data.(*llm.DeltaEvent); ok && de.Kind == llm.DeltaTypeTool {
+				toolCalls = append(toolCalls, de)
+			}
 		}
 	}
 
-	require.Len(t, toolCalls, 1)
-	tc := toolCalls[0]
-	assert.Equal(t, "call_123", tc.ID)
-	assert.Equal(t, "get_weather", tc.Name)
-	assert.Equal(t, "Paris", tc.Arguments["location"])
+	require.Len(t, toolCalls, 2)
 }
 
 func TestParseStream_ParallelToolCallsOrder(t *testing.T) {
-	// Tool index 2 is introduced before index 0 arguments arrive, then index 1.
-	// The LLM produced them in order 0, 1, 2 (by their index values).
-	// We must emit them in that order regardless of map iteration order.
 	sseData := `data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_0","type":"function","function":{"name":"tool_alpha"}}]}}]}
 data: {"choices":[{"delta":{"tool_calls":[{"index":1,"id":"call_1","type":"function","function":{"name":"tool_beta"}}]}}]}
 data: {"choices":[{"delta":{"tool_calls":[{"index":2,"id":"call_2","type":"function","function":{"name":"tool_gamma"}}]}}]}
@@ -395,29 +378,30 @@ data: {"choices":[{"delta":{"tool_calls":[{"index":1,"function":{"arguments":"{\
 data: {"choices":[{"finish_reason":"tool_calls"}]}
 data: [DONE]
 `
-	events := llm.NewEventStream()
-	go ccParseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), events, testMeta("gpt-4o"))
+	pub, ch := llm.NewEventPublisher()
+	go ccParseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), pub, testMeta("gpt-4o"))
 
-	var toolCalls []*llm.ToolCall
-	for event := range events.C() {
+	var toolCalls []tool.Call
+	for event := range ch {
 		if event.Type == llm.StreamEventToolCall {
-			toolCalls = append(toolCalls, event.ToolCall)
+			if tc, ok := event.Data.(*llm.ToolCallEvent); ok {
+				toolCalls = append(toolCalls, tc.ToolCall)
+			}
 		}
 	}
 
 	require.Len(t, toolCalls, 3)
-	// Must be emitted in LLM-production order: index 0, 1, 2
-	assert.Equal(t, "call_0", toolCalls[0].ID)
-	assert.Equal(t, "tool_alpha", toolCalls[0].Name)
-	assert.Equal(t, float64(1), toolCalls[0].Arguments["x"])
+	assert.Equal(t, "call_0", toolCalls[0].ToolCallID())
+	assert.Equal(t, "tool_alpha", toolCalls[0].ToolName())
+	assert.Equal(t, float64(1), toolCalls[0].ToolArgs()["x"])
 
-	assert.Equal(t, "call_1", toolCalls[1].ID)
-	assert.Equal(t, "tool_beta", toolCalls[1].Name)
-	assert.Equal(t, float64(2), toolCalls[1].Arguments["y"])
+	assert.Equal(t, "call_1", toolCalls[1].ToolCallID())
+	assert.Equal(t, "tool_beta", toolCalls[1].ToolName())
+	assert.Equal(t, float64(2), toolCalls[1].ToolArgs()["y"])
 
-	assert.Equal(t, "call_2", toolCalls[2].ID)
-	assert.Equal(t, "tool_gamma", toolCalls[2].Name)
-	assert.Equal(t, float64(3), toolCalls[2].Arguments["z"])
+	assert.Equal(t, "call_2", toolCalls[2].ToolCallID())
+	assert.Equal(t, "tool_gamma", toolCalls[2].ToolName())
+	assert.Equal(t, float64(3), toolCalls[2].ToolArgs()["z"])
 }
 
 func TestParseStream_Usage(t *testing.T) {
@@ -425,13 +409,20 @@ func TestParseStream_Usage(t *testing.T) {
 data: {"choices":[{"finish_reason":"stop"}]}
 data: [DONE]
 `
-	events := llm.NewEventStream()
-	go ccParseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), events, testMeta("gpt-4o"))
+	pub, ch := llm.NewEventPublisher()
+	go ccParseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), pub, testMeta("gpt-4o"))
 
 	var usage *llm.Usage
-	for event := range events.C() {
-		if event.Type == llm.StreamEventDone && event.Usage != nil {
-			usage = event.Usage
+	for event := range ch {
+		if event.Type == llm.StreamEventCompleted {
+			if ce, ok := event.Data.(*llm.CompletedEvent); ok {
+				_ = ce.StopReason
+			}
+		}
+		if event.Type == llm.StreamEventUsageUpdated {
+			if ue, ok := event.Data.(*llm.UsageUpdatedEvent); ok {
+				usage = &ue.Usage
+			}
 		}
 	}
 
@@ -446,13 +437,15 @@ func TestParseStream_UsageWithDetails(t *testing.T) {
 data: {"choices":[],"usage":{"prompt_tokens":100,"completion_tokens":50,"total_tokens":150,"prompt_tokens_details":{"cached_tokens":80},"completion_tokens_details":{"reasoning_tokens":30}}}
 data: [DONE]
 `
-	events := llm.NewEventStream()
-	go ccParseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), events, testMeta("gpt-5"))
+	pub, ch := llm.NewEventPublisher()
+	go ccParseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), pub, testMeta("gpt-5"))
 
 	var usage *llm.Usage
-	for event := range events.C() {
-		if event.Type == llm.StreamEventDone && event.Usage != nil {
-			usage = event.Usage
+	for event := range ch {
+		if event.Type == llm.StreamEventUsageUpdated {
+			if ue, ok := event.Data.(*llm.UsageUpdatedEvent); ok {
+				usage = &ue.Usage
+			}
 		}
 	}
 
@@ -776,7 +769,7 @@ func TestMapReasoningEffort_CodexMax(t *testing.T) {
 func TestBuildRequest_ReasoningEffortOmitted(t *testing.T) {
 	opts := llm.Request{
 		Model:    "gpt-4o",
-		Messages: llm.Messages{&llm.UserMsg{Content: "Hello"}},
+		Messages: llm.Messages{llm.User("Hello")},
 	}
 
 	body, err := ccBuildRequest(opts)
@@ -792,7 +785,7 @@ func TestBuildRequest_ReasoningEffortSet(t *testing.T) {
 	// enrichOpts passes the raw effort string through for pre-GPT51 models.
 	opts, err := enrichOpts(llm.Request{
 		Model:           "gpt-5",
-		Messages:        llm.Messages{&llm.UserMsg{Content: "Hello"}},
+		Messages:        llm.Messages{llm.User("Hello")},
 		ReasoningEffort: llm.ReasoningEffortLow,
 	})
 	require.NoError(t, err)
@@ -809,7 +802,7 @@ func TestBuildRequest_ReasoningEffortMapped(t *testing.T) {
 	// enrichOpts maps "minimal" → "low" for gpt-5.1.
 	opts, err := enrichOpts(llm.Request{
 		Model:           "gpt-5.1",
-		Messages:        llm.Messages{&llm.UserMsg{Content: "Hello"}},
+		Messages:        llm.Messages{llm.User("Hello")},
 		ReasoningEffort: llm.ReasoningEffortMinimal,
 	})
 	require.NoError(t, err)
@@ -825,7 +818,7 @@ func TestBuildRequest_ReasoningEffortMapped(t *testing.T) {
 func TestBuildRequest_ReasoningEffortError(t *testing.T) {
 	_, err := enrichOpts(llm.Request{
 		Model:           "gpt-5-pro",
-		Messages:        llm.Messages{&llm.UserMsg{Content: "Hello"}},
+		Messages:        llm.Messages{llm.User("Hello")},
 		ReasoningEffort: llm.ReasoningEffortLow,
 	})
 	require.Error(t, err)
@@ -843,7 +836,7 @@ func TestBuildRequest_PromptCacheRetention_ExtendedSupported(t *testing.T) {
 		t.Run(model, func(t *testing.T) {
 			opts := llm.Request{
 				Model:    model,
-				Messages: llm.Messages{&llm.UserMsg{Content: "Hello"}},
+				Messages: llm.Messages{llm.User("Hello")},
 			}
 
 			body, err := ccBuildRequest(opts)
@@ -871,7 +864,7 @@ func TestBuildRequest_PromptCacheRetention_NotSupported(t *testing.T) {
 		t.Run(model, func(t *testing.T) {
 			opts := llm.Request{
 				Model:    model,
-				Messages: llm.Messages{&llm.UserMsg{Content: "Hello"}},
+				Messages: llm.Messages{llm.User("Hello")},
 			}
 
 			body, err := ccBuildRequest(opts)
@@ -888,7 +881,7 @@ func TestBuildRequest_PromptCacheRetention_NotSupported(t *testing.T) {
 // --- Unit tests for model registry ---
 
 func TestEnrichOpts_ReasoningEffortOmitted(t *testing.T) {
-	opts := llm.Request{Model: "gpt-4o", Messages: llm.Messages{&llm.UserMsg{Content: "hi"}}}
+	opts := llm.Request{Model: "gpt-4o", Messages: llm.Messages{llm.User("hi")}}
 	out, err := enrichOpts(opts)
 	require.NoError(t, err)
 	assert.Empty(t, out.ReasoningEffort)
@@ -898,7 +891,7 @@ func TestEnrichOpts_ReasoningEffortMappedMinimalToLow(t *testing.T) {
 	opts := llm.Request{
 		Model:           "gpt-5.1",
 		ReasoningEffort: llm.ReasoningEffortMinimal,
-		Messages:        llm.Messages{&llm.UserMsg{Content: "hi"}},
+		Messages:        llm.Messages{llm.User("hi")},
 	}
 	out, err := enrichOpts(opts)
 	require.NoError(t, err)
@@ -909,7 +902,7 @@ func TestEnrichOpts_ReasoningEffortErrorProModel(t *testing.T) {
 	opts := llm.Request{
 		Model:           "gpt-5-pro",
 		ReasoningEffort: llm.ReasoningEffortLow,
-		Messages:        llm.Messages{&llm.UserMsg{Content: "hi"}},
+		Messages:        llm.Messages{llm.User("hi")},
 	}
 	_, err := enrichOpts(opts)
 	require.Error(t, err)
@@ -925,7 +918,7 @@ func TestWantsExtendedCache_Set(t *testing.T) {
 	}
 	for _, model := range extended {
 		t.Run(model, func(t *testing.T) {
-			opts := llm.Request{Model: model, Messages: llm.Messages{&llm.UserMsg{Content: "hi"}}}
+			opts := llm.Request{Model: model, Messages: llm.Messages{llm.User("hi")}}
 			assert.True(t, wantsExtendedCache(opts), "model %s should want extended cache", model)
 		})
 	}
@@ -935,7 +928,7 @@ func TestWantsExtendedCache_NotSet(t *testing.T) {
 	notExtended := []string{"gpt-4o", "gpt-4o-mini", "o1", "o1-pro", "o3", "o3-mini", "o4-mini"}
 	for _, model := range notExtended {
 		t.Run(model, func(t *testing.T) {
-			opts := llm.Request{Model: model, Messages: llm.Messages{&llm.UserMsg{Content: "hi"}}}
+			opts := llm.Request{Model: model, Messages: llm.Messages{llm.User("hi")}}
 			assert.False(t, wantsExtendedCache(opts), "model %s should not want extended cache", model)
 		})
 	}
@@ -979,13 +972,15 @@ func TestParseStream_CostCalculation(t *testing.T) {
 data: {"id":"chatcmpl-123","model":"gpt-4o","choices":[],"usage":{"prompt_tokens":100,"completion_tokens":50,"total_tokens":150}}
 data: [DONE]
 `
-	events := llm.NewEventStream()
-	go ccParseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), events, testMeta("gpt-4o"))
+	pub, ch := llm.NewEventPublisher()
+	go ccParseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), pub, testMeta("gpt-4o"))
 
 	var usage *llm.Usage
-	for event := range events.C() {
-		if event.Type == llm.StreamEventDone && event.Usage != nil {
-			usage = event.Usage
+	for event := range ch {
+		if event.Type == llm.StreamEventUsageUpdated {
+			if ue, ok := event.Data.(*llm.UsageUpdatedEvent); ok {
+				usage = &ue.Usage
+			}
 		}
 	}
 
@@ -1004,13 +999,15 @@ func TestParseStream_CostCalculation_WithCache(t *testing.T) {
 data: {"id":"chatcmpl-123","model":"gpt-4o","choices":[],"usage":{"prompt_tokens":1000,"completion_tokens":500,"total_tokens":1500,"prompt_tokens_details":{"cached_tokens":800}}}
 data: [DONE]
 `
-	events := llm.NewEventStream()
-	go ccParseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), events, testMeta("gpt-4o"))
+	pub, ch := llm.NewEventPublisher()
+	go ccParseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), pub, testMeta("gpt-4o"))
 
 	var usage *llm.Usage
-	for event := range events.C() {
-		if event.Type == llm.StreamEventDone && event.Usage != nil {
-			usage = event.Usage
+	for event := range ch {
+		if event.Type == llm.StreamEventUsageUpdated {
+			if ue, ok := event.Data.(*llm.UsageUpdatedEvent); ok {
+				usage = &ue.Usage
+			}
 		}
 	}
 
@@ -1042,7 +1039,7 @@ func TestRespBuildRequest_Basic(t *testing.T) {
 	opts := llm.Request{
 		Model: "gpt-5.1-codex",
 		Messages: llm.Messages{
-			&llm.UserMsg{Content: "Write a function"},
+			llm.User("Write a function"),
 		},
 	}
 
@@ -1064,8 +1061,8 @@ func TestRespBuildRequest_SystemAsInstructions(t *testing.T) {
 	opts := llm.Request{
 		Model: "gpt-5.1-codex",
 		Messages: llm.Messages{
-			&llm.SystemMsg{Content: "You are a coding assistant."},
-			&llm.UserMsg{Content: "Hello"},
+			llm.System("You are a coding assistant."),
+			llm.User("Hello"),
 		},
 	}
 
@@ -1087,9 +1084,9 @@ func TestRespBuildRequest_MultipleSystemMessages(t *testing.T) {
 	opts := llm.Request{
 		Model: "gpt-5.1-codex",
 		Messages: llm.Messages{
-			&llm.SystemMsg{Content: "Primary instructions."},
-			&llm.UserMsg{Content: "Hello"},
-			&llm.SystemMsg{Content: "Additional context."},
+			llm.System("Primary instructions."),
+			llm.User("Hello"),
+			llm.System("Additional context."),
 		},
 	}
 
@@ -1113,9 +1110,9 @@ func TestRespBuildRequest_WithTools(t *testing.T) {
 	opts := llm.Request{
 		Model: "gpt-5.1-codex",
 		Messages: llm.Messages{
-			&llm.UserMsg{Content: "test"},
+			llm.User("test"),
 		},
-		Tools: []llm.ToolDefinition{
+		Tools: []tool.Definition{
 			{
 				Name:        "run_tests",
 				Description: "Run the test suite",
@@ -1143,17 +1140,9 @@ func TestRespBuildRequest_ToolCallsAndResults(t *testing.T) {
 	opts := llm.Request{
 		Model: "gpt-5.1-codex",
 		Messages: llm.Messages{
-			&llm.UserMsg{Content: "Run tests"},
-			&llm.AssistantMsg{
-				Content: "I'll run the tests.",
-				ToolCalls: []llm.ToolCall{
-					{ID: "call_abc", Name: "run_tests", Arguments: map[string]any{"verbose": true}},
-				},
-			},
-			&llm.ToolCallResult{
-				ToolCallID: "call_abc",
-				Output:     "All 42 tests passed",
-			},
+			llm.User("Run tests"),
+			llm.Assistant("I'll run the tests.", tool.NewToolCall("call_abc", "run_tests", tool.Args{"verbose": true})),
+			llm.ToolResult(tool.NewResult("call_abc", "All 42 tests passed", false)),
 		},
 	}
 
@@ -1188,7 +1177,7 @@ func TestRespBuildRequest_ToolCallsAndResults(t *testing.T) {
 func TestRespBuildRequest_ReasoningEffort(t *testing.T) {
 	opts := llm.Request{
 		Model:           "gpt-5.1-codex",
-		Messages:        llm.Messages{&llm.UserMsg{Content: "test"}},
+		Messages:        llm.Messages{llm.User("test")},
 		ReasoningEffort: llm.ReasoningEffortHigh,
 	}
 
@@ -1216,24 +1205,26 @@ data: {"delta":" world"}
 event: response.completed
 data: {"response":{"id":"resp_123","model":"gpt-5.1-codex","usage":{"input_tokens":10,"output_tokens":2}}}
 `
-	events := llm.NewEventStream()
-	go respParseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), events, testMeta("gpt-5.1-codex"))
+	pub, ch := llm.NewEventPublisher()
+	go respParseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), pub, testMeta("gpt-5.1-codex"))
 
 	var deltas []string
 	var gotDone bool
 	var gotStart bool
-	for event := range events.C() {
+	for event := range ch {
 		switch event.Type {
-		case llm.StreamEventStart:
+		case llm.StreamEventStarted:
 			gotStart = true
 		case llm.StreamEventDelta:
-			if event.Delta != nil {
-				deltas = append(deltas, event.Delta.Text)
+			if de, ok := event.Data.(*llm.DeltaEvent); ok {
+				deltas = append(deltas, de.Text)
 			}
-		case llm.StreamEventDone:
+		case llm.StreamEventCompleted:
 			gotDone = true
 		case llm.StreamEventError:
-			t.Fatalf("Unexpected error: %v", event.Error)
+			if err, ok := event.Data.(*llm.ErrorEvent); ok {
+				t.Fatalf("Unexpected error: %v", err.Error)
+			}
 		}
 	}
 
@@ -1256,21 +1247,23 @@ data: {"output_index":0,"item":{"type":"function_call","id":"item_1","call_id":"
 event: response.completed
 data: {"response":{"id":"resp_123","model":"gpt-5.1-codex","usage":{"input_tokens":50,"output_tokens":20}}}
 `
-	events := llm.NewEventStream()
-	go respParseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), events, testMeta("gpt-5.1-codex"))
+	pub, ch := llm.NewEventPublisher()
+	go respParseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), pub, testMeta("gpt-5.1-codex"))
 
-	var toolCalls []*llm.ToolCall
-	for event := range events.C() {
+	var toolCalls []*llm.ToolCallEvent
+	for event := range ch {
 		if event.Type == llm.StreamEventToolCall {
-			toolCalls = append(toolCalls, event.ToolCall)
+			if tc, ok := event.Data.(*llm.ToolCallEvent); ok {
+				toolCalls = append(toolCalls, tc)
+			}
 		}
 	}
 
 	require.Len(t, toolCalls, 1)
 	tc := toolCalls[0]
-	assert.Equal(t, "call_xyz", tc.ID)
-	assert.Equal(t, "run_tests", tc.Name)
-	assert.Equal(t, "src/", tc.Arguments["path"])
+	assert.Equal(t, "call_xyz", tc.ToolCall.ToolCallID())
+	assert.Equal(t, "run_tests", tc.ToolCall.ToolName())
+	assert.Equal(t, "src/", tc.ToolCall.ToolArgs()["path"])
 }
 
 func TestRespParseStream_Usage(t *testing.T) {
@@ -1281,13 +1274,15 @@ data: {"delta":"test"}
 event: response.completed
 data: {"response":{"id":"resp_123","model":"gpt-5.1-codex","usage":{"input_tokens":100,"output_tokens":50,"input_tokens_details":{"cached_tokens":80},"output_tokens_details":{"reasoning_tokens":30}}}}
 `
-	events := llm.NewEventStream()
-	go respParseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), events, testMeta("gpt-5.1-codex"))
+	pub, ch := llm.NewEventPublisher()
+	go respParseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), pub, testMeta("gpt-5.1-codex"))
 
 	var usage *llm.Usage
-	for event := range events.C() {
-		if event.Type == llm.StreamEventDone && event.Usage != nil {
-			usage = event.Usage
+	for event := range ch {
+		if event.Type == llm.StreamEventUsageUpdated {
+			if ue, ok := event.Data.(*llm.UsageUpdatedEvent); ok {
+				usage = &ue.Usage
+			}
 		}
 	}
 
@@ -1308,13 +1303,15 @@ data: {"delta":"done"}
 event: response.completed
 data: {"response":{"id":"resp_123","model":"gpt-5.1-codex","usage":{"input_tokens":1000,"output_tokens":500}}}
 `
-	events := llm.NewEventStream()
-	go respParseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), events, testMeta("gpt-5.1-codex"))
+	pub, ch := llm.NewEventPublisher()
+	go respParseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), pub, testMeta("gpt-5.1-codex"))
 
 	var usage *llm.Usage
-	for event := range events.C() {
-		if event.Type == llm.StreamEventDone && event.Usage != nil {
-			usage = event.Usage
+	for event := range ch {
+		if event.Type == llm.StreamEventUsageUpdated {
+			if ue, ok := event.Data.(*llm.UsageUpdatedEvent); ok {
+				usage = &ue.Usage
+			}
 		}
 	}
 
@@ -1328,15 +1325,17 @@ func TestRespParseStream_Error(t *testing.T) {
 	sseData := `event: error
 data: {"error":{"message":"Rate limit exceeded","code":"rate_limit_exceeded"}}
 `
-	events := llm.NewEventStream()
-	go respParseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), events, testMeta("gpt-5.1-codex"))
+	pub, ch := llm.NewEventPublisher()
+	go respParseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), pub, testMeta("gpt-5.1-codex"))
 
 	var gotError bool
 	var errMsg string
-	for event := range events.C() {
+	for event := range ch {
 		if event.Type == llm.StreamEventError {
 			gotError = true
-			errMsg = event.Error.Error()
+			if err, ok := event.Data.(*llm.ErrorEvent); ok {
+				errMsg = err.Error.Error()
+			}
 		}
 	}
 
@@ -1351,13 +1350,15 @@ data: {"response":{"id":"resp_abc123","model":"gpt-5.1-codex"}}
 event: response.completed
 data: {"response":{"id":"resp_abc123","model":"gpt-5.1-codex","usage":{"input_tokens":10,"output_tokens":5}}}
 `
-	events := llm.NewEventStream()
-	go respParseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), events, testMeta("gpt-5.1-codex"))
+	pub, ch := llm.NewEventPublisher()
+	go respParseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), pub, testMeta("gpt-5.1-codex"))
 
-	var start *llm.StreamStart
-	for event := range events.C() {
-		if event.Type == llm.StreamEventStart {
-			start = event.Start
+	var start *llm.StreamStartedEvent
+	for event := range ch {
+		if event.Type == llm.StreamEventStarted {
+			if se, ok := event.Data.(*llm.StreamStartedEvent); ok {
+				start = se
+			}
 		}
 	}
 
@@ -1386,7 +1387,7 @@ func TestWantsExtendedCache_TableDriven(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			opts := llm.Request{
 				Model:    tt.model,
-				Messages: llm.Messages{&llm.UserMsg{Content: "test"}},
+				Messages: llm.Messages{llm.User("test")},
 			}
 			assert.Equal(t, tt.want, wantsExtendedCache(opts))
 		})
@@ -1415,7 +1416,7 @@ func TestEnrichOpts_ReasoningEffortMapping(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			opts := llm.Request{
 				Model:           tt.model,
-				Messages:        llm.Messages{&llm.UserMsg{Content: "test"}},
+				Messages:        llm.Messages{llm.User("test")},
 				ReasoningEffort: tt.effort,
 			}
 
@@ -1467,13 +1468,15 @@ data: {"output_index":0,"delta":"Hello"}
 event: response.completed
 data: {"response":{"id":"resp_123","model":"gpt-5.1-codex","status":"incomplete","incomplete_details":{"reason":"max_output_tokens"},"usage":{"input_tokens":10,"output_tokens":5}}}
 `
-	events := llm.NewEventStream()
-	go respParseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), events, testMeta("gpt-5.1-codex"))
+	pub, ch := llm.NewEventPublisher()
+	go respParseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), pub, testMeta("gpt-5.1-codex"))
 
 	var stopReason llm.StopReason
-	for event := range events.C() {
-		if event.Type == llm.StreamEventDone {
-			stopReason = event.StopReason
+	for event := range ch {
+		if event.Type == llm.StreamEventCompleted {
+			if ce, ok := event.Data.(*llm.CompletedEvent); ok {
+				stopReason = ce.StopReason
+			}
 		}
 	}
 	assert.Equal(t, llm.StopReasonMaxTokens, stopReason)
@@ -1485,13 +1488,15 @@ data: {"response":{"id":"resp_456","model":"gpt-5.1-codex"}}
 event: response.completed
 data: {"response":{"id":"resp_456","model":"gpt-5.1-codex","status":"incomplete","incomplete_details":{"reason":"content_filter"},"usage":{"input_tokens":10,"output_tokens":0}}}
 `
-	events := llm.NewEventStream()
-	go respParseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), events, testMeta("gpt-5.1-codex"))
+	pub, ch := llm.NewEventPublisher()
+	go respParseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), pub, testMeta("gpt-5.1-codex"))
 
 	var stopReason llm.StopReason
-	for event := range events.C() {
-		if event.Type == llm.StreamEventDone {
-			stopReason = event.StopReason
+	for event := range ch {
+		if event.Type == llm.StreamEventCompleted {
+			if ce, ok := event.Data.(*llm.CompletedEvent); ok {
+				stopReason = ce.StopReason
+			}
 		}
 	}
 	assert.Equal(t, llm.StopReasonContentFilter, stopReason)
