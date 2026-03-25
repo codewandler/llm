@@ -18,6 +18,7 @@ func NewInferCmd(root *RootFlags) *cobra.Command {
 	var system string
 	var verbose bool
 	var reasoning string
+	var demoTools bool
 
 	cmd := &cobra.Command{
 		Use:   "infer <message>",
@@ -35,7 +36,7 @@ Examples:
   llmcli infer -m codex --reasoning high "Hello"  # Add reasoning`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runInfer(cmd.Context(), args[0], model, system, reasoning, verbose, root)
+			return runInfer(cmd.Context(), args[0], model, system, reasoning, verbose, demoTools, root)
 		},
 	}
 
@@ -43,10 +44,11 @@ Examples:
 	cmd.Flags().StringVarP(&system, "system", "s", "", "System prompt to prepend")
 	cmd.Flags().StringVar(&reasoning, "reasoning", "", "Reasoning effort: low, medium, high (for o-series / codex models)")
 	cmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "Show usage statistics")
+	cmd.Flags().BoolVar(&demoTools, "demo-tools", false, "Enable demo tool loop (add_fact + complete_turn) and default persona")
 	return cmd
 }
 
-func runInfer(ctx context.Context, userMsg, model, system, reasoning string, verbose bool, root *RootFlags) error {
+func runInfer(ctx context.Context, userMsg, model, system, reasoning string, verbose bool, demoTools bool, root *RootFlags) error {
 	httpClient, logHandler := root.BuildHTTPClient()
 	concreteProvider, err := createProvider(ctx, httpClient, root.BuildLLMOptions(logHandler)...)
 	if err != nil {
@@ -54,49 +56,16 @@ func runInfer(ctx context.Context, userMsg, model, system, reasoning string, ver
 	}
 	var provider llm.Provider = concreteProvider
 
-	msgs := make(llm.Messages, 0)
-
-	cacheHint := &llm.CacheHint{Enabled: true}
-
-	if system != "" {
-		msgs = append(msgs, llm.System(system, cacheHint))
-	} else {
-		msgs = append(
-			msgs,
-			llm.System(
-				"You are Tessa. Before you do anything -> Introduce yourself! You must complete by calling `complete_turn` tool. This can happen together with adding facts",
-				cacheHint,
-			),
-		)
-	}
-	msgs = append(msgs, llm.User(userMsg))
-
-	type (
-		addFactParams struct {
-			Fact string `json:"fact"`
-		}
-		completeTurnParams struct {
-			Success bool `json:"success"`
-		}
-		DefaultToolResult struct {
-			Message string `json:"message"`
-			Success bool   `json:"success"`
-		}
-	)
-
-	tools := tool.NewToolSet(
-		tool.NewSpec[addFactParams]("add_fact", "Store a single fact"),
-		tool.NewSpec[completeTurnParams]("complete_turn", "Complete the current turn."),
-	).Definitions()
+	spec := buildInferSpec(userMsg, model, system, reasoning, demoTools)
 
 	// --- Token estimate (verbose only) ---
 	var tokenEstimate *llm.TokenCount
 	if verbose {
 		if tc, ok := provider.(llm.TokenCounter); ok {
 			est, err := tc.CountTokens(ctx, llm.TokenCountRequest{
-				Model:    model,
-				Messages: msgs,
-				Tools:    tools,
+				Model:    spec.Model,
+				Messages: spec.Messages,
+				Tools:    spec.Tools,
 			})
 			if err == nil {
 				tokenEstimate = est
@@ -106,11 +75,11 @@ func runInfer(ctx context.Context, userMsg, model, system, reasoning string, ver
 	}
 
 	stream, err := provider.CreateStream(ctx, llm.Request{
-		Model:           model,
-		Messages:        msgs,
-		ReasoningEffort: llm.ReasoningEffort(reasoning),
-		ToolChoice:      llm.ToolChoiceRequired{},
-		Tools:           tools,
+		Model:           spec.Model,
+		Messages:        spec.Messages,
+		ReasoningEffort: spec.ReasoningEffort,
+		ToolChoice:      spec.ToolChoice,
+		Tools:           spec.Tools,
 	})
 	if err != nil {
 		return fmt.Errorf("create stream: %w", err)
@@ -125,18 +94,13 @@ func runInfer(ctx context.Context, userMsg, model, system, reasoning string, ver
 				d, _ := json.MarshalIndent(ev, "  ", "  ")
 				fmt.Printf("\n[EVT :: %s]\n%s\n", ev.Type(), string(d))
 			}
-		})).
-		HandleTool(
-			tool.NewHandler("complete_turn", func(ctx context.Context, in completeTurnParams) (*DefaultToolResult, error) {
-				return &DefaultToolResult{Message: "Turn complete", Success: in.Success}, nil
-			}),
-			tool.NewHandler("add_fact", func(ctx context.Context, in addFactParams) (*DefaultToolResult, error) {
-				return &DefaultToolResult{
-					Message: fmt.Sprintf("Fact added: %s", in.Fact),
-					Success: true,
-				}, nil
-			}),
-		).
+		}))
+
+	if len(spec.ToolHandlers) > 0 {
+		proc = proc.HandleTool(spec.ToolHandlers...)
+	}
+
+	proc = proc.
 		OnTextDelta(func(chunk string) {
 			if inReasoning {
 				fmt.Print(ansiReset)
@@ -354,4 +318,66 @@ func formatCost(cost float64) string {
 	default:
 		return fmt.Sprintf("$%.2f", cost)
 	}
+}
+
+type inferSpec struct {
+	Model           string
+	Messages        llm.Messages
+	ReasoningEffort llm.ReasoningEffort
+	ToolChoice      llm.ToolChoice
+	Tools           []tool.Definition
+	ToolHandlers    []tool.NamedHandler
+}
+
+type addFactParams struct {
+	Fact string `json:"fact"`
+}
+
+type completeTurnParams struct {
+	Success bool `json:"success"`
+}
+
+type defaultToolResult struct {
+	Message string `json:"message"`
+	Success bool   `json:"success"`
+}
+
+const defaultDemoSystemPrompt = "You are Tessa. Before you do anything -> Introduce yourself! You must complete by calling `complete_turn` tool. This can happen together with adding facts"
+
+func buildInferSpec(userMsg, model, system, reasoning string, demoTools bool) inferSpec {
+	msgs := make(llm.Messages, 0, 2)
+	cacheHint := &llm.CacheHint{Enabled: true}
+
+	if system != "" {
+		msgs = append(msgs, llm.System(system, cacheHint))
+	} else if demoTools {
+		msgs = append(msgs, llm.System(defaultDemoSystemPrompt, cacheHint))
+	}
+	msgs = append(msgs, llm.User(userMsg))
+
+	spec := inferSpec{
+		Model:           model,
+		Messages:        msgs,
+		ReasoningEffort: llm.ReasoningEffort(reasoning),
+	}
+
+	if !demoTools {
+		return spec
+	}
+
+	spec.Tools = tool.NewToolSet(
+		tool.NewSpec[addFactParams]("add_fact", "Store a single fact"),
+		tool.NewSpec[completeTurnParams]("complete_turn", "Complete the current turn."),
+	).Definitions()
+	spec.ToolChoice = llm.ToolChoiceRequired{}
+	spec.ToolHandlers = []tool.NamedHandler{
+		tool.NewHandler("complete_turn", func(ctx context.Context, in completeTurnParams) (*defaultToolResult, error) {
+			return &defaultToolResult{Message: "Turn complete", Success: in.Success}, nil
+		}),
+		tool.NewHandler("add_fact", func(ctx context.Context, in addFactParams) (*defaultToolResult, error) {
+			return &defaultToolResult{Message: fmt.Sprintf("Fact added: %s", in.Fact), Success: true}, nil
+		}),
+	}
+
+	return spec
 }

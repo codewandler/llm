@@ -100,8 +100,8 @@ var requestHeaderDenylist = map[string]bool{
 }
 
 func (h *httpLogHandler) Enabled(_ context.Context, _ slog.Level) bool { return true }
-func (h *httpLogHandler) WithAttrs(_ []slog.Attr) slog.Handler          { return h }
-func (h *httpLogHandler) WithGroup(_ string) slog.Handler               { return h }
+func (h *httpLogHandler) WithAttrs(_ []slog.Attr) slog.Handler         { return h }
+func (h *httpLogHandler) WithGroup(_ string) slog.Handler              { return h }
 
 func (h *httpLogHandler) Handle(_ context.Context, r slog.Record) error {
 	attrs := make(map[string]string)
@@ -170,16 +170,18 @@ func (h *httpLogHandler) feedChunk(chunk string) {
 
 // handleSSELine processes one complete SSE line.
 func (h *httpLogHandler) handleSSELine(line string) {
+	if line == "" {
+		// Blank line = end of SSE frame — render and reset
+		h.flushSSEFrame()
+		return
+	}
+
 	switch {
 	case strings.HasPrefix(line, "event: "):
 		h.sseEvent = strings.TrimPrefix(line, "event: ")
 
 	case strings.HasPrefix(line, "data: "):
 		h.sseData = strings.TrimPrefix(line, "data: ")
-
-	case line == "":
-		// Blank line = end of SSE frame — render and reset
-		h.flushSSEFrame()
 
 	default:
 		// Non-SSE line (e.g. HTTP/1.1 trailers) — print as-is
@@ -201,10 +203,14 @@ func (h *httpLogHandler) flushSSEFrame() {
 	// Determine the SSE event type from the data JSON if not set by event: line
 	if eventType == "" {
 		var probe struct {
-			Type string `json:"type"`
+			Type   string `json:"type"`
+			Object string `json:"object"`
 		}
 		_ = json.Unmarshal([]byte(data), &probe)
 		eventType = probe.Type
+		if eventType == "" {
+			eventType = probe.Object
+		}
 	}
 
 	// If token output was printed to stdout, emit a blank separator line first

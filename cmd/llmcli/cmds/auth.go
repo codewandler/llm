@@ -158,6 +158,11 @@ func getStoreAndKey(key string) (claude.TokenStore, string, error) {
 // --- Command implementations ---
 
 func runRefresh(ctx context.Context, key string, verbose bool) error {
+	key, err := normalizeCredentialKey(key)
+	if err != nil {
+		return err
+	}
+
 	store, internalKey, err := getStoreAndKey(key)
 	if err != nil {
 		return err
@@ -233,6 +238,10 @@ func truncateToken(token string) string {
 }
 
 func runLogin(ctx context.Context, key string) error {
+	key, err := normalizeCredentialKey(key)
+	if err != nil {
+		return err
+	}
 	if key == localKey {
 		return fmt.Errorf("cannot login to @local; use Claude Code CLI to manage local credentials")
 	}
@@ -296,6 +305,11 @@ func runLogin(ctx context.Context, key string) error {
 }
 
 func runStatus(ctx context.Context, key string) error {
+	key, err := normalizeCredentialKey(key)
+	if err != nil {
+		return err
+	}
+
 	store, internalKey, err := getStoreAndKey(key)
 	if err != nil {
 		return err
@@ -333,6 +347,10 @@ func runStatus(ctx context.Context, key string) error {
 }
 
 func runLogout(ctx context.Context, key string) error {
+	key, err := normalizeCredentialKey(key)
+	if err != nil {
+		return err
+	}
 	if key == localKey {
 		return fmt.Errorf("cannot logout @local; use Claude Code CLI to manage local credentials")
 	}
@@ -414,6 +432,14 @@ func runList(ctx context.Context) error {
 }
 
 // --- Helpers ---
+
+func normalizeCredentialKey(key string) (string, error) {
+	normalized := strings.TrimSpace(key)
+	if normalized == "" {
+		return "", fmt.Errorf("key cannot be empty")
+	}
+	return normalized, nil
+}
 
 func openBrowser(url string) error {
 	var cmd *exec.Cmd

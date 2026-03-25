@@ -143,8 +143,10 @@ func printAliasesSections(models []llm.Model) {
 
 // printAliasEntry prints a single alias with its targets in multi-line format.
 func printAliasEntry(alias string, targets []string) {
+	sortedTargets := append([]string(nil), targets...)
+	sort.Strings(sortedTargets)
 	fmt.Printf("  %s:\n", alias)
-	for _, target := range targets {
+	for _, target := range sortedTargets {
 		fmt.Printf("    %s\n", target)
 	}
 }
