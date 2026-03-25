@@ -83,7 +83,7 @@ type StreamProcessor struct {
 	once          sync.Once
 }
 
-func ProcessChan(ctx context.Context, ch <-chan Envelope) *StreamProcessor {
+func NewEventProcessor(ctx context.Context, ch <-chan Envelope) *StreamProcessor {
 	return &StreamProcessor{
 		ctx:           ctx,
 		ch:            ch,
@@ -93,6 +93,10 @@ func ProcessChan(ctx context.Context, ch <-chan Envelope) *StreamProcessor {
 		result:        &result{},
 		done:          make(chan struct{}, 1),
 	}
+}
+
+func ProcessEvents(ctx context.Context, ch <-chan Envelope) (Result, error) {
+	return NewEventProcessor(ctx, ch).Result()
 }
 
 func (r *StreamProcessor) OnEvent(fn EventHandler) *StreamProcessor {
