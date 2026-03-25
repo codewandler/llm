@@ -1,6 +1,182 @@
 # Changelog
 
-## v0.25.0 (unreleased)
+## v0.26.0
+
+### Breaking Changes
+
+#### Event system overhaul — new type hierarchy replaces `StreamEvent`
+
+The `StreamEvent` struct and its raw field access pattern have been replaced
+with a typed event model based on the `Event` interface and an `Envelope` wrapper.
+
+**Before:**
+```go
+for ev := range ch {
+    switch ev.Type {
+    case llm.StreamEventDelta:
+        fmt.Print(ev.Text())
+    case llm.StreamEventCompleted:
+        fmt.Println(ev.Done.StopReason)
+    }
+}
+```
+
+**After:**
+```go
+for env := range ch {
+    switch e := env.Data.(type) {
+    case *llm.DeltaEvent:
+        fmt.Print(e.Text)
+    case *llm.CompletedEvent:
+        fmt.Println(e.StopReason)
+    }
+}
+```
+
+New event types (`event.go`):
+- `StreamCreatedEvent` — emitted once at publisher creation (replaces `StreamEventCreated`)
+- `StreamStartedEvent` — emitted when the first byte arrives (replaces `StreamEventStart`)
+- `DeltaEvent` — carries incremental text/reasoning/tool content (`event_delta.go`)
+- `CompletedEvent` — stream end with `StopReason` and `RequestID`
+- `UsageUpdatedEvent` — usage figures from the provider
+
+Each event type has a typed `Type() EventType` method. The `Envelope` wrapper
+carries `Meta EventMeta` with `RequestID`, `Seq`, `CreatedAt`, `After`, and `TraceID`.
+
+#### `tool` package extracted to `github.com/codewandler/llm/tool`
+
+All tool-related types that previously lived in the root package have been moved:
+
+| Before | After |
+|---|---|
+| `llm.ToolCall` | `tool.Call` |
+| `llm.ToolResult` | `tool.Result` |
+| `llm.ToolSpec` / `llm.BoundToolSpec` | `tool.Spec[In]` / `tool.BoundToolSpec[In,Out]` |
+| `llm.ToolHandler` / `llm.NewToolHandler` | `tool.Handler` / `tool.New[In,Out]` |
+| `llm.ToolSet` | `tool.Set` |
+| `llm.ToolChoiceAuto` / `ToolChoiceRequired` | `tool.ChoiceAuto` / `tool.ChoiceRequired` |
+
+`tool.Definition` is the new name for a tool schema carried in a `StreamRequest`.
+
+#### `NewEventProcessor` replaces `ProcessChan`
+
+```go
+// Before
+proc := llm.ProcessChan(ctx, ch)
+
+// After
+proc := llm.NewEventProcessor(ctx, ch)
+```
+
+`ProcessEvents(ctx, ch, handler)` is a new helper that iterates over a stream
+and calls a single `EventHandler` for each envelope.
+
+#### `Publisher` interface — new canonical stream writer
+
+Providers now write events via a `Publisher` interface instead of writing to
+a raw channel. `NewEventPublisher()` returns a `(Publisher, <-chan Envelope)`
+pair. Provider authors should use the typed helpers instead of raw channel sends:
+
+```go
+pub, ch := llm.NewEventPublisher()
+pub.Delta(&llm.DeltaEvent{Kind: llm.DeltaKindText, Text: token})
+pub.Completed(llm.CompletedEvent{StopReason: llm.StopReasonEndTurn})
+pub.Close()
+```
+
+#### `json.go` — shared JSON helpers extracted
+
+Internal JSON helpers (`unmarshalJSON`, `parsePartialJSON`) are now in `json.go`
+so all providers share a single copy.
+
+#### `response.go` and `usage.go` extracted
+
+`StopReason` constants, the `Response` interface, and `Usage` struct are now in
+their own files (`response.go`, `usage.go`) instead of `stream.go`, which has
+been removed.
+
+#### Integration tests moved to `integration/` sub-package
+
+`cache_integration_test.go`, `integration_test.go`, and
+`token_counter_drift_test.go` have been moved to the `integration/` directory,
+separating long-running / network-dependent tests from unit tests.
+
+---
+
+### New Features
+
+#### `tool.AsyncDispatcher` — concurrent tool execution
+
+`tool.AsyncDispatcher` executes all tool calls in a batch concurrently, one
+goroutine per call, and collects results in emission order:
+
+```go
+d := &tool.AsyncDispatcher{Handlers: tool.NewHandlers(myHandler)}
+results, err := d.Dispatch(ctx, toolCalls...)
+```
+
+`tool.NewSyncDispatcher(h)` is the sequential counterpart (the original behaviour).
+
+#### `sortmap.SortedMap` — deterministic JSON for stable cache fingerprints
+
+`github.com/codewandler/llm/sortmap.SortedMap` serialises `map[string]any`
+trees with alphabetically ordered keys at every nesting level. This produces
+stable JSON for tool schema definitions, which is required to hit the prompt
+cache on providers that fingerprint tool schemas (Anthropic, Bedrock):
+
+```go
+sm := sortmap.NewSortedMap(schemaMap)
+b, _ := json.Marshal(sm) // keys always sorted, deep
+```
+
+#### `auto.WithoutProvider` / `auto.WithoutBedrock`
+
+Explicitly exclude a provider from auto-detection without affecting others:
+
+```go
+p, err := auto.New(ctx,
+    auto.WithoutProvider(auto.ProviderBedrock),
+)
+
+// Convenience shorthand:
+p, err := auto.New(ctx, auto.WithoutBedrock())
+```
+
+#### `EventHandlerFunc` and `TypedEventHandler[T]` — lightweight handler adapters
+
+```go
+// Any function with the right signature:
+h := llm.EventHandlerFunc(func(e llm.Event) { ... })
+
+// Or typed — only called when the event matches type T:
+h := llm.TypedEventHandler[*llm.DeltaEvent](func(e *llm.DeltaEvent) {
+    fmt.Print(e.Text)
+})
+```
+
+#### OpenRouter — updated model registry
+
+`provider/openrouter/models.json` has been refreshed with new model additions
+and updated context window / pricing metadata.
+
+#### MiniMax — BPE tokenizer and calibrated token counter
+
+`provider/minimax` now ships a `TokenCounter` implementation backed by a BPE
+tokenizer (same `cl100k_base` encoding used by other providers), with calibrated
+overhead constants to reduce count drift.
+
+### Bug Fixes
+
+#### `Usage` emitted before `CompletedEvent` in all providers
+
+Previously some providers emitted usage figures after the stream-end marker,
+meaning consumers that stopped reading at `CompletedEvent` would miss usage data.
+All providers now guarantee `UsageUpdatedEvent` is published before
+`CompletedEvent`.
+
+---
+
+## v0.25.0
 
 ### New Features
 
