@@ -12,6 +12,8 @@ import (
 	"time"
 
 	"github.com/codewandler/llm"
+	"github.com/codewandler/llm/sortmap"
+	"github.com/codewandler/llm/tool"
 )
 
 // Known model IDs for Ollama.
@@ -240,7 +242,7 @@ func (p *Provider) downloadModel(ctx context.Context, modelID string) error {
 	return nil
 }
 
-func (p *Provider) CreateStream(ctx context.Context, opts llm.Request) (<-chan llm.StreamEvent, error) {
+func (p *Provider) CreateStream(ctx context.Context, opts llm.Request) (llm.Stream, error) {
 	if err := opts.Validate(); err != nil {
 		return nil, llm.NewErrBuildRequest(llm.ProviderNameOllama, err)
 	}
@@ -269,12 +271,12 @@ func (p *Provider) CreateStream(ctx context.Context, opts llm.Request) (<-chan l
 
 	meta := streamMeta{
 		RequestedModel: opts.Model,
-		ResolvedModel:  opts.Model, // For simple providers, resolved = requested
+		ResolvedModel:  opts.Model,
 		StartTime:      startTime,
 	}
-	stream := llm.NewEventStream()
-	go parseStream(ctx, resp.Body, stream, meta)
-	return stream.C(), nil
+	pub, ch := llm.NewEventPublisher()
+	go parseStream(ctx, resp.Body, pub, meta)
+	return ch, nil
 }
 
 // --- Request building ---
@@ -349,7 +351,7 @@ func buildRequest(opts llm.Request) ([]byte, error) {
 			Function: functionPayload{
 				Name:        t.Name,
 				Description: t.Description,
-				Parameters:  llm.NewSortedMap(t.Parameters),
+				Parameters:  sortmap.NewSortedMap(t.Parameters),
 			},
 		})
 	}
@@ -358,37 +360,36 @@ func buildRequest(opts llm.Request) ([]byte, error) {
 		var mp messagePayload
 
 		switch m := msg.(type) {
-		case *llm.SystemMsg:
+		case llm.SystemMessage:
 			mp = messagePayload{
 				Role:    "system",
-				Content: m.Content,
+				Content: m.Content(),
 			}
 
-		case *llm.UserMsg:
+		case llm.UserMessage:
 			mp = messagePayload{
 				Role:    "user",
-				Content: m.Content,
+				Content: m.Content(),
 			}
 
-		case *llm.AssistantMsg:
+		case llm.AssistantMessage:
 			mp = messagePayload{
 				Role:    "assistant",
-				Content: m.Content,
+				Content: m.Content(),
 			}
-			// Convert tool calls if present
-			for _, tc := range m.ToolCalls {
+			for _, tc := range m.ToolCalls() {
 				mp.ToolCalls = append(mp.ToolCalls, toolCallItem{
 					Function: functionCall{
-						Name:      tc.Name,
-						Arguments: tc.Arguments,
+						Name:      tc.ToolName(),
+						Arguments: tc.ToolArgs(),
 					},
 				})
 			}
 
-		case *llm.ToolCallResult:
+		case llm.ToolMessage:
 			mp = messagePayload{
 				Role:    "tool",
-				Content: m.Output,
+				Content: m.ToolOutput(),
 			}
 		}
 
@@ -398,7 +399,7 @@ func buildRequest(opts llm.Request) ([]byte, error) {
 	return json.Marshal(r)
 }
 
-// --- Stream parsing ---
+// --- Publisher parsing ---
 
 // streamMeta passes context into the stream parser for StreamEventStart.
 type streamMeta struct {
@@ -422,8 +423,8 @@ type streamChunk struct {
 	DoneReason string `json:"done_reason,omitempty"`
 }
 
-func parseStream(ctx context.Context, body io.ReadCloser, events *llm.EventStream, meta streamMeta) {
-	defer events.Close()
+func parseStream(ctx context.Context, body io.ReadCloser, pub llm.Publisher, meta streamMeta) {
+	defer pub.Close()
 	defer body.Close()
 
 	scanner := bufio.NewScanner(body)
@@ -434,10 +435,9 @@ func parseStream(ctx context.Context, body io.ReadCloser, events *llm.EventStrea
 	startEmitted := false
 
 	for scanner.Scan() {
-		// Check for context cancellation
 		select {
 		case <-ctx.Done():
-			events.Error(llm.NewErrContextCancelled(llm.ProviderNameOllama, ctx.Err()))
+			pub.Error(llm.NewErrContextCancelled(llm.ProviderNameOllama, ctx.Err()))
 			return
 		default:
 		}
@@ -448,58 +448,51 @@ func parseStream(ctx context.Context, body io.ReadCloser, events *llm.EventStrea
 
 		var chunk streamChunk
 		if err := json.Unmarshal([]byte(line), &chunk); err != nil {
-			events.Error(llm.NewErrStreamDecode(llm.ProviderNameOllama, err))
+			pub.Error(llm.NewErrStreamDecode(llm.ProviderNameOllama, err))
 			return
 		}
 
-		// Emit StreamEventStart on first chunk
 		if !startEmitted {
 			startEmitted = true
-			events.Start(llm.StreamStartOpts{})
+			pub.Started(llm.StreamStartedEvent{})
 		}
 
-		// Handle content delta
 		if chunk.Message.Content != "" {
-			events.Delta(llm.TextDelta(nil, chunk.Message.Content))
+			pub.Delta(llm.TextDelta(chunk.Message.Content))
 		}
 
-		// Handle tool calls
 		if len(chunk.Message.ToolCalls) > 0 {
 			for _, tc := range chunk.Message.ToolCalls {
 				toolCallID++
-				events.ToolCall(llm.ToolCall{
-					ID:        fmt.Sprintf("call_%d", toolCallID),
-					Name:      tc.Function.Name,
-					Arguments: tc.Function.Arguments,
-				})
+				pub.ToolCall(tool.NewToolCall(
+					fmt.Sprintf("call_%d", toolCallID),
+					tc.Function.Name,
+					tc.Function.Arguments,
+				))
 			}
 		}
 
-		// Handle done
 		if chunk.Done {
-			// Map done_reason when provided; fall back to inference from
-			// whether tool calls were present (for older Ollama versions).
 			stopReason := llm.StopReasonEndTurn
 			switch chunk.DoneReason {
 			case "length":
 				stopReason = llm.StopReasonMaxTokens
 			case "stop":
-				// explicit stop — check for tool use
 				if toolCallID > 0 {
 					stopReason = llm.StopReasonToolUse
 				}
 			default:
-				// DoneReason absent or unknown — infer from tool calls
 				if toolCallID > 0 {
 					stopReason = llm.StopReasonToolUse
 				}
 			}
-			events.Done(stopReason, &usage)
+			pub.Usage(usage)
+			pub.Completed(llm.CompletedEvent{StopReason: stopReason})
 			return
 		}
 	}
 
 	if err := scanner.Err(); err != nil {
-		events.Error(llm.NewErrStreamRead(llm.ProviderNameOllama, err))
+		pub.Error(llm.NewErrStreamRead(llm.ProviderNameOllama, err))
 	}
 }
