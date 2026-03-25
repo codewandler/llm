@@ -1,7 +1,6 @@
 package openrouter
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -12,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/codewandler/llm"
+	"github.com/codewandler/llm/provider/internal/sse"
 	"github.com/codewandler/llm/tool"
 )
 
@@ -379,30 +379,15 @@ func parseStream(ctx context.Context, body io.ReadCloser, pub llm.Publisher) {
 		_ = body.Close()
 	}()
 
-	scanner := bufio.NewScanner(body)
-	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
-
 	activeTools := make(map[uint32]*toolAccum)
 	startEmitted := false
 	var usage *llm.Usage
 	var stopReason llm.StopReason
 
-	for scanner.Scan() {
-		select {
-		case <-ctx.Done():
-			pub.Error(llm.NewErrContextCancelled(llm.ProviderNameOpenRouter, ctx.Err()))
-			return
-		default:
-		}
-
-		line := scanner.Text()
-		if !strings.HasPrefix(line, "data: ") {
-			continue
-		}
-		data := strings.TrimPrefix(line, "data: ")
-
+	err := sse.ForEachDataLine(ctx, body, func(ev sse.Event) bool {
+		data := ev.Data
 		if data == "" {
-			continue
+			return true
 		}
 
 		if data == "[DONE]" {
@@ -410,13 +395,13 @@ func parseStream(ctx context.Context, body io.ReadCloser, pub llm.Publisher) {
 				pub.Usage(*usage)
 			}
 			pub.Completed(llm.CompletedEvent{StopReason: stopReason})
-			return
+			return false
 		}
 
 		var chunk streamChunk
 		if err := json.Unmarshal([]byte(data), &chunk); err != nil {
 			pub.Error(llm.NewErrStreamDecode(llm.ProviderNameOpenRouter, err))
-			continue
+			return true
 		}
 
 		if !startEmitted {
@@ -429,7 +414,7 @@ func parseStream(ctx context.Context, body io.ReadCloser, pub llm.Publisher) {
 
 		if chunk.Error != nil {
 			pub.Error(llm.NewErrProviderMsg(llm.ProviderNameOpenRouter, chunk.Error.Message))
-			return
+			return false
 		}
 
 		if chunk.Usage != nil {
@@ -480,6 +465,15 @@ func parseStream(ctx context.Context, body io.ReadCloser, pub llm.Publisher) {
 				emitToolCalls(activeTools, pub)
 			}
 		}
+
+		return true
+	})
+	if err != nil {
+		if ctx.Err() != nil {
+			pub.Error(llm.NewErrContextCancelled(llm.ProviderNameOpenRouter, err))
+			return
+		}
+		pub.Error(llm.NewErrStreamRead(llm.ProviderNameOpenRouter, err))
 	}
 }
 

@@ -7,7 +7,6 @@ package openai
 // api_responses.go.
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -18,6 +17,7 @@ import (
 	"time"
 
 	"github.com/codewandler/llm"
+	"github.com/codewandler/llm/provider/internal/sse"
 	"github.com/codewandler/llm/sortmap"
 	"github.com/codewandler/llm/tool"
 )
@@ -280,28 +280,17 @@ func ccParseStream(ctx context.Context, body io.ReadCloser, pub llm.Publisher, m
 	defer pub.Close()
 	defer body.Close()
 
-	scanner := bufio.NewScanner(body)
-	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
-
 	activeTools := make(map[int]*ccToolAccum)
 	var finalUsage *llm.Usage
 	var stopReason llm.StopReason
 	startEmitted := false
 
-	for scanner.Scan() {
-		select {
-		case <-ctx.Done():
-			pub.Error(llm.NewErrContextCancelled(llm.ProviderNameOpenAI, ctx.Err()))
-			return
-		default:
+	err := sse.ForEachDataLine(ctx, body, func(ev sse.Event) bool {
+		data := ev.Data
+		if data == "" {
+			return true
 		}
 
-		line := scanner.Text()
-		if !strings.HasPrefix(line, "data: ") {
-			continue
-		}
-
-		data := strings.TrimPrefix(line, "data: ")
 		if data == "[DONE]" {
 			if finalUsage != nil {
 				calculateCost(meta.requestedModel, finalUsage)
@@ -310,12 +299,12 @@ func ccParseStream(ctx context.Context, body io.ReadCloser, pub llm.Publisher, m
 				pub.Usage(*finalUsage)
 			}
 			pub.Completed(llm.CompletedEvent{StopReason: stopReason})
-			return
+			return false
 		}
 
 		var chunk ccStreamChunk
 		if err := json.Unmarshal([]byte(data), &chunk); err != nil {
-			continue
+			return true
 		}
 
 		if !startEmitted {
@@ -341,7 +330,7 @@ func ccParseStream(ctx context.Context, body io.ReadCloser, pub llm.Publisher, m
 		}
 
 		if len(chunk.Choices) == 0 {
-			continue
+			return true
 		}
 		choice := chunk.Choices[0]
 
@@ -373,9 +362,13 @@ func ccParseStream(ctx context.Context, body io.ReadCloser, pub llm.Publisher, m
 				ccEmitToolCalls(activeTools, pub)
 			}
 		}
-	}
-
-	if err := scanner.Err(); err != nil {
+		return true
+	})
+	if err != nil {
+		if ctx.Err() != nil {
+			pub.Error(llm.NewErrContextCancelled(llm.ProviderNameOpenAI, err))
+			return
+		}
 		pub.Error(llm.NewErrStreamRead(llm.ProviderNameOpenAI, err))
 	}
 }

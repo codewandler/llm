@@ -114,7 +114,14 @@ func detectProviders(httpClient *http.Client, llmOpts []llm.Option, disabled map
 			name:         ProviderMiniMax,
 			providerType: ProviderMiniMax,
 			factory: func(opts ...llm.Option) llm.Provider {
-				return minimax.New(minimax.WithLLMOpts(opts...))
+				minimaxOpts := []minimax.Option{minimax.WithLLMOpts(opts...)}
+				if httpClient != nil {
+					minimaxOpts = append(minimaxOpts, minimax.WithLLMOpts(llm.WithHTTPClient(httpClient)))
+				}
+				if len(llmOpts) > 0 {
+					minimaxOpts = append(minimaxOpts, minimax.WithLLMOpts(llmOpts...))
+				}
+				return minimax.New(minimaxOpts...)
 			},
 			modelAliases: minimax.ModelAliases,
 			hasAliases:   true,

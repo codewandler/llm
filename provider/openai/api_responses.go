@@ -14,7 +14,6 @@ package openai
 //   - No [DONE] sentinel; response.completed is the terminal event
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -25,6 +24,7 @@ import (
 	"time"
 
 	"github.com/codewandler/llm"
+	"github.com/codewandler/llm/provider/internal/sse"
 	"github.com/codewandler/llm/sortmap"
 	"github.com/codewandler/llm/tool"
 )
@@ -327,34 +327,19 @@ func respParseStream(ctx context.Context, body io.ReadCloser, pub llm.Publisher,
 	defer pub.Close()
 	defer body.Close()
 
-	scanner := bufio.NewScanner(body)
-	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
-
 	activeTools := make(map[int]*respToolAccum)
 	startEmitted := false
 	hadToolCalls := false
-	var pendingEvent string
 
-	for scanner.Scan() {
-		select {
-		case <-ctx.Done():
-			pub.Error(llm.NewErrContextCancelled(llm.ProviderNameOpenAI, ctx.Err()))
+	err := sse.ForEachDataLine(ctx, body, func(ev sse.Event) bool {
+		respHandleEvent(ev.Name, ev.Data, &startEmitted, &hadToolCalls, activeTools, pub, &meta)
+		return true
+	})
+	if err != nil {
+		if ctx.Err() != nil {
+			pub.Error(llm.NewErrContextCancelled(llm.ProviderNameOpenAI, err))
 			return
-		default:
 		}
-
-		line := scanner.Text()
-		switch {
-		case strings.HasPrefix(line, "event: "):
-			pendingEvent = strings.TrimPrefix(line, "event: ")
-		case strings.HasPrefix(line, "data: "):
-			data := strings.TrimPrefix(line, "data: ")
-			respHandleEvent(pendingEvent, data, &startEmitted, &hadToolCalls, activeTools, pub, &meta)
-			pendingEvent = ""
-		}
-	}
-
-	if err := scanner.Err(); err != nil {
 		pub.Error(llm.NewErrStreamRead(llm.ProviderNameOpenAI, err))
 	}
 }

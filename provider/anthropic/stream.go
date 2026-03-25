@@ -1,7 +1,6 @@
 package anthropic
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"io"
@@ -9,6 +8,7 @@ import (
 	"time"
 
 	"github.com/codewandler/llm"
+	"github.com/codewandler/llm/provider/internal/sse"
 	"github.com/codewandler/llm/tool"
 )
 
@@ -44,9 +44,6 @@ func ParseStream(ctx context.Context, body io.ReadCloser, pub llm.Publisher, met
 	defer pub.Close()
 	defer body.Close()
 
-	scanner := bufio.NewScanner(body)
-	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
-
 	type toolBlock struct {
 		id      string
 		name    string
@@ -56,25 +53,17 @@ func ParseStream(ctx context.Context, body io.ReadCloser, pub llm.Publisher, met
 	var usage llm.Usage
 	var stopReason llm.StopReason
 
-	for scanner.Scan() {
-		select {
-		case <-ctx.Done():
-			pub.Error(llm.NewErrContextCancelled(llm.ProviderNameAnthropic, ctx.Err()))
-			return
-		default:
+	err := sse.ForEachDataLine(ctx, body, func(ev sse.Event) bool {
+		data := ev.Data
+		if data == "" {
+			return true
 		}
-
-		line := scanner.Text()
-		if !strings.HasPrefix(line, "data: ") {
-			continue
-		}
-		data := strings.TrimPrefix(line, "data: ")
 
 		var base struct {
 			Type string `json:"type"`
 		}
 		if err := json.Unmarshal([]byte(data), &base); err != nil {
-			continue
+			return true
 		}
 
 		switch base.Type {
@@ -122,7 +111,7 @@ func ParseStream(ctx context.Context, body io.ReadCloser, pub llm.Publisher, met
 		case "content_block_start":
 			var evt contentBlockStartEvent
 			if err := json.Unmarshal([]byte(data), &evt); err != nil {
-				continue
+				return true
 			}
 			if evt.ContentBlock.Type == "tool_use" {
 				activeTools[evt.Index] = &toolBlock{id: evt.ContentBlock.ID, name: evt.ContentBlock.Name}
@@ -131,7 +120,7 @@ func ParseStream(ctx context.Context, body io.ReadCloser, pub llm.Publisher, met
 		case "content_block_delta":
 			var evt contentBlockDeltaEvent
 			if err := json.Unmarshal([]byte(data), &evt); err != nil {
-				continue
+				return true
 			}
 			idx := uint32(evt.Index)
 			switch evt.Delta.Type {
@@ -157,7 +146,7 @@ func ParseStream(ctx context.Context, body io.ReadCloser, pub llm.Publisher, met
 				Index int `json:"index"`
 			}
 			if err := json.Unmarshal([]byte(data), &evt); err != nil {
-				continue
+				return true
 			}
 			if tb, ok := activeTools[evt.Index]; ok {
 				var args map[string]any
@@ -172,7 +161,7 @@ func ParseStream(ctx context.Context, body io.ReadCloser, pub llm.Publisher, met
 			FillCost(meta.ResolvedModel, &usage)
 			pub.Usage(usage)
 			pub.Completed(llm.CompletedEvent{StopReason: stopReason})
-			return
+			return false
 
 		case "error":
 			var errEvt struct {
@@ -183,8 +172,17 @@ func ParseStream(ctx context.Context, body io.ReadCloser, pub llm.Publisher, met
 			if err := json.Unmarshal([]byte(data), &errEvt); err == nil {
 				pub.Error(llm.NewErrProviderMsg(llm.ProviderNameAnthropic, errEvt.Error.Message))
 			}
+			return false
+		}
+
+		return true
+	})
+	if err != nil {
+		if ctx.Err() != nil {
+			pub.Error(llm.NewErrContextCancelled(llm.ProviderNameAnthropic, err))
 			return
 		}
+		pub.Error(llm.NewErrStreamRead(llm.ProviderNameAnthropic, err))
 	}
 }
 

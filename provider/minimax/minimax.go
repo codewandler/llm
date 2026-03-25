@@ -118,7 +118,7 @@ func (p *Provider) CreateStream(ctx context.Context, opts llm.Request) (llm.Stre
 	}
 
 	pub, ch := llm.NewEventPublisher()
-	go p.parseStreamWithCost(ctx, resp.Body, pub, opts.Model, startTime)
+	p.parseStreamWithCost(ctx, resp.Body, pub, opts.Model, startTime)
 	return ch, nil
 }
 
@@ -127,7 +127,7 @@ func (p *Provider) parseStreamWithCost(ctx context.Context, body io.ReadCloser, 
 	defer body.Close()
 
 	costPub := &costInjector{Publisher: pub, model: model}
-	go anthropic.ParseStream(ctx, body, costPub, anthropic.StreamMeta{
+	anthropic.ParseStream(ctx, body, costPub, anthropic.StreamMeta{
 		RequestedModel: model,
 		ResolvedModel:  model,
 		StartTime:      startTime,
