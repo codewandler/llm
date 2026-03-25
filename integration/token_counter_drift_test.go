@@ -17,10 +17,11 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/codewandler/llm"
-	anthropicprovider "github.com/codewandler/llm/provider/anthropic"
+	"github.com/codewandler/llm/provider/anthropic"
 	"github.com/codewandler/llm/provider/bedrock"
-	minimaxprovider "github.com/codewandler/llm/provider/minimax"
+	"github.com/codewandler/llm/provider/minimax"
 	"github.com/codewandler/llm/provider/openai"
+	"github.com/codewandler/llm/tool"
 )
 
 // driftPct returns the absolute percentage difference between estimated and
@@ -37,7 +38,7 @@ func driftPct(estimated, actual int) float64 {
 //  2. Sends the same request via CreateStream and reads the actual usage
 //  3. Asserts the drift is within maxDriftPct
 //  4. Logs the estimate, actual, and drift for visibility
-func testTokenCounterDrift(t *testing.T, provider llm.Provider, model string, msgs llm.Messages, tools []llm.ToolDefinition, maxDriftPct float64) {
+func testTokenCounterDrift(t *testing.T, provider llm.Provider, model string, msgs llm.Messages, tools []tool.Definition, maxDriftPct float64) {
 	t.Helper()
 	ctx := context.Background()
 
@@ -61,11 +62,11 @@ func testTokenCounterDrift(t *testing.T, provider llm.Provider, model string, ms
 	})
 	require.NoError(t, err)
 
-	result := <-llm.Process(ctx, stream).Result()
+	result := llm.NewEventProcessor(ctx, stream).Result()
 	require.NoError(t, result.Error())
-	require.NotNil(t, result.Usage, "provider returned no usage data")
+	require.NotNil(t, result.Usage(), "provider returned no usage data")
 
-	actual := result.Usage.InputTokens
+	actual := result.Usage().InputTokens
 	drift := driftPct(est.InputTokens, actual)
 
 	t.Logf("model=%s  estimated=%d  actual=%d  drift=%.1f%%", model, est.InputTokens, actual, drift)
@@ -85,13 +86,13 @@ func testTokenCounterDrift(t *testing.T, provider llm.Provider, model string, ms
 
 func TestTokenCounterDrift_Anthropic(t *testing.T) {
 	key := requireEnv(t, "ANTHROPIC_API_KEY")
-	p := anthropicprovider.New(llm.WithAPIKey(key))
+	p := anthropic.New(llm.WithAPIKey(key))
 	model := "claude-haiku-4-5-20251001"
 
 	t.Run("simple", func(t *testing.T) {
 		msgs := llm.Messages{
-			&llm.SystemMsg{Content: "You are a helpful assistant."},
-			&llm.UserMsg{Content: "What is the capital of France?"},
+			llm.System("You are a helpful assistant."),
+			llm.User("What is the capital of France?"),
 		}
 		// cl100k_base is an approximation; Anthropic's tokenizer is proprietary.
 		// Per-message framing overhead adds ~5-10 tokens. 40% covers both factors.
@@ -100,19 +101,19 @@ func TestTokenCounterDrift_Anthropic(t *testing.T) {
 
 	t.Run("multi_turn", func(t *testing.T) {
 		msgs := llm.Messages{
-			&llm.SystemMsg{Content: "You are a helpful assistant."},
-			&llm.UserMsg{Content: "What is 2+2?"},
-			&llm.AssistantMsg{Content: "2+2 equals 4."},
-			&llm.UserMsg{Content: "What about 3+3?"},
+			llm.System("You are a helpful assistant."),
+			llm.User("What is 2+2?"),
+			llm.Assistant("2+2 equals 4."),
+			llm.User("What about 3+3?"),
 		}
 		testTokenCounterDrift(t, p, model, msgs, nil, 40.0)
 	})
 
 	t.Run("with_tools", func(t *testing.T) {
 		msgs := llm.Messages{
-			&llm.UserMsg{Content: "What is the weather in Berlin?"},
+			llm.User("What is the weather in Berlin?"),
 		}
-		tools := []llm.ToolDefinition{
+		tools := []tool.Definition{
 			{
 				Name:        "get_weather",
 				Description: "Get the current weather for a location.",
@@ -146,27 +147,27 @@ func TestTokenCounterDrift_OpenAI(t *testing.T) {
 
 	t.Run("simple", func(t *testing.T) {
 		msgs := llm.Messages{
-			&llm.SystemMsg{Content: "You are a helpful assistant."},
-			&llm.UserMsg{Content: "What is the capital of France?"},
+			llm.System("You are a helpful assistant."),
+			llm.User("What is the capital of France?"),
 		}
 		testTokenCounterDrift(t, p, model, msgs, nil, 5.0) // tiktoken should be near-exact
 	})
 
 	t.Run("multi_turn", func(t *testing.T) {
 		msgs := llm.Messages{
-			&llm.SystemMsg{Content: "You are a helpful assistant."},
-			&llm.UserMsg{Content: "What is 2+2?"},
-			&llm.AssistantMsg{Content: "2+2 equals 4."},
-			&llm.UserMsg{Content: "What about 3+3?"},
+			llm.System("You are a helpful assistant."),
+			llm.User("What is 2+2?"),
+			llm.Assistant("2+2 equals 4."),
+			llm.User("What about 3+3?"),
 		}
 		testTokenCounterDrift(t, p, model, msgs, nil, 5.0)
 	})
 
 	t.Run("with_tools", func(t *testing.T) {
 		msgs := llm.Messages{
-			&llm.UserMsg{Content: "What is the weather in Berlin?"},
+			llm.User("What is the weather in Berlin?"),
 		}
-		tools := []llm.ToolDefinition{
+		tools := []tool.Definition{
 			{
 				Name:        "get_weather",
 				Description: "Get the current weather for a location.",
@@ -197,18 +198,18 @@ func TestTokenCounterDrift_Bedrock(t *testing.T) {
 
 	t.Run("simple", func(t *testing.T) {
 		msgs := llm.Messages{
-			&llm.SystemMsg{Content: "You are a helpful assistant."},
-			&llm.UserMsg{Content: "What is the capital of France?"},
+			llm.System("You are a helpful assistant."),
+			llm.User("What is the capital of France?"),
 		}
 		testTokenCounterDrift(t, p, model, msgs, nil, 40.0)
 	})
 
 	t.Run("multi_turn", func(t *testing.T) {
 		msgs := llm.Messages{
-			&llm.SystemMsg{Content: "You are a helpful assistant."},
-			&llm.UserMsg{Content: "What is 2+2?"},
-			&llm.AssistantMsg{Content: "2+2 equals 4."},
-			&llm.UserMsg{Content: "What about 3+3?"},
+			llm.System("You are a helpful assistant."),
+			llm.User("What is 2+2?"),
+			llm.Assistant("2+2 equals 4."),
+			llm.User("What about 3+3?"),
 		}
 		testTokenCounterDrift(t, p, model, msgs, nil, 40.0)
 	})
@@ -228,13 +229,13 @@ func requireEnv(t *testing.T, name string) string {
 
 func TestTokenCounterDrift_MiniMax(t *testing.T) {
 	key := requireEnv(t, "MINIMAX_API_KEY")
-	p := minimaxprovider.New(minimaxprovider.WithLLMOpts(llm.WithAPIKey(key)))
-	model := minimaxprovider.ModelM27
+	p := minimax.New(minimax.WithLLMOpts(llm.WithAPIKey(key)))
+	model := minimax.ModelM27
 
 	t.Run("simple", func(t *testing.T) {
 		msgs := llm.Messages{
-			&llm.SystemMsg{Content: "You are a helpful assistant."},
-			&llm.UserMsg{Content: "What is the capital of France?"},
+			llm.System("You are a helpful assistant."),
+			llm.User("What is the capital of France?"),
 		}
 		// MiniMax uses a proprietary BPE (200K vocab). With a system message present
 		// the hidden default system prompt is suppressed, so the only unaccounted
@@ -245,10 +246,10 @@ func TestTokenCounterDrift_MiniMax(t *testing.T) {
 
 	t.Run("multi_turn", func(t *testing.T) {
 		msgs := llm.Messages{
-			&llm.SystemMsg{Content: "You are a helpful assistant."},
-			&llm.UserMsg{Content: "What is 2+2?"},
-			&llm.AssistantMsg{Content: "2+2 equals 4."},
-			&llm.UserMsg{Content: "What about 3+3?"},
+			llm.System("You are a helpful assistant."),
+			llm.User("What is 2+2?"),
+			llm.Assistant("2+2 equals 4."),
+			llm.User("What about 3+3?"),
 		}
 		// Perfect match in calibration (0.0% drift). 10% safety margin.
 		testTokenCounterDrift(t, p, model, msgs, nil, 10.0)
@@ -256,9 +257,9 @@ func TestTokenCounterDrift_MiniMax(t *testing.T) {
 
 	t.Run("with_tools", func(t *testing.T) {
 		msgs := llm.Messages{
-			&llm.UserMsg{Content: "What is the weather in Berlin?"},
+			llm.User("What is the weather in Berlin?"),
 		}
-		tools := []llm.ToolDefinition{
+		tools := []tool.Definition{
 			{
 				Name:        "get_weather",
 				Description: "Get the current weather for a location.",

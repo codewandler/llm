@@ -33,15 +33,21 @@ func largeCacheablePrompt() string {
 
 // drainCacheStream consumes all events from stream and returns the done-event usage.
 // It fails the test immediately on any StreamEventError.
-func drainCacheStream(t *testing.T, stream <-chan llm.StreamEvent) *llm.Usage {
+func drainCacheStream(t *testing.T, stream <-chan llm.Envelope) *llm.Usage {
 	t.Helper()
 	var usage *llm.Usage
 	for ev := range stream {
 		switch ev.Type {
 		case llm.StreamEventError:
-			t.Fatalf("stream error: %v", ev.Error)
-		case llm.StreamEventDone:
-			usage = ev.Usage
+			if errEv, ok := ev.Data.(*llm.ErrorEvent); ok {
+				t.Fatalf("stream error: %v", errEv.Error)
+			}
+		case llm.StreamEventCompleted:
+			// completed event received, but usage comes via UsageUpdatedEvent
+		case llm.StreamEventUsageUpdated:
+			if usageEv, ok := ev.Data.(*llm.UsageUpdatedEvent); ok {
+				usage = &usageEv.Usage
+			}
 		}
 	}
 	return usage
@@ -71,8 +77,8 @@ func TestCacheIntegration_Claude_TopLevel(t *testing.T) {
 	opts := llm.Request{
 		Model: model,
 		Messages: llm.Messages{
-			&llm.SystemMsg{Content: largeCacheablePrompt()},
-			&llm.UserMsg{Content: "Summarise your role in one sentence."},
+			llm.System(largeCacheablePrompt()),
+			llm.User("Summarise your role in one sentence."),
 		},
 		CacheHint: &llm.CacheHint{Enabled: true},
 	}
@@ -118,11 +124,8 @@ func TestCacheIntegration_Claude_PerMessageHint(t *testing.T) {
 			Model: model,
 			Messages: llm.Messages{
 				// Explicit breakpoint on the system message only — user question varies
-				&llm.SystemMsg{
-					Content:   largeCacheablePrompt(),
-					CacheHint: &llm.CacheHint{Enabled: true},
-				},
-				&llm.UserMsg{Content: question},
+				llm.System(largeCacheablePrompt(), &llm.CacheHint{Enabled: true}),
+				llm.User(question),
 			},
 		}
 	}
@@ -158,8 +161,8 @@ func TestCacheIntegration_Claude_ExtendedTTL(t *testing.T) {
 	opts := llm.Request{
 		Model: "claude-haiku-4-5-20251001",
 		Messages: llm.Messages{
-			&llm.SystemMsg{Content: largeCacheablePrompt()},
-			&llm.UserMsg{Content: "Hello"},
+			llm.System(largeCacheablePrompt()),
+			llm.User("Hello"),
 		},
 		CacheHint: &llm.CacheHint{Enabled: true, TTL: "1h"},
 	}
@@ -190,8 +193,8 @@ func TestCacheIntegration_AnthropicDirect_TopLevel(t *testing.T) {
 	opts := llm.Request{
 		Model: "claude-haiku-4-5-20251001",
 		Messages: llm.Messages{
-			&llm.SystemMsg{Content: largeCacheablePrompt()},
-			&llm.UserMsg{Content: "Summarise your role in one sentence."},
+			llm.System(largeCacheablePrompt()),
+			llm.User("Summarise your role in one sentence."),
 		},
 		CacheHint: &llm.CacheHint{Enabled: true},
 	}
@@ -230,8 +233,8 @@ func TestCacheIntegration_Bedrock_TopLevel(t *testing.T) {
 	opts := llm.Request{
 		Model: model,
 		Messages: llm.Messages{
-			&llm.SystemMsg{Content: largeCacheablePrompt()},
-			&llm.UserMsg{Content: "Summarise your role in one sentence."},
+			llm.System(largeCacheablePrompt()),
+			llm.User("Summarise your role in one sentence."),
 		},
 		CacheHint: &llm.CacheHint{Enabled: true},
 	}
@@ -272,11 +275,8 @@ func TestCacheIntegration_Bedrock_PerMessageHint(t *testing.T) {
 		return llm.Request{
 			Model: model,
 			Messages: llm.Messages{
-				&llm.SystemMsg{
-					Content:   largeCacheablePrompt(),
-					CacheHint: &llm.CacheHint{Enabled: true},
-				},
-				&llm.UserMsg{Content: question},
+				llm.System(largeCacheablePrompt(), &llm.CacheHint{Enabled: true}),
+				llm.User(question),
 			},
 		}
 	}
@@ -313,7 +313,7 @@ func TestCacheIntegration_Bedrock_NonClaudeModel_NoError(t *testing.T) {
 	opts := llm.Request{
 		Model: bedrock.ModelNovaMicro, // non-Claude model
 		Messages: llm.Messages{
-			&llm.UserMsg{Content: "Hello"},
+			llm.User("Hello"),
 		},
 		CacheHint: &llm.CacheHint{Enabled: true},
 	}

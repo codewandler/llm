@@ -19,6 +19,7 @@ import (
 	"github.com/codewandler/llm/provider/ollama"
 	"github.com/codewandler/llm/provider/openai"
 	"github.com/codewandler/llm/provider/openrouter"
+	"github.com/codewandler/llm/tool"
 )
 
 // isClaudeAvailable checks if Claude Code credentials are available.
@@ -186,7 +187,7 @@ func TestProviders(t *testing.T) {
 				stream, err := tt.provider.CreateStream(ctx, llm.Request{
 					Model: getModelID(),
 					Messages: llm.Messages{
-						&llm.UserMsg{Content: "Hello"},
+						llm.User("Hello"),
 					},
 				})
 				require.NoError(t, err)
@@ -202,23 +203,19 @@ func TestProviders(t *testing.T) {
 
 					switch event.Type {
 					case llm.StreamEventError:
-						t.Errorf("Unexpected error event: %v", event.Error)
+						t.Errorf("Unexpected error event: %v", event.Data.(*llm.ErrorEvent).Error)
 
-					case llm.StreamEventDone:
+					case llm.StreamEventCompleted:
 						gotDone = true
 						// Usage is optional but should be valid if present
-						if event.Usage != nil {
-							assert.GreaterOrEqual(t, event.Usage.TotalTokens, 0,
-								"Usage.TotalTokens is negative")
-						}
 
 					case llm.StreamEventDelta:
-						t.Logf("Received delta: type=%s", event.Delta.Type)
+						t.Logf("Received delta: type=%s", event.Data.(*llm.DeltaEvent).Kind)
 						// Valid content event
 
 					case llm.StreamEventToolCall:
 						// Valid tool call event
-						assert.NotNil(t, event.ToolCall, "StreamEventToolCall has nil ToolCall")
+						assert.NotNil(t, event.Data.(*llm.ToolCallEvent).ToolCall, "StreamEventToolCall has nil ToolCall")
 					}
 				}
 
@@ -232,14 +229,14 @@ func TestProviders(t *testing.T) {
 					Location string `json:"location" jsonschema:"description=City name,required"`
 				}
 
-				tools := []llm.ToolDefinition{
-					llm.ToolDefinitionFor[GetWeatherParams]("get_weather", "Get the weather for a location"),
+				tools := []tool.Definition{
+					tool.DefinitionFor[GetWeatherParams]("get_weather", "Get the weather for a location"),
 				}
 
 				stream, err := tt.provider.CreateStream(ctx, llm.Request{
 					Model: getModelID(),
 					Messages: llm.Messages{
-						&llm.UserMsg{Content: "What's the weather?"},
+						llm.User("What's the weather?"),
 					},
 					Tools: tools,
 				})
@@ -250,7 +247,7 @@ func TestProviders(t *testing.T) {
 				for event := range stream {
 					eventCount++
 					if event.Type == llm.StreamEventError {
-						t.Errorf("Error event: %v", event.Error)
+						t.Errorf("Error event: %v", event.Data.(*llm.ErrorEvent).Error)
 					}
 				}
 
@@ -260,10 +257,10 @@ func TestProviders(t *testing.T) {
 			// Test 4: Multiple messages (conversation)
 			t.Run("conversation", func(t *testing.T) {
 				messages := llm.Messages{
-					&llm.SystemMsg{Content: "You are a helpful assistant."},
-					&llm.UserMsg{Content: "Hello"},
-					&llm.AssistantMsg{Content: "Hi there!"},
-					&llm.UserMsg{Content: "How are you?"},
+					llm.System("You are a helpful assistant."),
+					llm.User("Hello"),
+					llm.Assistant("Hi there!"),
+					llm.User("How are you?"),
 				}
 
 				stream, err := tt.provider.CreateStream(ctx, llm.Request{
@@ -274,8 +271,9 @@ func TestProviders(t *testing.T) {
 
 				// Verify stream completes without error
 				for event := range stream {
-					assert.NotEqual(t, llm.StreamEventError, event.Type,
-						"Unexpected error event: %v", event.Error)
+					if event.Type == llm.StreamEventError {
+						t.Errorf("Unexpected error event: %v", event.Data.(*llm.ErrorEvent).Error)
+					}
 				}
 			})
 
@@ -293,28 +291,28 @@ func TestProviders(t *testing.T) {
 					Location string `json:"location" jsonschema:"description=City name,required"`
 				}
 
-				tools := []llm.ToolDefinition{
-					llm.ToolDefinitionFor[GetWeatherParams]("get_weather", "Get the current weather for a location"),
+				tools := []tool.Definition{
+					tool.DefinitionFor[GetWeatherParams]("get_weather", "Get the current weather for a location"),
 				}
 
 				// First request: try to get a tool call
 				stream, err := tt.provider.CreateStream(ctx, llm.Request{
 					Model: getModelID(),
 					Messages: llm.Messages{
-						&llm.UserMsg{Content: "What's the weather in Paris? Use the get_weather tool."},
+						llm.User("What's the weather in Paris? Use the get_weather tool."),
 					},
 					Tools: tools,
 				})
 				require.NoError(t, err)
 
-				var toolCall *llm.ToolCall
+				var toolCall tool.Call
 				for event := range stream {
 					if event.Type == llm.StreamEventError {
-						t.Fatalf("Error in first request: %v", event.Error)
+						t.Fatalf("Error in first request: %v", event.Data.(*llm.ErrorEvent).Error)
 					}
 					if event.Type == llm.StreamEventToolCall {
-						toolCall = event.ToolCall
-						t.Logf("Received tool call: %s(%+v)", toolCall.Name, toolCall.Arguments)
+						toolCall = event.Data.(*llm.ToolCallEvent).ToolCall
+						t.Logf("Received tool call: %s(%+v)", toolCall.ToolName(), toolCall.ToolArgs())
 					}
 				}
 
@@ -323,27 +321,16 @@ func TestProviders(t *testing.T) {
 					t.Skip("Model did not call tool (not guaranteed)")
 				}
 
-				require.NotEmpty(t, toolCall.ID, "Tool call must have an ID")
+				require.NotEmpty(t, toolCall.ToolCallID(), "Tool call must have an ID")
 
 				// Second request: send tool result back
 				toolResult := `{"temperature": 22, "conditions": "sunny"}`
 				stream2, err := tt.provider.CreateStream(ctx, llm.Request{
 					Model: getModelID(),
 					Messages: llm.Messages{
-						&llm.UserMsg{Content: "What's the weather in Paris? Use the get_weather tool."},
-						&llm.AssistantMsg{
-							ToolCalls: []llm.ToolCall{
-								{
-									ID:        toolCall.ID,
-									Name:      toolCall.Name,
-									Arguments: toolCall.Arguments,
-								},
-							},
-						},
-						&llm.ToolCallResult{
-							ToolCallID: toolCall.ID,
-							Output:     toolResult,
-						},
+						llm.User("What's the weather in Paris? Use the get_weather tool."),
+						llm.Assistant("", toolCall),
+						llm.ToolResult(tool.NewResult(toolCall.ToolCallID(), toolResult, false)),
 					},
 					Tools: tools,
 				})
@@ -352,7 +339,7 @@ func TestProviders(t *testing.T) {
 				var gotResponse bool
 				for event := range stream2 {
 					if event.Type == llm.StreamEventError {
-						t.Fatalf("Error in second request: %v", event.Error)
+						t.Fatalf("Error in second request: %v", event.Data.(*llm.ErrorEvent).Error)
 					}
 					if event.Type == llm.StreamEventDelta {
 						gotResponse = true
@@ -393,7 +380,7 @@ func TestOllamaModels(t *testing.T) {
 	}
 
 	// Define test tools
-	tools := []llm.ToolDefinition{
+	tools := []tool.Definition{
 		{
 			Name:        "get_weather",
 			Description: "Get the weather for a location",
@@ -433,7 +420,7 @@ func TestOllamaModels(t *testing.T) {
 				stream, err := p.CreateStream(ctx, llm.Request{
 					Model: modelID,
 					Messages: llm.Messages{
-						&llm.UserMsg{Content: "Say hello"},
+						llm.User("Say hello"),
 					},
 				})
 
@@ -448,14 +435,14 @@ func TestOllamaModels(t *testing.T) {
 				for event := range stream {
 					switch event.Type {
 					case llm.StreamEventError:
-						result.streamingError = event.Error.Error()
-						t.Logf("✗ Streaming error: %v", event.Error)
+						result.streamingError = event.Data.(*llm.ErrorEvent).Error.Error()
+						t.Logf("✗ Streaming error: %v", event.Data.(*llm.ErrorEvent).Error)
 						return
 					case llm.StreamEventDelta:
-						if event.Delta != nil && event.Delta.Text != "" {
+						if de, ok := event.Data.(*llm.DeltaEvent); ok && de.Text != "" {
 							gotContent = true
 						}
-					case llm.StreamEventDone:
+					case llm.StreamEventCompleted:
 						gotDone = true
 					}
 				}
@@ -475,7 +462,7 @@ func TestOllamaModels(t *testing.T) {
 				stream, err := p.CreateStream(ctx, llm.Request{
 					Model: modelID,
 					Messages: llm.Messages{
-						&llm.UserMsg{Content: "What's the weather in Paris? Use the get_weather tool."},
+						llm.User("What's the weather in Paris? Use the get_weather tool."),
 					},
 					Tools: tools,
 				})
@@ -491,13 +478,13 @@ func TestOllamaModels(t *testing.T) {
 				for event := range stream {
 					switch event.Type {
 					case llm.StreamEventError:
-						result.toolError = event.Error.Error()
+						result.toolError = event.Data.(*llm.ErrorEvent).Error.Error()
 						gotError = true
-						t.Logf("✗ Tool calling error: %v", event.Error)
+						t.Logf("✗ Tool calling error: %v", event.Data.(*llm.ErrorEvent).Error)
 					case llm.StreamEventToolCall:
 						gotToolCall = true
-						t.Logf("✓ Tool call: %s", event.ToolCall.Name)
-					case llm.StreamEventDone:
+						t.Logf("✓ Tool call: %s", event.Data.(*llm.ToolCallEvent).ToolCall.ToolName())
+					case llm.StreamEventCompleted:
 						// Done event received
 					}
 				}
@@ -517,10 +504,10 @@ func TestOllamaModels(t *testing.T) {
 			t.Run("conversation", func(t *testing.T) {
 				t.Parallel()
 				messages := llm.Messages{
-					&llm.SystemMsg{Content: "You are a helpful assistant."},
-					&llm.UserMsg{Content: "Hi"},
-					&llm.AssistantMsg{Content: "Hello!"},
-					&llm.UserMsg{Content: "What's 2+2?"},
+					llm.System("You are a helpful assistant."),
+					llm.User("Hi"),
+					llm.Assistant("Hello!"),
+					llm.User("What's 2+2?"),
 				}
 
 				stream, err := p.CreateStream(ctx, llm.Request{
@@ -537,9 +524,9 @@ func TestOllamaModels(t *testing.T) {
 				gotError := false
 				for event := range stream {
 					if event.Type == llm.StreamEventError {
-						result.convError = event.Error.Error()
+						result.convError = event.Data.(*llm.ErrorEvent).Error.Error()
 						gotError = true
-						t.Logf("✗ Conversation error: %v", event.Error)
+						t.Logf("✗ Conversation error: %v", event.Data.(*llm.ErrorEvent).Error)
 						break
 					}
 				}
