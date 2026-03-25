@@ -107,7 +107,7 @@ func New(cfg Config, factories map[string]Factory) (*Provider, error) {
 		}
 	}
 
-	// ProcessChan local aliases from provider configs.
+	// Process local aliases from provider configs.
 	// Local aliases are only accessible with provider prefix (e.g., "openai/mini").
 	// Global aliases must be explicitly configured via cfg.Aliases.
 	for instName, aliases := range localAliases {

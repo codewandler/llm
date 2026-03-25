@@ -109,7 +109,7 @@ func Handle[In, Out any](spec *Spec[In], fn func(ctx context.Context, in In) (*O
 func (b *BoundToolSpec[In, Out]) ToolName() string { return b.spec.name }
 
 // Handle implements Handler — validates, unmarshal, calls fn, marshals toolResult.
-func (b *BoundToolSpec[In, Out]) Handle(ctx context.Context, call Call) (string, error) {
+func (b *BoundToolSpec[In, Out]) Handle(ctx context.Context, call Call) (any, error) {
 	return execTypedHandler(ctx, b.spec.name, call, b.fn)
 }
 

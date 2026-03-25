@@ -13,7 +13,7 @@ import (
 //
 //	ch := llmtest.SendEvents(
 //	    llmtest.TextEvent("hello"),
-//	    llmtest.DoneEvent(llm.StopReasonEndTurn, nil),
+//	    llmtest.CompletedEvent(llm.StopReasonEndTurn, nil),
 //	)
 func SendEvents(evs ...llm.Event) <-chan llm.Envelope {
 	ch := make(chan llm.Envelope, len(evs))
@@ -23,25 +23,13 @@ func SendEvents(evs ...llm.Event) <-chan llm.Envelope {
 	close(ch)
 	return ch
 }
-
-func TextEvent(s string) llm.Event {
-	return llm.TextDelta(s)
-}
-
-func ReasoningEvent(s string) llm.Event {
-	return llm.ReasoningDelta(s)
-}
-
+func TextEvent(s string) llm.Event                   { return llm.TextDelta(s) }
+func ReasoningEvent(s string) llm.Event              { return llm.ReasoningDelta(s) }
+func CompletedEvent(reason llm.StopReason) llm.Event { return &llm.CompletedEvent{StopReason: reason} }
+func ErrorEvent(err *llm.ProviderError) llm.Event    { return &llm.ErrorEvent{Error: err} }
+func UsageEvent(u llm.Usage) llm.Event               { return &llm.UsageUpdatedEvent{Usage: u} }
 func ToolEvent(id, name string, args map[string]any) llm.Event {
 	return &llm.ToolCallEvent{
 		ToolCall: tool.NewToolCall(id, name, args),
 	}
-}
-
-func DoneEvent(reason llm.StopReason, usage *llm.Usage) llm.Event {
-	return &llm.CompletedEvent{StopReason: reason}
-}
-
-func ErrorEvent(err *llm.ProviderError) llm.Event {
-	return &llm.ErrorEvent{Error: err}
 }
