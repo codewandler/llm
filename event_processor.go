@@ -121,16 +121,16 @@ func (r *StreamProcessor) OnStart(fn TypedEventHandler[StreamStartedEvent]) *Str
 	return r.OnEvent(fn)
 }
 
-func (r *StreamProcessor) OnDelta(fn TypedEventHandler[DeltaEvent]) *StreamProcessor {
+func (r *StreamProcessor) OnDelta(fn TypedEventHandler[*DeltaEvent]) *StreamProcessor {
 	return r.OnEvent(fn)
 }
 
 func (r *StreamProcessor) onDeltaKind(k DeltaKind, fn func(d DeltaEvent)) *StreamProcessor {
-	return r.OnDelta(func(d DeltaEvent) {
+	return r.OnDelta(func(d *DeltaEvent) {
 		if d.Kind != k {
 			return
 		}
-		fn(d)
+		fn(*d)
 	})
 }
 

@@ -269,6 +269,7 @@ func TestStreamResponse_ToolHandlerPanicRecovered(t *testing.T) {
 		HandleTool(tool.Handle(explodeSpec, func(_ context.Context, _ In) (*Out, error) { panic("kaboom") })).
 		Result()
 	require.NoError(t, err)
+	require.NotNil(t, result)
 
 	assert.Error(t, result.Error())
 	assert.Contains(t, result.Error().Error(), "kaboom")
