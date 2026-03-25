@@ -6,22 +6,13 @@ import (
 	"io"
 	"strings"
 	"testing"
-	"time"
 
+	"github.com/codewandler/llm/tool"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/codewandler/llm"
 )
-
-// testMeta returns a streamMeta for testing.
-func testMeta(model string) streamMeta {
-	return streamMeta{
-		RequestedModel: model,
-		ResolvedModel:  model,
-		StartTime:      time.Now(),
-	}
-}
 
 // --- Unit tests for buildRequest ---
 
@@ -33,10 +24,10 @@ func TestBuildRequest_ToolDefinitions(t *testing.T) {
 	opts := llm.Request{
 		Model: "test/model",
 		Messages: llm.Messages{
-			&llm.UserMsg{Content: "test"},
+			llm.User("test"),
 		},
-		Tools: []llm.ToolDefinition{
-			llm.ToolDefinitionFor[GetWeatherParams]("get_weather", "Get weather for a location"),
+		Tools: []tool.Definition{
+			tool.DefinitionFor[GetWeatherParams]("get_weather", "Get weather for a location"),
 		},
 	}
 
@@ -66,18 +57,10 @@ func TestBuildRequest_AssistantWithToolCalls(t *testing.T) {
 	opts := llm.Request{
 		Model: "test/model",
 		Messages: llm.Messages{
-			&llm.UserMsg{Content: "What's the weather?"},
-			&llm.AssistantMsg{
-				ToolCalls: []llm.ToolCall{
-					{
-						ID:   "call_123",
-						Name: "get_weather",
-						Arguments: map[string]any{
-							"location": "Paris",
-						},
-					},
-				},
-			},
+			llm.User("Whats the weather?"),
+			llm.ToolCalls(
+				tool.NewToolCall("call_123", "get_weather", map[string]any{"location": "Paris"}),
+			),
 		},
 	}
 
@@ -100,7 +83,7 @@ func TestBuildRequest_AssistantWithToolCalls(t *testing.T) {
 	assert.Equal(t, "function", toolCall.Type)
 	assert.Equal(t, "get_weather", toolCall.Function.Name)
 
-	// Arguments should be JSON string
+	// ToolArgs should be JSON string
 	var args map[string]any
 	err = json.Unmarshal([]byte(toolCall.Function.Arguments), &args)
 	require.NoError(t, err)
@@ -111,16 +94,12 @@ func TestBuildRequest_ToolResults(t *testing.T) {
 	opts := llm.Request{
 		Model: "test/model",
 		Messages: llm.Messages{
-			&llm.UserMsg{Content: "What's the weather?"},
-			&llm.AssistantMsg{
-				ToolCalls: []llm.ToolCall{
-					{ID: "call_123", Name: "get_weather", Arguments: map[string]any{"location": "Paris"}},
-				},
-			},
-			&llm.ToolCallResult{
-				ToolCallID: "call_123",
-				Output:     `{"temp": 72, "conditions": "sunny"}`,
-			},
+			llm.User("Whats the weather?"),
+			llm.Assistant(
+				"Fetching info ...",
+				tool.NewToolCall("call_123", "get_weather", map[string]any{"location": "Paris"}),
+			),
+			llm.Tool("call_123", `{"temp": 72, "conditions": "sunny"}`),
 		},
 	}
 
@@ -145,12 +124,12 @@ func TestBuildRequest_ToolResultEmptyContent(t *testing.T) {
 		Model: "test/model",
 		Messages: llm.Messages{
 			&llm.UserMsg{Content: "test"},
-			&llm.AssistantMsg{
-				ToolCalls: []llm.ToolCall{
+			&llm.AssistantMessage{
+				ToolCalls: []llm.MessageToolCall{
 					{ID: "call_123", Name: "test_tool", Arguments: map[string]any{}},
 				},
 			},
-			&llm.ToolCallResult{
+			&llm.ToolResult{
 				ToolCallID: "call_123",
 				Output:     "",
 			},
@@ -176,14 +155,14 @@ func TestBuildRequest_MultipleToolResults(t *testing.T) {
 		Model: "test/model",
 		Messages: llm.Messages{
 			&llm.UserMsg{Content: "test"},
-			&llm.AssistantMsg{
-				ToolCalls: []llm.ToolCall{
+			&llm.AssistantMessage{
+				ToolCalls: []llm.MessageToolCall{
 					{ID: "call_1", Name: "tool_a", Arguments: map[string]any{}},
 					{ID: "call_2", Name: "tool_b", Arguments: map[string]any{}},
 				},
 			},
-			&llm.ToolCallResult{ToolCallID: "call_1", Output: "result_a"},
-			&llm.ToolCallResult{ToolCallID: "call_2", Output: "result_b"},
+			&llm.ToolResult{ToolCallID: "call_1", Output: "result_a"},
+			&llm.ToolResult{ToolCallID: "call_2", Output: "result_b"},
 		},
 	}
 
@@ -211,15 +190,15 @@ func TestBuildRequest_FullConversationFlow(t *testing.T) {
 	opts := llm.Request{
 		Model: "test/model",
 		Messages: llm.Messages{
-			&llm.SystemMsg{Content: "You are a helpful assistant."},
+			&llm.System{Content: "You are a helpful assistant."},
 			&llm.UserMsg{Content: "What's the weather in Paris?"},
-			&llm.AssistantMsg{
-				ToolCalls: []llm.ToolCall{
+			&llm.AssistantMessage{
+				ToolCalls: []llm.MessageToolCall{
 					{ID: "call_123", Name: "get_weather", Arguments: map[string]any{"location": "Paris"}},
 				},
 			},
-			&llm.ToolCallResult{ToolCallID: "call_123", Output: `{"temp": 72}`},
-			&llm.AssistantMsg{Content: "It's 72 degrees in Paris."},
+			&llm.ToolResult{ToolCallID: "call_123", Output: `{"temp": 72}`},
+			&llm.AssistantMessage{Content: "It's 72 degrees in Paris."},
 		},
 	}
 
@@ -248,7 +227,7 @@ data: [DONE]
 `
 
 	events := llm.NewEventStream()
-	go parseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), events, testMeta("test/model"))
+	go parseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), events)
 
 	var deltas []string
 	var gotDone bool
@@ -279,9 +258,9 @@ data: [DONE]
 `
 
 	events := llm.NewEventStream()
-	go parseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), events, testMeta("test/model"))
+	go parseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), events)
 
-	var toolCalls []*llm.ToolCall
+	var toolCalls []*llm.MessageToolCall
 	for event := range events.C() {
 		if event.Type == llm.StreamEventToolCall {
 			toolCalls = append(toolCalls, event.ToolCall)
@@ -296,7 +275,7 @@ data: [DONE]
 }
 
 func TestParseStream_MultipleParallelToolCalls(t *testing.T) {
-	// Arguments for index 1 arrive before index 0; must still emit in LLM-production order (0, 1).
+	// ToolArgs for index 1 arrive before index 0; must still emit in LLM-production order (0, 1).
 	sseData := `data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_1","type":"function","function":{"name":"tool_a"}}]}}]}
 data: {"choices":[{"delta":{"tool_calls":[{"index":1,"id":"call_2","type":"function","function":{"name":"tool_b"}}]}}]}
 data: {"choices":[{"delta":{"tool_calls":[{"index":1,"function":{"arguments":"{\"b\":2}"}}]}}]}
@@ -306,9 +285,9 @@ data: [DONE]
 `
 
 	events := llm.NewEventStream()
-	go parseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), events, testMeta("test/model"))
+	go parseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), events)
 
-	var toolCalls []*llm.ToolCall
+	var toolCalls []*llm.MessageToolCall
 	for event := range events.C() {
 		if event.Type == llm.StreamEventToolCall {
 			toolCalls = append(toolCalls, event.ToolCall)
@@ -334,7 +313,7 @@ data: [DONE]
 `
 
 	events := llm.NewEventStream()
-	go parseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), events, testMeta("test/model"))
+	go parseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), events)
 
 	var reasoning []string
 	var content []string
@@ -346,9 +325,9 @@ data: [DONE]
 				continue
 			}
 			switch event.Delta.Type {
-			case llm.DeltaTypeReasoning:
+			case llm.DeltaKindReasoning:
 				reasoning = append(reasoning, event.Delta.Reasoning)
-			case llm.DeltaTypeText:
+			case llm.DeltaKindText:
 				content = append(content, event.Delta.Text)
 			}
 		}
@@ -365,7 +344,7 @@ data: [DONE]
 `
 
 	events := llm.NewEventStream()
-	go parseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), events, testMeta("test/model"))
+	go parseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), events)
 
 	var usage *llm.Usage
 	for event := range events.C() {
@@ -388,7 +367,7 @@ data: [DONE]
 `
 
 	events := llm.NewEventStream()
-	go parseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), events, testMeta("test/model"))
+	go parseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), events)
 
 	var usage *llm.Usage
 	for event := range events.C() {
@@ -411,7 +390,7 @@ func TestParseStream_ErrorHandling(t *testing.T) {
 `
 
 	events := llm.NewEventStream()
-	go parseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), events, testMeta("test/model"))
+	go parseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), events)
 
 	var gotError bool
 	var errorMsg string
@@ -435,7 +414,7 @@ func TestParseStream_ContextCancellation(t *testing.T) {
 	defer cancel()
 	events := llm.NewEventStream()
 
-	go parseStream(ctx, io.NopCloser(strings.NewReader(sseData)), events, testMeta("test/model"))
+	go parseStream(ctx, io.NopCloser(strings.NewReader(sseData)), events)
 
 	// Cancel after receiving a few events
 	eventCount := 0
@@ -463,9 +442,9 @@ data: {"choices":[{"finish_reason":"stop"}]}
 data: [DONE]
 `
 	events := llm.NewEventStream()
-	go parseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), events, testMeta("test/model"))
+	go parseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), events)
 
-	var toolCalls []*llm.ToolCall
+	var toolCalls []*llm.MessageToolCall
 	var stopReason llm.StopReason
 	for event := range events.C() {
 		switch event.Type {

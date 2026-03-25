@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"sort"
 	"strings"
-	"time"
 
 	"github.com/codewandler/llm"
 )
@@ -20,7 +19,7 @@ const (
 	providerName   = "openrouter"
 
 	// DefaultModel is the recommended default model for OpenRouter
-	DefaultModel = "anthropic/claude-sonnet-4.5"
+	DefaultModel = "auto"
 )
 
 // Provider implements the OpenRouter LLM backend.
@@ -44,13 +43,13 @@ func DefaultOptions() []llm.Option {
 //
 // Example usage:
 //
-//	// With API key
+//	// Add API key
 //	p := openrouter.New(llm.WithAPIKey("sk-or-..."))
 //
-//	// With API key from environment
+//	// Add API key from environment
 //	p := openrouter.New(llm.APIKeyFromEnv("OPENROUTER_API_KEY"))
 //
-//	// With dynamic API key resolution
+//	// Add dynamic API key resolution
 //	p := openrouter.New(llm.WithAPIKeyFunc(func(ctx context.Context) (string, error) {
 //	    return secretStore.Get(ctx, "openrouter-key")
 //	}))
@@ -74,7 +73,7 @@ func (p *Provider) WithDefaultModel(modelID string) *Provider {
 	return p
 }
 
-// DefaultModel returns the configured default model ID.
+// DefaultModel returns the configured default model ToolCallID.
 func (p *Provider) DefaultModel() string {
 	return p.defaultModel
 }
@@ -125,7 +124,7 @@ func (p *Provider) FetchModels(ctx context.Context) ([]llm.Model, error) {
 	return models, nil
 }
 
-func (p *Provider) CreateStream(ctx context.Context, opts llm.Request) (<-chan llm.StreamEvent, error) {
+func (p *Provider) CreateStream(ctx context.Context, opts llm.Request) (llm.Stream, error) {
 	if err := opts.Validate(); err != nil {
 		return nil, llm.NewErrBuildRequest(llm.ProviderNameOpenRouter, err)
 	}
@@ -151,7 +150,6 @@ func (p *Provider) CreateStream(ctx context.Context, opts llm.Request) (<-chan l
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+apiKey)
 
-	startTime := time.Now()
 	resp, err := p.client.Do(req)
 	if err != nil {
 		return nil, llm.NewErrRequestFailed(llm.ProviderNameOpenRouter, err)
@@ -162,15 +160,9 @@ func (p *Provider) CreateStream(ctx context.Context, opts llm.Request) (<-chan l
 		errBody, _ := io.ReadAll(resp.Body)
 		return nil, llm.NewErrAPIError(llm.ProviderNameOpenRouter, resp.StatusCode, string(errBody))
 	}
-
-	meta := streamMeta{
-		RequestedModel: opts.Model,
-		ResolvedModel:  opts.Model, // For simple providers, resolved = requested
-		StartTime:      startTime,
-	}
-	stream := llm.NewEventStream()
-	go parseStream(ctx, resp.Body, stream, meta)
-	return stream.C(), nil
+	stream, ch := llm.NewEventPublisher()
+	go parseStream(ctx, resp.Body, stream)
+	return ch, nil
 }
 
 // --- Request building ---
@@ -290,41 +282,42 @@ func buildRequest(opts llm.Request) ([]byte, error) {
 
 	for _, msg := range opts.Messages {
 		switch m := msg.(type) {
-		case *llm.SystemMsg:
+		case llm.SystemMessage:
 			r.Messages = append(r.Messages, messagePayload{
 				Role:    "system",
-				Content: m.Content,
+				Content: m.Content(),
+				// TODO: cache!
 			})
 
-		case *llm.UserMsg:
+		case llm.UserMessage:
 			r.Messages = append(r.Messages, messagePayload{
 				Role:    "user",
-				Content: m.Content,
+				Content: m.Content(),
 			})
 
-		case *llm.AssistantMsg:
+		case llm.AssistantMessage:
 			mp := messagePayload{
 				Role:    "assistant",
-				Content: m.Content,
+				Content: m.Content(),
 			}
-			for _, tc := range m.ToolCalls {
-				argsJSON, _ := json.Marshal(tc.Arguments)
+			for _, tc := range m.ToolCalls() {
+				argsJSON, _ := json.Marshal(tc.ToolArgs())
 				mp.ToolCalls = append(mp.ToolCalls, toolCallItem{
-					ID:   tc.ID,
+					ID:   tc.ToolCallID(),
 					Type: "function",
 					Function: functionCall{
-						Name:      tc.Name,
+						Name:      tc.ToolName(),
 						Arguments: string(argsJSON),
 					},
 				})
 			}
 			r.Messages = append(r.Messages, mp)
 
-		case *llm.ToolCallResult:
+		case llm.ToolMessage:
 			r.Messages = append(r.Messages, messagePayload{
 				Role:       "tool",
-				Content:    m.Output,
-				ToolCallID: m.ToolCallID,
+				Content:    m.ToolOutput(),
+				ToolCallID: m.ToolCallID(),
 			})
 		}
 	}
@@ -334,15 +327,9 @@ func buildRequest(opts llm.Request) ([]byte, error) {
 
 // --- SSE stream parsing ---
 
-// streamMeta passes context into the stream parser for StreamEventStart.
-type streamMeta struct {
-	RequestedModel string
-	ResolvedModel  string
-	StartTime      time.Time
-}
-
 type streamChunk struct {
 	ID      string `json:"id"`
+	Object  string `json:"object"`
 	Model   string `json:"model"`
 	Choices []struct {
 		Delta struct {
@@ -370,7 +357,7 @@ type streamChunk struct {
 }
 
 type streamToolDelta struct {
-	Index    int `json:"index"`
+	Index    uint32 `json:"index"`
 	Function struct {
 		Name      string `json:"name,omitempty"`
 		Arguments string `json:"arguments,omitempty"`
@@ -385,15 +372,16 @@ type toolAccum struct {
 	argsBuf strings.Builder
 }
 
-func parseStream(ctx context.Context, body io.ReadCloser, events *llm.EventStream, meta streamMeta) {
-	defer events.Close()
-	defer body.Close()
+func parseStream(ctx context.Context, body io.ReadCloser, pub llm.Publisher) {
+	defer func() {
+		pub.Close()
+		_ = body.Close()
+	}()
 
 	scanner := bufio.NewScanner(body)
 	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 
 	activeTools := make(map[int]*toolAccum)
-	doneSent := false
 	startEmitted := false
 	var usage *llm.Usage
 	var stopReason llm.StopReason
@@ -402,41 +390,47 @@ func parseStream(ctx context.Context, body io.ReadCloser, events *llm.EventStrea
 		// Check for context cancellation
 		select {
 		case <-ctx.Done():
-			events.Error(llm.NewErrContextCancelled(llm.ProviderNameOpenRouter, ctx.Err()))
+			pub.Error(llm.NewErrContextCancelled(llm.ProviderNameOpenRouter, ctx.Err()))
 			return
 		default:
 		}
+
+		// extract data
 		line := scanner.Text()
 		if !strings.HasPrefix(line, "data: ") {
 			continue
 		}
 		data := strings.TrimPrefix(line, "data: ")
 
+		// LINE: empty
+		if data == "" {
+			continue
+		}
+
+		// LINE: [DONE] -> OpenRouter returns this when the stream is done.
 		if data == "[DONE]" {
-			if !doneSent {
-				events.Done(stopReason, usage)
-				doneSent = true
-			}
-			return
+			pub.Debug("OpenRouter [DONE] message received", nil)
+			continue
 		}
 
 		var chunk streamChunk
 		if err := json.Unmarshal([]byte(data), &chunk); err != nil {
+			pub.Error(llm.NewErrStreamDecode(llm.ProviderNameOpenRouter, err))
 			continue
 		}
 
 		// Emit StreamEventStart on first chunk
 		if !startEmitted {
 			startEmitted = true
-			events.Start(llm.StreamStartOpts{
+			pub.Started(llm.StreamStartedEvent{
 				Model:     chunk.Model,
 				RequestID: chunk.ID,
 			})
 		}
 
 		if chunk.Error != nil {
-			events.Error(llm.NewErrProviderMsg(llm.ProviderNameOpenRouter, chunk.Error.Message))
-			return
+			pub.Error(llm.NewErrProviderMsg(llm.ProviderNameOpenRouter, chunk.Error.Message))
+			continue
 		}
 
 		// Capture usage from any chunk that includes it.
@@ -458,58 +452,46 @@ func parseStream(ctx context.Context, body io.ReadCloser, events *llm.EventStrea
 			}
 		}
 
-		if len(chunk.Choices) == 0 {
-			continue
-		}
-
-		choice := chunk.Choices[0]
-
-		// Reasoning content delta.
-		if choice.Delta.ReasoningContent != "" {
-			events.Delta(llm.ReasoningDelta(nil, choice.Delta.ReasoningContent))
-		}
-
-		// Text content delta.
-		if choice.Delta.Content != "" {
-			events.Delta(llm.TextDelta(nil, choice.Delta.Content))
-		}
-
-		// Tool call deltas.
-		for _, tc := range choice.Delta.ToolCalls {
-			accum, ok := activeTools[tc.Index]
-			if !ok {
-				accum = &toolAccum{}
-				activeTools[tc.Index] = accum
+		if len(chunk.Choices) >= 1 {
+			choice := chunk.Choices[0]
+			if choice.Delta.ReasoningContent != "" {
+				pub.Delta(llm.ReasoningDelta(choice.Delta.ReasoningContent))
 			}
-			if tc.ID != "" {
-				accum.id = tc.ID
+			if choice.Delta.Content != "" {
+				pub.Delta(llm.TextDelta(choice.Delta.Content))
 			}
-			if tc.Function.Name != "" {
-				accum.name = tc.Function.Name
-			}
-			if tc.Function.Arguments != "" {
-				accum.argsBuf.WriteString(tc.Function.Arguments)
-				events.Delta(llm.ToolDelta(llm.DeltaIndex(tc.Index), accum.id, accum.name, tc.Function.Arguments))
-			}
-		}
+			for _, tc := range choice.Delta.ToolCalls {
+				accum, ok := activeTools[tc.Index]
 
-		// Emit tool calls on finish, but keep reading for usage data.
-		if choice.FinishReason != nil {
-			stopReason = mapFinishReason(*choice.FinishReason)
-			if *choice.FinishReason == "tool_calls" {
-				emitToolCalls(activeTools, events)
+				if !ok {
+					accum = &toolAccum{}
+					activeTools[tc.Index] = accum
+				}
+				if tc.ID != "" {
+					accum.id = tc.ID
+				}
+				if tc.Function.Name != "" {
+					accum.name = tc.Function.Name
+				}
+				if tc.Function.Arguments != "" {
+					accum.argsBuf.WriteString(tc.Function.Arguments)
+					pub.Delta(llm.ToolDelta(accum.id, accum.name, tc.Function.Arguments).WithIndex(tc.Index))
+				}
+				// TODO: would be nice to know if we are already done, emit early ...
+			}
+			if choice.FinishReason != nil {
+				stopReason = finishReasonToStopReason(*choice.FinishReason)
+				emitToolCalls(activeTools, pub)
+				pub.Done(stopReason, usage)
 			}
 		}
-	}
-
-	// If the stream ended without a finish_reason, emit whatever we have.
-	if !doneSent {
-		emitToolCalls(activeTools, events)
-		events.Done(stopReason, usage)
 	}
 }
 
 func emitToolCalls(activeTools map[int]*toolAccum, events *llm.EventStream) {
+	if len(activeTools) == 0 {
+		return
+	}
 	// Collect indices and sort so tool calls are emitted in LLM-production order.
 	indices := make([]int, 0, len(activeTools))
 	for idx := range activeTools {
@@ -523,7 +505,7 @@ func emitToolCalls(activeTools map[int]*toolAccum, events *llm.EventStream) {
 		if accum.argsBuf.Len() > 0 {
 			_ = json.Unmarshal([]byte(accum.argsBuf.String()), &args)
 		}
-		events.ToolCall(llm.ToolCall{
+		events.ToolCall(llm.MessageToolCall{
 			ID:        accum.id,
 			Name:      accum.name,
 			Arguments: args,
@@ -532,10 +514,10 @@ func emitToolCalls(activeTools map[int]*toolAccum, events *llm.EventStream) {
 	}
 }
 
-// mapFinishReason converts an OpenAI-compatible finish_reason string to a
+// finishReasonToStopReason converts an OpenAI-compatible finish_reason string to a
 // typed StopReason.
-func mapFinishReason(s string) llm.StopReason {
-	switch s {
+func finishReasonToStopReason(finishReason string) llm.StopReason {
+	switch finishReason {
 	case "stop":
 		return llm.StopReasonEndTurn
 	case "tool_calls":
@@ -545,6 +527,6 @@ func mapFinishReason(s string) llm.StopReason {
 	case "content_filter":
 		return llm.StopReasonContentFilter
 	default:
-		return llm.StopReason(s)
+		return llm.StopReason(finishReason)
 	}
 }

@@ -1,11 +1,120 @@
 [
   {
-    "id": "minimax/minimax-m2.5",
-    "canonical_slug": "minimax/minimax-m2.5-20260211",
-    "hugging_face_id": "MiniMaxAI/MiniMax-M2.5",
-    "name": "MiniMax: MiniMax M2.5",
-    "created": 1770908502,
-    "description": "MiniMax-M2.5 is a SOTA large language model designed for real-world productivity. Trained in a diverse range of complex real-world digital working environments, M2.5 builds upon the coding expertise of M2.1 to extend into general office work, reaching fluency in generating and operating Word, Excel, and Powerpoint files, context switching between diverse software environments, and working across different agent and human teams. Scoring 80.2% on SWE-Bench Verified, 51.3% on Multi-SWE-Bench, and 76.3% on BrowseComp, M2.5 is also more token efficient than previous generations, having been trained to optimize its actions and output through planning.",
+    "id": "xiaomi/mimo-v2-omni",
+    "canonical_slug": "xiaomi/mimo-v2-omni-20260318",
+    "hugging_face_id": "",
+    "name": "Xiaomi: MiMo-V2-Omni",
+    "created": 1773863703,
+    "description": "MiMo-V2-Omni is a frontier omni-modal model that natively processes image, video, and audio inputs within a unified architecture. It combines strong multimodal perception with agentic capability - visual grounding, multi-step planning, tool use, and code execution - making it well-suited for complex real-world tasks that span modalities. 256K context window.",
+    "context_length": 262144,
+    "architecture": {
+      "modality": "text+image+audio+video->text",
+      "input_modalities": [
+        "text",
+        "audio",
+        "image",
+        "video"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "tokenizer": "Other",
+      "instruct_type": null
+    },
+    "pricing": {
+      "prompt": "0.0000004",
+      "completion": "0.000002",
+      "input_cache_read": "0.00000008"
+    },
+    "top_provider": {
+      "context_length": 262144,
+      "max_completion_tokens": 65536,
+      "is_moderated": false
+    },
+    "per_request_limits": null,
+    "supported_parameters": [
+      "frequency_penalty",
+      "include_reasoning",
+      "max_tokens",
+      "presence_penalty",
+      "reasoning",
+      "response_format",
+      "stop",
+      "temperature",
+      "tool_choice",
+      "tools",
+      "top_p"
+    ],
+    "default_parameters": {
+      "temperature": 1,
+      "top_p": 0.95,
+      "top_k": null,
+      "frequency_penalty": null,
+      "presence_penalty": null,
+      "repetition_penalty": null
+    },
+    "expiration_date": null
+  },
+  {
+    "id": "xiaomi/mimo-v2-pro",
+    "canonical_slug": "xiaomi/mimo-v2-pro-20260318",
+    "hugging_face_id": "",
+    "name": "Xiaomi: MiMo-V2-Pro",
+    "created": 1773863643,
+    "description": "MiMo-V2-Pro is Xiaomi's flagship foundation model, featuring over 1T total parameters and a 1M context length, deeply optimized for agentic scenarios. It is highly adaptable to general agent frameworks like OpenClaw. It ranks among the global top tier in the standard PinchBench and ClawBench benchmarks, with perceived performance approaching that of Opus 4.6. MiMo-V2-Pro is designed to serve as the brain of agent systems, orchestrating complex workflows, driving production engineering tasks, and delivering results reliably.",
+    "context_length": 1048576,
+    "architecture": {
+      "modality": "text->text",
+      "input_modalities": [
+        "text"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "tokenizer": "Other",
+      "instruct_type": null
+    },
+    "pricing": {
+      "prompt": "0.000001",
+      "completion": "0.000003",
+      "input_cache_read": "0.0000002"
+    },
+    "top_provider": {
+      "context_length": 1048576,
+      "max_completion_tokens": 131072,
+      "is_moderated": false
+    },
+    "per_request_limits": null,
+    "supported_parameters": [
+      "frequency_penalty",
+      "include_reasoning",
+      "max_tokens",
+      "presence_penalty",
+      "reasoning",
+      "response_format",
+      "stop",
+      "temperature",
+      "tool_choice",
+      "tools",
+      "top_p"
+    ],
+    "default_parameters": {
+      "temperature": 1,
+      "top_p": 0.95,
+      "top_k": null,
+      "frequency_penalty": null,
+      "presence_penalty": null,
+      "repetition_penalty": null
+    },
+    "expiration_date": null
+  },
+  {
+    "id": "minimax/minimax-m2.7",
+    "canonical_slug": "minimax/minimax-m2.7-20260318",
+    "hugging_face_id": "MiniMaxAI/MiniMax-M2.7",
+    "name": "MiniMax: MiniMax M2.7",
+    "created": 1773836697,
+    "description": "MiniMax-M2.7 is a next-generation large language model designed for autonomous, real-world productivity and continuous improvement. Built to actively participate in its own evolution, M2.7 integrates advanced agentic capabilities through multi-agent collaboration, enabling it to plan, execute, and refine complex tasks across dynamic environments.\n\nTrained for production-grade performance, M2.7 handles workflows such as live debugging, root cause analysis, financial modeling, and full document generation across Word, Excel, and PowerPoint. It delivers strong results on benchmarks including 56.2% on SWE-Pro and 57.0% on Terminal Bench 2, while achieving a 1495 ELO on GDPval-AA, setting a new standard for multi-agent systems operating in real-world digital workflows.",
     "context_length": 204800,
     "architecture": {
       "modality": "text->text",
@@ -21,7 +130,7 @@
     "pricing": {
       "prompt": "0.0000003",
       "completion": "0.0000012",
-      "input_cache_read": "0.00000003"
+      "input_cache_read": "0.00000006"
     },
     "top_provider": {
       "context_length": 204800,
@@ -32,7 +141,9 @@
     "supported_parameters": [
       "frequency_penalty",
       "include_reasoning",
+      "logit_bias",
       "max_tokens",
+      "min_p",
       "presence_penalty",
       "reasoning",
       "repetition_penalty",
@@ -48,7 +159,1506 @@
     "default_parameters": {
       "temperature": 1,
       "top_p": 0.95,
+      "top_k": null,
+      "frequency_penalty": null,
+      "presence_penalty": null,
+      "repetition_penalty": null
+    },
+    "expiration_date": null
+  },
+  {
+    "id": "openai/gpt-5.4-nano",
+    "canonical_slug": "openai/gpt-5.4-nano-20260317",
+    "hugging_face_id": "",
+    "name": "OpenAI: GPT-5.4 Nano",
+    "created": 1773748187,
+    "description": "GPT-5.4 nano is the most lightweight and cost-efficient variant of the GPT-5.4 family, optimized for speed-critical and high-volume tasks. It supports text and image inputs and is designed for low-latency use cases such as classification, data extraction, ranking, and sub-agent execution.\n\nThe model prioritizes responsiveness and efficiency over deep reasoning, making it ideal for pipelines that require fast, reliable outputs at scale. GPT-5.4 nano is well suited for background tasks, real-time systems, and distributed agent architectures where minimizing cost and latency is essential.",
+    "context_length": 400000,
+    "architecture": {
+      "modality": "text+image+file->text",
+      "input_modalities": [
+        "file",
+        "image",
+        "text"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "tokenizer": "GPT",
+      "instruct_type": null
+    },
+    "pricing": {
+      "prompt": "0.0000002",
+      "completion": "0.00000125",
+      "web_search": "0.01",
+      "input_cache_read": "0.00000002"
+    },
+    "top_provider": {
+      "context_length": 400000,
+      "max_completion_tokens": 128000,
+      "is_moderated": true
+    },
+    "per_request_limits": null,
+    "supported_parameters": [
+      "include_reasoning",
+      "max_tokens",
+      "reasoning",
+      "response_format",
+      "seed",
+      "structured_outputs",
+      "tool_choice",
+      "tools"
+    ],
+    "default_parameters": {
+      "temperature": null,
+      "top_p": null,
+      "top_k": null,
+      "frequency_penalty": null,
+      "presence_penalty": null,
+      "repetition_penalty": null
+    },
+    "expiration_date": null
+  },
+  {
+    "id": "openai/gpt-5.4-mini",
+    "canonical_slug": "openai/gpt-5.4-mini-20260317",
+    "hugging_face_id": "",
+    "name": "OpenAI: GPT-5.4 Mini",
+    "created": 1773748178,
+    "description": "GPT-5.4 mini brings the core capabilities of GPT-5.4 to a faster, more efficient model optimized for high-throughput workloads. It supports text and image inputs with strong performance across reasoning, coding, and tool use, while reducing latency and cost for large-scale deployments.\n\nThe model is designed for production environments that require a balance of capability and efficiency, making it well suited for chat applications, coding assistants, and agent workflows that operate at scale. GPT-5.4 mini delivers reliable instruction following, solid multi-step reasoning, and consistent performance across diverse tasks with improved cost efficiency.",
+    "context_length": 400000,
+    "architecture": {
+      "modality": "text+image+file->text",
+      "input_modalities": [
+        "file",
+        "image",
+        "text"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "tokenizer": "GPT",
+      "instruct_type": null
+    },
+    "pricing": {
+      "prompt": "0.00000075",
+      "completion": "0.0000045",
+      "web_search": "0.01",
+      "input_cache_read": "0.000000075"
+    },
+    "top_provider": {
+      "context_length": 400000,
+      "max_completion_tokens": 128000,
+      "is_moderated": true
+    },
+    "per_request_limits": null,
+    "supported_parameters": [
+      "include_reasoning",
+      "max_tokens",
+      "reasoning",
+      "response_format",
+      "seed",
+      "structured_outputs",
+      "tool_choice",
+      "tools"
+    ],
+    "default_parameters": {
+      "temperature": null,
+      "top_p": null,
+      "top_k": null,
+      "frequency_penalty": null,
+      "presence_penalty": null,
+      "repetition_penalty": null
+    },
+    "expiration_date": null
+  },
+  {
+    "id": "mistralai/mistral-small-2603",
+    "canonical_slug": "mistralai/mistral-small-2603",
+    "hugging_face_id": "mistralai/Mistral-Small-4-119B-2603",
+    "name": "Mistral: Mistral Small 4",
+    "created": 1773695685,
+    "description": "Mistral Small 4 is the next major release in the Mistral Small family, unifying the capabilities of several flagship Mistral models into a single system. It combines strong reasoning from Magistral, multimodal understanding from Pixtral, and agentic coding capabilities from Devstral, enabling one model to handle complex analysis, software development, and visual tasks within the same workflow.",
+    "context_length": 262144,
+    "architecture": {
+      "modality": "text+image->text",
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "tokenizer": "Mistral",
+      "instruct_type": null
+    },
+    "pricing": {
+      "prompt": "0.00000015",
+      "completion": "0.0000006",
+      "input_cache_read": "0.000000015"
+    },
+    "top_provider": {
+      "context_length": 262144,
+      "max_completion_tokens": null,
+      "is_moderated": false
+    },
+    "per_request_limits": null,
+    "supported_parameters": [
+      "frequency_penalty",
+      "include_reasoning",
+      "max_tokens",
+      "presence_penalty",
+      "reasoning",
+      "response_format",
+      "seed",
+      "stop",
+      "structured_outputs",
+      "temperature",
+      "tool_choice",
+      "tools",
+      "top_p"
+    ],
+    "default_parameters": {
+      "temperature": null,
+      "top_p": null,
+      "top_k": null,
+      "frequency_penalty": null,
+      "presence_penalty": null,
+      "repetition_penalty": null
+    },
+    "expiration_date": null
+  },
+  {
+    "id": "z-ai/glm-5-turbo",
+    "canonical_slug": "z-ai/glm-5-turbo-20260315",
+    "hugging_face_id": "",
+    "name": "Z.ai: GLM 5 Turbo",
+    "created": 1773583573,
+    "description": "GLM-5 Turbo is a new model from Z.ai designed for fast inference and strong performance in agent-driven environments such as OpenClaw scenarios. It is deeply optimized for real-world agent workflows involving long execution chains, with improved complex instruction decomposition, tool use, scheduled and persistent execution, and overall stability across extended tasks.",
+    "context_length": 202752,
+    "architecture": {
+      "modality": "text->text",
+      "input_modalities": [
+        "text"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "tokenizer": "Other",
+      "instruct_type": null
+    },
+    "pricing": {
+      "prompt": "0.0000012",
+      "completion": "0.000004",
+      "input_cache_read": "0.00000024"
+    },
+    "top_provider": {
+      "context_length": 202752,
+      "max_completion_tokens": 131072,
+      "is_moderated": false
+    },
+    "per_request_limits": null,
+    "supported_parameters": [
+      "include_reasoning",
+      "max_tokens",
+      "reasoning",
+      "response_format",
+      "temperature",
+      "tool_choice",
+      "tools",
+      "top_p"
+    ],
+    "default_parameters": {
+      "temperature": 1,
+      "top_p": 0.95,
+      "top_k": null,
+      "frequency_penalty": null,
+      "presence_penalty": null,
+      "repetition_penalty": null
+    },
+    "expiration_date": null
+  },
+  {
+    "id": "x-ai/grok-4.20-beta",
+    "canonical_slug": "x-ai/grok-4.20-beta-20260309",
+    "hugging_face_id": "",
+    "name": "xAI: Grok 4.20 Beta",
+    "created": 1773325354,
+    "description": "Grok 4.20 Beta is xAI's newest flagship model with industry-leading speed and agentic tool calling capabilities. It combines the lowest hallucination rate on the market with strict prompt adherance, delivering consistently precise and truthful responses.\n\nReasoning can be enabled/disabled using the `reasoning` `enabled` parameter in the API. [Learn more in our docs](https://openrouter.ai/docs/use-cases/reasoning-tokens#controlling-reasoning-tokens)",
+    "context_length": 2000000,
+    "architecture": {
+      "modality": "text+image->text",
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "tokenizer": "Grok",
+      "instruct_type": null
+    },
+    "pricing": {
+      "prompt": "0.000002",
+      "completion": "0.000006",
+      "web_search": "0.005",
+      "input_cache_read": "0.0000002"
+    },
+    "top_provider": {
+      "context_length": 2000000,
+      "max_completion_tokens": null,
+      "is_moderated": false
+    },
+    "per_request_limits": null,
+    "supported_parameters": [
+      "include_reasoning",
+      "logprobs",
+      "max_tokens",
+      "reasoning",
+      "response_format",
+      "seed",
+      "structured_outputs",
+      "temperature",
+      "tool_choice",
+      "tools",
+      "top_logprobs",
+      "top_p"
+    ],
+    "default_parameters": {
+      "temperature": null,
+      "top_p": null,
+      "top_k": null,
+      "frequency_penalty": null,
+      "presence_penalty": null,
+      "repetition_penalty": null
+    },
+    "expiration_date": null
+  },
+  {
+    "id": "nvidia/nemotron-3-super-120b-a12b:free",
+    "canonical_slug": "nvidia/nemotron-3-super-120b-a12b-20230311",
+    "hugging_face_id": "nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-FP8",
+    "name": "NVIDIA: Nemotron 3 Super (free)",
+    "created": 1773245239,
+    "description": "NVIDIA Nemotron 3 Super is a 120B-parameter open hybrid MoE model, activating just 12B parameters for maximum compute efficiency and accuracy in complex multi-agent applications. Built on a hybrid Mamba-Transformer Mixture-of-Experts architecture with multi-token prediction (MTP), it delivers over 50% higher token generation compared to leading open models.\n \nThe model features a 1M token context window for long-term agent coherence, cross-document reasoning, and multi-step task planning. Latent MoE enables calling 4 experts for the inference cost of only one, improving intelligence and generalization. Multi-environment RL training across 10+ environments delivers leading accuracy on benchmarks including AIME 2025, TerminalBench, and SWE-Bench Verified.\n \nFully open with weights, datasets, and recipes under the NVIDIA Open License, Nemotron 3 Super allows easy customization and secure deployment anywhere — from workstation to cloud.",
+    "context_length": 262144,
+    "architecture": {
+      "modality": "text->text",
+      "input_modalities": [
+        "text"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "tokenizer": "Other",
+      "instruct_type": null
+    },
+    "pricing": {
+      "prompt": "0",
+      "completion": "0"
+    },
+    "top_provider": {
+      "context_length": 262144,
+      "max_completion_tokens": 262144,
+      "is_moderated": false
+    },
+    "per_request_limits": null,
+    "supported_parameters": [
+      "include_reasoning",
+      "max_tokens",
+      "reasoning",
+      "response_format",
+      "seed",
+      "structured_outputs",
+      "temperature",
+      "tool_choice",
+      "tools",
+      "top_p"
+    ],
+    "default_parameters": {
+      "temperature": 1,
+      "top_p": 0.95,
+      "top_k": null,
+      "frequency_penalty": null,
+      "presence_penalty": null,
+      "repetition_penalty": null
+    },
+    "expiration_date": null
+  },
+  {
+    "id": "nvidia/nemotron-3-super-120b-a12b",
+    "canonical_slug": "nvidia/nemotron-3-super-120b-a12b-20230311",
+    "hugging_face_id": "nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-FP8",
+    "name": "NVIDIA: Nemotron 3 Super",
+    "created": 1773245239,
+    "description": "NVIDIA Nemotron 3 Super is a 120B-parameter open hybrid MoE model, activating just 12B parameters for maximum compute efficiency and accuracy in complex multi-agent applications. Built on a hybrid Mamba-Transformer Mixture-of-Experts architecture with multi-token prediction (MTP), it delivers over 50% higher token generation compared to leading open models.\n \nThe model features a 1M token context window for long-term agent coherence, cross-document reasoning, and multi-step task planning. Latent MoE enables calling 4 experts for the inference cost of only one, improving intelligence and generalization. Multi-environment RL training across 10+ environments delivers leading accuracy on benchmarks including AIME 2025, TerminalBench, and SWE-Bench Verified.\n \nFully open with weights, datasets, and recipes under the NVIDIA Open License, Nemotron 3 Super allows easy customization and secure deployment anywhere — from workstation to cloud.",
+    "context_length": 262144,
+    "architecture": {
+      "modality": "text->text",
+      "input_modalities": [
+        "text"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "tokenizer": "Other",
+      "instruct_type": null
+    },
+    "pricing": {
+      "prompt": "0.0000001",
+      "completion": "0.0000005",
+      "input_cache_read": "0.0000001"
+    },
+    "top_provider": {
+      "context_length": 262144,
+      "max_completion_tokens": null,
+      "is_moderated": false
+    },
+    "per_request_limits": null,
+    "supported_parameters": [
+      "frequency_penalty",
+      "include_reasoning",
+      "max_tokens",
+      "min_p",
+      "presence_penalty",
+      "reasoning",
+      "repetition_penalty",
+      "response_format",
+      "seed",
+      "stop",
+      "temperature",
+      "tool_choice",
+      "tools",
+      "top_k",
+      "top_p"
+    ],
+    "default_parameters": {
+      "temperature": 1,
+      "top_p": 0.95,
+      "top_k": null,
+      "frequency_penalty": null,
+      "presence_penalty": null,
+      "repetition_penalty": null
+    },
+    "expiration_date": null
+  },
+  {
+    "id": "bytedance-seed/seed-2.0-lite",
+    "canonical_slug": "bytedance-seed/seed-2.0-lite-20260309",
+    "hugging_face_id": null,
+    "name": "ByteDance Seed: Seed-2.0-Lite",
+    "created": 1773157231,
+    "description": "Seed-2.0-Lite is a versatile, cost‑efficient enterprise workhorse that delivers strong multimodal and agent capabilities while offering noticeably lower latency, making it a practical default choice for most production workloads across text, vision, and tools. Engineered for high-frequency visual understanding and agentic workflows, it's an ideal choice for deployment at scale with minimal latency.",
+    "context_length": 262144,
+    "architecture": {
+      "modality": "text+image+video->text",
+      "input_modalities": [
+        "text",
+        "image",
+        "video"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "tokenizer": "Other",
+      "instruct_type": null
+    },
+    "pricing": {
+      "prompt": "0.00000025",
+      "completion": "0.000002"
+    },
+    "top_provider": {
+      "context_length": 262144,
+      "max_completion_tokens": 131072,
+      "is_moderated": false
+    },
+    "per_request_limits": null,
+    "supported_parameters": [
+      "frequency_penalty",
+      "include_reasoning",
+      "max_tokens",
+      "reasoning",
+      "response_format",
+      "stop",
+      "structured_outputs",
+      "temperature",
+      "tool_choice",
+      "tools",
+      "top_p"
+    ],
+    "default_parameters": {
+      "temperature": null,
+      "top_p": null,
+      "top_k": null,
+      "frequency_penalty": null,
+      "presence_penalty": null,
+      "repetition_penalty": null
+    },
+    "expiration_date": null
+  },
+  {
+    "id": "qwen/qwen3.5-9b",
+    "canonical_slug": "qwen/qwen3.5-9b-20260310",
+    "hugging_face_id": "Qwen/Qwen3.5-9B",
+    "name": "Qwen: Qwen3.5-9B",
+    "created": 1773152396,
+    "description": "Qwen3.5-9B is a multimodal foundation model from the Qwen3.5 family, designed to deliver strong reasoning, coding, and visual understanding in an efficient 9B-parameter architecture. It uses a unified vision-language design with early fusion of multimodal tokens, allowing the model to process and reason across text and images within the same context.",
+    "context_length": 256000,
+    "architecture": {
+      "modality": "text+image+video->text",
+      "input_modalities": [
+        "text",
+        "image",
+        "video"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "tokenizer": "Qwen3",
+      "instruct_type": null
+    },
+    "pricing": {
+      "prompt": "0.00000005",
+      "completion": "0.00000015"
+    },
+    "top_provider": {
+      "context_length": 256000,
+      "max_completion_tokens": 65536,
+      "is_moderated": false
+    },
+    "per_request_limits": null,
+    "supported_parameters": [
+      "frequency_penalty",
+      "include_reasoning",
+      "logit_bias",
+      "logprobs",
+      "max_tokens",
+      "min_p",
+      "presence_penalty",
+      "reasoning",
+      "repetition_penalty",
+      "response_format",
+      "stop",
+      "structured_outputs",
+      "temperature",
+      "tool_choice",
+      "tools",
+      "top_k",
+      "top_logprobs",
+      "top_p"
+    ],
+    "default_parameters": {
+      "temperature": null,
+      "top_p": null,
+      "top_k": null,
+      "frequency_penalty": null,
+      "presence_penalty": null,
+      "repetition_penalty": null
+    },
+    "expiration_date": null
+  },
+  {
+    "id": "openai/gpt-5.4-pro",
+    "canonical_slug": "openai/gpt-5.4-pro-20260305",
+    "hugging_face_id": "",
+    "name": "OpenAI: GPT-5.4 Pro",
+    "created": 1772734366,
+    "description": "GPT-5.4 Pro is OpenAI's most advanced model, building on GPT-5.4's unified architecture with enhanced reasoning capabilities for complex, high-stakes tasks. It features a 1M+ token context window (922K input, 128K output) with support for text and image inputs. Optimized for step-by-step reasoning, instruction following, and accuracy, GPT-5.4 Pro excels at agentic coding, long-context workflows, and multi-step problem solving.",
+    "context_length": 1050000,
+    "architecture": {
+      "modality": "text+image+file->text",
+      "input_modalities": [
+        "text",
+        "image",
+        "file"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "tokenizer": "GPT",
+      "instruct_type": null
+    },
+    "pricing": {
+      "prompt": "0.00003",
+      "completion": "0.00018",
+      "web_search": "0.01"
+    },
+    "top_provider": {
+      "context_length": 1050000,
+      "max_completion_tokens": 128000,
+      "is_moderated": true
+    },
+    "per_request_limits": null,
+    "supported_parameters": [
+      "include_reasoning",
+      "max_tokens",
+      "reasoning",
+      "response_format",
+      "seed",
+      "structured_outputs",
+      "tool_choice",
+      "tools"
+    ],
+    "default_parameters": {
+      "temperature": null,
+      "top_p": null,
+      "top_k": null,
+      "frequency_penalty": null,
+      "presence_penalty": null,
+      "repetition_penalty": null
+    },
+    "expiration_date": null
+  },
+  {
+    "id": "openai/gpt-5.4",
+    "canonical_slug": "openai/gpt-5.4-20260305",
+    "hugging_face_id": "",
+    "name": "OpenAI: GPT-5.4",
+    "created": 1772734352,
+    "description": "GPT-5.4 is OpenAI’s latest frontier model, unifying the Codex and GPT lines into a single system. It features a 1M+ token context window (922K input, 128K output) with support for text and image inputs, enabling high-context reasoning, coding, and multimodal analysis within the same workflow.\n\nThe model delivers improved performance in coding, document understanding, tool use, and instruction following. It is designed as a strong default for both general-purpose tasks and software engineering, capable of generating production-quality code, synthesizing information across multiple sources, and executing complex multi-step workflows with fewer iterations and greater token efficiency.",
+    "context_length": 1050000,
+    "architecture": {
+      "modality": "text+image+file->text",
+      "input_modalities": [
+        "text",
+        "image",
+        "file"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "tokenizer": "GPT",
+      "instruct_type": null
+    },
+    "pricing": {
+      "prompt": "0.0000025",
+      "completion": "0.000015",
+      "web_search": "0.01",
+      "input_cache_read": "0.00000025"
+    },
+    "top_provider": {
+      "context_length": 1050000,
+      "max_completion_tokens": 128000,
+      "is_moderated": true
+    },
+    "per_request_limits": null,
+    "supported_parameters": [
+      "include_reasoning",
+      "max_tokens",
+      "reasoning",
+      "response_format",
+      "seed",
+      "structured_outputs",
+      "tool_choice",
+      "tools"
+    ],
+    "default_parameters": {
+      "temperature": null,
+      "top_p": null,
+      "top_k": null,
+      "frequency_penalty": null,
+      "presence_penalty": null,
+      "repetition_penalty": null
+    },
+    "expiration_date": null
+  },
+  {
+    "id": "inception/mercury-2",
+    "canonical_slug": "inception/mercury-2-20260304",
+    "hugging_face_id": null,
+    "name": "Inception: Mercury 2",
+    "created": 1772636275,
+    "description": "Mercury 2 is an extremely fast reasoning LLM, and the first reasoning diffusion LLM (dLLM).\nInstead of generating tokens sequentially, Mercury 2 produces and refines multiple tokens in parallel, achieving >1,000 tokens/sec on standard GPUs. Mercury 2 is 5x+ faster than leading speed-optimized LLMs like Claude 4.5 Haiku and GPT 5 Mini, at a fraction of the cost. \nMercury 2 supports tunable reasoning levels, 128K context, native tool use, and schema-aligned JSON output. Built for coding workflows where latency compounds, real-time voice/search, and agent loops. OpenAI API compatible. Read more in the [blog post](https://www.inceptionlabs.ai/blog/introducing-mercury-2).",
+    "context_length": 128000,
+    "architecture": {
+      "modality": "text->text",
+      "input_modalities": [
+        "text"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "tokenizer": "Other",
+      "instruct_type": null
+    },
+    "pricing": {
+      "prompt": "0.00000025",
+      "completion": "0.00000075",
+      "input_cache_read": "0.000000025"
+    },
+    "top_provider": {
+      "context_length": 128000,
+      "max_completion_tokens": 50000,
+      "is_moderated": false
+    },
+    "per_request_limits": null,
+    "supported_parameters": [
+      "include_reasoning",
+      "max_tokens",
+      "reasoning",
+      "response_format",
+      "stop",
+      "structured_outputs",
+      "temperature",
+      "tool_choice",
+      "tools"
+    ],
+    "default_parameters": {
+      "temperature": 0.75,
+      "top_p": null,
+      "top_k": null,
+      "frequency_penalty": null,
+      "presence_penalty": null,
+      "repetition_penalty": null
+    },
+    "expiration_date": null
+  },
+  {
+    "id": "openai/gpt-5.3-chat",
+    "canonical_slug": "openai/gpt-5.3-chat-20260303",
+    "hugging_face_id": "",
+    "name": "OpenAI: GPT-5.3 Chat",
+    "created": 1772564061,
+    "description": "GPT-5.3 Chat is an update to ChatGPT's most-used model that makes everyday conversations smoother, more useful, and more directly helpful. It delivers more accurate answers with better contextualization and significantly reduces unnecessary refusals, caveats, and overly cautious phrasing that can interrupt conversational flow.",
+    "context_length": 128000,
+    "architecture": {
+      "modality": "text+image+file->text",
+      "input_modalities": [
+        "text",
+        "image",
+        "file"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "tokenizer": "GPT",
+      "instruct_type": null
+    },
+    "pricing": {
+      "prompt": "0.00000175",
+      "completion": "0.000014",
+      "web_search": "0.1",
+      "input_cache_read": "0.000000175"
+    },
+    "top_provider": {
+      "context_length": 128000,
+      "max_completion_tokens": 16384,
+      "is_moderated": true
+    },
+    "per_request_limits": null,
+    "supported_parameters": [
+      "max_tokens",
+      "response_format",
+      "seed",
+      "structured_outputs",
+      "tool_choice",
+      "tools"
+    ],
+    "default_parameters": {
+      "temperature": null,
+      "top_p": null,
+      "top_k": null,
+      "frequency_penalty": null,
+      "presence_penalty": null,
+      "repetition_penalty": null
+    },
+    "expiration_date": null
+  },
+  {
+    "id": "google/gemini-3.1-flash-lite-preview",
+    "canonical_slug": "google/gemini-3.1-flash-lite-preview-20260303",
+    "hugging_face_id": "",
+    "name": "Google: Gemini 3.1 Flash Lite Preview",
+    "created": 1772512673,
+    "description": "Gemini 3.1 Flash Lite Preview is Google's high-efficiency model optimized for high-volume use cases. It outperforms Gemini 2.5 Flash Lite on overall quality and approaches Gemini 2.5 Flash performance across key capabilities. Improvements span audio input/ASR, RAG snippet ranking, translation, data extraction, and code completion. Supports full thinking levels (minimal, low, medium, high) for fine-grained cost/performance trade-offs. Priced at half the cost of Gemini 3 Flash.",
+    "context_length": 1048576,
+    "architecture": {
+      "modality": "text+image+file+audio+video->text",
+      "input_modalities": [
+        "text",
+        "image",
+        "video",
+        "file",
+        "audio"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "tokenizer": "Gemini",
+      "instruct_type": null
+    },
+    "pricing": {
+      "prompt": "0.00000025",
+      "completion": "0.0000015",
+      "image": "0.00000025",
+      "audio": "0.0000005",
+      "internal_reasoning": "0.0000015",
+      "input_cache_read": "0.000000025",
+      "input_cache_write": "0.00000008333333333333334"
+    },
+    "top_provider": {
+      "context_length": 1048576,
+      "max_completion_tokens": 65536,
+      "is_moderated": false
+    },
+    "per_request_limits": null,
+    "supported_parameters": [
+      "include_reasoning",
+      "max_tokens",
+      "reasoning",
+      "response_format",
+      "seed",
+      "stop",
+      "structured_outputs",
+      "temperature",
+      "tool_choice",
+      "tools",
+      "top_p"
+    ],
+    "default_parameters": {
+      "temperature": null,
+      "top_p": null,
+      "top_k": null,
+      "frequency_penalty": null,
+      "presence_penalty": null,
+      "repetition_penalty": null
+    },
+    "expiration_date": null
+  },
+  {
+    "id": "bytedance-seed/seed-2.0-mini",
+    "canonical_slug": "bytedance-seed/seed-2.0-mini-20260224",
+    "hugging_face_id": "",
+    "name": "ByteDance Seed: Seed-2.0-Mini",
+    "created": 1772131107,
+    "description": "Seed-2.0-mini targets latency-sensitive, high-concurrency, and cost-sensitive scenarios, emphasizing fast response and flexible inference deployment. It delivers performance comparable to ByteDance-Seed-1.6, supports 256k context, four reasoning effort modes (minimal/low/medium/high), multimodal understanding, and is optimized for lightweight tasks where cost and speed take priority.",
+    "context_length": 262144,
+    "architecture": {
+      "modality": "text+image+video->text",
+      "input_modalities": [
+        "text",
+        "image",
+        "video"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "tokenizer": "Other",
+      "instruct_type": null
+    },
+    "pricing": {
+      "prompt": "0.0000001",
+      "completion": "0.0000004"
+    },
+    "top_provider": {
+      "context_length": 262144,
+      "max_completion_tokens": 131072,
+      "is_moderated": false
+    },
+    "per_request_limits": null,
+    "supported_parameters": [
+      "frequency_penalty",
+      "include_reasoning",
+      "max_tokens",
+      "reasoning",
+      "response_format",
+      "stop",
+      "structured_outputs",
+      "temperature",
+      "tool_choice",
+      "tools",
+      "top_p"
+    ],
+    "default_parameters": {
+      "temperature": null,
+      "top_p": null,
       "frequency_penalty": null
+    },
+    "expiration_date": null
+  },
+  {
+    "id": "qwen/qwen3.5-35b-a3b",
+    "canonical_slug": "qwen/qwen3.5-35b-a3b-20260224",
+    "hugging_face_id": "Qwen/Qwen3.5-35B-A3B",
+    "name": "Qwen: Qwen3.5-35B-A3B",
+    "created": 1772053822,
+    "description": "The Qwen3.5 Series 35B-A3B is a native vision-language model designed with a hybrid architecture that integrates linear attention mechanisms and a sparse mixture-of-experts model, achieving higher inference efficiency. Its overall performance is comparable to that of the Qwen3.5-27B.",
+    "context_length": 262144,
+    "architecture": {
+      "modality": "text+image+video->text",
+      "input_modalities": [
+        "text",
+        "image",
+        "video"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "tokenizer": "Qwen3",
+      "instruct_type": null
+    },
+    "pricing": {
+      "prompt": "0.0000001625",
+      "completion": "0.0000013"
+    },
+    "top_provider": {
+      "context_length": 262144,
+      "max_completion_tokens": 65536,
+      "is_moderated": false
+    },
+    "per_request_limits": null,
+    "supported_parameters": [
+      "frequency_penalty",
+      "include_reasoning",
+      "logit_bias",
+      "logprobs",
+      "max_tokens",
+      "min_p",
+      "presence_penalty",
+      "reasoning",
+      "repetition_penalty",
+      "response_format",
+      "seed",
+      "stop",
+      "structured_outputs",
+      "temperature",
+      "tool_choice",
+      "tools",
+      "top_k",
+      "top_logprobs",
+      "top_p"
+    ],
+    "default_parameters": {
+      "temperature": 1,
+      "top_p": 0.95,
+      "top_k": 20,
+      "frequency_penalty": null,
+      "presence_penalty": null,
+      "repetition_penalty": null
+    },
+    "expiration_date": null
+  },
+  {
+    "id": "qwen/qwen3.5-27b",
+    "canonical_slug": "qwen/qwen3.5-27b-20260224",
+    "hugging_face_id": "Qwen/Qwen3.5-27B",
+    "name": "Qwen: Qwen3.5-27B",
+    "created": 1772053810,
+    "description": "The Qwen3.5 27B native vision-language Dense model incorporates a linear attention mechanism, delivering fast response times while balancing inference speed and performance. Its overall capabilities are comparable to those of the Qwen3.5-122B-A10B.",
+    "context_length": 262144,
+    "architecture": {
+      "modality": "text+image+video->text",
+      "input_modalities": [
+        "text",
+        "image",
+        "video"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "tokenizer": "Qwen3",
+      "instruct_type": null
+    },
+    "pricing": {
+      "prompt": "0.000000195",
+      "completion": "0.00000156"
+    },
+    "top_provider": {
+      "context_length": 262144,
+      "max_completion_tokens": 65536,
+      "is_moderated": false
+    },
+    "per_request_limits": null,
+    "supported_parameters": [
+      "frequency_penalty",
+      "include_reasoning",
+      "logit_bias",
+      "logprobs",
+      "max_tokens",
+      "min_p",
+      "presence_penalty",
+      "reasoning",
+      "repetition_penalty",
+      "response_format",
+      "seed",
+      "stop",
+      "structured_outputs",
+      "temperature",
+      "tool_choice",
+      "tools",
+      "top_k",
+      "top_logprobs",
+      "top_p"
+    ],
+    "default_parameters": {
+      "temperature": 0.6,
+      "top_p": 0.95,
+      "top_k": 20,
+      "frequency_penalty": null,
+      "presence_penalty": null,
+      "repetition_penalty": null
+    },
+    "expiration_date": null
+  },
+  {
+    "id": "qwen/qwen3.5-122b-a10b",
+    "canonical_slug": "qwen/qwen3.5-122b-a10b-20260224",
+    "hugging_face_id": "Qwen/Qwen3.5-122B-A10B",
+    "name": "Qwen: Qwen3.5-122B-A10B",
+    "created": 1772053789,
+    "description": "The Qwen3.5 122B-A10B native vision-language model is built on a hybrid architecture that integrates a linear attention mechanism with a sparse mixture-of-experts model, achieving higher inference efficiency. In terms of overall performance, this model is second only to Qwen3.5-397B-A17B. Its text capabilities significantly outperform those of Qwen3-235B-2507, and its visual capabilities surpass those of Qwen3-VL-235B.",
+    "context_length": 262144,
+    "architecture": {
+      "modality": "text+image+video->text",
+      "input_modalities": [
+        "text",
+        "image",
+        "video"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "tokenizer": "Qwen3",
+      "instruct_type": null
+    },
+    "pricing": {
+      "prompt": "0.00000026",
+      "completion": "0.00000208"
+    },
+    "top_provider": {
+      "context_length": 262144,
+      "max_completion_tokens": 65536,
+      "is_moderated": false
+    },
+    "per_request_limits": null,
+    "supported_parameters": [
+      "frequency_penalty",
+      "include_reasoning",
+      "logit_bias",
+      "logprobs",
+      "max_tokens",
+      "min_p",
+      "presence_penalty",
+      "reasoning",
+      "repetition_penalty",
+      "response_format",
+      "seed",
+      "stop",
+      "structured_outputs",
+      "temperature",
+      "tool_choice",
+      "tools",
+      "top_k",
+      "top_logprobs",
+      "top_p"
+    ],
+    "default_parameters": {
+      "temperature": 0.6,
+      "top_p": 0.95,
+      "top_k": 20,
+      "frequency_penalty": null,
+      "presence_penalty": null,
+      "repetition_penalty": null
+    },
+    "expiration_date": null
+  },
+  {
+    "id": "qwen/qwen3.5-flash-02-23",
+    "canonical_slug": "qwen/qwen3.5-flash-20260224",
+    "hugging_face_id": null,
+    "name": "Qwen: Qwen3.5-Flash",
+    "created": 1772053776,
+    "description": "The Qwen3.5 native vision-language Flash models are built on a hybrid architecture that integrates a linear attention mechanism with a sparse mixture-of-experts model, achieving higher inference efficiency. Compared to the 3 series, these models deliver a leap forward in performance for both pure text and multimodal tasks, offering fast response times while balancing inference speed and overall performance.",
+    "context_length": 1000000,
+    "architecture": {
+      "modality": "text+image+video->text",
+      "input_modalities": [
+        "text",
+        "image",
+        "video"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "tokenizer": "Qwen3",
+      "instruct_type": null
+    },
+    "pricing": {
+      "prompt": "0.000000065",
+      "completion": "0.00000026"
+    },
+    "top_provider": {
+      "context_length": 1000000,
+      "max_completion_tokens": 65536,
+      "is_moderated": false
+    },
+    "per_request_limits": null,
+    "supported_parameters": [
+      "include_reasoning",
+      "max_tokens",
+      "presence_penalty",
+      "reasoning",
+      "response_format",
+      "seed",
+      "structured_outputs",
+      "temperature",
+      "tool_choice",
+      "tools",
+      "top_p"
+    ],
+    "default_parameters": {
+      "temperature": null,
+      "top_p": null,
+      "frequency_penalty": null
+    },
+    "expiration_date": null
+  },
+  {
+    "id": "google/gemini-3.1-pro-preview-customtools",
+    "canonical_slug": "google/gemini-3.1-pro-preview-customtools-20260219",
+    "hugging_face_id": null,
+    "name": "Google: Gemini 3.1 Pro Preview Custom Tools",
+    "created": 1772045923,
+    "description": "Gemini 3.1 Pro Preview Custom Tools is a variant of Gemini 3.1 Pro that improves tool selection behavior by preventing overuse of a general bash tool when more efficient third-party or user-defined functions are available. This specialized preview endpoint significantly increases function calling reliability and ensures the model selects the most appropriate tool in coding agents and complex, multi-tool workflows.\n\nIt retains the core strengths of Gemini 3.1 Pro, including multimodal reasoning across text, image, video, audio, and code, a 1M-token context window, and strong software engineering performance.",
+    "context_length": 1048576,
+    "architecture": {
+      "modality": "text+image+file+audio+video->text",
+      "input_modalities": [
+        "text",
+        "audio",
+        "image",
+        "video",
+        "file"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "tokenizer": "Gemini",
+      "instruct_type": null
+    },
+    "pricing": {
+      "prompt": "0.000002",
+      "completion": "0.000012",
+      "image": "0.000002",
+      "audio": "0.000002",
+      "internal_reasoning": "0.000012",
+      "input_cache_read": "0.0000002",
+      "input_cache_write": "0.000000375"
+    },
+    "top_provider": {
+      "context_length": 1048576,
+      "max_completion_tokens": 65536,
+      "is_moderated": false
+    },
+    "per_request_limits": null,
+    "supported_parameters": [
+      "include_reasoning",
+      "max_tokens",
+      "reasoning",
+      "response_format",
+      "seed",
+      "stop",
+      "structured_outputs",
+      "temperature",
+      "tool_choice",
+      "tools",
+      "top_p"
+    ],
+    "default_parameters": {
+      "temperature": null,
+      "top_p": null,
+      "frequency_penalty": null
+    },
+    "expiration_date": null
+  },
+  {
+    "id": "openai/gpt-5.3-codex",
+    "canonical_slug": "openai/gpt-5.3-codex-20260224",
+    "hugging_face_id": "",
+    "name": "OpenAI: GPT-5.3-Codex",
+    "created": 1771959164,
+    "description": "GPT-5.3-Codex is OpenAI’s most advanced agentic coding model, combining the frontier software engineering performance of GPT-5.2-Codex with the broader reasoning and professional knowledge capabilities of GPT-5.2. It achieves state-of-the-art results on SWE-Bench Pro and strong performance on Terminal-Bench 2.0 and OSWorld-Verified, reflecting improved multi-language coding, terminal proficiency, and real-world computer-use skills. The model is optimized for long-running, tool-using workflows and supports interactive steering during execution, making it suitable for complex development tasks, debugging, deployment, and iterative product work.\n\nBeyond coding, GPT-5.3-Codex performs strongly on structured knowledge-work benchmarks such as GDPval, supporting tasks like document drafting, spreadsheet analysis, slide creation, and operational research across domains. It is trained with enhanced cybersecurity awareness, including vulnerability identification capabilities, and deployed with additional safeguards for high-risk use cases. Compared to prior Codex models, it is more token-efficient and approximately 25% faster, targeting professional end-to-end workflows that span reasoning, execution, and computer interaction.",
+    "context_length": 400000,
+    "architecture": {
+      "modality": "text+image+file->text",
+      "input_modalities": [
+        "text",
+        "image",
+        "file"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "tokenizer": "GPT",
+      "instruct_type": null
+    },
+    "pricing": {
+      "prompt": "0.00000175",
+      "completion": "0.000014",
+      "web_search": "0.01",
+      "input_cache_read": "0.000000175"
+    },
+    "top_provider": {
+      "context_length": 400000,
+      "max_completion_tokens": 128000,
+      "is_moderated": true
+    },
+    "per_request_limits": null,
+    "supported_parameters": [
+      "include_reasoning",
+      "max_tokens",
+      "reasoning",
+      "response_format",
+      "seed",
+      "structured_outputs",
+      "tool_choice",
+      "tools"
+    ],
+    "default_parameters": {
+      "temperature": null,
+      "top_p": null,
+      "top_k": null,
+      "frequency_penalty": null,
+      "presence_penalty": null,
+      "repetition_penalty": null
+    },
+    "expiration_date": null
+  },
+  {
+    "id": "google/gemini-3.1-pro-preview",
+    "canonical_slug": "google/gemini-3.1-pro-preview-20260219",
+    "hugging_face_id": "",
+    "name": "Google: Gemini 3.1 Pro Preview",
+    "created": 1771509627,
+    "description": "Gemini 3.1 Pro Preview is Google’s frontier reasoning model, delivering enhanced software engineering performance, improved agentic reliability, and more efficient token usage across complex workflows. Building on the multimodal foundation of the Gemini 3 series, it combines high-precision reasoning across text, image, video, audio, and code with a 1M-token context window. Reasoning Details must be preserved when using multi-turn tool calling, see our docs here: https://openrouter.ai/docs/use-cases/reasoning-tokens#preserving-reasoning. The 3.1 update introduces measurable gains in SWE benchmarks and real-world coding environments, along with stronger autonomous task execution in structured domains such as finance and spreadsheet-based workflows.\n\nDesigned for advanced development and agentic systems, Gemini 3.1 Pro Preview improves long-horizon stability and tool orchestration while increasing token efficiency. It introduces a new medium thinking level to better balance cost, speed, and performance. The model excels in agentic coding, structured planning, multimodal analysis, and workflow automation, making it well-suited for autonomous agents, financial modeling, spreadsheet automation, and high-context enterprise tasks.",
+    "context_length": 1048576,
+    "architecture": {
+      "modality": "text+image+file+audio+video->text",
+      "input_modalities": [
+        "audio",
+        "file",
+        "image",
+        "text",
+        "video"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "tokenizer": "Gemini",
+      "instruct_type": null
+    },
+    "pricing": {
+      "prompt": "0.000002",
+      "completion": "0.000012",
+      "image": "0.000002",
+      "audio": "0.000002",
+      "internal_reasoning": "0.000012",
+      "input_cache_read": "0.0000002",
+      "input_cache_write": "0.000000375"
+    },
+    "top_provider": {
+      "context_length": 1048576,
+      "max_completion_tokens": 65536,
+      "is_moderated": false
+    },
+    "per_request_limits": null,
+    "supported_parameters": [
+      "include_reasoning",
+      "max_tokens",
+      "reasoning",
+      "response_format",
+      "seed",
+      "stop",
+      "structured_outputs",
+      "temperature",
+      "tool_choice",
+      "tools",
+      "top_p"
+    ],
+    "default_parameters": {
+      "temperature": null,
+      "top_p": null,
+      "frequency_penalty": null
+    },
+    "expiration_date": null
+  },
+  {
+    "id": "anthropic/claude-sonnet-4.6",
+    "canonical_slug": "anthropic/claude-4.6-sonnet-20260217",
+    "hugging_face_id": "",
+    "name": "Anthropic: Claude Sonnet 4.6",
+    "created": 1771342990,
+    "description": "Sonnet 4.6 is Anthropic's most capable Sonnet-class model yet, with frontier performance across coding, agents, and professional work. It excels at iterative development, complex codebase navigation, end-to-end project management with memory, polished document creation, and confident computer use for web QA and workflow automation.",
+    "context_length": 1000000,
+    "architecture": {
+      "modality": "text+image->text",
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "tokenizer": "Claude",
+      "instruct_type": null
+    },
+    "pricing": {
+      "prompt": "0.000003",
+      "completion": "0.000015",
+      "web_search": "0.01",
+      "input_cache_read": "0.0000003",
+      "input_cache_write": "0.00000375"
+    },
+    "top_provider": {
+      "context_length": 1000000,
+      "max_completion_tokens": 128000,
+      "is_moderated": true
+    },
+    "per_request_limits": null,
+    "supported_parameters": [
+      "include_reasoning",
+      "max_tokens",
+      "reasoning",
+      "response_format",
+      "stop",
+      "structured_outputs",
+      "temperature",
+      "tool_choice",
+      "tools",
+      "top_k",
+      "top_p",
+      "verbosity"
+    ],
+    "default_parameters": {
+      "temperature": null,
+      "top_p": null,
+      "top_k": null,
+      "frequency_penalty": null,
+      "presence_penalty": null,
+      "repetition_penalty": null
+    },
+    "expiration_date": null
+  },
+  {
+    "id": "qwen/qwen3.5-plus-02-15",
+    "canonical_slug": "qwen/qwen3.5-plus-20260216",
+    "hugging_face_id": "",
+    "name": "Qwen: Qwen3.5 Plus 2026-02-15",
+    "created": 1771229416,
+    "description": "The Qwen3.5 native vision-language series Plus models are built on a hybrid architecture that integrates linear attention mechanisms with sparse mixture-of-experts models, achieving higher inference efficiency. In a variety of task evaluations, the 3.5 series consistently demonstrates performance on par with state-of-the-art leading models. Compared to the 3 series, these models show a leap forward in both pure-text and multimodal capabilities.",
+    "context_length": 1000000,
+    "architecture": {
+      "modality": "text+image+video->text",
+      "input_modalities": [
+        "text",
+        "image",
+        "video"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "tokenizer": "Qwen3",
+      "instruct_type": null
+    },
+    "pricing": {
+      "prompt": "0.00000026",
+      "completion": "0.00000156"
+    },
+    "top_provider": {
+      "context_length": 1000000,
+      "max_completion_tokens": 65536,
+      "is_moderated": false
+    },
+    "per_request_limits": null,
+    "supported_parameters": [
+      "include_reasoning",
+      "max_tokens",
+      "presence_penalty",
+      "reasoning",
+      "response_format",
+      "seed",
+      "structured_outputs",
+      "temperature",
+      "tool_choice",
+      "tools",
+      "top_p"
+    ],
+    "default_parameters": {
+      "temperature": null,
+      "top_p": null,
+      "frequency_penalty": null
+    },
+    "expiration_date": null
+  },
+  {
+    "id": "qwen/qwen3.5-397b-a17b",
+    "canonical_slug": "qwen/qwen3.5-397b-a17b-20260216",
+    "hugging_face_id": "Qwen/Qwen3.5-397B-A17B",
+    "name": "Qwen: Qwen3.5 397B A17B",
+    "created": 1771223018,
+    "description": "The Qwen3.5 series 397B-A17B native vision-language model is built on a hybrid architecture that integrates a linear attention mechanism with a sparse mixture-of-experts model, achieving higher inference efficiency. It delivers state-of-the-art performance comparable to leading-edge models across a wide range of tasks, including language understanding, logical reasoning, code generation, agent-based tasks, image understanding, video understanding, and graphical user interface (GUI) interactions. With its robust code-generation and agent capabilities, the model exhibits strong generalization across diverse agent.",
+    "context_length": 262144,
+    "architecture": {
+      "modality": "text+image+video->text",
+      "input_modalities": [
+        "text",
+        "image",
+        "video"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "tokenizer": "Qwen3",
+      "instruct_type": null
+    },
+    "pricing": {
+      "prompt": "0.00000039",
+      "completion": "0.00000234"
+    },
+    "top_provider": {
+      "context_length": 262144,
+      "max_completion_tokens": 65536,
+      "is_moderated": false
+    },
+    "per_request_limits": null,
+    "supported_parameters": [
+      "frequency_penalty",
+      "include_reasoning",
+      "logit_bias",
+      "max_tokens",
+      "min_p",
+      "presence_penalty",
+      "reasoning",
+      "repetition_penalty",
+      "response_format",
+      "seed",
+      "stop",
+      "structured_outputs",
+      "temperature",
+      "tool_choice",
+      "tools",
+      "top_k",
+      "top_p"
+    ],
+    "default_parameters": {
+      "temperature": 0.6,
+      "top_p": 0.95,
+      "top_k": 20,
+      "frequency_penalty": null,
+      "presence_penalty": null,
+      "repetition_penalty": null
+    },
+    "expiration_date": null
+  },
+  {
+    "id": "minimax/minimax-m2.5:free",
+    "canonical_slug": "minimax/minimax-m2.5-20260211",
+    "hugging_face_id": "MiniMaxAI/MiniMax-M2.5",
+    "name": "MiniMax: MiniMax M2.5 (free)",
+    "created": 1770908502,
+    "description": "MiniMax-M2.5 is a SOTA large language model designed for real-world productivity. Trained in a diverse range of complex real-world digital working environments, M2.5 builds upon the coding expertise of M2.1 to extend into general office work, reaching fluency in generating and operating Word, Excel, and Powerpoint files, context switching between diverse software environments, and working across different agent and human teams. Scoring 80.2% on SWE-Bench Verified, 51.3% on Multi-SWE-Bench, and 76.3% on BrowseComp, M2.5 is also more token efficient than previous generations, having been trained to optimize its actions and output through planning.",
+    "context_length": 196608,
+    "architecture": {
+      "modality": "text->text",
+      "input_modalities": [
+        "text"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "tokenizer": "Other",
+      "instruct_type": null
+    },
+    "pricing": {
+      "prompt": "0",
+      "completion": "0"
+    },
+    "top_provider": {
+      "context_length": 196608,
+      "max_completion_tokens": 196608,
+      "is_moderated": true
+    },
+    "per_request_limits": null,
+    "supported_parameters": [
+      "include_reasoning",
+      "max_tokens",
+      "reasoning",
+      "response_format",
+      "seed",
+      "stop",
+      "temperature",
+      "tools"
+    ],
+    "default_parameters": {
+      "temperature": 1,
+      "top_p": 0.95,
+      "top_k": null,
+      "frequency_penalty": null,
+      "presence_penalty": null,
+      "repetition_penalty": null
+    },
+    "expiration_date": null
+  },
+  {
+    "id": "minimax/minimax-m2.5",
+    "canonical_slug": "minimax/minimax-m2.5-20260211",
+    "hugging_face_id": "MiniMaxAI/MiniMax-M2.5",
+    "name": "MiniMax: MiniMax M2.5",
+    "created": 1770908502,
+    "description": "MiniMax-M2.5 is a SOTA large language model designed for real-world productivity. Trained in a diverse range of complex real-world digital working environments, M2.5 builds upon the coding expertise of M2.1 to extend into general office work, reaching fluency in generating and operating Word, Excel, and Powerpoint files, context switching between diverse software environments, and working across different agent and human teams. Scoring 80.2% on SWE-Bench Verified, 51.3% on Multi-SWE-Bench, and 76.3% on BrowseComp, M2.5 is also more token efficient than previous generations, having been trained to optimize its actions and output through planning.",
+    "context_length": 196608,
+    "architecture": {
+      "modality": "text->text",
+      "input_modalities": [
+        "text"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "tokenizer": "Other",
+      "instruct_type": null
+    },
+    "pricing": {
+      "prompt": "0.0000002",
+      "completion": "0.00000117",
+      "input_cache_read": "0.0000001"
+    },
+    "top_provider": {
+      "context_length": 196608,
+      "max_completion_tokens": 65536,
+      "is_moderated": false
+    },
+    "per_request_limits": null,
+    "supported_parameters": [
+      "frequency_penalty",
+      "include_reasoning",
+      "logit_bias",
+      "logprobs",
+      "max_tokens",
+      "min_p",
+      "parallel_tool_calls",
+      "presence_penalty",
+      "reasoning",
+      "reasoning_effort",
+      "repetition_penalty",
+      "response_format",
+      "seed",
+      "stop",
+      "structured_outputs",
+      "temperature",
+      "tool_choice",
+      "tools",
+      "top_k",
+      "top_logprobs",
+      "top_p"
+    ],
+    "default_parameters": {
+      "temperature": 1,
+      "top_p": 0.95,
+      "top_k": null,
+      "frequency_penalty": null,
+      "presence_penalty": null,
+      "repetition_penalty": null
     },
     "expiration_date": null
   },
@@ -78,7 +1688,7 @@
     },
     "top_provider": {
       "context_length": 202752,
-      "max_completion_tokens": 131072,
+      "max_completion_tokens": null,
       "is_moderated": false
     },
     "per_request_limits": null,
@@ -130,12 +1740,12 @@
       "instruct_type": null
     },
     "pricing": {
-      "prompt": "0.0000012",
-      "completion": "0.000006"
+      "prompt": "0.00000078",
+      "completion": "0.0000039"
     },
     "top_provider": {
       "context_length": 262144,
-      "max_completion_tokens": 65536,
+      "max_completion_tokens": 32768,
       "is_moderated": false
     },
     "per_request_limits": null,
@@ -151,57 +1761,6 @@
       "tool_choice",
       "tools",
       "top_p"
-    ],
-    "default_parameters": {
-      "temperature": null,
-      "top_p": null,
-      "frequency_penalty": null
-    },
-    "expiration_date": null
-  },
-  {
-    "id": "openrouter/aurora-alpha",
-    "canonical_slug": "openrouter/aurora-alpha",
-    "hugging_face_id": "",
-    "name": "Aurora Alpha",
-    "created": 1770611225,
-    "description": "This is a cloaked model provided to the community to gather feedback. A reasoning model designed for speed. It is built for coding assistants, real-time conversational applications, and agentic workflows.\n\nDefault reasoning effort is set to medium for fast responses. For agentic coding use cases, we recommend changing effort to high. \n\nNote: All prompts and completions for this model are logged by the provider and may be used to improve the model.",
-    "context_length": 128000,
-    "architecture": {
-      "modality": "text->text",
-      "input_modalities": [
-        "text"
-      ],
-      "output_modalities": [
-        "text"
-      ],
-      "tokenizer": "Other",
-      "instruct_type": null
-    },
-    "pricing": {
-      "prompt": "0",
-      "completion": "0",
-      "request": "0",
-      "image": "0",
-      "web_search": "0",
-      "internal_reasoning": "0"
-    },
-    "top_provider": {
-      "context_length": 128000,
-      "max_completion_tokens": 50000,
-      "is_moderated": false
-    },
-    "per_request_limits": null,
-    "supported_parameters": [
-      "include_reasoning",
-      "max_tokens",
-      "reasoning",
-      "reasoning_effort",
-      "response_format",
-      "structured_outputs",
-      "temperature",
-      "tool_choice",
-      "tools"
     ],
     "default_parameters": {
       "temperature": null,
@@ -260,7 +1819,10 @@
     "default_parameters": {
       "temperature": null,
       "top_p": null,
-      "frequency_penalty": null
+      "top_k": null,
+      "frequency_penalty": null,
+      "presence_penalty": null,
+      "repetition_penalty": null
     },
     "expiration_date": null
   },
@@ -284,9 +1846,9 @@
       "instruct_type": null
     },
     "pricing": {
-      "prompt": "0.00000007",
-      "completion": "0.0000003",
-      "input_cache_read": "0.000000035"
+      "prompt": "0.00000012",
+      "completion": "0.00000075",
+      "input_cache_read": "0.00000006"
     },
     "top_provider": {
       "context_length": 262144,
@@ -487,7 +2049,11 @@
     },
     "pricing": {
       "prompt": "0",
-      "completion": "0"
+      "completion": "0",
+      "request": "0",
+      "image": "0",
+      "web_search": "0",
+      "internal_reasoning": "0"
     },
     "top_provider": {
       "context_length": 131000,
@@ -507,7 +2073,10 @@
     "default_parameters": {
       "temperature": 0.8,
       "top_p": 0.8,
-      "frequency_penalty": null
+      "top_k": null,
+      "frequency_penalty": null,
+      "presence_penalty": null,
+      "repetition_penalty": null
     },
     "expiration_date": null
   },
@@ -533,12 +2102,12 @@
     },
     "pricing": {
       "prompt": "0.00000045",
-      "completion": "0.00000225",
-      "input_cache_read": "0.000000070000002"
+      "completion": "0.0000022",
+      "input_cache_read": "0.000000225"
     },
     "top_provider": {
       "context_length": 262144,
-      "max_completion_tokens": null,
+      "max_completion_tokens": 65535,
       "is_moderated": false
     },
     "per_request_limits": null,
@@ -552,7 +2121,6 @@
       "parallel_tool_calls",
       "presence_penalty",
       "reasoning",
-      "reasoning_effort",
       "repetition_penalty",
       "response_format",
       "seed",
@@ -573,10 +2141,10 @@
     "expiration_date": null
   },
   {
-    "id": "upstage/solar-pro-3:free",
+    "id": "upstage/solar-pro-3",
     "canonical_slug": "upstage/solar-pro-3",
     "hugging_face_id": "",
-    "name": "Upstage: Solar Pro 3 (free)",
+    "name": "Upstage: Solar Pro 3",
     "created": 1769481200,
     "description": "Solar Pro 3 is Upstage's powerful Mixture-of-Experts (MoE) language model. With 102B total parameters and 12B active parameters per forward pass, it delivers exceptional performance while maintaining computational efficiency. Optimized for Korean with English and Japanese support.",
     "context_length": 128000,
@@ -592,8 +2160,9 @@
       "instruct_type": null
     },
     "pricing": {
-      "prompt": "0",
-      "completion": "0"
+      "prompt": "0.00000015",
+      "completion": "0.0000006",
+      "input_cache_read": "0.000000015"
     },
     "top_provider": {
       "context_length": 128000,
@@ -614,9 +2183,12 @@
     "default_parameters": {
       "temperature": null,
       "top_p": null,
-      "frequency_penalty": null
+      "top_k": null,
+      "frequency_penalty": null,
+      "presence_penalty": null,
+      "repetition_penalty": null
     },
-    "expiration_date": "2026-03-02"
+    "expiration_date": null
   },
   {
     "id": "z-ai/glm-4.7-flash",
@@ -898,7 +2470,7 @@
     "pricing": {
       "prompt": "0.00000027",
       "completion": "0.00000095",
-      "input_cache_read": "0.0000000299999997"
+      "input_cache_read": "0.0000000290000007"
     },
     "top_provider": {
       "context_length": 196608,
@@ -954,9 +2526,9 @@
       "instruct_type": null
     },
     "pricing": {
-      "prompt": "0.0000004",
-      "completion": "0.0000015",
-      "input_cache_read": "0.0000002"
+      "prompt": "0.00000039",
+      "completion": "0.00000175",
+      "input_cache_read": "0.000000195"
     },
     "top_provider": {
       "context_length": 202752,
@@ -968,13 +2540,10 @@
       "frequency_penalty",
       "include_reasoning",
       "logit_bias",
-      "logprobs",
       "max_tokens",
       "min_p",
-      "parallel_tool_calls",
       "presence_penalty",
       "reasoning",
-      "reasoning_effort",
       "repetition_penalty",
       "response_format",
       "seed",
@@ -984,7 +2553,6 @@
       "tool_choice",
       "tools",
       "top_k",
-      "top_logprobs",
       "top_p"
     ],
     "default_parameters": {
@@ -1028,7 +2596,7 @@
     },
     "top_provider": {
       "context_length": 1048576,
-      "max_completion_tokens": 65535,
+      "max_completion_tokens": 65536,
       "is_moderated": false
     },
     "per_request_limits": null,
@@ -1073,7 +2641,8 @@
     },
     "pricing": {
       "prompt": "0.0000001",
-      "completion": "0.0000003"
+      "completion": "0.0000003",
+      "input_cache_read": "0.00000001"
     },
     "top_provider": {
       "context_length": 32768,
@@ -1090,7 +2659,7 @@
       "top_p": 0.95,
       "frequency_penalty": null
     },
-    "expiration_date": null
+    "expiration_date": "2026-04-30"
   },
   {
     "id": "xiaomi/mimo-v2-flash",
@@ -1118,14 +2687,16 @@
     },
     "top_provider": {
       "context_length": 262144,
-      "max_completion_tokens": null,
+      "max_completion_tokens": 65536,
       "is_moderated": false
     },
     "per_request_limits": null,
     "supported_parameters": [
       "frequency_penalty",
       "include_reasoning",
+      "logit_bias",
       "max_tokens",
+      "min_p",
       "presence_penalty",
       "reasoning",
       "repetition_penalty",
@@ -1152,7 +2723,7 @@
     "hugging_face_id": "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-BF16",
     "name": "NVIDIA: Nemotron 3 Nano 30B A3B (free)",
     "created": 1765731275,
-    "description": "NVIDIA Nemotron 3 Nano 30B A3B is a small language MoE model with highest compute efficiency and accuracy for developers to build specialized agentic AI systems.\n\nThe model is fully open with open-weights, datasets and recipes so developers can easily\ncustomize, optimize, and deploy the model on their infrastructure for maximum privacy and\nsecurity.\n\nNote: For the free endpoint, all prompts and output are logged to improve the provider's model and its product and services. Please do not upload any personal, confidential, or otherwise sensitive information. This is a trial use only. Do not use for production or business-critical systems.",
+    "description": "NVIDIA Nemotron 3 Nano 30B A3B is a small language MoE model with highest compute efficiency and accuracy for developers to build specialized agentic AI systems.\n\nThe model is fully open with open-weights, datasets and recipes so developers can easily\ncustomize, optimize, and deploy the model on their infrastructure for maximum privacy and\nsecurity.",
     "context_length": 256000,
     "architecture": {
       "modality": "text->text",
@@ -1198,7 +2769,7 @@
     "hugging_face_id": "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-BF16",
     "name": "NVIDIA: Nemotron 3 Nano 30B A3B",
     "created": 1765731275,
-    "description": "NVIDIA Nemotron 3 Nano 30B A3B is a small language MoE model with highest compute efficiency and accuracy for developers to build specialized agentic AI systems.\n\nThe model is fully open with open-weights, datasets and recipes so developers can easily\ncustomize, optimize, and deploy the model on their infrastructure for maximum privacy and\nsecurity.\n\nNote: For the free endpoint, all prompts and output are logged to improve the provider's model and its product and services. Please do not upload any personal, confidential, or otherwise sensitive information. This is a trial use only. Do not use for production or business-critical systems.",
+    "description": "NVIDIA Nemotron 3 Nano 30B A3B is a small language MoE model with highest compute efficiency and accuracy for developers to build specialized agentic AI systems.\n\nThe model is fully open with open-weights, datasets and recipes so developers can easily\ncustomize, optimize, and deploy the model on their infrastructure for maximum privacy and\nsecurity.",
     "context_length": 262144,
     "architecture": {
       "modality": "text->text",
@@ -1232,7 +2803,6 @@
       "response_format",
       "seed",
       "stop",
-      "structured_outputs",
       "temperature",
       "tool_choice",
       "tools",
@@ -1389,7 +2959,10 @@
     "default_parameters": {
       "temperature": null,
       "top_p": null,
-      "frequency_penalty": null
+      "top_k": null,
+      "frequency_penalty": null,
+      "presence_penalty": null,
+      "repetition_penalty": null
     },
     "expiration_date": null
   },
@@ -1413,13 +2986,13 @@
       "instruct_type": null
     },
     "pricing": {
-      "prompt": "0.00000005",
-      "completion": "0.00000022",
-      "input_cache_read": "0.000000025"
+      "prompt": "0.0000004",
+      "completion": "0.000002",
+      "input_cache_read": "0.00000004"
     },
     "top_provider": {
       "context_length": 262144,
-      "max_completion_tokens": 65536,
+      "max_completion_tokens": null,
       "is_moderated": false
     },
     "per_request_limits": null,
@@ -1427,7 +3000,6 @@
       "frequency_penalty",
       "max_tokens",
       "presence_penalty",
-      "repetition_penalty",
       "response_format",
       "seed",
       "stop",
@@ -1435,7 +3007,6 @@
       "temperature",
       "tool_choice",
       "tools",
-      "top_k",
       "top_p"
     ],
     "default_parameters": {
@@ -1524,7 +3095,6 @@
     "supported_parameters": [
       "frequency_penalty",
       "include_reasoning",
-      "logit_bias",
       "max_tokens",
       "min_p",
       "presence_penalty",
@@ -1567,8 +3137,8 @@
       "instruct_type": null
     },
     "pricing": {
-      "prompt": "0.00000027",
-      "completion": "0.000001"
+      "prompt": "0.000000135",
+      "completion": "0.0000005"
     },
     "top_provider": {
       "context_length": 131072,
@@ -1579,6 +3149,58 @@
     "supported_parameters": [
       "frequency_penalty",
       "response_format",
+      "structured_outputs",
+      "temperature",
+      "tool_choice",
+      "tools",
+      "top_k",
+      "top_p"
+    ],
+    "default_parameters": {
+      "temperature": null,
+      "top_p": null,
+      "frequency_penalty": null
+    },
+    "expiration_date": null
+  },
+  {
+    "id": "essentialai/rnj-1-instruct",
+    "canonical_slug": "essentialai/rnj-1-instruct",
+    "hugging_face_id": "EssentialAI/rnj-1-instruct",
+    "name": "EssentialAI: Rnj 1 Instruct",
+    "created": 1765094847,
+    "description": "Rnj-1 is an 8B-parameter, dense, open-weight model family developed by Essential AI and trained from scratch with a focus on programming, math, and scientific reasoning. The model demonstrates strong performance across multiple programming languages, tool-use workflows, and agentic execution environments (e.g., mini-SWE-agent). ",
+    "context_length": 32768,
+    "architecture": {
+      "modality": "text->text",
+      "input_modalities": [
+        "text"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "tokenizer": "Other",
+      "instruct_type": null
+    },
+    "pricing": {
+      "prompt": "0.00000015",
+      "completion": "0.00000015"
+    },
+    "top_provider": {
+      "context_length": 32768,
+      "max_completion_tokens": null,
+      "is_moderated": false
+    },
+    "per_request_limits": null,
+    "supported_parameters": [
+      "frequency_penalty",
+      "logit_bias",
+      "max_tokens",
+      "min_p",
+      "presence_penalty",
+      "repetition_penalty",
+      "response_format",
+      "stop",
       "structured_outputs",
       "temperature",
       "tool_choice",
@@ -1638,7 +3260,10 @@
     "default_parameters": {
       "temperature": null,
       "top_p": null,
-      "frequency_penalty": null
+      "top_k": null,
+      "frequency_penalty": null,
+      "presence_penalty": null,
+      "repetition_penalty": null
     },
     "expiration_date": null
   },
@@ -1714,7 +3339,8 @@
     },
     "pricing": {
       "prompt": "0.0000002",
-      "completion": "0.0000002"
+      "completion": "0.0000002",
+      "input_cache_read": "0.00000002"
     },
     "top_provider": {
       "context_length": 262144,
@@ -1724,9 +3350,8 @@
     "per_request_limits": null,
     "supported_parameters": [
       "frequency_penalty",
-      "logit_bias",
+      "logprobs",
       "max_tokens",
-      "min_p",
       "presence_penalty",
       "repetition_penalty",
       "response_format",
@@ -1736,7 +3361,7 @@
       "temperature",
       "tool_choice",
       "tools",
-      "top_k",
+      "top_logprobs",
       "top_p"
     ],
     "default_parameters": {
@@ -1768,7 +3393,8 @@
     },
     "pricing": {
       "prompt": "0.00000015",
-      "completion": "0.00000015"
+      "completion": "0.00000015",
+      "input_cache_read": "0.000000015"
     },
     "top_provider": {
       "context_length": 262144,
@@ -1778,8 +3404,10 @@
     "per_request_limits": null,
     "supported_parameters": [
       "frequency_penalty",
+      "logprobs",
       "max_tokens",
       "presence_penalty",
+      "repetition_penalty",
       "response_format",
       "seed",
       "stop",
@@ -1787,6 +3415,7 @@
       "temperature",
       "tool_choice",
       "tools",
+      "top_logprobs",
       "top_p"
     ],
     "default_parameters": {
@@ -1818,7 +3447,8 @@
     },
     "pricing": {
       "prompt": "0.0000001",
-      "completion": "0.0000001"
+      "completion": "0.0000001",
+      "input_cache_read": "0.00000001"
     },
     "top_provider": {
       "context_length": 131072,
@@ -1828,8 +3458,10 @@
     "per_request_limits": null,
     "supported_parameters": [
       "frequency_penalty",
+      "logprobs",
       "max_tokens",
       "presence_penalty",
+      "repetition_penalty",
       "response_format",
       "seed",
       "stop",
@@ -1837,6 +3469,7 @@
       "temperature",
       "tool_choice",
       "tools",
+      "top_logprobs",
       "top_p"
     ],
     "default_parameters": {
@@ -1868,7 +3501,8 @@
     },
     "pricing": {
       "prompt": "0.0000005",
-      "completion": "0.0000015"
+      "completion": "0.0000015",
+      "input_cache_read": "0.00000005"
     },
     "top_provider": {
       "context_length": 262144,
@@ -2012,13 +3646,13 @@
       "instruct_type": null
     },
     "pricing": {
-      "prompt": "0.00000025",
+      "prompt": "0.00000026",
       "completion": "0.00000038",
-      "input_cache_read": "0.000000125"
+      "input_cache_read": "0.00000013"
     },
     "top_provider": {
       "context_length": 163840,
-      "max_completion_tokens": 65536,
+      "max_completion_tokens": null,
       "is_moderated": false
     },
     "per_request_limits": null,
@@ -2046,7 +3680,10 @@
     "default_parameters": {
       "temperature": 1,
       "top_p": 0.95,
-      "frequency_penalty": null
+      "top_k": null,
+      "frequency_penalty": null,
+      "presence_penalty": null,
+      "repetition_penalty": null
     },
     "expiration_date": null
   },
@@ -2099,113 +3736,6 @@
     ],
     "default_parameters": {
       "temperature": 0.6,
-      "top_p": null,
-      "frequency_penalty": null
-    },
-    "expiration_date": null
-  },
-  {
-    "id": "tngtech/tng-r1t-chimera:free",
-    "canonical_slug": "tngtech/tng-r1t-chimera",
-    "hugging_face_id": null,
-    "name": "TNG: R1T Chimera (free)",
-    "created": 1764184161,
-    "description": "TNG-R1T-Chimera is an experimental LLM with a faible for creative storytelling and character interaction. It is a derivate of the original TNG/DeepSeek-R1T-Chimera released in April 2025 and is available exclusively via Chutes and OpenRouter.\n\nCharacteristics and improvements include:\n\nWe think that it has a creative and pleasant personality.\nIt has a preliminary EQ-Bench3 value of about 1305.\nIt is quite a bit more intelligent than the original, albeit a slightly slower.\nIt is much more think-token consistent, i.e. reasoning and answer blocks are properly delineated.\nTool calling is much improved.\n\nTNG Tech, the model authors, ask that users follow the careful guidelines that Microsoft has created for their \"MAI-DS-R1\" DeepSeek-based model. These guidelines are available on Hugging Face (https://huggingface.co/microsoft/MAI-DS-R1).",
-    "context_length": 163840,
-    "architecture": {
-      "modality": "text->text",
-      "input_modalities": [
-        "text"
-      ],
-      "output_modalities": [
-        "text"
-      ],
-      "tokenizer": "Other",
-      "instruct_type": null
-    },
-    "pricing": {
-      "prompt": "0",
-      "completion": "0"
-    },
-    "top_provider": {
-      "context_length": 163840,
-      "max_completion_tokens": 65536,
-      "is_moderated": false
-    },
-    "per_request_limits": null,
-    "supported_parameters": [
-      "frequency_penalty",
-      "include_reasoning",
-      "max_tokens",
-      "presence_penalty",
-      "reasoning",
-      "repetition_penalty",
-      "response_format",
-      "seed",
-      "stop",
-      "structured_outputs",
-      "temperature",
-      "tool_choice",
-      "tools",
-      "top_k",
-      "top_p"
-    ],
-    "default_parameters": {
-      "temperature": null,
-      "top_p": null,
-      "frequency_penalty": null
-    },
-    "expiration_date": null
-  },
-  {
-    "id": "tngtech/tng-r1t-chimera",
-    "canonical_slug": "tngtech/tng-r1t-chimera",
-    "hugging_face_id": null,
-    "name": "TNG: R1T Chimera",
-    "created": 1764184161,
-    "description": "TNG-R1T-Chimera is an experimental LLM with a faible for creative storytelling and character interaction. It is a derivate of the original TNG/DeepSeek-R1T-Chimera released in April 2025 and is available exclusively via Chutes and OpenRouter.\n\nCharacteristics and improvements include:\n\nWe think that it has a creative and pleasant personality.\nIt has a preliminary EQ-Bench3 value of about 1305.\nIt is quite a bit more intelligent than the original, albeit a slightly slower.\nIt is much more think-token consistent, i.e. reasoning and answer blocks are properly delineated.\nTool calling is much improved.\n\nTNG Tech, the model authors, ask that users follow the careful guidelines that Microsoft has created for their \"MAI-DS-R1\" DeepSeek-based model. These guidelines are available on Hugging Face (https://huggingface.co/microsoft/MAI-DS-R1).",
-    "context_length": 163840,
-    "architecture": {
-      "modality": "text->text",
-      "input_modalities": [
-        "text"
-      ],
-      "output_modalities": [
-        "text"
-      ],
-      "tokenizer": "Other",
-      "instruct_type": null
-    },
-    "pricing": {
-      "prompt": "0.00000025",
-      "completion": "0.00000085",
-      "input_cache_read": "0.000000125"
-    },
-    "top_provider": {
-      "context_length": 163840,
-      "max_completion_tokens": 65536,
-      "is_moderated": false
-    },
-    "per_request_limits": null,
-    "supported_parameters": [
-      "frequency_penalty",
-      "include_reasoning",
-      "max_tokens",
-      "presence_penalty",
-      "reasoning",
-      "repetition_penalty",
-      "response_format",
-      "seed",
-      "stop",
-      "structured_outputs",
-      "temperature",
-      "tool_choice",
-      "tools",
-      "top_k",
-      "top_p"
-    ],
-    "default_parameters": {
-      "temperature": null,
       "top_p": null,
       "frequency_penalty": null
     },
@@ -2374,7 +3904,7 @@
       "top_p": null,
       "frequency_penalty": null
     },
-    "expiration_date": null
+    "expiration_date": "2026-03-26"
   },
   {
     "id": "openai/gpt-5.1",
@@ -2422,7 +3952,10 @@
     "default_parameters": {
       "temperature": null,
       "top_p": null,
-      "frequency_penalty": null
+      "top_k": null,
+      "frequency_penalty": null,
+      "presence_penalty": null,
+      "repetition_penalty": null
     },
     "expiration_date": null
   },
@@ -2518,7 +4051,10 @@
     "default_parameters": {
       "temperature": null,
       "top_p": null,
-      "frequency_penalty": null
+      "top_k": null,
+      "frequency_penalty": null,
+      "presence_penalty": null,
+      "repetition_penalty": null
     },
     "expiration_date": null
   },
@@ -2566,7 +4102,10 @@
     "default_parameters": {
       "temperature": null,
       "top_p": null,
-      "frequency_penalty": null
+      "top_k": null,
+      "frequency_penalty": null,
+      "presence_penalty": null,
+      "repetition_penalty": null
     },
     "expiration_date": null
   },
@@ -2602,7 +4141,9 @@
     "per_request_limits": null,
     "supported_parameters": [
       "frequency_penalty",
+      "logit_bias",
       "max_tokens",
+      "min_p",
       "presence_penalty",
       "repetition_penalty",
       "response_format",
@@ -2629,7 +4170,7 @@
     "name": "MoonshotAI: Kimi K2 Thinking",
     "created": 1762440622,
     "description": "Kimi K2 Thinking is Moonshot AI’s most advanced open reasoning model to date, extending the K2 series into agentic, long-horizon reasoning. Built on the trillion-parameter Mixture-of-Experts (MoE) architecture introduced in Kimi K2, it activates 32 billion parameters per forward pass and supports 256 k-token context windows. The model is optimized for persistent step-by-step thought, dynamic tool invocation, and complex reasoning workflows that span hundreds of turns. It interleaves step-by-step reasoning with tool use, enabling autonomous research, coding, and writing that can persist for hundreds of sequential actions without drift.\n\nIt sets new open-source benchmarks on HLE, BrowseComp, SWE-Multilingual, and LiveCodeBench, while maintaining stable multi-agent behavior through 200–300 tool calls. Built on a large-scale MoE architecture with MuonClip optimization, it combines strong reasoning depth with high inference efficiency for demanding agentic and analytical tasks.",
-    "context_length": 262144,
+    "context_length": 131072,
     "architecture": {
       "modality": "text->text",
       "input_modalities": [
@@ -2642,13 +4183,13 @@
       "instruct_type": null
     },
     "pricing": {
-      "prompt": "0.0000004",
-      "completion": "0.00000175",
-      "input_cache_read": "0.0000002"
+      "prompt": "0.00000047",
+      "completion": "0.000002",
+      "input_cache_read": "0.000000141"
     },
     "top_provider": {
-      "context_length": 262144,
-      "max_completion_tokens": 65535,
+      "context_length": 131072,
+      "max_completion_tokens": null,
       "is_moderated": false
     },
     "per_request_limits": null,
@@ -2747,7 +4288,8 @@
     "pricing": {
       "prompt": "0.0000001",
       "completion": "0.0000003",
-      "audio": "0.0001"
+      "audio": "0.0001",
+      "input_cache_read": "0.00000001"
     },
     "top_provider": {
       "context_length": 32000,
@@ -2898,14 +4440,16 @@
     },
     "top_provider": {
       "context_length": 196608,
-      "max_completion_tokens": 65536,
+      "max_completion_tokens": 196608,
       "is_moderated": false
     },
     "per_request_limits": null,
     "supported_parameters": [
       "frequency_penalty",
       "include_reasoning",
+      "logit_bias",
       "max_tokens",
+      "min_p",
       "presence_penalty",
       "reasoning",
       "repetition_penalty",
@@ -2957,26 +4501,22 @@
     },
     "per_request_limits": null,
     "supported_parameters": [
-      "frequency_penalty",
-      "logit_bias",
       "max_tokens",
-      "min_p",
       "presence_penalty",
-      "repetition_penalty",
       "response_format",
       "seed",
-      "stop",
-      "structured_outputs",
       "temperature",
       "tool_choice",
       "tools",
-      "top_k",
       "top_p"
     ],
     "default_parameters": {
-      "temperature": null,
-      "top_p": null,
-      "frequency_penalty": null
+      "temperature": 0.7,
+      "top_p": 0.8,
+      "top_k": 20,
+      "frequency_penalty": null,
+      "presence_penalty": null,
+      "repetition_penalty": 1
     },
     "expiration_date": null
   },
@@ -3069,7 +4609,7 @@
     "top_provider": {
       "context_length": 200000,
       "max_completion_tokens": 64000,
-      "is_moderated": false
+      "is_moderated": true
     },
     "per_request_limits": null,
     "supported_parameters": [
@@ -3440,12 +4980,8 @@
       "instruct_type": null
     },
     "pricing": {
-      "prompt": "0",
-      "completion": "0",
-      "request": "0",
-      "image": "0",
-      "web_search": "0",
-      "internal_reasoning": "0"
+      "prompt": "0.00000013",
+      "completion": "0.00000156"
     },
     "top_provider": {
       "context_length": 131072,
@@ -3472,7 +5008,11 @@
     ],
     "default_parameters": {
       "temperature": 0.8,
-      "top_p": 0.95
+      "top_p": 0.95,
+      "top_k": 20,
+      "frequency_penalty": null,
+      "presence_penalty": null,
+      "repetition_penalty": 1
     },
     "expiration_date": null
   },
@@ -3525,7 +5065,10 @@
     "default_parameters": {
       "temperature": 0.7,
       "top_p": 0.8,
-      "frequency_penalty": null
+      "top_k": 20,
+      "frequency_penalty": null,
+      "presence_penalty": null,
+      "repetition_penalty": 1
     },
     "expiration_date": null
   },
@@ -3581,11 +5124,11 @@
   {
     "id": "z-ai/glm-4.6",
     "canonical_slug": "z-ai/glm-4.6",
-    "hugging_face_id": "",
+    "hugging_face_id": "zai-org/GLM-4.6",
     "name": "Z.ai: GLM 4.6",
     "created": 1759235576,
     "description": "Compared with GLM-4.5, this generation brings several key improvements:\n\nLonger context window: The context window has been expanded from 128K to 200K tokens, enabling the model to handle more complex agentic tasks.\nSuperior coding performance: The model achieves higher scores on code benchmarks and demonstrates better real-world performance in applications such as Claude Code、Cline、Roo Code and Kilo Code, including improvements in generating visually polished front-end pages.\nAdvanced reasoning: GLM-4.6 shows a clear improvement in reasoning performance and supports tool use during inference, leading to stronger overall capability.\nMore capable agents: GLM-4.6 exhibits stronger performance in tool using and search-based agents, and integrates more effectively within agent frameworks.\nRefined writing: Better aligns with human preferences in style and readability, and performs more naturally in role-playing scenarios.",
-    "context_length": 202752,
+    "context_length": 204800,
     "architecture": {
       "modality": "text->text",
       "input_modalities": [
@@ -3598,13 +5141,12 @@
       "instruct_type": null
     },
     "pricing": {
-      "prompt": "0.00000035",
-      "completion": "0.0000015",
-      "input_cache_read": "0.000000175"
+      "prompt": "0.00000039",
+      "completion": "0.0000019"
     },
     "top_provider": {
-      "context_length": 202752,
-      "max_completion_tokens": 65536,
+      "context_length": 204800,
+      "max_completion_tokens": 204800,
       "is_moderated": false
     },
     "per_request_limits": null,
@@ -3630,61 +5172,10 @@
     "default_parameters": {
       "temperature": 0.6,
       "top_p": null,
-      "frequency_penalty": null
-    },
-    "expiration_date": null
-  },
-  {
-    "id": "z-ai/glm-4.6:exacto",
-    "canonical_slug": "z-ai/glm-4.6",
-    "hugging_face_id": "",
-    "name": "Z.ai: GLM 4.6 (exacto)",
-    "created": 1759235576,
-    "description": "Compared with GLM-4.5, this generation brings several key improvements:\n\nLonger context window: The context window has been expanded from 128K to 200K tokens, enabling the model to handle more complex agentic tasks.\nSuperior coding performance: The model achieves higher scores on code benchmarks and demonstrates better real-world performance in applications such as Claude Code、Cline、Roo Code and Kilo Code, including improvements in generating visually polished front-end pages.\nAdvanced reasoning: GLM-4.6 shows a clear improvement in reasoning performance and supports tool use during inference, leading to stronger overall capability.\nMore capable agents: GLM-4.6 exhibits stronger performance in tool using and search-based agents, and integrates more effectively within agent frameworks.\nRefined writing: Better aligns with human preferences in style and readability, and performs more naturally in role-playing scenarios.",
-    "context_length": 204800,
-    "architecture": {
-      "modality": "text->text",
-      "input_modalities": [
-        "text"
-      ],
-      "output_modalities": [
-        "text"
-      ],
-      "tokenizer": "Other",
-      "instruct_type": null
-    },
-    "pricing": {
-      "prompt": "0.00000044",
-      "completion": "0.00000176",
-      "input_cache_read": "0.00000011"
-    },
-    "top_provider": {
-      "context_length": 204800,
-      "max_completion_tokens": 131072,
-      "is_moderated": false
-    },
-    "per_request_limits": null,
-    "supported_parameters": [
-      "frequency_penalty",
-      "include_reasoning",
-      "max_tokens",
-      "presence_penalty",
-      "reasoning",
-      "repetition_penalty",
-      "response_format",
-      "seed",
-      "stop",
-      "structured_outputs",
-      "temperature",
-      "tool_choice",
-      "tools",
-      "top_k",
-      "top_p"
-    ],
-    "default_parameters": {
-      "temperature": 0.6,
-      "top_p": null,
-      "frequency_penalty": null
+      "top_k": null,
+      "frequency_penalty": null,
+      "presence_penalty": null,
+      "repetition_penalty": null
     },
     "expiration_date": null
   },
@@ -3738,7 +5229,10 @@
     "default_parameters": {
       "temperature": 1,
       "top_p": 1,
-      "frequency_penalty": null
+      "top_k": null,
+      "frequency_penalty": null,
+      "presence_penalty": null,
+      "repetition_penalty": null
     },
     "expiration_date": null
   },
@@ -3774,7 +5268,9 @@
     "supported_parameters": [
       "frequency_penalty",
       "include_reasoning",
+      "logit_bias",
       "max_tokens",
+      "min_p",
       "presence_penalty",
       "reasoning",
       "repetition_penalty",
@@ -3794,64 +5290,6 @@
       "frequency_penalty": null
     },
     "expiration_date": null
-  },
-  {
-    "id": "google/gemini-2.5-flash-preview-09-2025",
-    "canonical_slug": "google/gemini-2.5-flash-preview-09-2025",
-    "hugging_face_id": "",
-    "name": "Google: Gemini 2.5 Flash Preview 09-2025",
-    "created": 1758820178,
-    "description": "Gemini 2.5 Flash Preview September 2025 Checkpoint is Google's state-of-the-art workhorse model, specifically designed for advanced reasoning, coding, mathematics, and scientific tasks. It includes built-in \"thinking\" capabilities, enabling it to provide responses with greater accuracy and nuanced context handling. \n\nAdditionally, Gemini 2.5 Flash is configurable through the \"max tokens for reasoning\" parameter, as described in the documentation (https://openrouter.ai/docs/use-cases/reasoning-tokens#max-tokens-for-reasoning).",
-    "context_length": 1048576,
-    "architecture": {
-      "modality": "text+image+file+audio+video->text",
-      "input_modalities": [
-        "image",
-        "file",
-        "text",
-        "audio",
-        "video"
-      ],
-      "output_modalities": [
-        "text"
-      ],
-      "tokenizer": "Gemini",
-      "instruct_type": null
-    },
-    "pricing": {
-      "prompt": "0.0000003",
-      "completion": "0.0000025",
-      "image": "0.0000003",
-      "audio": "0.000001",
-      "internal_reasoning": "0.0000025",
-      "input_cache_read": "0.00000003",
-      "input_cache_write": "0.00000008333333333333334"
-    },
-    "top_provider": {
-      "context_length": 1048576,
-      "max_completion_tokens": 65536,
-      "is_moderated": false
-    },
-    "per_request_limits": null,
-    "supported_parameters": [
-      "include_reasoning",
-      "max_tokens",
-      "reasoning",
-      "response_format",
-      "seed",
-      "stop",
-      "structured_outputs",
-      "temperature",
-      "tool_choice",
-      "tools",
-      "top_p"
-    ],
-    "default_parameters": {
-      "temperature": null,
-      "top_p": null,
-      "frequency_penalty": null
-    },
-    "expiration_date": "2026-02-17"
   },
   {
     "id": "google/gemini-2.5-flash-lite-preview-09-2025",
@@ -3887,7 +5325,7 @@
     },
     "top_provider": {
       "context_length": 1048576,
-      "max_completion_tokens": 65535,
+      "max_completion_tokens": 65536,
       "is_moderated": false
     },
     "per_request_limits": null,
@@ -3932,12 +5370,8 @@
       "instruct_type": null
     },
     "pricing": {
-      "prompt": "0",
-      "completion": "0",
-      "request": "0",
-      "image": "0",
-      "web_search": "0",
-      "internal_reasoning": "0"
+      "prompt": "0.00000026",
+      "completion": "0.0000026"
     },
     "top_provider": {
       "context_length": 131072,
@@ -3965,7 +5399,10 @@
     "default_parameters": {
       "temperature": 0.8,
       "top_p": 0.95,
-      "frequency_penalty": null
+      "top_k": 20,
+      "frequency_penalty": null,
+      "presence_penalty": null,
+      "repetition_penalty": 1
     },
     "expiration_date": null
   },
@@ -4003,6 +5440,7 @@
     "supported_parameters": [
       "frequency_penalty",
       "logit_bias",
+      "logprobs",
       "max_tokens",
       "min_p",
       "presence_penalty",
@@ -4015,6 +5453,7 @@
       "tool_choice",
       "tools",
       "top_k",
+      "top_logprobs",
       "top_p"
     ],
     "default_parameters": {
@@ -4044,13 +5483,13 @@
       "instruct_type": null
     },
     "pricing": {
-      "prompt": "0.0000012",
-      "completion": "0.000006",
-      "input_cache_read": "0.00000024"
+      "prompt": "0.00000078",
+      "completion": "0.0000039",
+      "input_cache_read": "0.000000156"
     },
     "top_provider": {
       "context_length": 262144,
-      "max_completion_tokens": 65536,
+      "max_completion_tokens": 32768,
       "is_moderated": false
     },
     "per_request_limits": null,
@@ -4091,9 +5530,9 @@
       "instruct_type": null
     },
     "pricing": {
-      "prompt": "0.000001",
-      "completion": "0.000005",
-      "input_cache_read": "0.0000002"
+      "prompt": "0.00000065",
+      "completion": "0.00000325",
+      "input_cache_read": "0.00000013"
     },
     "top_provider": {
       "context_length": 1000000,
@@ -4168,61 +5607,6 @@
     "expiration_date": null
   },
   {
-    "id": "deepseek/deepseek-v3.1-terminus:exacto",
-    "canonical_slug": "deepseek/deepseek-v3.1-terminus",
-    "hugging_face_id": "deepseek-ai/DeepSeek-V3.1-Terminus",
-    "name": "DeepSeek: DeepSeek V3.1 Terminus (exacto)",
-    "created": 1758548275,
-    "description": "DeepSeek-V3.1 Terminus is an update to [DeepSeek V3.1](/deepseek/deepseek-chat-v3.1) that maintains the model's original capabilities while addressing issues reported by users, including language consistency and agent capabilities, further optimizing the model's performance in coding and search agents. It is a large hybrid reasoning model (671B parameters, 37B active) that supports both thinking and non-thinking modes. It extends the DeepSeek-V3 base with a two-phase long-context training process, reaching up to 128K tokens, and uses FP8 microscaling for efficient inference. Users can control the reasoning behaviour with the `reasoning` `enabled` boolean. [Learn more in our docs](https://openrouter.ai/docs/use-cases/reasoning-tokens#enable-reasoning-with-default-config)\n\nThe model improves tool use, code generation, and reasoning efficiency, achieving performance comparable to DeepSeek-R1 on difficult benchmarks while responding more quickly. It supports structured tool calling, code agents, and search agents, making it suitable for research, coding, and agentic workflows. ",
-    "context_length": 163840,
-    "architecture": {
-      "modality": "text->text",
-      "input_modalities": [
-        "text"
-      ],
-      "output_modalities": [
-        "text"
-      ],
-      "tokenizer": "DeepSeek",
-      "instruct_type": "deepseek-v3.1"
-    },
-    "pricing": {
-      "prompt": "0.00000021",
-      "completion": "0.00000079",
-      "input_cache_read": "0.000000168"
-    },
-    "top_provider": {
-      "context_length": 163840,
-      "max_completion_tokens": null,
-      "is_moderated": false
-    },
-    "per_request_limits": null,
-    "supported_parameters": [
-      "frequency_penalty",
-      "include_reasoning",
-      "max_tokens",
-      "min_p",
-      "presence_penalty",
-      "reasoning",
-      "repetition_penalty",
-      "response_format",
-      "seed",
-      "stop",
-      "structured_outputs",
-      "temperature",
-      "tool_choice",
-      "tools",
-      "top_k",
-      "top_p"
-    ],
-    "default_parameters": {
-      "temperature": null,
-      "top_p": null,
-      "frequency_penalty": null
-    },
-    "expiration_date": null
-  },
-  {
     "id": "deepseek/deepseek-v3.1-terminus",
     "canonical_slug": "deepseek/deepseek-v3.1-terminus",
     "hugging_face_id": "deepseek-ai/DeepSeek-V3.1-Terminus",
@@ -4255,6 +5639,7 @@
     "supported_parameters": [
       "frequency_penalty",
       "include_reasoning",
+      "logit_bias",
       "max_tokens",
       "min_p",
       "presence_penalty",
@@ -4361,14 +5746,22 @@
     },
     "per_request_limits": null,
     "supported_parameters": [
+      "frequency_penalty",
       "include_reasoning",
+      "logit_bias",
       "max_tokens",
+      "min_p",
+      "presence_penalty",
       "reasoning",
+      "repetition_penalty",
       "response_format",
+      "seed",
+      "stop",
       "structured_outputs",
       "temperature",
       "tool_choice",
       "tools",
+      "top_k",
       "top_p"
     ],
     "default_parameters": {
@@ -4398,9 +5791,9 @@
       "instruct_type": null
     },
     "pricing": {
-      "prompt": "0.0000003",
-      "completion": "0.0000015",
-      "input_cache_read": "0.00000006"
+      "prompt": "0.000000195",
+      "completion": "0.000000975",
+      "input_cache_read": "0.000000039"
     },
     "top_provider": {
       "context_length": 1000000,
@@ -4432,7 +5825,7 @@
     "name": "Qwen: Qwen3 Next 80B A3B Thinking",
     "created": 1757612284,
     "description": "Qwen3-Next-80B-A3B-Thinking is a reasoning-first chat model in the Qwen3-Next line that outputs structured “thinking” traces by default. It’s designed for hard multi-step problems; math proofs, code synthesis/debugging, logic, and agentic planning, and reports strong results across knowledge, reasoning, coding, alignment, and multilingual evaluations. Compared with prior Qwen3 variants, it emphasizes stability under long chains of thought and efficient scaling during inference, and it is tuned to follow complex instructions while reducing repetitive or off-task behavior.\n\nThe model is suitable for agent frameworks and tool use (function calling), retrieval-heavy workflows, and standardized benchmarking where step-by-step solutions are required. It supports long, detailed completions and leverages throughput-oriented techniques (e.g., multi-token prediction) for faster generation. Note that it operates in thinking-only mode.",
-    "context_length": 128000,
+    "context_length": 131072,
     "architecture": {
       "modality": "text->text",
       "input_modalities": [
@@ -4445,21 +5838,19 @@
       "instruct_type": null
     },
     "pricing": {
-      "prompt": "0.00000015",
-      "completion": "0.0000012"
+      "prompt": "0.0000000975",
+      "completion": "0.00000078"
     },
     "top_provider": {
-      "context_length": 128000,
-      "max_completion_tokens": null,
+      "context_length": 131072,
+      "max_completion_tokens": 32768,
       "is_moderated": false
     },
     "per_request_limits": null,
     "supported_parameters": [
       "frequency_penalty",
       "include_reasoning",
-      "logit_bias",
       "max_tokens",
-      "min_p",
       "presence_penalty",
       "reasoning",
       "repetition_penalty",
@@ -4575,13 +5966,13 @@
     "expiration_date": null
   },
   {
-    "id": "qwen/qwen-plus-2025-07-28",
-    "canonical_slug": "qwen/qwen-plus-2025-07-28",
-    "hugging_face_id": "",
-    "name": "Qwen: Qwen Plus 0728",
-    "created": 1757347599,
-    "description": "Qwen Plus 0728, based on the Qwen3 foundation model, is a 1 million context hybrid reasoning model with a balanced performance, speed, and cost combination.",
-    "context_length": 1000000,
+    "id": "meituan/longcat-flash-chat",
+    "canonical_slug": "meituan/longcat-flash-chat",
+    "hugging_face_id": "meituan-longcat/LongCat-Flash-Chat",
+    "name": "Meituan: LongCat Flash Chat",
+    "created": 1757427658,
+    "description": "LongCat-Flash-Chat is a large-scale Mixture-of-Experts (MoE) model with 560B total parameters, of which 18.6B–31.3B (≈27B on average) are dynamically activated per input. It introduces a shortcut-connected MoE design to reduce communication overhead and achieve high throughput while maintaining training stability through advanced scaling strategies such as hyperparameter transfer, deterministic computation, and multi-stage optimization.\n\nThis release, LongCat-Flash-Chat, is a non-thinking foundation model optimized for conversational and agentic tasks. It supports long context windows up to 128K tokens and shows competitive performance across reasoning, coding, instruction following, and domain benchmarks, with particular strengths in tool use and complex multi-step interactions.",
+    "context_length": 131072,
     "architecture": {
       "modality": "text->text",
       "input_modalities": [
@@ -4590,35 +5981,38 @@
       "output_modalities": [
         "text"
       ],
-      "tokenizer": "Qwen3",
+      "tokenizer": "Other",
       "instruct_type": null
     },
     "pricing": {
-      "prompt": "0.0000004",
-      "completion": "0.0000012"
+      "prompt": "0.0000002",
+      "completion": "0.0000008",
+      "input_cache_read": "0.0000002"
     },
     "top_provider": {
-      "context_length": 1000000,
-      "max_completion_tokens": 32768,
+      "context_length": 131072,
+      "max_completion_tokens": 131072,
       "is_moderated": false
     },
     "per_request_limits": null,
     "supported_parameters": [
+      "frequency_penalty",
+      "logit_bias",
       "max_tokens",
+      "min_p",
       "presence_penalty",
+      "repetition_penalty",
       "response_format",
       "seed",
+      "stop",
       "structured_outputs",
       "temperature",
       "tool_choice",
       "tools",
+      "top_k",
       "top_p"
     ],
-    "default_parameters": {
-      "temperature": null,
-      "top_p": null,
-      "frequency_penalty": null
-    },
+    "default_parameters": {},
     "expiration_date": null
   },
   {
@@ -4641,8 +6035,8 @@
       "instruct_type": null
     },
     "pricing": {
-      "prompt": "0.0000004",
-      "completion": "0.0000012"
+      "prompt": "0.00000026",
+      "completion": "0.00000078"
     },
     "top_provider": {
       "context_length": 1000000,
@@ -4655,6 +6049,53 @@
       "max_tokens",
       "presence_penalty",
       "reasoning",
+      "response_format",
+      "seed",
+      "structured_outputs",
+      "temperature",
+      "tool_choice",
+      "tools",
+      "top_p"
+    ],
+    "default_parameters": {
+      "temperature": null,
+      "top_p": null,
+      "frequency_penalty": null
+    },
+    "expiration_date": null
+  },
+  {
+    "id": "qwen/qwen-plus-2025-07-28",
+    "canonical_slug": "qwen/qwen-plus-2025-07-28",
+    "hugging_face_id": "",
+    "name": "Qwen: Qwen Plus 0728",
+    "created": 1757347599,
+    "description": "Qwen Plus 0728, based on the Qwen3 foundation model, is a 1 million context hybrid reasoning model with a balanced performance, speed, and cost combination.",
+    "context_length": 1000000,
+    "architecture": {
+      "modality": "text->text",
+      "input_modalities": [
+        "text"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "tokenizer": "Qwen3",
+      "instruct_type": null
+    },
+    "pricing": {
+      "prompt": "0.00000026",
+      "completion": "0.00000078"
+    },
+    "top_provider": {
+      "context_length": 1000000,
+      "max_completion_tokens": 32768,
+      "is_moderated": false
+    },
+    "per_request_limits": null,
+    "supported_parameters": [
+      "max_tokens",
+      "presence_penalty",
       "response_format",
       "seed",
       "structured_outputs",
@@ -4711,7 +6152,11 @@
       "tools",
       "top_p"
     ],
-    "default_parameters": {},
+    "default_parameters": {
+      "temperature": null,
+      "top_p": null,
+      "frequency_penalty": null
+    },
     "expiration_date": null
   },
   {
@@ -4746,7 +6191,6 @@
     "supported_parameters": [
       "frequency_penalty",
       "include_reasoning",
-      "logit_bias",
       "max_tokens",
       "min_p",
       "presence_penalty",
@@ -4761,7 +6205,11 @@
       "top_k",
       "top_p"
     ],
-    "default_parameters": {},
+    "default_parameters": {
+      "temperature": null,
+      "top_p": null,
+      "frequency_penalty": null
+    },
     "expiration_date": null
   },
   {
@@ -4771,7 +6219,7 @@
     "name": "MoonshotAI: Kimi K2 0905",
     "created": 1757021147,
     "description": "Kimi K2 0905 is the September update of [Kimi K2 0711](moonshotai/kimi-k2). It is a large-scale Mixture-of-Experts (MoE) language model developed by Moonshot AI, featuring 1 trillion total parameters with 32 billion active per forward pass. It supports long-context inference up to 256k tokens, extended from the previous 128k.\n\nThis update improves agentic coding with higher accuracy and better generalization across scaffolds, and enhances frontend coding with more aesthetic and functional outputs for web, 3D, and related tasks. Kimi K2 is optimized for agentic capabilities, including advanced tool use, reasoning, and code synthesis. It excels across coding (LiveCodeBench, SWE-bench), reasoning (ZebraLogic, GPQA), and tool-use (Tau2, AceBench) benchmarks. The model is trained with a novel stack incorporating the MuonClip optimizer for stable large-scale MoE training.",
-    "context_length": 262144,
+    "context_length": 131072,
     "architecture": {
       "modality": "text->text",
       "input_modalities": [
@@ -4784,13 +6232,13 @@
       "instruct_type": null
     },
     "pricing": {
-      "prompt": "0.00000039",
-      "completion": "0.0000019",
-      "input_cache_read": "0.000000195"
+      "prompt": "0.0000004",
+      "completion": "0.000002",
+      "input_cache_read": "0.00000015"
     },
     "top_provider": {
-      "context_length": 262144,
-      "max_completion_tokens": 262144,
+      "context_length": 131072,
+      "max_completion_tokens": null,
       "is_moderated": false
     },
     "per_request_limits": null,
@@ -4817,58 +6265,13 @@
     "expiration_date": null
   },
   {
-    "id": "moonshotai/kimi-k2-0905:exacto",
-    "canonical_slug": "moonshotai/kimi-k2-0905",
-    "hugging_face_id": "moonshotai/Kimi-K2-Instruct-0905",
-    "name": "MoonshotAI: Kimi K2 0905 (exacto)",
-    "created": 1757021147,
-    "description": "Kimi K2 0905 is the September update of [Kimi K2 0711](moonshotai/kimi-k2). It is a large-scale Mixture-of-Experts (MoE) language model developed by Moonshot AI, featuring 1 trillion total parameters with 32 billion active per forward pass. It supports long-context inference up to 256k tokens, extended from the previous 128k.\n\nThis update improves agentic coding with higher accuracy and better generalization across scaffolds, and enhances frontend coding with more aesthetic and functional outputs for web, 3D, and related tasks. Kimi K2 is optimized for agentic capabilities, including advanced tool use, reasoning, and code synthesis. It excels across coding (LiveCodeBench, SWE-bench), reasoning (ZebraLogic, GPQA), and tool-use (Tau2, AceBench) benchmarks. The model is trained with a novel stack incorporating the MuonClip optimizer for stable large-scale MoE training.",
-    "context_length": 262144,
-    "architecture": {
-      "modality": "text->text",
-      "input_modalities": [
-        "text"
-      ],
-      "output_modalities": [
-        "text"
-      ],
-      "tokenizer": "Other",
-      "instruct_type": null
-    },
-    "pricing": {
-      "prompt": "0.0000006",
-      "completion": "0.0000025"
-    },
-    "top_provider": {
-      "context_length": 262144,
-      "max_completion_tokens": null,
-      "is_moderated": false
-    },
-    "per_request_limits": null,
-    "supported_parameters": [
-      "frequency_penalty",
-      "max_tokens",
-      "presence_penalty",
-      "response_format",
-      "seed",
-      "stop",
-      "structured_outputs",
-      "temperature",
-      "tool_choice",
-      "tools",
-      "top_p"
-    ],
-    "default_parameters": {},
-    "expiration_date": null
-  },
-  {
     "id": "qwen/qwen3-30b-a3b-thinking-2507",
     "canonical_slug": "qwen/qwen3-30b-a3b-thinking-2507",
     "hugging_face_id": "Qwen/Qwen3-30B-A3B-Thinking-2507",
     "name": "Qwen: Qwen3 30B A3B Thinking 2507",
     "created": 1756399192,
     "description": "Qwen3-30B-A3B-Thinking-2507 is a 30B parameter Mixture-of-Experts reasoning model optimized for complex tasks requiring extended multi-step thinking. The model is designed specifically for “thinking mode,” where internal reasoning traces are separated from final answers.\n\nCompared to earlier Qwen3-30B releases, this version improves performance across logical reasoning, mathematics, science, coding, and multilingual benchmarks. It also demonstrates stronger instruction following, tool use, and alignment with human preferences. With higher reasoning efficiency and extended output budgets, it is best suited for advanced research, competitive problem solving, and agentic applications requiring structured long-context reasoning.",
-    "context_length": 32768,
+    "context_length": 131072,
     "architecture": {
       "modality": "text->text",
       "input_modalities": [
@@ -4881,24 +6284,28 @@
       "instruct_type": null
     },
     "pricing": {
-      "prompt": "0.000000051",
-      "completion": "0.00000034"
+      "prompt": "0.00000008",
+      "completion": "0.0000004",
+      "input_cache_read": "0.00000008"
     },
     "top_provider": {
-      "context_length": 32768,
-      "max_completion_tokens": null,
+      "context_length": 131072,
+      "max_completion_tokens": 131072,
       "is_moderated": false
     },
     "per_request_limits": null,
     "supported_parameters": [
       "frequency_penalty",
       "include_reasoning",
+      "logit_bias",
       "max_tokens",
+      "min_p",
       "presence_penalty",
       "reasoning",
       "repetition_penalty",
       "response_format",
       "seed",
+      "stop",
       "structured_outputs",
       "temperature",
       "tool_choice",
@@ -4953,56 +6360,6 @@
       "tool_choice",
       "tools",
       "top_logprobs",
-      "top_p"
-    ],
-    "default_parameters": {},
-    "expiration_date": null
-  },
-  {
-    "id": "nousresearch/hermes-4-70b",
-    "canonical_slug": "nousresearch/hermes-4-70b",
-    "hugging_face_id": "NousResearch/Hermes-4-70B",
-    "name": "Nous: Hermes 4 70B",
-    "created": 1756236182,
-    "description": "Hermes 4 70B is a hybrid reasoning model from Nous Research, built on Meta-Llama-3.1-70B. It introduces the same hybrid mode as the larger 405B release, allowing the model to either respond directly or generate explicit <think>...</think> reasoning traces before answering. Users can control the reasoning behaviour with the `reasoning` `enabled` boolean. [Learn more in our docs](https://openrouter.ai/docs/use-cases/reasoning-tokens#enable-reasoning-with-default-config)\n\nThis 70B variant is trained with the expanded post-training corpus (~60B tokens) emphasizing verified reasoning data, leading to improvements in mathematics, coding, STEM, logic, and structured outputs while maintaining general assistant performance. It supports JSON mode, schema adherence, function calling, and tool use, and is designed for greater steerability with reduced refusal rates.",
-    "context_length": 131072,
-    "architecture": {
-      "modality": "text->text",
-      "input_modalities": [
-        "text"
-      ],
-      "output_modalities": [
-        "text"
-      ],
-      "tokenizer": "Llama3",
-      "instruct_type": null
-    },
-    "pricing": {
-      "prompt": "0.00000011",
-      "completion": "0.00000038",
-      "input_cache_read": "0.000000055"
-    },
-    "top_provider": {
-      "context_length": 131072,
-      "max_completion_tokens": 131072,
-      "is_moderated": false
-    },
-    "per_request_limits": null,
-    "supported_parameters": [
-      "frequency_penalty",
-      "include_reasoning",
-      "max_tokens",
-      "presence_penalty",
-      "reasoning",
-      "repetition_penalty",
-      "response_format",
-      "seed",
-      "stop",
-      "structured_outputs",
-      "temperature",
-      "tool_choice",
-      "tools",
-      "top_k",
       "top_p"
     ],
     "default_parameters": {},
@@ -5138,7 +6495,8 @@
     },
     "pricing": {
       "prompt": "0.0000004",
-      "completion": "0.000002"
+      "completion": "0.000002",
+      "input_cache_read": "0.00000004"
     },
     "top_provider": {
       "context_length": 131072,
@@ -5403,7 +6761,10 @@
     "default_parameters": {
       "temperature": null,
       "top_p": null,
-      "frequency_penalty": null
+      "top_k": null,
+      "frequency_penalty": null,
+      "presence_penalty": null,
+      "repetition_penalty": null
     },
     "expiration_date": null
   },
@@ -5450,7 +6811,14 @@
       "tool_choice",
       "tools"
     ],
-    "default_parameters": {},
+    "default_parameters": {
+      "temperature": null,
+      "top_p": null,
+      "top_k": null,
+      "frequency_penalty": null,
+      "presence_penalty": null,
+      "repetition_penalty": null
+    },
     "expiration_date": null
   },
   {
@@ -5496,7 +6864,14 @@
       "tool_choice",
       "tools"
     ],
-    "default_parameters": {},
+    "default_parameters": {
+      "temperature": null,
+      "top_p": null,
+      "top_k": null,
+      "frequency_penalty": null,
+      "presence_penalty": null,
+      "repetition_penalty": null
+    },
     "expiration_date": null
   },
   {
@@ -5604,60 +6979,6 @@
     "expiration_date": null
   },
   {
-    "id": "openai/gpt-oss-120b:exacto",
-    "canonical_slug": "openai/gpt-oss-120b",
-    "hugging_face_id": "openai/gpt-oss-120b",
-    "name": "OpenAI: gpt-oss-120b (exacto)",
-    "created": 1754414231,
-    "description": "gpt-oss-120b is an open-weight, 117B-parameter Mixture-of-Experts (MoE) language model from OpenAI designed for high-reasoning, agentic, and general-purpose production use cases. It activates 5.1B parameters per forward pass and is optimized to run on a single H100 GPU with native MXFP4 quantization. The model supports configurable reasoning depth, full chain-of-thought access, and native tool use, including function calling, browsing, and structured output generation.",
-    "context_length": 131072,
-    "architecture": {
-      "modality": "text->text",
-      "input_modalities": [
-        "text"
-      ],
-      "output_modalities": [
-        "text"
-      ],
-      "tokenizer": "GPT",
-      "instruct_type": null
-    },
-    "pricing": {
-      "prompt": "0.000000039",
-      "completion": "0.00000019"
-    },
-    "top_provider": {
-      "context_length": 131072,
-      "max_completion_tokens": null,
-      "is_moderated": false
-    },
-    "per_request_limits": null,
-    "supported_parameters": [
-      "frequency_penalty",
-      "include_reasoning",
-      "max_tokens",
-      "min_p",
-      "presence_penalty",
-      "reasoning",
-      "repetition_penalty",
-      "response_format",
-      "seed",
-      "stop",
-      "structured_outputs",
-      "temperature",
-      "tool_choice",
-      "tools",
-      "top_k",
-      "top_p"
-    ],
-    "default_parameters": {
-      "temperature": null,
-      "top_p": null,
-      "frequency_penalty": null
-    },
-    "expiration_date": null
-  },
-  {
     "id": "openai/gpt-oss-20b:free",
     "canonical_slug": "openai/gpt-oss-20b",
     "hugging_face_id": "openai/gpt-oss-20b",
@@ -5724,11 +7045,12 @@
     },
     "pricing": {
       "prompt": "0.00000003",
-      "completion": "0.00000014"
+      "completion": "0.00000011",
+      "input_cache_read": "0.000000015"
     },
     "top_provider": {
       "context_length": 131072,
-      "max_completion_tokens": null,
+      "max_completion_tokens": 131072,
       "is_moderated": false
     },
     "per_request_limits": null,
@@ -5736,6 +7058,7 @@
       "frequency_penalty",
       "include_reasoning",
       "logit_bias",
+      "logprobs",
       "max_tokens",
       "min_p",
       "presence_penalty",
@@ -5750,6 +7073,7 @@
       "tool_choice",
       "tools",
       "top_k",
+      "top_logprobs",
       "top_p"
     ],
     "default_parameters": {
@@ -5834,7 +7158,8 @@
     },
     "pricing": {
       "prompt": "0.0000003",
-      "completion": "0.0000009"
+      "completion": "0.0000009",
+      "input_cache_read": "0.00000003"
     },
     "top_provider": {
       "context_length": 256000,
@@ -5927,9 +7252,8 @@
       "instruct_type": null
     },
     "pricing": {
-      "prompt": "0.00000008",
-      "completion": "0.00000033",
-      "input_cache_read": "0.00000004"
+      "prompt": "0.00000009",
+      "completion": "0.0000003"
     },
     "top_provider": {
       "context_length": 262144,
@@ -5939,7 +7263,9 @@
     "per_request_limits": null,
     "supported_parameters": [
       "frequency_penalty",
+      "logit_bias",
       "max_tokens",
+      "min_p",
       "presence_penalty",
       "repetition_penalty",
       "response_format",
@@ -5975,13 +7301,13 @@
       "instruct_type": null
     },
     "pricing": {
-      "prompt": "0.00000035",
-      "completion": "0.00000155",
-      "input_cache_read": "0.000000175"
+      "prompt": "0.0000006",
+      "completion": "0.0000022",
+      "input_cache_read": "0.00000011"
     },
     "top_provider": {
       "context_length": 131072,
-      "max_completion_tokens": 65536,
+      "max_completion_tokens": 98304,
       "is_moderated": false
     },
     "per_request_limits": null,
@@ -6115,7 +7441,7 @@
     "name": "Qwen: Qwen3 235B A22B Thinking 2507",
     "created": 1753449557,
     "description": "Qwen3-235B-A22B-Thinking-2507 is a high-performance, open-weight Mixture-of-Experts (MoE) language model optimized for complex reasoning tasks. It activates 22B of its 235B parameters per forward pass and natively supports up to 262,144 tokens of context. This \"thinking-only\" variant enhances structured logical reasoning, mathematics, science, and long-form generation, showing strong benchmark performance across AIME, SuperGPQA, LiveCodeBench, and MMLU-Redux. It enforces a special reasoning mode (</think>) and is designed for high-token outputs (up to 81,920 tokens) in challenging domains.\n\nThe model is instruction-tuned and excels at step-by-step reasoning, tool use, agentic workflows, and multilingual tasks. This release represents the most capable open-source variant in the Qwen3-235B series, surpassing many closed models in structured reasoning use cases.",
-    "context_length": 262144,
+    "context_length": 131072,
     "architecture": {
       "modality": "text->text",
       "input_modalities": [
@@ -6128,13 +7454,12 @@
       "instruct_type": "qwen3"
     },
     "pricing": {
-      "prompt": "0.00000011",
-      "completion": "0.0000006",
-      "input_cache_read": "0.000000055"
+      "prompt": "0.0000001495",
+      "completion": "0.000001495"
     },
     "top_provider": {
-      "context_length": 262144,
-      "max_completion_tokens": 262144,
+      "context_length": 131072,
+      "max_completion_tokens": null,
       "is_moderated": false
     },
     "per_request_limits": null,
@@ -6301,54 +7626,6 @@
     "expiration_date": null
   },
   {
-    "id": "qwen/qwen3-coder:exacto",
-    "canonical_slug": "qwen/qwen3-coder-480b-a35b-07-25",
-    "hugging_face_id": "Qwen/Qwen3-Coder-480B-A35B-Instruct",
-    "name": "Qwen: Qwen3 Coder 480B A35B (exacto)",
-    "created": 1753230546,
-    "description": "Qwen3-Coder-480B-A35B-Instruct is a Mixture-of-Experts (MoE) code generation model developed by the Qwen team. It is optimized for agentic coding tasks such as function calling, tool use, and long-context reasoning over repositories. The model features 480 billion total parameters, with 35 billion active per forward pass (8 out of 160 experts).\n\nPricing for the Alibaba endpoints varies by context length. Once a request is greater than 128k input tokens, the higher pricing is used.",
-    "context_length": 262144,
-    "architecture": {
-      "modality": "text->text",
-      "input_modalities": [
-        "text"
-      ],
-      "output_modalities": [
-        "text"
-      ],
-      "tokenizer": "Qwen3",
-      "instruct_type": null
-    },
-    "pricing": {
-      "prompt": "0.00000022",
-      "completion": "0.0000018",
-      "input_cache_read": "0.000000022"
-    },
-    "top_provider": {
-      "context_length": 262144,
-      "max_completion_tokens": 65536,
-      "is_moderated": false
-    },
-    "per_request_limits": null,
-    "supported_parameters": [
-      "frequency_penalty",
-      "max_tokens",
-      "presence_penalty",
-      "repetition_penalty",
-      "response_format",
-      "seed",
-      "stop",
-      "structured_outputs",
-      "temperature",
-      "tool_choice",
-      "tools",
-      "top_k",
-      "top_p"
-    ],
-    "default_parameters": {},
-    "expiration_date": null
-  },
-  {
     "id": "google/gemini-2.5-flash-lite",
     "canonical_slug": "google/gemini-2.5-flash-lite",
     "hugging_face_id": "",
@@ -6454,7 +7731,6 @@
       "tool_choice",
       "tools",
       "top_k",
-      "top_logprobs",
       "top_p"
     ],
     "default_parameters": {},
@@ -6480,12 +7756,12 @@
       "instruct_type": null
     },
     "pricing": {
-      "prompt": "0.0000005",
-      "completion": "0.0000024"
+      "prompt": "0.00000057",
+      "completion": "0.0000023"
     },
     "top_provider": {
       "context_length": 131072,
-      "max_completion_tokens": null,
+      "max_completion_tokens": 131072,
       "is_moderated": false
     },
     "per_request_limits": null,
@@ -6493,7 +7769,6 @@
       "frequency_penalty",
       "logprobs",
       "max_tokens",
-      "min_p",
       "presence_penalty",
       "repetition_penalty",
       "response_format",
@@ -6531,7 +7806,8 @@
     },
     "pricing": {
       "prompt": "0.0000004",
-      "completion": "0.000002"
+      "completion": "0.000002",
+      "input_cache_read": "0.00000004"
     },
     "top_provider": {
       "context_length": 131072,
@@ -6578,7 +7854,8 @@
     },
     "pricing": {
       "prompt": "0.0000001",
-      "completion": "0.0000003"
+      "completion": "0.0000003",
+      "input_cache_read": "0.00000001"
     },
     "top_provider": {
       "context_length": 131072,
@@ -6673,9 +7950,9 @@
       "instruct_type": null
     },
     "pricing": {
-      "prompt": "0.00000025",
-      "completion": "0.00000085",
-      "input_cache_read": "0.000000125"
+      "prompt": "0.0000003",
+      "completion": "0.0000011",
+      "input_cache_read": "0.00000015"
     },
     "top_provider": {
       "context_length": 163840,
@@ -6724,33 +8001,30 @@
     },
     "pricing": {
       "prompt": "0.00000025",
-      "completion": "0.000001"
+      "completion": "0.00000075",
+      "input_cache_read": "0.000000025"
     },
     "top_provider": {
       "context_length": 128000,
-      "max_completion_tokens": 16384,
+      "max_completion_tokens": 32000,
       "is_moderated": false
     },
     "per_request_limits": null,
     "supported_parameters": [
-      "frequency_penalty",
       "max_tokens",
-      "presence_penalty",
       "response_format",
       "stop",
       "structured_outputs",
       "temperature",
       "tool_choice",
-      "tools",
-      "top_k",
-      "top_p"
+      "tools"
     ],
     "default_parameters": {
       "temperature": 0,
       "top_p": null,
       "frequency_penalty": null
     },
-    "expiration_date": null
+    "expiration_date": "2026-04-15"
   },
   {
     "id": "mistralai/mistral-small-3.2-24b-instruct",
@@ -6759,7 +8033,7 @@
     "name": "Mistral: Mistral Small 3.2 24B",
     "created": 1750443016,
     "description": "Mistral-Small-3.2-24B-Instruct-2506 is an updated 24B parameter model from Mistral optimized for instruction following, repetition reduction, and improved function calling. Compared to the 3.1 release, version 3.2 significantly improves accuracy on WildBench and Arena Hard, reduces infinite generations, and delivers gains in tool use and structured output tasks.\n\nIt supports image and text inputs with structured outputs, function/tool calling, and strong performance across coding (HumanEval+, MBPP), STEM (MMLU, MATH, GPQA), and vision benchmarks (ChartQA, DocVQA).",
-    "context_length": 131072,
+    "context_length": 128000,
     "architecture": {
       "modality": "text+image->text",
       "input_modalities": [
@@ -6773,13 +8047,12 @@
       "instruct_type": null
     },
     "pricing": {
-      "prompt": "0.00000006",
-      "completion": "0.00000018",
-      "input_cache_read": "0.00000003"
+      "prompt": "0.000000075",
+      "completion": "0.0000002"
     },
     "top_provider": {
-      "context_length": 131072,
-      "max_completion_tokens": 131072,
+      "context_length": 128000,
+      "max_completion_tokens": null,
       "is_moderated": false
     },
     "per_request_limits": null,
@@ -6849,7 +8122,11 @@
       "top_k",
       "top_p"
     ],
-    "default_parameters": {},
+    "default_parameters": {
+      "temperature": null,
+      "top_p": null,
+      "frequency_penalty": null
+    },
     "expiration_date": null
   },
   {
@@ -7192,9 +8469,9 @@
       "instruct_type": "deepseek-r1"
     },
     "pricing": {
-      "prompt": "0.0000004",
-      "completion": "0.00000175",
-      "input_cache_read": "0.0000002"
+      "prompt": "0.00000045",
+      "completion": "0.00000215",
+      "input_cache_read": "0.000000225"
     },
     "top_provider": {
       "context_length": 163840,
@@ -7206,7 +8483,6 @@
       "frequency_penalty",
       "include_reasoning",
       "logit_bias",
-      "logprobs",
       "max_tokens",
       "min_p",
       "presence_penalty",
@@ -7220,7 +8496,6 @@
       "tool_choice",
       "tools",
       "top_k",
-      "top_logprobs",
       "top_p"
     ],
     "default_parameters": {
@@ -7289,7 +8564,7 @@
     "name": "Anthropic: Claude Sonnet 4",
     "created": 1747930371,
     "description": "Claude Sonnet 4 significantly enhances the capabilities of its predecessor, Sonnet 3.7, excelling in both coding and reasoning tasks with improved precision and controllability. Achieving state-of-the-art performance on SWE-bench (72.7%), Sonnet 4 balances capability and computational efficiency, making it suitable for a broad range of applications from routine coding tasks to complex software development projects. Key enhancements include improved autonomous codebase navigation, reduced error rates in agent-driven workflows, and increased reliability in following intricate instructions. Sonnet 4 is optimized for practical everyday use, providing advanced reasoning capabilities while maintaining efficiency and responsiveness in diverse internal and external scenarios.\n\nRead more at the [blog post here](https://www.anthropic.com/news/claude-4)",
-    "context_length": 1000000,
+    "context_length": 200000,
     "architecture": {
       "modality": "text+image+file->text",
       "input_modalities": [
@@ -7311,9 +8586,9 @@
       "input_cache_write": "0.00000375"
     },
     "top_provider": {
-      "context_length": 1000000,
+      "context_length": 200000,
       "max_completion_tokens": 64000,
-      "is_moderated": false
+      "is_moderated": true
     },
     "per_request_limits": null,
     "supported_parameters": [
@@ -7332,56 +8607,6 @@
       "top_p": null,
       "frequency_penalty": null
     },
-    "expiration_date": null
-  },
-  {
-    "id": "nousresearch/deephermes-3-mistral-24b-preview",
-    "canonical_slug": "nousresearch/deephermes-3-mistral-24b-preview",
-    "hugging_face_id": "NousResearch/DeepHermes-3-Mistral-24B-Preview",
-    "name": "Nous: DeepHermes 3 Mistral 24B Preview",
-    "created": 1746830904,
-    "description": "DeepHermes 3 (Mistral 24B Preview) is an instruction-tuned language model by Nous Research based on Mistral-Small-24B, designed for chat, function calling, and advanced multi-turn reasoning. It introduces a dual-mode system that toggles between intuitive chat responses and structured “deep reasoning” mode using special system prompts. Fine-tuned via distillation from R1, it supports structured output (JSON mode) and function call syntax for agent-based applications.\n\nDeepHermes 3 supports a **reasoning toggle via system prompt**, allowing users to switch between fast, intuitive responses and deliberate, multi-step reasoning. When activated with the following specific system instruction, the model enters a *\"deep thinking\"* mode—generating extended chains of thought wrapped in `<think></think>` tags before delivering a final answer. \n\nSystem Prompt: You are a deep thinking AI, you may use extremely long chains of thought to deeply consider the problem and deliberate with yourself via systematic reasoning processes to help come to a correct solution prior to answering. You should enclose your thoughts and internal monologue inside <think> </think> tags, and then provide your solution or response to the problem.\n",
-    "context_length": 32768,
-    "architecture": {
-      "modality": "text->text",
-      "input_modalities": [
-        "text"
-      ],
-      "output_modalities": [
-        "text"
-      ],
-      "tokenizer": "Other",
-      "instruct_type": null
-    },
-    "pricing": {
-      "prompt": "0.00000002",
-      "completion": "0.0000001",
-      "input_cache_read": "0.00000001"
-    },
-    "top_provider": {
-      "context_length": 32768,
-      "max_completion_tokens": 32768,
-      "is_moderated": false
-    },
-    "per_request_limits": null,
-    "supported_parameters": [
-      "frequency_penalty",
-      "include_reasoning",
-      "max_tokens",
-      "presence_penalty",
-      "reasoning",
-      "repetition_penalty",
-      "response_format",
-      "seed",
-      "stop",
-      "structured_outputs",
-      "temperature",
-      "tool_choice",
-      "tools",
-      "top_k",
-      "top_p"
-    ],
-    "default_parameters": {},
     "expiration_date": null
   },
   {
@@ -7406,7 +8631,8 @@
     },
     "pricing": {
       "prompt": "0.0000004",
-      "completion": "0.000002"
+      "completion": "0.000002",
+      "input_cache_read": "0.00000004"
     },
     "top_provider": {
       "context_length": 131072,
@@ -7557,26 +8783,23 @@
     },
     "pricing": {
       "prompt": "0.00000025",
-      "completion": "0.000001"
+      "completion": "0.00000075",
+      "input_cache_read": "0.000000025"
     },
     "top_provider": {
       "context_length": 128000,
-      "max_completion_tokens": 16384,
+      "max_completion_tokens": 32000,
       "is_moderated": false
     },
     "per_request_limits": null,
     "supported_parameters": [
-      "frequency_penalty",
       "max_tokens",
-      "presence_penalty",
       "response_format",
       "stop",
       "structured_outputs",
       "temperature",
       "tool_choice",
-      "tools",
-      "top_k",
-      "top_p"
+      "tools"
     ],
     "default_parameters": {
       "temperature": 0,
@@ -7630,7 +8853,7 @@
       "top_p"
     ],
     "default_parameters": {},
-    "expiration_date": null
+    "expiration_date": "2026-03-29"
   },
   {
     "id": "qwen/qwen3-30b-a3b",
@@ -7652,9 +8875,8 @@
       "instruct_type": "qwen3"
     },
     "pricing": {
-      "prompt": "0.00000006",
-      "completion": "0.00000022",
-      "input_cache_read": "0.00000003"
+      "prompt": "0.00000008",
+      "completion": "0.00000028"
     },
     "top_provider": {
       "context_length": 40960,
@@ -7665,6 +8887,7 @@
     "supported_parameters": [
       "frequency_penalty",
       "include_reasoning",
+      "logprobs",
       "max_tokens",
       "min_p",
       "presence_penalty",
@@ -7678,6 +8901,7 @@
       "tool_choice",
       "tools",
       "top_k",
+      "top_logprobs",
       "top_p"
     ],
     "default_parameters": {
@@ -7694,7 +8918,7 @@
     "name": "Qwen: Qwen3 8B",
     "created": 1745876632,
     "description": "Qwen3-8B is a dense 8.2B parameter causal language model from the Qwen3 series, designed for both reasoning-heavy tasks and efficient dialogue. It supports seamless switching between \"thinking\" mode for math, coding, and logical inference, and \"non-thinking\" mode for general conversation. The model is fine-tuned for instruction-following, agent integration, creative writing, and multilingual use across 100+ languages and dialects. It natively supports a 32K token context window and can extend to 131K tokens with YaRN scaling.",
-    "context_length": 32000,
+    "context_length": 40960,
     "architecture": {
       "modality": "text->text",
       "input_modalities": [
@@ -7712,26 +8936,37 @@
       "input_cache_read": "0.00000005"
     },
     "top_provider": {
-      "context_length": 32000,
+      "context_length": 40960,
       "max_completion_tokens": 8192,
       "is_moderated": false
     },
     "per_request_limits": null,
     "supported_parameters": [
+      "frequency_penalty",
       "include_reasoning",
+      "logit_bias",
       "max_tokens",
+      "min_p",
+      "presence_penalty",
       "reasoning",
+      "repetition_penalty",
       "response_format",
+      "seed",
+      "stop",
       "structured_outputs",
       "temperature",
       "tool_choice",
       "tools",
+      "top_k",
       "top_p"
     ],
     "default_parameters": {
-      "temperature": null,
-      "top_p": null,
-      "frequency_penalty": null
+      "temperature": 0.6,
+      "top_p": 0.95,
+      "top_k": 20,
+      "frequency_penalty": null,
+      "presence_penalty": null,
+      "repetition_penalty": null
     },
     "expiration_date": null
   },
@@ -7755,9 +8990,8 @@
       "instruct_type": "qwen3"
     },
     "pricing": {
-      "prompt": "0.00000005",
-      "completion": "0.00000022",
-      "input_cache_read": "0.000000025"
+      "prompt": "0.00000006",
+      "completion": "0.00000024"
     },
     "top_provider": {
       "context_length": 40960,
@@ -7768,6 +9002,7 @@
     "supported_parameters": [
       "frequency_penalty",
       "include_reasoning",
+      "logprobs",
       "max_tokens",
       "min_p",
       "presence_penalty",
@@ -7781,6 +9016,7 @@
       "tool_choice",
       "tools",
       "top_k",
+      "top_logprobs",
       "top_p"
     ],
     "default_parameters": {},
@@ -7819,7 +9055,6 @@
     "supported_parameters": [
       "frequency_penalty",
       "include_reasoning",
-      "logprobs",
       "max_tokens",
       "min_p",
       "presence_penalty",
@@ -7833,7 +9068,6 @@
       "tool_choice",
       "tools",
       "top_k",
-      "top_logprobs",
       "top_p"
     ],
     "default_parameters": {},
@@ -7846,7 +9080,7 @@
     "name": "Qwen: Qwen3 235B A22B",
     "created": 1745875757,
     "description": "Qwen3-235B-A22B is a 235B parameter mixture-of-experts (MoE) model developed by Qwen, activating 22B parameters per forward pass. It supports seamless switching between a \"thinking\" mode for complex reasoning, math, and code tasks, and a \"non-thinking\" mode for general conversational efficiency. The model demonstrates strong reasoning ability, multilingual support (100+ languages and dialects), advanced instruction-following, and agent tool-calling capabilities. It natively handles a 32K token context window and extends up to 131K tokens using YaRN-based scaling.",
-    "context_length": 40960,
+    "context_length": 131072,
     "architecture": {
       "modality": "text->text",
       "input_modalities": [
@@ -7859,31 +9093,25 @@
       "instruct_type": "qwen3"
     },
     "pricing": {
-      "prompt": "0.0000003",
-      "completion": "0.0000012",
-      "input_cache_read": "0.00000015"
+      "prompt": "0.000000455",
+      "completion": "0.00000182"
     },
     "top_provider": {
-      "context_length": 40960,
-      "max_completion_tokens": 40960,
+      "context_length": 131072,
+      "max_completion_tokens": 8192,
       "is_moderated": false
     },
     "per_request_limits": null,
     "supported_parameters": [
-      "frequency_penalty",
       "include_reasoning",
       "max_tokens",
       "presence_penalty",
       "reasoning",
-      "repetition_penalty",
       "response_format",
       "seed",
-      "stop",
-      "structured_outputs",
       "temperature",
       "tool_choice",
       "tools",
-      "top_k",
       "top_p"
     ],
     "default_parameters": {},
@@ -8388,13 +9616,13 @@
       "instruct_type": null
     },
     "pricing": {
-      "prompt": "0.00000019",
-      "completion": "0.00000087",
-      "input_cache_read": "0.000000095"
+      "prompt": "0.0000002",
+      "completion": "0.00000077",
+      "input_cache_read": "0.000000135"
     },
     "top_provider": {
       "context_length": 163840,
-      "max_completion_tokens": 65536,
+      "max_completion_tokens": null,
       "is_moderated": false
     },
     "per_request_limits": null,
@@ -8467,160 +9695,7 @@
     "default_parameters": {
       "temperature": 0.3
     },
-    "expiration_date": null
-  },
-  {
-    "id": "mistralai/mistral-small-3.1-24b-instruct",
-    "canonical_slug": "mistralai/mistral-small-3.1-24b-instruct-2503",
-    "hugging_face_id": "mistralai/Mistral-Small-3.1-24B-Instruct-2503",
-    "name": "Mistral: Mistral Small 3.1 24B",
-    "created": 1742238937,
-    "description": "Mistral Small 3.1 24B Instruct is an upgraded variant of Mistral Small 3 (2501), featuring 24 billion parameters with advanced multimodal capabilities. It provides state-of-the-art performance in text-based reasoning and vision tasks, including image analysis, programming, mathematical reasoning, and multilingual support across dozens of languages. Equipped with an extensive 128k token context window and optimized for efficient local inference, it supports use cases such as conversational agents, function calling, long-document comprehension, and privacy-sensitive deployments. The updated version is [Mistral Small 3.2](mistralai/mistral-small-3.2-24b-instruct)",
-    "context_length": 131072,
-    "architecture": {
-      "modality": "text+image->text",
-      "input_modalities": [
-        "text",
-        "image"
-      ],
-      "output_modalities": [
-        "text"
-      ],
-      "tokenizer": "Mistral",
-      "instruct_type": null
-    },
-    "pricing": {
-      "prompt": "0.00000003",
-      "completion": "0.00000011",
-      "input_cache_read": "0.000000015"
-    },
-    "top_provider": {
-      "context_length": 131072,
-      "max_completion_tokens": 131072,
-      "is_moderated": false
-    },
-    "per_request_limits": null,
-    "supported_parameters": [
-      "frequency_penalty",
-      "max_tokens",
-      "presence_penalty",
-      "repetition_penalty",
-      "response_format",
-      "seed",
-      "stop",
-      "structured_outputs",
-      "temperature",
-      "tool_choice",
-      "tools",
-      "top_k",
-      "top_p"
-    ],
-    "default_parameters": {
-      "temperature": 0.3
-    },
-    "expiration_date": null
-  },
-  {
-    "id": "google/gemma-3-27b-it:free",
-    "canonical_slug": "google/gemma-3-27b-it",
-    "hugging_face_id": "google/gemma-3-27b-it",
-    "name": "Google: Gemma 3 27B (free)",
-    "created": 1741756359,
-    "description": "Gemma 3 introduces multimodality, supporting vision-language input and text outputs. It handles context windows up to 128k tokens, understands over 140 languages, and offers improved math, reasoning, and chat capabilities, including structured outputs and function calling. Gemma 3 27B is Google's latest open source model, successor to [Gemma 2](google/gemma-2-27b-it)",
-    "context_length": 131072,
-    "architecture": {
-      "modality": "text+image->text",
-      "input_modalities": [
-        "text",
-        "image"
-      ],
-      "output_modalities": [
-        "text"
-      ],
-      "tokenizer": "Gemini",
-      "instruct_type": "gemma"
-    },
-    "pricing": {
-      "prompt": "0",
-      "completion": "0"
-    },
-    "top_provider": {
-      "context_length": 131072,
-      "max_completion_tokens": 8192,
-      "is_moderated": false
-    },
-    "per_request_limits": null,
-    "supported_parameters": [
-      "max_tokens",
-      "response_format",
-      "seed",
-      "stop",
-      "temperature",
-      "tool_choice",
-      "tools",
-      "top_p"
-    ],
-    "default_parameters": {
-      "temperature": null,
-      "top_p": null,
-      "frequency_penalty": null
-    },
-    "expiration_date": null
-  },
-  {
-    "id": "google/gemma-3-27b-it",
-    "canonical_slug": "google/gemma-3-27b-it",
-    "hugging_face_id": "google/gemma-3-27b-it",
-    "name": "Google: Gemma 3 27B",
-    "created": 1741756359,
-    "description": "Gemma 3 introduces multimodality, supporting vision-language input and text outputs. It handles context windows up to 128k tokens, understands over 140 languages, and offers improved math, reasoning, and chat capabilities, including structured outputs and function calling. Gemma 3 27B is Google's latest open source model, successor to [Gemma 2](google/gemma-2-27b-it)",
-    "context_length": 128000,
-    "architecture": {
-      "modality": "text+image->text",
-      "input_modalities": [
-        "text",
-        "image"
-      ],
-      "output_modalities": [
-        "text"
-      ],
-      "tokenizer": "Gemini",
-      "instruct_type": "gemma"
-    },
-    "pricing": {
-      "prompt": "0.00000004",
-      "completion": "0.00000015",
-      "input_cache_read": "0.00000002"
-    },
-    "top_provider": {
-      "context_length": 128000,
-      "max_completion_tokens": 65536,
-      "is_moderated": false
-    },
-    "per_request_limits": null,
-    "supported_parameters": [
-      "frequency_penalty",
-      "logit_bias",
-      "max_tokens",
-      "min_p",
-      "presence_penalty",
-      "repetition_penalty",
-      "response_format",
-      "seed",
-      "stop",
-      "structured_outputs",
-      "temperature",
-      "tool_choice",
-      "tools",
-      "top_k",
-      "top_p"
-    ],
-    "default_parameters": {
-      "temperature": null,
-      "top_p": null,
-      "frequency_penalty": null
-    },
-    "expiration_date": null
+    "expiration_date": "2026-03-29"
   },
   {
     "id": "qwen/qwq-32b",
@@ -8629,7 +9704,7 @@
     "name": "Qwen: QwQ 32B",
     "created": 1741208814,
     "description": "QwQ is the reasoning model of the Qwen series. Compared with conventional instruction-tuned models, QwQ, which is capable of thinking and reasoning, can achieve significantly enhanced performance in downstream tasks, especially hard problems. QwQ-32B is the medium-sized reasoning model, which is capable of achieving competitive performance against state-of-the-art reasoning models, e.g., DeepSeek-R1, o1-mini.",
-    "context_length": 32768,
+    "context_length": 131072,
     "architecture": {
       "modality": "text->text",
       "input_modalities": [
@@ -8643,27 +9718,18 @@
     },
     "pricing": {
       "prompt": "0.00000015",
-      "completion": "0.0000004"
+      "completion": "0.00000058"
     },
     "top_provider": {
-      "context_length": 32768,
-      "max_completion_tokens": 32768,
+      "context_length": 131072,
+      "max_completion_tokens": 131072,
       "is_moderated": false
     },
     "per_request_limits": null,
     "supported_parameters": [
       "frequency_penalty",
       "include_reasoning",
-      "logit_bias",
-      "max_tokens",
-      "min_p",
-      "presence_penalty",
       "reasoning",
-      "repetition_penalty",
-      "response_format",
-      "seed",
-      "stop",
-      "structured_outputs",
       "temperature",
       "tool_choice",
       "tools",
@@ -8725,58 +9791,7 @@
       "top_p": null,
       "frequency_penalty": null
     },
-    "expiration_date": "2026-03-03"
-  },
-  {
-    "id": "anthropic/claude-3.7-sonnet:thinking",
-    "canonical_slug": "anthropic/claude-3-7-sonnet-20250219",
-    "hugging_face_id": "",
-    "name": "Anthropic: Claude 3.7 Sonnet (thinking)",
-    "created": 1740422110,
-    "description": "Claude 3.7 Sonnet is an advanced large language model with improved reasoning, coding, and problem-solving capabilities. It introduces a hybrid reasoning approach, allowing users to choose between rapid responses and extended, step-by-step processing for complex tasks. The model demonstrates notable improvements in coding, particularly in front-end development and full-stack updates, and excels in agentic workflows, where it can autonomously navigate multi-step processes. \n\nClaude 3.7 Sonnet maintains performance parity with its predecessor in standard mode while offering an extended reasoning mode for enhanced accuracy in math, coding, and instruction-following tasks.\n\nRead more at the [blog post here](https://www.anthropic.com/news/claude-3-7-sonnet)",
-    "context_length": 200000,
-    "architecture": {
-      "modality": "text+image+file->text",
-      "input_modalities": [
-        "text",
-        "image",
-        "file"
-      ],
-      "output_modalities": [
-        "text"
-      ],
-      "tokenizer": "Claude",
-      "instruct_type": null
-    },
-    "pricing": {
-      "prompt": "0.000003",
-      "completion": "0.000015",
-      "web_search": "0.01",
-      "input_cache_read": "0.0000003",
-      "input_cache_write": "0.00000375"
-    },
-    "top_provider": {
-      "context_length": 200000,
-      "max_completion_tokens": 64000,
-      "is_moderated": false
-    },
-    "per_request_limits": null,
-    "supported_parameters": [
-      "include_reasoning",
-      "max_tokens",
-      "reasoning",
-      "stop",
-      "temperature",
-      "tool_choice",
-      "tools",
-      "top_p"
-    ],
-    "default_parameters": {
-      "temperature": null,
-      "top_p": null,
-      "frequency_penalty": null
-    },
-    "expiration_date": null
+    "expiration_date": "2026-06-01"
   },
   {
     "id": "anthropic/claude-3.7-sonnet",
@@ -8828,7 +9843,58 @@
       "top_p": null,
       "frequency_penalty": null
     },
-    "expiration_date": null
+    "expiration_date": "2026-05-05"
+  },
+  {
+    "id": "anthropic/claude-3.7-sonnet:thinking",
+    "canonical_slug": "anthropic/claude-3-7-sonnet-20250219",
+    "hugging_face_id": "",
+    "name": "Anthropic: Claude 3.7 Sonnet (thinking)",
+    "created": 1740422110,
+    "description": "Claude 3.7 Sonnet is an advanced large language model with improved reasoning, coding, and problem-solving capabilities. It introduces a hybrid reasoning approach, allowing users to choose between rapid responses and extended, step-by-step processing for complex tasks. The model demonstrates notable improvements in coding, particularly in front-end development and full-stack updates, and excels in agentic workflows, where it can autonomously navigate multi-step processes. \n\nClaude 3.7 Sonnet maintains performance parity with its predecessor in standard mode while offering an extended reasoning mode for enhanced accuracy in math, coding, and instruction-following tasks.\n\nRead more at the [blog post here](https://www.anthropic.com/news/claude-3-7-sonnet)",
+    "context_length": 200000,
+    "architecture": {
+      "modality": "text+image+file->text",
+      "input_modalities": [
+        "text",
+        "image",
+        "file"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "tokenizer": "Claude",
+      "instruct_type": null
+    },
+    "pricing": {
+      "prompt": "0.000003",
+      "completion": "0.000015",
+      "web_search": "0.01",
+      "input_cache_read": "0.0000003",
+      "input_cache_write": "0.00000375"
+    },
+    "top_provider": {
+      "context_length": 200000,
+      "max_completion_tokens": 64000,
+      "is_moderated": false
+    },
+    "per_request_limits": null,
+    "supported_parameters": [
+      "include_reasoning",
+      "max_tokens",
+      "reasoning",
+      "stop",
+      "temperature",
+      "tool_choice",
+      "tools",
+      "top_p"
+    ],
+    "default_parameters": {
+      "temperature": null,
+      "top_p": null,
+      "frequency_penalty": null
+    },
+    "expiration_date": "2026-05-05"
   },
   {
     "id": "mistralai/mistral-saba",
@@ -8851,7 +9917,8 @@
     },
     "pricing": {
       "prompt": "0.0000002",
-      "completion": "0.0000006"
+      "completion": "0.0000006",
+      "input_cache_read": "0.00000002"
     },
     "top_provider": {
       "context_length": 32768,
@@ -8909,7 +9976,9 @@
     },
     "per_request_limits": null,
     "supported_parameters": [
+      "include_reasoning",
       "max_tokens",
+      "reasoning",
       "response_format",
       "seed",
       "structured_outputs",
@@ -8977,7 +10046,7 @@
       "top_p": null,
       "frequency_penalty": null
     },
-    "expiration_date": "2026-03-31"
+    "expiration_date": "2026-06-01"
   },
   {
     "id": "qwen/qwen-vl-max",
@@ -9000,8 +10069,8 @@
       "instruct_type": null
     },
     "pricing": {
-      "prompt": "0.0000008",
-      "completion": "0.0000032"
+      "prompt": "0.00000052",
+      "completion": "0.00000208"
     },
     "top_provider": {
       "context_length": 131072,
@@ -9046,9 +10115,9 @@
       "instruct_type": null
     },
     "pricing": {
-      "prompt": "0.00000005",
-      "completion": "0.0000002",
-      "input_cache_read": "0.00000001"
+      "prompt": "0.0000000325",
+      "completion": "0.00000013",
+      "input_cache_read": "0.0000000065"
     },
     "top_provider": {
       "context_length": 131072,
@@ -9089,9 +10158,9 @@
       "instruct_type": null
     },
     "pricing": {
-      "prompt": "0.0000004",
-      "completion": "0.0000012",
-      "input_cache_read": "0.00000008"
+      "prompt": "0.00000026",
+      "completion": "0.00000078",
+      "input_cache_read": "0.000000052"
     },
     "top_provider": {
       "context_length": 1000000,
@@ -9132,9 +10201,9 @@
       "instruct_type": null
     },
     "pricing": {
-      "prompt": "0.0000016",
-      "completion": "0.0000064",
-      "input_cache_read": "0.00000032"
+      "prompt": "0.00000104",
+      "completion": "0.00000416",
+      "input_cache_read": "0.000000208"
     },
     "top_provider": {
       "context_length": 32768,
@@ -9187,14 +10256,23 @@
     },
     "per_request_limits": null,
     "supported_parameters": [
+      "include_reasoning",
       "max_tokens",
+      "reasoning",
       "response_format",
       "seed",
       "structured_outputs",
       "tool_choice",
       "tools"
     ],
-    "default_parameters": {},
+    "default_parameters": {
+      "temperature": null,
+      "top_p": null,
+      "top_k": null,
+      "frequency_penalty": null,
+      "presence_penalty": null,
+      "repetition_penalty": null
+    },
     "expiration_date": null
   },
   {
@@ -9236,7 +10314,6 @@
       "response_format",
       "seed",
       "stop",
-      "structured_outputs",
       "temperature",
       "tool_choice",
       "tools",
@@ -9294,7 +10371,14 @@
       "top_k",
       "top_p"
     ],
-    "default_parameters": {},
+    "default_parameters": {
+      "temperature": null,
+      "top_p": null,
+      "top_k": null,
+      "frequency_penalty": null,
+      "presence_penalty": null,
+      "repetition_penalty": null
+    },
     "expiration_date": null
   },
   {
@@ -9317,9 +10401,8 @@
       "instruct_type": null
     },
     "pricing": {
-      "prompt": "0.0000003",
-      "completion": "0.0000012",
-      "input_cache_read": "0.00000015"
+      "prompt": "0.00000032",
+      "completion": "0.00000089"
     },
     "top_provider": {
       "context_length": 163840,
@@ -9336,7 +10419,6 @@
       "response_format",
       "seed",
       "stop",
-      "structured_outputs",
       "temperature",
       "tool_choice",
       "tools",
@@ -9379,14 +10461,23 @@
     },
     "per_request_limits": null,
     "supported_parameters": [
+      "include_reasoning",
       "max_tokens",
+      "reasoning",
       "response_format",
       "seed",
       "structured_outputs",
       "tool_choice",
       "tools"
     ],
-    "default_parameters": {},
+    "default_parameters": {
+      "temperature": null,
+      "top_p": null,
+      "top_k": null,
+      "frequency_penalty": null,
+      "presence_penalty": null,
+      "repetition_penalty": null
+    },
     "expiration_date": null
   },
   {
@@ -9396,7 +10487,7 @@
     "name": "Meta: Llama 3.3 70B Instruct (free)",
     "created": 1733506137,
     "description": "The Meta Llama 3.3 multilingual large language model (LLM) is a pretrained and instruction tuned generative model in 70B (text in/text out). The Llama 3.3 instruction tuned text only model is optimized for multilingual dialogue use cases and outperforms many of the available open source and closed chat models on common industry benchmarks.\n\nSupported languages: English, German, French, Italian, Portuguese, Hindi, Spanish, and Thai.\n\n[Model Card](https://github.com/meta-llama/llama-models/blob/main/models/llama3_3/MODEL_CARD.md)",
-    "context_length": 128000,
+    "context_length": 65536,
     "architecture": {
       "modality": "text->text",
       "input_modalities": [
@@ -9413,16 +10504,15 @@
       "completion": "0"
     },
     "top_provider": {
-      "context_length": 128000,
-      "max_completion_tokens": 128000,
-      "is_moderated": true
+      "context_length": 65536,
+      "max_completion_tokens": null,
+      "is_moderated": false
     },
     "per_request_limits": null,
     "supported_parameters": [
       "frequency_penalty",
       "max_tokens",
       "presence_penalty",
-      "seed",
       "stop",
       "temperature",
       "tool_choice",
@@ -9679,7 +10769,8 @@
     },
     "pricing": {
       "prompt": "0.000002",
-      "completion": "0.000006"
+      "completion": "0.000006",
+      "input_cache_read": "0.0000002"
     },
     "top_provider": {
       "context_length": 131072,
@@ -9726,7 +10817,8 @@
     },
     "pricing": {
       "prompt": "0.000002",
-      "completion": "0.000006"
+      "completion": "0.000006",
+      "input_cache_read": "0.0000002"
     },
     "top_provider": {
       "context_length": 131072,
@@ -9774,7 +10866,8 @@
     },
     "pricing": {
       "prompt": "0.000002",
-      "completion": "0.000006"
+      "completion": "0.000006",
+      "input_cache_read": "0.0000002"
     },
     "top_provider": {
       "context_length": 131072,
@@ -9831,14 +10924,18 @@
     "per_request_limits": null,
     "supported_parameters": [
       "frequency_penalty",
+      "logprobs",
       "max_tokens",
       "presence_penalty",
+      "repetition_penalty",
       "response_format",
+      "seed",
       "stop",
       "structured_outputs",
       "temperature",
       "tool_choice",
       "tools",
+      "top_logprobs",
       "top_p"
     ],
     "default_parameters": {},
@@ -9916,7 +11013,9 @@
     },
     "pricing": {
       "prompt": "0.000006",
-      "completion": "0.00003"
+      "completion": "0.00003",
+      "input_cache_read": "0.0000006",
+      "input_cache_write": "0.0000075"
     },
     "top_provider": {
       "context_length": 200000,
@@ -9961,7 +11060,7 @@
     },
     "top_provider": {
       "context_length": 32768,
-      "max_completion_tokens": null,
+      "max_completion_tokens": 32768,
       "is_moderated": false
     },
     "per_request_limits": null,
@@ -9972,6 +11071,7 @@
       "min_p",
       "presence_penalty",
       "repetition_penalty",
+      "response_format",
       "seed",
       "stop",
       "temperature",
@@ -10066,6 +11166,7 @@
     "supported_parameters": [
       "frequency_penalty",
       "logit_bias",
+      "logprobs",
       "max_tokens",
       "min_p",
       "presence_penalty",
@@ -10078,6 +11179,7 @@
       "tool_choice",
       "tools",
       "top_k",
+      "top_logprobs",
       "top_p"
     ],
     "default_parameters": {},
@@ -10114,57 +11216,10 @@
     "per_request_limits": null,
     "supported_parameters": [
       "frequency_penalty",
-      "logit_bias",
       "max_tokens",
       "min_p",
       "presence_penalty",
       "repetition_penalty",
-      "response_format",
-      "seed",
-      "stop",
-      "structured_outputs",
-      "temperature",
-      "tool_choice",
-      "tools",
-      "top_k",
-      "top_p"
-    ],
-    "default_parameters": {},
-    "expiration_date": null
-  },
-  {
-    "id": "cohere/command-r-08-2024",
-    "canonical_slug": "cohere/command-r-08-2024",
-    "hugging_face_id": null,
-    "name": "Cohere: Command R (08-2024)",
-    "created": 1724976000,
-    "description": "command-r-08-2024 is an update of the [Command R](/models/cohere/command-r) with improved performance for multilingual retrieval-augmented generation (RAG) and tool use. More broadly, it is better at math, code and reasoning and is competitive with the previous version of the larger Command R+ model.\n\nRead the launch post [here](https://docs.cohere.com/changelog/command-gets-refreshed).\n\nUse of this model is subject to Cohere's [Usage Policy](https://docs.cohere.com/docs/usage-policy) and [SaaS Agreement](https://cohere.com/saas-agreement).",
-    "context_length": 128000,
-    "architecture": {
-      "modality": "text->text",
-      "input_modalities": [
-        "text"
-      ],
-      "output_modalities": [
-        "text"
-      ],
-      "tokenizer": "Cohere",
-      "instruct_type": null
-    },
-    "pricing": {
-      "prompt": "0.00000015",
-      "completion": "0.0000006"
-    },
-    "top_provider": {
-      "context_length": 128000,
-      "max_completion_tokens": 4000,
-      "is_moderated": true
-    },
-    "per_request_limits": null,
-    "supported_parameters": [
-      "frequency_penalty",
-      "max_tokens",
-      "presence_penalty",
       "response_format",
       "seed",
       "stop",
@@ -10225,13 +11280,59 @@
     "expiration_date": null
   },
   {
+    "id": "cohere/command-r-08-2024",
+    "canonical_slug": "cohere/command-r-08-2024",
+    "hugging_face_id": null,
+    "name": "Cohere: Command R (08-2024)",
+    "created": 1724976000,
+    "description": "command-r-08-2024 is an update of the [Command R](/models/cohere/command-r) with improved performance for multilingual retrieval-augmented generation (RAG) and tool use. More broadly, it is better at math, code and reasoning and is competitive with the previous version of the larger Command R+ model.\n\nRead the launch post [here](https://docs.cohere.com/changelog/command-gets-refreshed).\n\nUse of this model is subject to Cohere's [Usage Policy](https://docs.cohere.com/docs/usage-policy) and [SaaS Agreement](https://cohere.com/saas-agreement).",
+    "context_length": 128000,
+    "architecture": {
+      "modality": "text->text",
+      "input_modalities": [
+        "text"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "tokenizer": "Cohere",
+      "instruct_type": null
+    },
+    "pricing": {
+      "prompt": "0.00000015",
+      "completion": "0.0000006"
+    },
+    "top_provider": {
+      "context_length": 128000,
+      "max_completion_tokens": 4000,
+      "is_moderated": true
+    },
+    "per_request_limits": null,
+    "supported_parameters": [
+      "frequency_penalty",
+      "max_tokens",
+      "presence_penalty",
+      "response_format",
+      "seed",
+      "stop",
+      "structured_outputs",
+      "temperature",
+      "tool_choice",
+      "tools",
+      "top_k",
+      "top_p"
+    ],
+    "default_parameters": {},
+    "expiration_date": null
+  },
+  {
     "id": "sao10k/l3.1-euryale-70b",
     "canonical_slug": "sao10k/l3.1-euryale-70b",
     "hugging_face_id": "Sao10K/L3.1-70B-Euryale-v2.2",
     "name": "Sao10K: Llama 3.1 Euryale 70B v2.2",
     "created": 1724803200,
     "description": "Euryale L3.1 70B v2.2 is a model focused on creative roleplay from [Sao10k](https://ko-fi.com/sao10k). It is the successor of [Euryale L3 70B v2.1](/models/sao10k/l3-euryale-70b).",
-    "context_length": 32768,
+    "context_length": 131072,
     "architecture": {
       "modality": "text->text",
       "input_modalities": [
@@ -10244,12 +11345,12 @@
       "instruct_type": "llama3"
     },
     "pricing": {
-      "prompt": "0.00000065",
-      "completion": "0.00000075"
+      "prompt": "0.00000085",
+      "completion": "0.00000085"
     },
     "top_provider": {
-      "context_length": 32768,
-      "max_completion_tokens": 32768,
+      "context_length": 131072,
+      "max_completion_tokens": 16384,
       "is_moderated": false
     },
     "per_request_limits": null,
@@ -10355,7 +11456,6 @@
     "per_request_limits": null,
     "supported_parameters": [
       "frequency_penalty",
-      "logit_bias",
       "logprobs",
       "max_tokens",
       "min_p",
@@ -10370,55 +11470,6 @@
       "tools",
       "top_k",
       "top_logprobs",
-      "top_p"
-    ],
-    "default_parameters": {},
-    "expiration_date": null
-  },
-  {
-    "id": "meta-llama/llama-3.1-405b-instruct",
-    "canonical_slug": "meta-llama/llama-3.1-405b-instruct",
-    "hugging_face_id": "meta-llama/Meta-Llama-3.1-405B-Instruct",
-    "name": "Meta: Llama 3.1 405B Instruct",
-    "created": 1721692800,
-    "description": "The highly anticipated 400B class of Llama3 is here! Clocking in at 128k context with impressive eval scores, the Meta AI team continues to push the frontier of open-source LLMs.\n\nMeta's latest class of model (Llama 3.1) launched with a variety of sizes & flavors. This 405B instruct-tuned version is optimized for high quality dialogue usecases.\n\nIt has demonstrated strong performance compared to leading closed-source models including GPT-4o and Claude 3.5 Sonnet in evaluations.\n\nTo read more about the model release, [click here](https://ai.meta.com/blog/meta-llama-3-1/). Usage of this model is subject to [Meta's Acceptable Use Policy](https://llama.meta.com/llama3/use-policy/).",
-    "context_length": 131000,
-    "architecture": {
-      "modality": "text->text",
-      "input_modalities": [
-        "text"
-      ],
-      "output_modalities": [
-        "text"
-      ],
-      "tokenizer": "Llama3",
-      "instruct_type": "llama3"
-    },
-    "pricing": {
-      "prompt": "0.000004",
-      "completion": "0.000004"
-    },
-    "top_provider": {
-      "context_length": 131000,
-      "max_completion_tokens": null,
-      "is_moderated": false
-    },
-    "per_request_limits": null,
-    "supported_parameters": [
-      "frequency_penalty",
-      "logit_bias",
-      "max_tokens",
-      "min_p",
-      "presence_penalty",
-      "repetition_penalty",
-      "response_format",
-      "seed",
-      "stop",
-      "structured_outputs",
-      "temperature",
-      "tool_choice",
-      "tools",
-      "top_k",
       "top_p"
     ],
     "default_parameters": {},
@@ -10455,7 +11506,6 @@
     "per_request_limits": null,
     "supported_parameters": [
       "frequency_penalty",
-      "logit_bias",
       "max_tokens",
       "min_p",
       "presence_penalty",
@@ -10894,7 +11944,8 @@
     },
     "pricing": {
       "prompt": "0.000002",
-      "completion": "0.000006"
+      "completion": "0.000006",
+      "input_cache_read": "0.0000002"
     },
     "top_provider": {
       "context_length": 65536,
@@ -11034,7 +12085,8 @@
     },
     "pricing": {
       "prompt": "0.000002",
-      "completion": "0.000006"
+      "completion": "0.000006",
+      "input_cache_read": "0.0000002"
     },
     "top_provider": {
       "context_length": 128000,
@@ -11058,54 +12110,6 @@
     "default_parameters": {
       "temperature": 0.3
     },
-    "expiration_date": null
-  },
-  {
-    "id": "openai/gpt-3.5-turbo-0613",
-    "canonical_slug": "openai/gpt-3.5-turbo-0613",
-    "hugging_face_id": null,
-    "name": "OpenAI: GPT-3.5 Turbo (older v0613)",
-    "created": 1706140800,
-    "description": "GPT-3.5 Turbo is OpenAI's fastest model. It can understand and generate natural language or code, and is optimized for chat and traditional completion tasks.\n\nTraining data up to Sep 2021.",
-    "context_length": 4095,
-    "architecture": {
-      "modality": "text->text",
-      "input_modalities": [
-        "text"
-      ],
-      "output_modalities": [
-        "text"
-      ],
-      "tokenizer": "GPT",
-      "instruct_type": null
-    },
-    "pricing": {
-      "prompt": "0.000001",
-      "completion": "0.000002"
-    },
-    "top_provider": {
-      "context_length": 4095,
-      "max_completion_tokens": 4096,
-      "is_moderated": false
-    },
-    "per_request_limits": null,
-    "supported_parameters": [
-      "frequency_penalty",
-      "logit_bias",
-      "logprobs",
-      "max_tokens",
-      "presence_penalty",
-      "response_format",
-      "seed",
-      "stop",
-      "structured_outputs",
-      "temperature",
-      "tool_choice",
-      "tools",
-      "top_logprobs",
-      "top_p"
-    ],
-    "default_parameters": {},
     "expiration_date": null
   },
   {
@@ -11135,6 +12139,54 @@
       "context_length": 128000,
       "max_completion_tokens": 4096,
       "is_moderated": true
+    },
+    "per_request_limits": null,
+    "supported_parameters": [
+      "frequency_penalty",
+      "logit_bias",
+      "logprobs",
+      "max_tokens",
+      "presence_penalty",
+      "response_format",
+      "seed",
+      "stop",
+      "structured_outputs",
+      "temperature",
+      "tool_choice",
+      "tools",
+      "top_logprobs",
+      "top_p"
+    ],
+    "default_parameters": {},
+    "expiration_date": null
+  },
+  {
+    "id": "openai/gpt-3.5-turbo-0613",
+    "canonical_slug": "openai/gpt-3.5-turbo-0613",
+    "hugging_face_id": null,
+    "name": "OpenAI: GPT-3.5 Turbo (older v0613)",
+    "created": 1706140800,
+    "description": "GPT-3.5 Turbo is OpenAI's fastest model. It can understand and generate natural language or code, and is optimized for chat and traditional completion tasks.\n\nTraining data up to Sep 2021.",
+    "context_length": 4095,
+    "architecture": {
+      "modality": "text->text",
+      "input_modalities": [
+        "text"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "tokenizer": "GPT",
+      "instruct_type": null
+    },
+    "pricing": {
+      "prompt": "0.000001",
+      "completion": "0.000002"
+    },
+    "top_provider": {
+      "context_length": 4095,
+      "max_completion_tokens": 4096,
+      "is_moderated": false
     },
     "per_request_limits": null,
     "supported_parameters": [
@@ -11212,7 +12264,7 @@
     "hugging_face_id": null,
     "name": "Auto Router",
     "created": 1699401600,
-    "description": "Your prompt will be processed by a meta-model and routed to one of dozens of models (see below), optimizing for the best possible output.\n\nTo see which model was used, visit [Activity](/activity), or read the `model` attribute of the response. Your response will be priced at the same rate as the routed model.\n\nLearn more, including how to customize the models for routing, in our [docs](/docs/guides/routing/routers/auto-router).\n\nRequests will be routed to the following models:\n- [anthropic/claude-haiku-4.5](/anthropic/claude-haiku-4.5)\n- [anthropic/claude-opus-4.6](/anthropic/claude-opus-4.6)\n- [anthropic/claude-sonnet-4.5](/anthropic/claude-sonnet-4.5)\n- [deepseek/deepseek-r1](/deepseek/deepseek-r1)\n- [google/gemini-2.5-flash-lite](/google/gemini-2.5-flash-lite)\n- [google/gemini-3-flash-preview](/google/gemini-3-flash-preview)\n- [google/gemini-3-pro-preview](/google/gemini-3-pro-preview)\n- [meta-llama/llama-3.3-70b-instruct](/meta-llama/llama-3.3-70b-instruct)\n- [mistralai/codestral-2508](/mistralai/codestral-2508)\n- [mistralai/mistral-large](/mistralai/mistral-large)\n- [mistralai/mistral-medium-3.1](/mistralai/mistral-medium-3.1)\n- [mistralai/mistral-small-3.2-24b-instruct-2506](/mistralai/mistral-small-3.2-24b-instruct-2506)\n- [moonshotai/kimi-k2-thinking](/moonshotai/kimi-k2-thinking)\n- [moonshotai/kimi-k2.5](/moonshotai/kimi-k2.5)\n- [openai/gpt-5](/openai/gpt-5)\n- [openai/gpt-5-mini](/openai/gpt-5-mini)\n- [openai/gpt-5-nano](/openai/gpt-5-nano)\n- [openai/gpt-5.1](/openai/gpt-5.1)\n- [openai/gpt-5.2](/openai/gpt-5.2)\n- [openai/gpt-5.2-pro](/openai/gpt-5.2-pro)\n- [openai/gpt-oss-120b](/openai/gpt-oss-120b)\n- [perplexity/sonar](/perplexity/sonar)\n- [qwen/qwen3-235b-a22b](/qwen/qwen3-235b-a22b)\n- [x-ai/grok-3](/x-ai/grok-3)\n- [x-ai/grok-3-mini](/x-ai/grok-3-mini)\n- [x-ai/grok-4](/x-ai/grok-4)",
+    "description": "Your prompt will be processed by a meta-model and routed to one of dozens of models (see below), optimizing for the best possible output.\n\nTo see which model was used, visit [Activity](/activity), or read the `model` attribute of the response. Your response will be priced at the same rate as the routed model.\n\nLearn more, including how to customize the models for routing, in our [docs](/docs/guides/routing/routers/auto-router).\n\nRequests will be routed to the following models:\n- [anthropic/claude-haiku-4.5](/anthropic/claude-haiku-4.5)\n- [anthropic/claude-opus-4.6](/anthropic/claude-opus-4.6)\n- [anthropic/claude-sonnet-4.5](/anthropic/claude-sonnet-4.5)\n- [anthropic/claude-sonnet-4.6](/anthropic/claude-sonnet-4.6)\n- [deepseek/deepseek-r1](/deepseek/deepseek-r1)\n- [google/gemini-2.5-flash-lite](/google/gemini-2.5-flash-lite)\n- [google/gemini-3-flash-preview](/google/gemini-3-flash-preview)\n- [google/gemini-3-pro-preview](/google/gemini-3-pro-preview)\n- [google/gemini-3.1-pro-preview](/google/gemini-3.1-pro-preview)\n- [meta-llama/llama-3.3-70b-instruct](/meta-llama/llama-3.3-70b-instruct)\n- [minimax/minimax-m2.5](/minimax/minimax-m2.5)\n- [mistralai/codestral-2508](/mistralai/codestral-2508)\n- [mistralai/mistral-7b-instruct-v0.1](/mistralai/mistral-7b-instruct-v0.1)\n- [mistralai/mistral-large](/mistralai/mistral-large)\n- [mistralai/mistral-medium-3.1](/mistralai/mistral-medium-3.1)\n- [mistralai/mistral-small-3.2-24b-instruct-2506](/mistralai/mistral-small-3.2-24b-instruct-2506)\n- [moonshotai/kimi-k2-thinking](/moonshotai/kimi-k2-thinking)\n- [moonshotai/kimi-k2.5](/moonshotai/kimi-k2.5)\n- [openai/gpt-5](/openai/gpt-5)\n- [openai/gpt-5-mini](/openai/gpt-5-mini)\n- [openai/gpt-5-nano](/openai/gpt-5-nano)\n- [openai/gpt-5.1](/openai/gpt-5.1)\n- [openai/gpt-5.2](/openai/gpt-5.2)\n- [openai/gpt-5.2-pro](/openai/gpt-5.2-pro)\n- [openai/gpt-5.3-chat](/openai/gpt-5.3-chat)\n- [openai/gpt-oss-120b](/openai/gpt-oss-120b)\n- [perplexity/sonar](/perplexity/sonar)\n- [qwen/qwen3-235b-a22b](/qwen/qwen3-235b-a22b)\n- [x-ai/grok-3](/x-ai/grok-3)\n- [x-ai/grok-3-mini](/x-ai/grok-3-mini)\n- [x-ai/grok-4](/x-ai/grok-4)\n- [x-ai/grok-4.1-fast](/x-ai/grok-4.1-fast)\n- [z-ai/glm-5](/z-ai/glm-5)",
     "context_length": 2000000,
     "architecture": {
       "modality": "text+image+file+audio+video->text+image",
