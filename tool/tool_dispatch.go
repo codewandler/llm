@@ -2,7 +2,8 @@ package tool
 
 import (
 	"context"
-	"fmt"
+	"errors"
+	"sync"
 )
 
 type Dispatcher interface {
@@ -46,9 +47,9 @@ func (d *syncDispatcher) Dispatch(ctx context.Context, toolCalls ...Call) ([]Res
 }
 
 func dispatchOne(ctx context.Context, h Handler, tc Call) (Result, error) {
-	x, err := h.Handle(ctx, tc)
+	x, err := SafeHandle(ctx, h, tc)
 	if err != nil {
-		return nil, fmt.Errorf("tool handler %s panic: %v", tc.ToolName(), err)
+		return NewResult(tc.ToolCallID(), err.Error(), true), nil
 	}
 
 	var tr Result
@@ -58,4 +59,37 @@ func dispatchOne(ctx context.Context, h Handler, tc Call) (Result, error) {
 		tr = NewResult(tc.ToolCallID(), x, false)
 	}
 	return tr, nil
+}
+
+type AsyncDispatcher struct {
+	Handlers Handlers
+}
+
+func (d *AsyncDispatcher) Dispatch(ctx context.Context, toolCalls ...Call) ([]Result, error) {
+	results := make([]Result, len(toolCalls))
+	errCh := make(chan error, len(toolCalls))
+	var wg sync.WaitGroup
+
+	for i, tc := range toolCalls {
+		wg.Add(1)
+		go func(i int, tc Call) {
+			defer wg.Done()
+			res, err := SafeHandle(ctx, d.Handlers, tc)
+			if err != nil {
+				results[i] = NewResult(tc.ToolCallID(), err.Error(), true)
+				return
+			}
+			results[i] = NewResult(tc.ToolCallID(), res, false)
+		}(i, tc)
+	}
+
+	wg.Wait()
+	close(errCh)
+
+	var errs []error
+	for err := range errCh {
+		errs = append(errs, err)
+	}
+
+	return results, errors.Join(errs...)
 }

@@ -3,6 +3,7 @@ package llm
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
 
@@ -32,13 +33,16 @@ func newResult() *result {
 	}
 }
 
-func (r *result) Message() AssistantMessage { return r.assistantMsg }
-func (r *result) Text() string              { return r.textBuf.String() }
-func (r *result) Reasoning() string         { return r.reasoningBuf.String() }
-func (r *result) StopReason() StopReason    { return r.stopReason }
-func (r *result) Usage() *Usage             { return r.usage }
-func (r *result) Error() error              { return errors.Join(r.errors...) }
-func (r *result) ToolCalls() []tool.Call    { return r.toolCalls }
+func (r *result) Message() AssistantMessage {
+	return Assistant(r.textBuf.String(), r.toolCalls...)
+}
+
+func (r *result) Text() string           { return r.textBuf.String() }
+func (r *result) Reasoning() string      { return r.reasoningBuf.String() }
+func (r *result) StopReason() StopReason { return r.stopReason }
+func (r *result) Usage() *Usage          { return r.usage }
+func (r *result) Error() error           { return errors.Join(r.errors...) }
+func (r *result) ToolCalls() []tool.Call { return r.toolCalls }
 
 func (r *result) addError(err error) {
 	r.errors = append(r.errors, err)
@@ -70,8 +74,8 @@ func (r *result) applyToolCall(tc tool.Call) {
 var _ Result = (*result)(nil)
 
 func (r *result) Next() (next Messages) {
-	if r.assistantMsg != nil {
-		next.Add(r.assistantMsg)
+	if r.textBuf.Len() > 0 || len(r.toolCalls) > 0 {
+		next.Add(Assistant(r.textBuf.String(), r.toolCalls...))
 	}
 	for _, tr := range r.toolResults {
 		next.Add(ToolResult(tr))
@@ -103,7 +107,7 @@ func NewEventProcessor(ctx context.Context, ch <-chan Envelope) *StreamProcessor
 	}
 }
 
-func ProcessEvents(ctx context.Context, ch <-chan Envelope) (Result, error) {
+func ProcessEvents(ctx context.Context, ch <-chan Envelope) Result {
 	return NewEventProcessor(ctx, ch).Result()
 }
 
@@ -194,10 +198,10 @@ func (r *StreamProcessor) WithToolDispatcher(d tool.DispatcherType) *StreamProce
 //
 // Calling Result() multiple times is safe — the eventPub is only consumed once
 // and the same channel is returned on subsequent calls.
-func (r *StreamProcessor) Result() (Result, error) {
+func (r *StreamProcessor) Result() Result {
 	r.once.Do(func() { go r.doProcess() })
 	<-r.done
-	return r.result, r.result.Error()
+	return r.result
 }
 
 func (r *StreamProcessor) dispatchEvent(e Envelope) {
@@ -236,6 +240,9 @@ func (r *StreamProcessor) doProcess() {
 
 		case ev, ok := <-r.ch:
 			if !ok {
+				if res.stopReason == StopReasonToolUse {
+					r.dispatchToolCalls()
+				}
 				if res.stopReason == "" {
 					res.stopReason = StopReasonEndTurn
 				}
@@ -244,6 +251,45 @@ func (r *StreamProcessor) doProcess() {
 
 			r.processEvent(ev)
 		}
+	}
+}
+
+func (r *StreamProcessor) dispatchToolCalls() {
+	if len(r.result.toolCalls) == 0 {
+		return
+	}
+
+	if len(r.toolHandlers) == 0 {
+		return
+	}
+
+	var dispatcher tool.Dispatcher
+	if r.dispatcher == tool.DispatchTypeAsync {
+		dispatcher = &tool.AsyncDispatcher{Handlers: r.toolHandlers}
+	} else {
+		dispatcher = tool.NewSyncDispatcher(r.toolHandlers)
+	}
+
+	results, err := dispatcher.Dispatch(r.ctx, r.result.toolCalls...)
+	if err != nil {
+		r.result.addError(err)
+	}
+
+	if len(results) == 0 && len(r.result.toolCalls) > 0 {
+		results = make([]tool.Result, len(r.result.toolCalls))
+		for i, tc := range r.result.toolCalls {
+			results[i] = tool.NewResult(tc.ToolCallID(), fmt.Sprintf("no handler for tool: %s", tc.ToolName()), true)
+		}
+	}
+
+	for i, tc := range r.result.toolCalls {
+		if i < len(results) && results[i] == nil {
+			results[i] = tool.NewResult(tc.ToolCallID(), fmt.Sprintf("no handler for tool: %s", tc.ToolName()), true)
+		}
+	}
+
+	for _, tr := range results {
+		r.result.toolResults = append(r.result.toolResults, tr)
 	}
 }
 

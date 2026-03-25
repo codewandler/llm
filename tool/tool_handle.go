@@ -157,10 +157,12 @@ func SafeCall(fn func(), errPtr *error) {
 }
 
 // SafeHandle calls h.Handle inside a panic-recovery wrapper.
+// Panics are recovered and returned as an error result instead of propagating.
 func SafeHandle(ctx context.Context, h Handler, call Call) (output any, err error) {
 	defer func() {
 		if p := recover(); p != nil {
-			err = fmt.Errorf("tool handler %s panic: %v", call.ToolName(), p)
+			output = fmt.Sprintf("tool handler %s panic: %v", call.ToolName(), p)
+			err = nil
 		}
 	}()
 	return h.Handle(ctx, call)

@@ -23,8 +23,7 @@ func TestStreamResponse_TextAccumulation(t *testing.T) {
 		llmtest.CompletedEvent(llm.StopReasonEndTurn),
 	)
 
-	result, err := llm.NewEventProcessor(context.Background(), ch).Result()
-	require.NoError(t, err)
+	result := llm.NewEventProcessor(context.Background(), ch).Result()
 	require.NoError(t, result.Error())
 	assert.Equal(t, "hello world", result.Text())
 	assert.Equal(t, llm.StopReasonEndTurn, result.StopReason())
@@ -39,8 +38,7 @@ func TestStreamResponse_ReasoningAccumulation(t *testing.T) {
 		llmtest.CompletedEvent(llm.StopReasonEndTurn),
 	)
 
-	result, err := llm.NewEventProcessor(context.Background(), ch).Result()
-	require.NoError(t, err)
+	result := llm.NewEventProcessor(context.Background(), ch).Result()
 	require.NoError(t, result.Error())
 	assert.Equal(t, "step1 step2", result.Reasoning())
 	assert.Equal(t, "answer", result.Text())
@@ -50,8 +48,7 @@ func TestStreamResponse_Usage(t *testing.T) {
 	usage := llm.Usage{InputTokens: 10, OutputTokens: 5, TotalTokens: 15, Cost: 0.001}
 	ch := llmtest.SendEvents(llmtest.TextEvent("hi"), llmtest.UsageEvent(usage), llmtest.CompletedEvent(llm.StopReasonEndTurn))
 
-	result, err := llm.NewEventProcessor(context.Background(), ch).Result()
-	require.NoError(t, err)
+	result := llm.NewEventProcessor(context.Background(), ch).Result()
 	require.NoError(t, result.Error())
 	require.NotNil(t, result.Usage())
 	assert.Equal(t, 10, result.Usage().InputTokens)
@@ -62,10 +59,9 @@ func TestStreamResponse_OnTextCallback(t *testing.T) {
 	var received []string
 	ch := llmtest.SendEvents(llmtest.TextEvent("a"), llmtest.TextEvent("b"), llmtest.TextEvent("c"), llmtest.CompletedEvent(llm.StopReasonEndTurn))
 
-	result, err := llm.NewEventProcessor(context.Background(), ch).
+	result := llm.NewEventProcessor(context.Background(), ch).
 		OnTextDelta(func(s string) { received = append(received, s) }).
 		Result()
-	require.NoError(t, err)
 	require.NoError(t, result.Error())
 	assert.Equal(t, []string{"a", "b", "c"}, received)
 }
@@ -74,10 +70,9 @@ func TestStreamResponse_OnReasoningCallback(t *testing.T) {
 	var received []string
 	ch := llmtest.SendEvents(llmtest.ReasoningEvent("r1"), llmtest.ReasoningEvent("r2"), llmtest.CompletedEvent(llm.StopReasonEndTurn))
 
-	result, err := llm.NewEventProcessor(context.Background(), ch).
+	result := llm.NewEventProcessor(context.Background(), ch).
 		OnReasoningDelta(func(s string) { received = append(received, s) }).
 		Result()
-	require.NoError(t, err)
 	require.NoError(t, result.Error())
 	assert.Equal(t, []string{"r1", "r2"}, received)
 }
@@ -89,10 +84,9 @@ func TestStreamResponse_OnToolDeltaCallback(t *testing.T) {
 		llmtest.CompletedEvent(llm.StopReasonEndTurn),
 	)
 
-	result, err := llm.NewEventProcessor(context.Background(), deltaCh).
+	result := llm.NewEventProcessor(context.Background(), deltaCh).
 		OnToolDelta(func(d llm.ToolDeltaPart) { received = append(received, d.ToolArgs) }).
 		Result()
-	require.NoError(t, err)
 	require.NoError(t, result.Error())
 	assert.Equal(t, []string{`{"loc`}, received)
 }
@@ -103,8 +97,7 @@ func TestStreamResponse_StopReasonToolUse(t *testing.T) {
 		llmtest.CompletedEvent(llm.StopReasonToolUse),
 	)
 
-	result, err := llm.NewEventProcessor(context.Background(), ch).Result()
-	require.NoError(t, err)
+	result := llm.NewEventProcessor(context.Background(), ch).Result()
 	require.NoError(t, result.Error())
 	assert.Equal(t, llm.StopReasonToolUse, result.StopReason())
 	require.Len(t, result.ToolCalls(), 1)
@@ -125,18 +118,17 @@ func TestStreamResponse_ToolHandler_Sync(t *testing.T) {
 	)
 
 	weatherSpec := tool.NewSpec[In]("get_weather", "Get weather")
-	result, err := llm.NewEventProcessor(context.Background(), ch).
+	result := llm.NewEventProcessor(context.Background(), ch).
 		HandleTool(tool.Handle(weatherSpec, func(_ context.Context, in In) (*Out, error) {
 			assert.Equal(t, "Berlin", in.Location)
 			return &Out{Temp: 22}, nil
 		})).
 		Result()
-	require.NoError(t, err)
 	require.NoError(t, result.Error())
 
 	msgs := result.Next()
-	require.Len(t, msgs, 1)
-	toolMsg, ok := msgs[0].(llm.ToolMessage)
+	require.Len(t, msgs, 2)
+	toolMsg, ok := msgs[1].(llm.ToolMessage)
 	require.True(t, ok)
 	assert.Equal(t, "id1", toolMsg.ToolCallID())
 	assert.JSONEq(t, `{"temp":22}`, toolMsg.ToolOutput())
@@ -158,12 +150,17 @@ func TestStreamResponse_ToolHandler_Error(t *testing.T) {
 	boom := errors.New("service unavailable")
 
 	weatherSpec := tool.NewSpec[In]("get_weather", "Get weather")
-	result, err := llm.NewEventProcessor(context.Background(), ch).
+	result := llm.NewEventProcessor(context.Background(), ch).
 		HandleTool(tool.Handle(weatherSpec, func(_ context.Context, _ In) (*Out, error) { return nil, boom })).
 		Result()
-	require.NoError(t, err)
 
-	assert.ErrorIs(t, result.Error(), boom)
+	require.NoError(t, result.Error())
+	msgs := result.Next()
+	require.Len(t, msgs, 2)
+	toolMsg, ok := msgs[1].(llm.ToolMessage)
+	require.True(t, ok)
+	assert.True(t, toolMsg.IsError())
+	assert.Contains(t, toolMsg.ToolOutput(), "service unavailable")
 }
 
 func TestStreamResponse_ToolHandler_Async(t *testing.T) {
@@ -181,15 +178,14 @@ func TestStreamResponse_ToolHandler_Async(t *testing.T) {
 	)
 
 	doubleSpec := tool.NewSpec[In]("double", "Double a number")
-	result, err := llm.NewEventProcessor(context.Background(), ch).
+	result := llm.NewEventProcessor(context.Background(), ch).
 		HandleTool(tool.Handle(doubleSpec, func(_ context.Context, in In) (*Out, error) { return &Out{N: in.N * 2}, nil })).
 		WithAsyncToolDispatch().
 		Result()
-	require.NoError(t, err)
 	require.NoError(t, result.Error())
 
 	msgs := result.Next()
-	require.Len(t, msgs, 2)
+	require.Len(t, msgs, 3)
 }
 
 func TestStreamResponse_UnhandledToolCall(t *testing.T) {
@@ -198,14 +194,17 @@ func TestStreamResponse_UnhandledToolCall(t *testing.T) {
 		llmtest.CompletedEvent(llm.StopReasonToolUse),
 	)
 
-	result, err := llm.NewEventProcessor(context.Background(), ch).Result()
-	require.NoError(t, err)
+	result := llm.NewEventProcessor(context.Background(), ch).Result()
 	require.NoError(t, result.Error())
 	require.Len(t, result.ToolCalls(), 1)
 
 	msgs := result.Next()
-	require.Len(t, msgs, 1)
-	toolMsg, ok := msgs[0].(llm.ToolMessage)
+	require.Len(t, msgs, 2)
+	assistantMsg, ok := msgs[0].(llm.AssistantMessage)
+	require.True(t, ok)
+	require.Len(t, assistantMsg.ToolCalls(), 1)
+	assert.Equal(t, "unknown_tool", assistantMsg.ToolCalls()[0].ToolName())
+	toolMsg, ok := msgs[1].(llm.ToolMessage)
 	require.True(t, ok)
 	assert.Equal(t, "id1", toolMsg.ToolCallID())
 	assert.True(t, toolMsg.IsError())
@@ -218,8 +217,7 @@ func TestStreamResponse_StreamError(t *testing.T) {
 		llmtest.ErrorEvent(llm.NewErrProviderMsg("test", "foo")),
 	)
 
-	result, err := llm.NewEventProcessor(context.Background(), ch).Result()
-	require.NoError(t, err)
+	result := llm.NewEventProcessor(context.Background(), ch).Result()
 	assert.Error(t, result.Error())
 	assert.Equal(t, llm.StopReasonError, result.StopReason())
 	assert.Equal(t, "partial", result.Text())
@@ -236,8 +234,7 @@ func TestStreamResponse_ContextCancellation(t *testing.T) {
 
 	cancel()
 
-	result, err := llm.NewEventProcessor(ctx, live).Result()
-	require.NoError(t, err)
+	result := llm.NewEventProcessor(ctx, live).Result()
 	assert.ErrorIs(t, result.Error(), context.Canceled)
 	assert.Equal(t, llm.StopReasonCancelled, result.StopReason())
 }
@@ -245,10 +242,9 @@ func TestStreamResponse_ContextCancellation(t *testing.T) {
 func TestStreamResponse_CallbackPanicRecovered(t *testing.T) {
 	ch := llmtest.SendEvents(llmtest.TextEvent("x"), llmtest.CompletedEvent(llm.StopReasonEndTurn))
 
-	result, err := llm.NewEventProcessor(context.Background(), ch).
+	result := llm.NewEventProcessor(context.Background(), ch).
 		OnTextDelta(func(_ string) { panic("boom") }).
 		Result()
-	require.NoError(t, err)
 
 	assert.Error(t, result.Error())
 	assert.Contains(t, result.Error().Error(), "boom")
@@ -265,14 +261,18 @@ func TestStreamResponse_ToolHandlerPanicRecovered(t *testing.T) {
 	)
 
 	explodeSpec := tool.NewSpec[In]("explode", "Explode")
-	result, err := llm.NewEventProcessor(context.Background(), ch).
+	result := llm.NewEventProcessor(context.Background(), ch).
 		HandleTool(tool.Handle(explodeSpec, func(_ context.Context, _ In) (*Out, error) { panic("kaboom") })).
 		Result()
-	require.NoError(t, err)
 	require.NotNil(t, result)
+	require.NoError(t, result.Error())
 
-	assert.Error(t, result.Error())
-	assert.Contains(t, result.Error().Error(), "kaboom")
+	msgs := result.Next()
+	require.Len(t, msgs, 2)
+	toolMsg, ok := msgs[1].(llm.ToolMessage)
+	require.True(t, ok)
+	assert.True(t, toolMsg.IsError())
+	assert.Contains(t, toolMsg.ToolOutput(), "kaboom")
 }
 
 func TestStreamResponse_Message(t *testing.T) {
@@ -282,8 +282,7 @@ func TestStreamResponse_Message(t *testing.T) {
 		llmtest.CompletedEvent(llm.StopReasonToolUse),
 	)
 
-	result, err := llm.NewEventProcessor(context.Background(), ch).Result()
-	require.NoError(t, err)
+	result := llm.NewEventProcessor(context.Background(), ch).Result()
 
 	msg := result.Message()
 	assert.Equal(t, llm.RoleAssistant, msg.Role())
@@ -307,12 +306,11 @@ func TestStreamResponse_Next(t *testing.T) {
 	)
 
 	searchSpec := tool.NewSpec[In]("search", "Search")
-	result, err := llm.NewEventProcessor(context.Background(), ch).
+	result := llm.NewEventProcessor(context.Background(), ch).
 		HandleTool(tool.Handle(searchSpec, func(_ context.Context, in In) (*Out, error) {
 			return &Out{Results: []string{"golang.org"}}, nil
 		})).
 		Result()
-	require.NoError(t, err)
 	require.NoError(t, result.Error())
 
 	next := result.Next()
@@ -322,8 +320,7 @@ func TestStreamResponse_Next(t *testing.T) {
 func TestStreamResponse_NextAndMessage(t *testing.T) {
 	ch := llmtest.SendEvents(llmtest.TextEvent("hi"), llmtest.CompletedEvent(llm.StopReasonEndTurn))
 
-	result, err := llm.NewEventProcessor(context.Background(), ch).Result()
-	require.NoError(t, err)
+	result := llm.NewEventProcessor(context.Background(), ch).Result()
 	require.NoError(t, result.Error())
 
 	next := result.Next()
@@ -335,11 +332,9 @@ func TestStreamResponse_ResultIdempotent(t *testing.T) {
 	ch := llmtest.SendEvents(llmtest.TextEvent("hi"), llmtest.CompletedEvent(llm.StopReasonEndTurn))
 
 	r := llm.NewEventProcessor(context.Background(), ch)
-	result1, err1 := r.Result()
-	result2, err2 := r.Result()
+	result1 := r.Result()
+	result2 := r.Result()
 
-	require.NoError(t, err1)
-	require.NoError(t, err2)
 	assert.Equal(t, result1, result2)
 	require.NoError(t, result1.Error())
 	assert.Equal(t, "hi", result1.Text())
@@ -362,11 +357,10 @@ func TestStreamResponse_HandleTool_BoundSpec(t *testing.T) {
 		llmtest.CompletedEvent(llm.StopReasonToolUse),
 	)
 
-	result, err := llm.NewEventProcessor(context.Background(), ch).
+	result := llm.NewEventProcessor(context.Background(), ch).
 		HandleTool(tool.Handle(spec, func(_ context.Context, in In) (*Out, error) {
 			return &Out{Temp: 18}, nil
 		})).
 		Result()
-	require.NoError(t, err)
 	require.NoError(t, result.Error())
 }
