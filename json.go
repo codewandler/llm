@@ -7,6 +7,34 @@ import (
 	"github.com/codewandler/llm/tool"
 )
 
+type wireToolCalls []tool.Call
+
+func (tc *wireToolCalls) UnmarshalJSON(data []byte) error {
+	var raw []json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	*tc = make(wireToolCalls, len(raw))
+	for i, r := range raw {
+		var t struct {
+			ID   string          `json:"id"`
+			Name string          `json:"name"`
+			Args json.RawMessage `json:"args"`
+		}
+		if err := json.Unmarshal(r, &t); err != nil {
+			return err
+		}
+		var args tool.Args
+		if len(t.Args) > 0 {
+			if err := json.Unmarshal(t.Args, &args); err != nil {
+				return err
+			}
+		}
+		(*tc)[i] = tool.NewToolCall(t.ID, t.Name, args)
+	}
+	return nil
+}
+
 type (
 	wireTextMsg struct {
 		Role      Role       `json:"role"`
@@ -16,7 +44,7 @@ type (
 
 	wireAssistantMsg struct {
 		wireTextMsg
-		ToolCalls []tool.Call `json:"tool_calls,omitempty"`
+		ToolCalls wireToolCalls `json:"tool_calls,omitempty"`
 	}
 
 	wireToolMsg struct {

@@ -202,7 +202,7 @@ func (m *systemMsg) isSystem()        {}
 func (m *userMsg) isUser()            {}
 func (m *toolMsg) ToolCallID() string { return m.toolCallID }
 func (m *toolMsg) ToolOutput() string { return m.textMsg.content }
-func (m *toolMsg) IsError() bool      { return false }
+func (m *toolMsg) IsError() bool      { return m.isError }
 func (m *toolMsg) isTool()            {}
 func (m *assistantMsg) isAssistant()  {}
 func (m *assistantMsg) ToolCalls() []tool.Call {
@@ -210,8 +210,8 @@ func (m *assistantMsg) ToolCalls() []tool.Call {
 }
 
 func (m *assistantMsg) Validate() error {
-	if err := m.textMsg.Validate(); err != nil {
-		return err
+	if m.content == "" && len(m.toolCalls) == 0 {
+		return errors.New("message: content is required")
 	}
 	for i, tc := range m.toolCalls {
 		if err := tc.Validate(); err != nil {
