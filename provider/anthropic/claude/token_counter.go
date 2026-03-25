@@ -25,7 +25,7 @@ var _ llm.TokenCounter = (*Provider)(nil)
 // tokenizer is proprietary. Expect ±10-15% accuracy for English text.
 func (p *Provider) CountTokens(_ context.Context, req llm.TokenCountRequest) (*llm.TokenCount, error) {
 	// Count the three injected system blocks individually, mirroring the
-	// separate {Type:"text", Text:...} entries that buildRequest prepends.
+	// separate {EventType:"text", Content:...} entries that buildRequest prepends.
 	injectedTokens := 0
 	for _, text := range []string{billingHeader, systemCore, systemIdentity} {
 		n, err := tokencount.CountText(tokencount.EncodingCL100K, text)

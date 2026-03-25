@@ -6,7 +6,7 @@ import (
 	"github.com/codewandler/llm"
 )
 
-// Model ID constants for programmatic use.
+// Model ToolCallID constants for programmatic use.
 const (
 	// Claude 4.6 (current)
 	ModelOpus   = "claude-opus-4-6"
@@ -28,7 +28,7 @@ var ModelAliases = map[string]string{
 // Source: https://www.anthropic.com/pricing (as of 2025)
 type modelPricing struct {
 	InputPrice       float64 // Regular input tokens
-	OutputPrice      float64 // Output tokens
+	OutputPrice      float64 // ToolOutput tokens
 	CachedInputPrice float64 // Cached input tokens (prompt caching read) — ~0.1× input
 	CacheWritePrice  float64 // Cache write tokens (prompt caching write) — ~1.25× input
 }

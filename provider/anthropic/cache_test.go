@@ -47,36 +47,36 @@ func TestHasPerMessageCacheHints(t *testing.T) {
 
 	t.Run("messages without hints returns false", func(t *testing.T) {
 		msgs := llm.Messages{
-			&llm.SystemMsg{Content: "system"},
-			&llm.UserMsg{Content: "user"},
+			llm.System("system"),
+			llm.User("user"),
 		}
 		assert.False(t, hasPerMessageCacheHints(msgs))
 	})
 
-	t.Run("SystemMsg with hint returns true", func(t *testing.T) {
+	t.Run("System with hint returns true", func(t *testing.T) {
 		msgs := llm.Messages{
-			&llm.SystemMsg{Content: "system", CacheHint: &llm.CacheHint{Enabled: true}},
+			llm.System("system", &llm.CacheHint{Enabled: true}),
 		}
 		assert.True(t, hasPerMessageCacheHints(msgs))
 	})
 
 	t.Run("UserMsg with hint returns true", func(t *testing.T) {
 		msgs := llm.Messages{
-			&llm.UserMsg{Content: "hi", CacheHint: &llm.CacheHint{Enabled: true}},
+			llm.User("hi", &llm.CacheHint{Enabled: true}),
 		}
 		assert.True(t, hasPerMessageCacheHints(msgs))
 	})
 
-	t.Run("AssistantMsg with hint returns true", func(t *testing.T) {
+	t.Run("AssistantMessage with hint returns true", func(t *testing.T) {
 		msgs := llm.Messages{
-			&llm.AssistantMsg{Content: "reply", CacheHint: &llm.CacheHint{Enabled: true}},
+			llm.AssistantWithCacheHint("reply", &llm.CacheHint{Enabled: true}),
 		}
 		assert.True(t, hasPerMessageCacheHints(msgs))
 	})
 
 	t.Run("disabled hint does not count", func(t *testing.T) {
 		msgs := llm.Messages{
-			&llm.UserMsg{Content: "hi", CacheHint: &llm.CacheHint{Enabled: false}},
+			llm.User("hi", &llm.CacheHint{Enabled: false}),
 		}
 		assert.False(t, hasPerMessageCacheHints(msgs))
 	})
@@ -88,7 +88,7 @@ func TestBuildRequest_CacheHint_TopLevel(t *testing.T) {
 		MaxTokens: 100,
 		StreamOptions: llm.Request{
 			Messages: llm.Messages{
-				&llm.UserMsg{Content: "Hello"},
+				llm.User("Hello"),
 			},
 			CacheHint: &llm.CacheHint{Enabled: true},
 		},
@@ -112,7 +112,7 @@ func TestBuildRequest_CacheHint_NoTopLevelWhenPerMessageHintsExist(t *testing.T)
 		MaxTokens: 100,
 		StreamOptions: llm.Request{
 			Messages: llm.Messages{
-				&llm.UserMsg{Content: "Hello", CacheHint: &llm.CacheHint{Enabled: true}},
+				llm.User("Hello", &llm.CacheHint{Enabled: true}),
 			},
 			CacheHint: &llm.CacheHint{Enabled: true}, // should be ignored
 		},
@@ -135,7 +135,7 @@ func TestBuildRequest_CacheHint_PerMessageUser(t *testing.T) {
 		MaxTokens: 100,
 		StreamOptions: llm.Request{
 			Messages: llm.Messages{
-				&llm.UserMsg{Content: "Hello", CacheHint: &llm.CacheHint{Enabled: true}},
+				llm.User("Hello", &llm.CacheHint{Enabled: true}),
 			},
 		},
 	}
@@ -164,8 +164,8 @@ func TestBuildRequest_CacheHint_SystemBlock(t *testing.T) {
 		MaxTokens: 100,
 		StreamOptions: llm.Request{
 			Messages: llm.Messages{
-				&llm.SystemMsg{Content: "Big prompt", CacheHint: &llm.CacheHint{Enabled: true}},
-				&llm.UserMsg{Content: "Hello"},
+				llm.System("Big prompt", &llm.CacheHint{Enabled: true}),
+				llm.User("Hello"),
 			},
 		},
 	}
@@ -191,7 +191,7 @@ func TestBuildRequest_CacheHint_ExtendedTTL(t *testing.T) {
 		MaxTokens: 100,
 		StreamOptions: llm.Request{
 			Messages: llm.Messages{
-				&llm.UserMsg{Content: "Hello"},
+				llm.User("Hello"),
 			},
 			CacheHint: &llm.CacheHint{Enabled: true, TTL: "1h"},
 		},
@@ -214,7 +214,7 @@ func TestBuildRequest_NoCacheHint_NoTopLevelField(t *testing.T) {
 		MaxTokens: 100,
 		StreamOptions: llm.Request{
 			Messages: llm.Messages{
-				&llm.UserMsg{Content: "Hello"},
+				llm.User("Hello"),
 			},
 		},
 	}
@@ -231,8 +231,8 @@ func TestBuildRequest_NoCacheHint_NoTopLevelField(t *testing.T) {
 
 func TestCollectSystemBlocks_CacheHint(t *testing.T) {
 	msgs := llm.Messages{
-		&llm.SystemMsg{Content: "First", CacheHint: &llm.CacheHint{Enabled: true}},
-		&llm.SystemMsg{Content: "Second"},
+		llm.System("First", &llm.CacheHint{Enabled: true}),
+		llm.System("Second"),
 	}
 
 	blocks := CollectSystemBlocks(msgs)

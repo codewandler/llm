@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/codewandler/llm"
+	"github.com/codewandler/llm/tool"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -41,10 +42,10 @@ func TestBuildRequest_SystemAndTools(t *testing.T) {
 		StreamOptions: llm.Request{
 			Model: "claude-sonnet-4-5-20250929",
 			Messages: llm.Messages{
-				&llm.SystemMsg{Content: "system prompt"},
-				&llm.UserMsg{Content: "hello"},
+				llm.System("system prompt"),
+				llm.User("hello"),
 			},
-			Tools: []llm.ToolDefinition{{
+			Tools: []tool.Definition{{
 				Name:        "get_weather",
 				Description: "Get weather",
 				Parameters:  map[string]any{"type": "object"},
@@ -84,7 +85,7 @@ func TestBuildRequest_TopKAndTopP(t *testing.T) {
 			opts: llm.Request{
 				Model: "claude-sonnet-4-5-20250929",
 				Messages: llm.Messages{
-					&llm.UserMsg{Content: "hello"},
+					llm.User("hello"),
 				},
 				TopK: 10,
 			},
@@ -97,7 +98,7 @@ func TestBuildRequest_TopKAndTopP(t *testing.T) {
 			opts: llm.Request{
 				Model: "claude-sonnet-4-5-20250929",
 				Messages: llm.Messages{
-					&llm.UserMsg{Content: "hello"},
+					llm.User("hello"),
 				},
 				TopP: 0.9,
 			},
@@ -110,7 +111,7 @@ func TestBuildRequest_TopKAndTopP(t *testing.T) {
 			opts: llm.Request{
 				Model: "claude-sonnet-4-5-20250929",
 				Messages: llm.Messages{
-					&llm.UserMsg{Content: "hello"},
+					llm.User("hello"),
 				},
 				TopK: 5,
 				TopP: 0.8,
@@ -125,7 +126,7 @@ func TestBuildRequest_TopKAndTopP(t *testing.T) {
 			opts: llm.Request{
 				Model: "claude-sonnet-4-5-20250929",
 				Messages: llm.Messages{
-					&llm.UserMsg{Content: "hello"},
+					llm.User("hello"),
 				},
 				TopK: 0,
 				TopP: 0,
@@ -164,9 +165,9 @@ func TestBuildRequest_MultipleSystemMessages(t *testing.T) {
 			StreamOptions: llm.Request{
 				Model: "claude-sonnet-4-5-20250929",
 				Messages: llm.Messages{
-					&llm.SystemMsg{Content: "first instruction"},
-					&llm.SystemMsg{Content: "second instruction"},
-					&llm.UserMsg{Content: "hello"},
+					llm.System("first instruction"),
+					llm.System("second instruction"),
+					llm.User("hello"),
 				},
 			},
 		})
@@ -189,11 +190,11 @@ func TestBuildRequest_MultipleSystemMessages(t *testing.T) {
 			StreamOptions: llm.Request{
 				Model: "claude-sonnet-4-5-20250929",
 				Messages: llm.Messages{
-					&llm.SystemMsg{Content: "initial system"},
-					&llm.UserMsg{Content: "hello"},
-					&llm.AssistantMsg{Content: "hi there"},
-					&llm.SystemMsg{Content: "additional context"},
-					&llm.UserMsg{Content: "continue"},
+					llm.System("initial system"),
+					llm.User("hello"),
+					llm.Assistant("hi there"),
+					llm.System("additional context"),
+					llm.User("continue"),
 				},
 			},
 		})
@@ -216,10 +217,10 @@ func TestBuildRequest_MultipleSystemMessages(t *testing.T) {
 			StreamOptions: llm.Request{
 				Model: "claude-sonnet-4-5-20250929",
 				Messages: llm.Messages{
-					&llm.SystemMsg{Content: "keep this"},
-					&llm.SystemMsg{Content: "   "}, // whitespace only
-					&llm.SystemMsg{Content: ""},    // empty
-					&llm.UserMsg{Content: "hello"},
+					llm.System("keep this"),
+					llm.System("   "), // whitespace only
+					llm.System(""),    // empty
+					llm.User("hello"),
 				},
 			},
 		})
@@ -240,7 +241,7 @@ func TestBuildRequest_MultipleSystemMessages(t *testing.T) {
 			StreamOptions: llm.Request{
 				Model: "claude-sonnet-4-5-20250929",
 				Messages: llm.Messages{
-					&llm.UserMsg{Content: "hello"},
+					llm.User("hello"),
 				},
 			},
 		})
@@ -258,21 +259,16 @@ func TestBuildRequest_ToolCallWithNilArguments(t *testing.T) {
 	t.Parallel()
 
 	// This tests the fix for: "messages.N.content.0.tool_use.input: Field required"
-	// When a tool call has nil Arguments, the serialized JSON must still include
+	// When a tool call has nil ToolArgs, the serialized JSON must still include
 	// the "input" field (as an empty object) because Anthropic API requires it.
 	body, err := BuildRequest(RequestOptions{
 		Model: "claude-sonnet-4-5-20250929",
 		StreamOptions: llm.Request{
 			Model: "claude-sonnet-4-5-20250929",
 			Messages: llm.Messages{
-				&llm.UserMsg{Content: "hello"},
-				&llm.AssistantMsg{
-					Content: "",
-					ToolCalls: []llm.ToolCall{
-						{ID: "call_123", Name: "get_time", Arguments: nil}, // nil arguments
-					},
-				},
-				&llm.ToolCallResult{ToolCallID: "call_123", Output: "12:00"},
+				llm.User("hello"),
+				llm.Assistant("", tool.NewToolCall("call_123", "get_time", nil)),
+				llm.Tool("call_123", "12:00"),
 			},
 		},
 	})

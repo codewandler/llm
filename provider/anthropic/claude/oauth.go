@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	// AnthropicClientID is the public OAuth client ID for Anthropic.
+	// AnthropicClientID is the public OAuth client ToolCallID for Anthropic.
 	AnthropicClientID = "9d1c250a-e61b-44d9-88ed-5944d1962f5e"
 
 	// AuthEndpoint is the Claude OAuth authorization endpoint.

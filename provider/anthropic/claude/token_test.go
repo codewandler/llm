@@ -80,7 +80,7 @@ func TestToken_IsExpiredWithBuffer_ExactBoundary(t *testing.T) {
 		AccessToken: "valid-token",
 		ExpiresAt:   time.Now().Add(time.Minute),
 	}
-	// With 1 minute buffer, it should be at the boundary
+	// Add 1 minute buffer, it should be at the boundary
 	// time.Now().Add(1m) is After token.ExpiresAt is false when they're equal
 	// But due to timing, we check both scenarios
 	result := token.IsExpiredWithBuffer(time.Minute)

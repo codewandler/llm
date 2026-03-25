@@ -182,7 +182,7 @@ func (p *Provider) Models() []llm.Model {
 }
 
 // CreateStream implements llm.Provider.
-func (p *Provider) CreateStream(ctx context.Context, opts llm.Request) (<-chan llm.StreamEvent, error) {
+func (p *Provider) CreateStream(ctx context.Context, opts llm.Request) (llm.Stream, error) {
 	startTime := time.Now()
 	requestedModel := opts.Model
 
@@ -221,13 +221,13 @@ func (p *Provider) CreateStream(ctx context.Context, opts llm.Request) (<-chan l
 		return nil, llm.NewErrAPIError(llm.ProviderNameClaude, resp.StatusCode, string(errBody))
 	}
 
-	stream := llm.NewEventStream()
-	go anthropic.ParseStream(ctx, resp.Body, stream, anthropic.StreamMeta{
+	pub, ch := llm.NewEventPublisher()
+	go anthropic.ParseStream(ctx, resp.Body, pub, anthropic.StreamMeta{
 		RequestedModel: requestedModel,
 		ResolvedModel:  opts.Model,
 		StartTime:      startTime,
 	})
-	return stream.C(), nil
+	return ch, nil
 }
 
 func (p *Provider) newAPIRequest(ctx context.Context, accessToken string, body []byte) (*http.Request, error) {

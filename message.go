@@ -65,6 +65,10 @@ type (
 
 // --- Concrete Message Types ---
 
+type MessageOpt interface {
+	apply(v Message)
+}
+
 type (
 	textMsg struct {
 		content   string
@@ -99,22 +103,32 @@ func (m *textMsg) applyCache(cache *CacheHint) {
 	}
 }
 
-func System(content string) SystemMessage {
-	return &systemMsg{
+func (c *CacheHint) apply(m Message) { m.applyCache(c) }
+
+func System(content string, opts ...MessageOpt) SystemMessage {
+	msg := &systemMsg{
 		textMsg{
 			role:    RoleSystem,
 			content: content,
 		},
 	}
+	for _, opt := range opts {
+		opt.apply(msg)
+	}
+	return msg
 }
 
-func User(content string) UserMessage {
-	return &userMsg{
+func User(content string, opts ...MessageOpt) UserMessage {
+	msg := &userMsg{
 		textMsg{
 			role:    RoleUser,
 			content: content,
 		},
 	}
+	for _, opt := range opts {
+		opt.apply(msg)
+	}
+	return msg
 }
 
 func ToolCalls(toolCalls ...tool.Call) AssistantMessage {
@@ -134,6 +148,20 @@ func Assistant(content string, toolCalls ...tool.Call) AssistantMessage {
 		},
 		toolCalls: toolCalls,
 	}
+}
+
+func AssistantWithCacheHint(content string, cacheHint *CacheHint, toolCalls ...tool.Call) AssistantMessage {
+	msg := &assistantMsg{
+		textMsg: textMsg{
+			role:    RoleAssistant,
+			content: content,
+		},
+		toolCalls: toolCalls,
+	}
+	if cacheHint != nil {
+		msg.applyCache(cacheHint)
+	}
+	return msg
 }
 
 func newToolMsg(toolCallID, output string, isError bool) ToolMessage {

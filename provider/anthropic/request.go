@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/codewandler/llm"
+	"github.com/codewandler/llm/sortmap"
 )
 
 // Request types for Anthropic API
@@ -115,20 +116,20 @@ func buildCacheControl(h *llm.CacheHint) *cacheControl {
 func hasPerMessageCacheHints(msgs llm.Messages) bool {
 	for _, msg := range msgs {
 		switch m := msg.(type) {
-		case *llm.SystemMsg:
-			if m.CacheHint != nil && m.CacheHint.Enabled {
+		case llm.SystemMessage:
+			if m.CacheHint() != nil && m.CacheHint().Enabled {
 				return true
 			}
-		case *llm.UserMsg:
-			if m.CacheHint != nil && m.CacheHint.Enabled {
+		case llm.UserMessage:
+			if m.CacheHint() != nil && m.CacheHint().Enabled {
 				return true
 			}
-		case *llm.AssistantMsg:
-			if m.CacheHint != nil && m.CacheHint.Enabled {
+		case llm.AssistantMessage:
+			if m.CacheHint() != nil && m.CacheHint().Enabled {
 				return true
 			}
-		case *llm.ToolCallResult:
-			if m.CacheHint != nil && m.CacheHint.Enabled {
+		case llm.ToolMessage:
+			if m.CacheHint() != nil && m.CacheHint().Enabled {
 				return true
 			}
 		}
@@ -177,7 +178,7 @@ func BuildRequest(reqOpts RequestOptions) ([]byte, error) {
 	}
 
 	for _, t := range opts.Tools {
-		r.Tools = append(r.Tools, toolPayload{Name: t.Name, Description: t.Description, InputSchema: llm.NewSortedMap(t.Parameters)})
+		r.Tools = append(r.Tools, toolPayload{Name: t.Name, Description: t.Description, InputSchema: sortmap.NewSortedMap(t.Parameters)})
 	}
 
 	// Wire extended thinking. Incompatible with forced tool_choice — downgrade to auto.
@@ -218,59 +219,56 @@ func BuildRequest(reqOpts RequestOptions) ([]byte, error) {
 
 	for i := 0; i < len(opts.Messages); i++ {
 		switch m := opts.Messages[i].(type) {
-		case *llm.SystemMsg:
+		case llm.SystemMessage:
 			// Handled by system blocks above
-		case *llm.UserMsg:
-			block := contentBlock{Type: "text", Text: m.Content, CacheControl: buildCacheControl(m.CacheHint)}
+		case llm.UserMessage:
+			block := contentBlock{Type: "text", Text: m.Content(), CacheControl: buildCacheControl(m.CacheHint())}
 			r.Messages = append(r.Messages, messagePayload{Role: "user", Content: []contentBlock{block}})
-		case *llm.AssistantMsg:
-			if len(m.ToolCalls) == 0 {
-				block := contentBlock{Type: "text", Text: m.Content, CacheControl: buildCacheControl(m.CacheHint)}
+		case llm.AssistantMessage:
+			if len(m.ToolCalls()) == 0 {
+				block := contentBlock{Type: "text", Text: m.Content(), CacheControl: buildCacheControl(m.CacheHint())}
 				r.Messages = append(r.Messages, messagePayload{Role: "assistant", Content: []contentBlock{block}})
 				continue
 			}
 			var blocks []any
-			if m.Content != "" {
-				blocks = append(blocks, contentBlock{Type: "text", Text: m.Content})
+			if m.Content() != "" {
+				blocks = append(blocks, contentBlock{Type: "text", Text: m.Content()})
 			}
-			for j, tc := range m.ToolCalls {
-				tub := toolUseBlock{Type: "tool_use", ID: tc.ID, Name: tc.Name, Input: ensureInputMap(tc.Arguments)}
-				// Attach cache_control to the last block in the assistant message
-				if m.CacheHint != nil && m.CacheHint.Enabled && j == len(m.ToolCalls)-1 {
-					// Use a contentBlock wrapper that supports cache_control
+			for j, tc := range m.ToolCalls() {
+				tub := toolUseBlock{Type: "tool_use", ID: tc.ToolCallID(), Name: tc.ToolName(), Input: ensureInputMap(tc.ToolArgs())}
+				if m.CacheHint() != nil && m.CacheHint().Enabled && j == len(m.ToolCalls())-1 {
 					blocks = append(blocks, struct {
 						Type         string         `json:"type"`
 						ID           string         `json:"id"`
 						Name         string         `json:"name"`
 						Input        map[string]any `json:"input"`
 						CacheControl *cacheControl  `json:"cache_control,omitempty"`
-					}{tub.Type, tub.ID, tub.Name, tub.Input, buildCacheControl(m.CacheHint)})
+					}{tub.Type, tub.ID, tub.Name, tub.Input, buildCacheControl(m.CacheHint())})
 				} else {
 					blocks = append(blocks, tub)
 				}
 			}
 			r.Messages = append(r.Messages, messagePayload{Role: "assistant", Content: blocks})
-		case *llm.ToolCallResult:
+		case llm.ToolMessage:
 			var results []contentBlock
 			prevAssistant := FindPrecedingAssistant(opts.Messages, i)
 			toolIdx := 0
 			startI := i
 			for ; i < len(opts.Messages); i++ {
-				tr, ok := opts.Messages[i].(*llm.ToolCallResult)
+				tr, ok := opts.Messages[i].(llm.ToolMessage)
 				if !ok {
 					break
 				}
-				toolUseID := tr.ToolCallID
-				if toolUseID == "" && prevAssistant != nil && toolIdx < len(prevAssistant.ToolCalls) {
-					toolUseID = prevAssistant.ToolCalls[toolIdx].ID
+				toolUseID := tr.ToolCallID()
+				if toolUseID == "" && prevAssistant != nil && toolIdx < len(prevAssistant.ToolCalls()) {
+					toolUseID = prevAssistant.ToolCalls()[toolIdx].ToolCallID()
 				}
-				results = append(results, contentBlock{Type: "tool_result", ToolUseID: toolUseID, Content: tr.Output, IsError: tr.IsError})
+				results = append(results, contentBlock{Type: "tool_result", ToolUseID: toolUseID, Content: tr.ToolOutput(), IsError: tr.IsError()})
 				toolIdx++
 			}
-			// Apply cache hint from the last ToolCallResult in this batch
 			if i > startI {
-				if lastTR, ok := opts.Messages[i-1].(*llm.ToolCallResult); ok {
-					if cc := buildCacheControl(lastTR.CacheHint); cc != nil {
+				if lastTR, ok := opts.Messages[i-1].(llm.ToolMessage); ok {
+					if cc := buildCacheControl(lastTR.CacheHint()); cc != nil {
 						results[len(results)-1].CacheControl = cc
 					}
 				}
@@ -284,27 +282,25 @@ func BuildRequest(reqOpts RequestOptions) ([]byte, error) {
 }
 
 // FindPrecedingAssistant finds the assistant message preceding the given index.
-func FindPrecedingAssistant(messages llm.Messages, toolIdx int) *llm.AssistantMsg {
+func FindPrecedingAssistant(messages llm.Messages, toolIdx int) llm.AssistantMessage {
 	for j := toolIdx - 1; j >= 0; j-- {
-		if am, ok := messages[j].(*llm.AssistantMsg); ok {
+		if am, ok := messages[j].(llm.AssistantMessage); ok {
 			return am
 		}
 	}
 	return nil
 }
 
-// CollectSystemBlocks extracts all SystemMsg from messages and returns them as SystemBlocks.
-// It filters out empty content. This allows multiple system messages to be accumulated
-// into an array format as supported by the Anthropic API.
+// CollectSystemBlocks extracts all System from messages and returns them as SystemBlocks.
 func CollectSystemBlocks(messages llm.Messages) []SystemBlock {
 	var blocks []SystemBlock
 	for _, msg := range messages {
-		if sm, ok := msg.(*llm.SystemMsg); ok {
-			if strings.TrimSpace(sm.Content) != "" {
+		if sm, ok := msg.(llm.SystemMessage); ok {
+			if strings.TrimSpace(sm.Content()) != "" {
 				blocks = append(blocks, SystemBlock{
 					Type:         "text",
-					Text:         sm.Content,
-					CacheControl: buildCacheControl(sm.CacheHint),
+					Text:         sm.Content(),
+					CacheControl: buildCacheControl(sm.CacheHint()),
 				})
 			}
 		}

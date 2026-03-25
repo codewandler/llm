@@ -50,7 +50,7 @@ func (p *Provider) Models() []llm.Model {
 	}
 }
 
-func (p *Provider) CreateStream(ctx context.Context, opts llm.Request) (<-chan llm.StreamEvent, error) {
+func (p *Provider) CreateStream(ctx context.Context, opts llm.Request) (llm.Stream, error) {
 	startTime := time.Now()
 
 	if err := opts.Validate(); err != nil {
@@ -89,13 +89,13 @@ func (p *Provider) CreateStream(ctx context.Context, opts llm.Request) (<-chan l
 		return nil, llm.NewErrAPIError(llm.ProviderNameAnthropic, resp.StatusCode, string(errBody))
 	}
 
-	stream := llm.NewEventStream()
-	go ParseStream(ctx, resp.Body, stream, StreamMeta{
+	pub, ch := llm.NewEventPublisher()
+	go ParseStream(ctx, resp.Body, pub, StreamMeta{
 		RequestedModel: opts.Model,
 		ResolvedModel:  opts.Model,
 		StartTime:      startTime,
 	})
-	return stream.C(), nil
+	return ch, nil
 }
 
 func (p *Provider) newAPIRequest(ctx context.Context, apiKey string, body []byte) (*http.Request, error) {

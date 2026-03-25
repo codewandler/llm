@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/codewandler/llm"
+	"github.com/codewandler/llm/tool"
 )
 
 type contentBlockStartEvent struct {
@@ -33,16 +34,14 @@ type contentBlockDeltaEvent struct {
 	} `json:"delta"`
 }
 
-// StreamMeta passes context into the stream parser for StreamEventStart.
 type StreamMeta struct {
 	RequestedModel string
 	ResolvedModel  string
 	StartTime      time.Time
 }
 
-// ParseStream parses an Anthropic SSE stream and sends events to the stream.
-func ParseStream(ctx context.Context, body io.ReadCloser, events *llm.EventStream, meta StreamMeta) {
-	defer events.Close()
+func ParseStream(ctx context.Context, body io.ReadCloser, pub llm.Publisher, meta StreamMeta) {
+	defer pub.Close()
 	defer body.Close()
 
 	scanner := bufio.NewScanner(body)
@@ -60,7 +59,7 @@ func ParseStream(ctx context.Context, body io.ReadCloser, events *llm.EventStrea
 	for scanner.Scan() {
 		select {
 		case <-ctx.Done():
-			events.Error(llm.NewErrContextCancelled(llm.ProviderNameAnthropic, ctx.Err()))
+			pub.Error(llm.NewErrContextCancelled(llm.ProviderNameAnthropic, ctx.Err()))
 			return
 		default:
 		}
@@ -94,14 +93,10 @@ func ParseStream(ctx context.Context, body io.ReadCloser, events *llm.EventStrea
 			if err := json.Unmarshal([]byte(data), &evt); err == nil {
 				usage.CacheWriteTokens = evt.Message.Usage.CacheCreationInputTokens
 				usage.CacheReadTokens = evt.Message.Usage.CacheReadInputTokens
-				// InputTokens is total input: uncached remainder + cache-read + cache-write.
-				// The wire field input_tokens is only the uncached remainder (tokens after
-				// the last cache breakpoint), so we sum all three buckets here.
 				usage.InputTokens = evt.Message.Usage.InputTokens +
 					usage.CacheWriteTokens + usage.CacheReadTokens
 
-				// Emit StreamEventStart with metadata
-				events.Start(llm.StreamStartOpts{
+				pub.Started(llm.StreamStartedEvent{
 					Model:     evt.Message.Model,
 					RequestID: evt.Message.ID,
 				})
@@ -138,15 +133,22 @@ func ParseStream(ctx context.Context, body io.ReadCloser, events *llm.EventStrea
 			if err := json.Unmarshal([]byte(data), &evt); err != nil {
 				continue
 			}
+			idx := uint32(evt.Index)
 			switch evt.Delta.Type {
 			case "text_delta":
-				events.Delta(llm.TextDelta(llm.DeltaIndex(evt.Index), evt.Delta.Text))
+				d := llm.TextDelta(evt.Delta.Text)
+				d.Index = &idx
+				pub.Delta(d)
 			case "thinking_delta":
-				events.Delta(llm.ReasoningDelta(llm.DeltaIndex(evt.Index), evt.Delta.Thinking))
+				d := llm.ReasoningDelta(evt.Delta.Thinking)
+				d.Index = &idx
+				pub.Delta(d)
 			case "input_json_delta":
 				if tb, ok := activeTools[evt.Index]; ok {
 					tb.jsonBuf.WriteString(evt.Delta.PartialJSON)
-					events.Delta(llm.ToolDelta(llm.DeltaIndex(evt.Index), tb.id, tb.name, evt.Delta.PartialJSON))
+					d := llm.ToolDelta(tb.id, tb.name, evt.Delta.PartialJSON)
+					d.Index = &idx
+					pub.Delta(d)
 				}
 			}
 
@@ -162,13 +164,14 @@ func ParseStream(ctx context.Context, body io.ReadCloser, events *llm.EventStrea
 				if tb.jsonBuf.Len() > 0 {
 					_ = json.Unmarshal([]byte(tb.jsonBuf.String()), &args)
 				}
-				events.ToolCall(llm.ToolCall{ID: tb.id, Name: tb.name, Arguments: args})
+				pub.ToolCall(tool.NewToolCall(tb.id, tb.name, args))
 				delete(activeTools, evt.Index)
 			}
 
 		case "message_stop":
 			FillCost(meta.ResolvedModel, &usage)
-			events.Done(stopReason, &usage)
+			pub.Completed(llm.CompletedEvent{StopReason: stopReason})
+			pub.Usage(usage)
 			return
 
 		case "error":
@@ -178,15 +181,13 @@ func ParseStream(ctx context.Context, body io.ReadCloser, events *llm.EventStrea
 				} `json:"error"`
 			}
 			if err := json.Unmarshal([]byte(data), &errEvt); err == nil {
-				events.Error(llm.NewErrProviderMsg(llm.ProviderNameAnthropic, errEvt.Error.Message))
+				pub.Error(llm.NewErrProviderMsg(llm.ProviderNameAnthropic, errEvt.Error.Message))
 			}
 			return
 		}
 	}
 }
 
-// mapAnthropicStopReason converts Anthropic's wire stop_reason string to a
-// typed StopReason.
 func mapAnthropicStopReason(s string) llm.StopReason {
 	switch s {
 	case "end_turn":
