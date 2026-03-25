@@ -15,8 +15,9 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime"
 	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime/document"
 	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime/types"
-
 	"github.com/codewandler/llm"
+	"github.com/codewandler/llm/sortmap"
+	"github.com/codewandler/llm/tool"
 )
 
 // Environment variable names for AWS configuration.
@@ -293,7 +294,7 @@ func (p *Provider) RegionPrefix() string {
 	return p.regionPrefix
 }
 
-func (p *Provider) CreateStream(ctx context.Context, opts llm.Request) (<-chan llm.StreamEvent, error) {
+func (p *Provider) CreateStream(ctx context.Context, opts llm.Request) (llm.Stream, error) {
 	// Lazy client initialization (thread-safe)
 	if err := p.initClient(ctx); err != nil {
 		return nil, llm.NewErrRequestFailed(llm.ProviderNameBedrock, err)
@@ -328,9 +329,9 @@ func (p *Provider) CreateStream(ctx context.Context, opts llm.Request) (<-chan l
 		ResolvedModel:  resolvedModel,
 		Logger:         p.logger,
 	}
-	stream := llm.NewEventStream()
-	go parseStream(ctx, output, stream, meta)
-	return stream.C(), nil
+	pub, ch := llm.NewEventPublisher()
+	go parseStream(ctx, output, pub, meta)
+	return ch, nil
 }
 
 // --- Request building ---
@@ -359,20 +360,20 @@ func buildBedrockCachePoint(h *llm.CacheHint, modelID string) *types.CachePointB
 func hasBedrockPerMessageCacheHints(msgs llm.Messages) bool {
 	for _, msg := range msgs {
 		switch m := msg.(type) {
-		case *llm.SystemMsg:
-			if m.CacheHint != nil && m.CacheHint.Enabled {
+		case llm.SystemMessage:
+			if m.CacheHint() != nil && m.CacheHint().Enabled {
 				return true
 			}
-		case *llm.UserMsg:
-			if m.CacheHint != nil && m.CacheHint.Enabled {
+		case llm.UserMessage:
+			if m.CacheHint() != nil && m.CacheHint().Enabled {
 				return true
 			}
-		case *llm.AssistantMsg:
-			if m.CacheHint != nil && m.CacheHint.Enabled {
+		case llm.AssistantMessage:
+			if m.CacheHint() != nil && m.CacheHint().Enabled {
 				return true
 			}
-		case *llm.ToolCallResult:
-			if m.CacheHint != nil && m.CacheHint.Enabled {
+		case llm.ToolMessage:
+			if m.CacheHint() != nil && m.CacheHint().Enabled {
 				return true
 			}
 		}
@@ -393,23 +394,21 @@ func buildRequest(opts llm.Request) (*bedrockruntime.ConverseStreamInput, error)
 		msg := opts.Messages[i]
 
 		switch m := msg.(type) {
-		case *llm.SystemMsg:
+		case llm.SystemMessage:
 			system = append(system, &types.SystemContentBlockMemberText{
-				Value: m.Content,
+				Value: m.Content(),
 			})
-			// Append cachePoint after this system block if requested
-			if cp := buildBedrockCachePoint(m.CacheHint, opts.Model); cp != nil {
+			if cp := buildBedrockCachePoint(m.CacheHint(), opts.Model); cp != nil {
 				system = append(system, &types.SystemContentBlockMemberCachePoint{
 					Value: *cp,
 				})
 			}
 
-		case *llm.UserMsg:
+		case llm.UserMessage:
 			content := []types.ContentBlock{
-				&types.ContentBlockMemberText{Value: m.Content},
+				&types.ContentBlockMemberText{Value: m.Content()},
 			}
-			// Append cachePoint after content if requested
-			if cp := buildBedrockCachePoint(m.CacheHint, opts.Model); cp != nil {
+			if cp := buildBedrockCachePoint(m.CacheHint(), opts.Model); cp != nil {
 				content = append(content, &types.ContentBlockMemberCachePoint{Value: *cp})
 			}
 			messages = append(messages, types.Message{
@@ -417,27 +416,25 @@ func buildRequest(opts llm.Request) (*bedrockruntime.ConverseStreamInput, error)
 				Content: content,
 			})
 
-		case *llm.AssistantMsg:
+		case llm.AssistantMessage:
 			var content []types.ContentBlock
-			if m.Content != "" {
-				content = append(content, &types.ContentBlockMemberText{Value: m.Content})
+			if m.Content() != "" {
+				content = append(content, &types.ContentBlockMemberText{Value: m.Content()})
 			}
-			for _, tc := range m.ToolCalls {
-				// Convert arguments to document.Interface
-				inputDoc, err := toDocument(tc.Arguments)
+			for _, tc := range m.ToolCalls() {
+				inputDoc, err := toDocument(tc.ToolArgs())
 				if err != nil {
 					return nil, fmt.Errorf("marshal tool arguments: %w", err)
 				}
 				content = append(content, &types.ContentBlockMemberToolUse{
 					Value: types.ToolUseBlock{
-						ToolUseId: aws.String(tc.ID),
-						Name:      aws.String(tc.Name),
+						ToolUseId: aws.String(tc.ToolCallID()),
+						Name:      aws.String(tc.ToolName()),
 						Input:     inputDoc,
 					},
 				})
 			}
-			// Append cachePoint after all content blocks if requested
-			if cp := buildBedrockCachePoint(m.CacheHint, opts.Model); cp != nil {
+			if cp := buildBedrockCachePoint(m.CacheHint(), opts.Model); cp != nil {
 				content = append(content, &types.ContentBlockMemberCachePoint{Value: *cp})
 			}
 			messages = append(messages, types.Message{
@@ -445,39 +442,36 @@ func buildRequest(opts llm.Request) (*bedrockruntime.ConverseStreamInput, error)
 				Content: content,
 			})
 
-		case *llm.ToolCallResult:
-			// Bedrock expects tool results in a user message with toolResult content blocks
-			// Collect consecutive tool results
+		case llm.ToolMessage:
 			var toolResults []types.ContentBlock
 			startI := i
 			for ; i < len(opts.Messages); i++ {
-				tr, ok := opts.Messages[i].(*llm.ToolCallResult)
+				tr, ok := opts.Messages[i].(llm.ToolMessage)
 				if !ok {
 					break
 				}
 				status := types.ToolResultStatusSuccess
-				if tr.IsError {
+				if tr.IsError() {
 					status = types.ToolResultStatusError
 				}
 				toolResults = append(toolResults, &types.ContentBlockMemberToolResult{
 					Value: types.ToolResultBlock{
-						ToolUseId: aws.String(tr.ToolCallID),
+						ToolUseId: aws.String(tr.ToolCallID()),
 						Content: []types.ToolResultContentBlock{
-							&types.ToolResultContentBlockMemberText{Value: tr.Output},
+							&types.ToolResultContentBlockMemberText{Value: tr.ToolOutput()},
 						},
 						Status: status,
 					},
 				})
 			}
-			// Apply cache hint from the last ToolCallResult in this batch
 			if i > startI {
-				if lastTR, ok := opts.Messages[i-1].(*llm.ToolCallResult); ok {
-					if cp := buildBedrockCachePoint(lastTR.CacheHint, opts.Model); cp != nil {
+				if lastTR, ok := opts.Messages[i-1].(llm.ToolMessage); ok {
+					if cp := buildBedrockCachePoint(lastTR.CacheHint(), opts.Model); cp != nil {
 						toolResults = append(toolResults, &types.ContentBlockMemberCachePoint{Value: *cp})
 					}
 				}
 			}
-			i-- // back up one since loop will increment
+			i--
 			messages = append(messages, types.Message{
 				Role:    types.ConversationRoleUser,
 				Content: toolResults,
@@ -507,7 +501,7 @@ func buildRequest(opts llm.Request) (*bedrockruntime.ConverseStreamInput, error)
 	if len(opts.Tools) > 0 {
 		var tools []types.Tool
 		for _, t := range opts.Tools {
-			schema, err := toDocument(llm.NewSortedMap(t.Parameters))
+			schema, err := toDocument(sortmap.NewSortedMap(t.Parameters))
 			if err != nil {
 				return nil, fmt.Errorf("marshal tool schema: %w", err)
 			}
@@ -644,7 +638,7 @@ func toDocument(v any) (document.Interface, error) {
 	return document.NewLazyDocument(normalized), nil
 }
 
-// --- Stream parsing ---
+// --- Publisher parsing ---
 
 // streamMeta passes context into the stream parser for StreamEventStart.
 type streamMeta struct {
@@ -653,15 +647,12 @@ type streamMeta struct {
 	Logger         *slog.Logger
 }
 
-func parseStream(ctx context.Context, output *bedrockruntime.ConverseStreamOutput, events *llm.EventStream, meta streamMeta) {
-	defer events.Close()
+func parseStream(ctx context.Context, output *bedrockruntime.ConverseStreamOutput, pub llm.Publisher, meta streamMeta) {
+	defer pub.Close()
 
 	stream := output.GetStream()
 	defer stream.Close()
 
-	// logEvent emits a decoded eventstream frame to the logger in the same
-	// format the HTTP transport uses for SSE chunks, so httpLogHandler renders
-	// it identically. v must be JSON-serialisable.
 	logEvent := func(eventType string, v any) {
 		if meta.Logger == nil {
 			return
@@ -670,12 +661,9 @@ func parseStream(ctx context.Context, output *bedrockruntime.ConverseStreamOutpu
 		if err != nil {
 			return
 		}
-		// Inject the event type into the JSON so httpLogHandler can identify
-		// and render it (noisy events collapsed, full events expanded).
-		// Merge {"type":"<eventType>"} with the struct JSON.
 		merged := `{"type":"` + eventType + `"`
 		if string(b) != "{}" {
-			merged += "," + string(b[1:]) // drop leading '{' from b
+			merged += "," + string(b[1:])
 		} else {
 			merged += "}"
 		}
@@ -686,7 +674,6 @@ func parseStream(ctx context.Context, output *bedrockruntime.ConverseStreamOutpu
 		)
 	}
 
-	// Tool call accumulation
 	type toolAccum struct {
 		id      string
 		name    string
@@ -698,18 +685,16 @@ func parseStream(ctx context.Context, output *bedrockruntime.ConverseStreamOutpu
 	startEmitted := false
 
 	for event := range stream.Events() {
-		// Check for context cancellation
 		select {
 		case <-ctx.Done():
-			events.Error(llm.NewErrContextCancelled(llm.ProviderNameBedrock, ctx.Err()))
+			pub.Error(llm.NewErrContextCancelled(llm.ProviderNameBedrock, ctx.Err()))
 			return
 		default:
 		}
 
-		// Emit StreamEventStart on first event
 		if !startEmitted {
 			startEmitted = true
-			events.Start(llm.StreamStartOpts{})
+			pub.Started(llm.StreamStartedEvent{})
 		}
 
 		switch e := event.(type) {
@@ -732,16 +717,16 @@ func parseStream(ctx context.Context, output *bedrockruntime.ConverseStreamOutpu
 			if e.Value.Delta != nil {
 				switch delta := e.Value.Delta.(type) {
 				case *types.ContentBlockDeltaMemberText:
-					events.Delta(llm.TextDelta(llm.DeltaIndex(idx), delta.Value))
+					pub.Delta(llm.TextDelta(delta.Value).WithIndex(uint32(idx)))
 				case *types.ContentBlockDeltaMemberToolUse:
 					if tb, ok := activeTools[idx]; ok && delta.Value.Input != nil {
 						tb.argsBuf.WriteString(*delta.Value.Input)
-						events.Delta(llm.ToolDelta(llm.DeltaIndex(idx), tb.id, tb.name, *delta.Value.Input))
+						pub.Delta(llm.ToolDelta(tb.id, tb.name, *delta.Value.Input).WithIndex(uint32(idx)))
 					}
 				case *types.ContentBlockDeltaMemberReasoningContent:
 					switch r := delta.Value.(type) {
 					case *types.ReasoningContentBlockDeltaMemberText:
-						events.Delta(llm.ReasoningDelta(llm.DeltaIndex(idx), r.Value))
+						pub.Delta(llm.ReasoningDelta(r.Value).WithIndex(uint32(idx)))
 					}
 				}
 			}
@@ -754,11 +739,7 @@ func parseStream(ctx context.Context, output *bedrockruntime.ConverseStreamOutpu
 				if tb.argsBuf.Len() > 0 {
 					_ = json.Unmarshal([]byte(tb.argsBuf.String()), &args)
 				}
-				events.ToolCall(llm.ToolCall{
-					ID:        tb.id,
-					Name:      tb.name,
-					Arguments: args,
-				})
+				pub.ToolCall(tool.NewToolCall(tb.id, tb.name, args))
 				delete(activeTools, idx)
 			}
 
@@ -780,15 +761,11 @@ func parseStream(ctx context.Context, output *bedrockruntime.ConverseStreamOutpu
 				if e.Value.Usage.CacheWriteInputTokens != nil {
 					usage.CacheWriteTokens = int(*e.Value.Usage.CacheWriteInputTokens)
 				}
-				// InputTokens must be the total tokens seen by the model:
-				// uncached remainder + cache-read tokens + cache-write tokens.
-				// The raw Bedrock field is only the uncached remainder (same as
-				// the Anthropic wire format). Add the cache buckets to match the
-				// Usage.InputTokens contract.
 				usage.InputTokens += usage.CacheReadTokens + usage.CacheWriteTokens
 				fillCost(meta.ResolvedModel, &usage)
 			}
-			events.Done(stopReason, &usage)
+			pub.Usage(usage)
+			pub.Completed(llm.CompletedEvent{StopReason: stopReason})
 			return
 
 		case *types.ConverseStreamOutputMemberMessageStop:
@@ -797,9 +774,8 @@ func parseStream(ctx context.Context, output *bedrockruntime.ConverseStreamOutpu
 		}
 	}
 
-	// Check for stream errors
 	if err := stream.Err(); err != nil {
-		events.Error(llm.NewErrStreamRead(llm.ProviderNameBedrock, err))
+		pub.Error(llm.NewErrStreamRead(llm.ProviderNameBedrock, err))
 	}
 }
 

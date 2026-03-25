@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/codewandler/llm"
+	"github.com/codewandler/llm/tool"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -12,7 +13,7 @@ import (
 func TestProvider_CountTokens_MissingModel(t *testing.T) {
 	p := New()
 	_, err := p.CountTokens(context.Background(), llm.TokenCountRequest{
-		Messages: llm.Messages{&llm.UserMsg{Content: "hello"}},
+		Messages: llm.Messages{llm.User("hello")},
 	})
 	require.Error(t, err)
 }
@@ -20,8 +21,8 @@ func TestProvider_CountTokens_MissingModel(t *testing.T) {
 func TestProvider_CountTokens_PerMessageLen(t *testing.T) {
 	p := New()
 	msgs := llm.Messages{
-		&llm.SystemMsg{Content: "You are helpful."},
-		&llm.UserMsg{Content: "What is 2+2?"},
+		llm.System("You are helpful."),
+		llm.User("What is 2+2?"),
 	}
 	got, err := p.CountTokens(context.Background(), llm.TokenCountRequest{
 		Model:    "anthropic.claude-3-5-sonnet-20241022-v2:0",
@@ -34,10 +35,10 @@ func TestProvider_CountTokens_PerMessageLen(t *testing.T) {
 func TestProvider_CountTokens_RoleBreakdown(t *testing.T) {
 	p := New()
 	msgs := llm.Messages{
-		&llm.SystemMsg{Content: "Be concise."},
-		&llm.UserMsg{Content: "Hello"},
-		&llm.AssistantMsg{Content: "Hi there!"},
-		&llm.ToolCallResult{ToolCallID: "t1", Output: "result"},
+		llm.System("Be concise."),
+		llm.User("Hello"),
+		llm.Assistant("Hi there!"),
+		llm.Tool("t1", "result"),
 	}
 	got, err := p.CountTokens(context.Background(), llm.TokenCountRequest{
 		Model:    "anthropic.claude-3-haiku-20240307-v1:0",
@@ -55,7 +56,7 @@ func TestProvider_CountTokens_RoleBreakdown(t *testing.T) {
 
 func TestProvider_CountTokens_Tools(t *testing.T) {
 	p := New()
-	tools := []llm.ToolDefinition{
+	tools := []tool.Definition{
 		{Name: "fetch", Description: "Fetch a URL", Parameters: map[string]any{
 			"type":       "object",
 			"properties": map[string]any{"url": map[string]any{"type": "string"}},
@@ -63,12 +64,11 @@ func TestProvider_CountTokens_Tools(t *testing.T) {
 	}
 	got, err := p.CountTokens(context.Background(), llm.TokenCountRequest{
 		Model:    "anthropic.claude-3-5-sonnet-20241022-v2:0",
-		Messages: llm.Messages{&llm.UserMsg{Content: "fetch this"}},
+		Messages: llm.Messages{llm.User("fetch this")},
 		Tools:    tools,
 	})
 	require.NoError(t, err)
 	assert.Greater(t, got.ToolsTokens, 0)
-	// ToolsTokens is now raw JSON only; overhead is in OverheadTokens.
 	assert.Equal(t, got.ToolsTokens, got.PerTool["fetch"])
 	assert.Greater(t, got.OverheadTokens, 0, "Anthropic tool preamble must appear in OverheadTokens")
 }
