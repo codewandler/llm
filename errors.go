@@ -14,14 +14,14 @@ const (
 	ProviderNameOllama     = "ollama"
 	ProviderNameOpenAI     = "openai"
 	ProviderNameOpenRouter = "openrouter"
-	ProviderNameRouter  = "router"
+	ProviderNameRouter     = "router"
 )
 
 // Sentinel errors for use with errors.Is. Each ProviderError wraps one of
 // these so callers can inspect the error kind without string matching.
 var (
 	// ErrContextCancelled is returned when the caller's context is cancelled
-	// while a stream is in progress.
+	// while a eventPub is in progress.
 	ErrContextCancelled = errors.New("context cancelled")
 
 	// ErrRequestFailed is returned when the HTTP transport fails before a
@@ -32,16 +32,16 @@ var (
 	// HTTP status. The ProviderError carries StatusCode and Body.
 	ErrAPIError = errors.New("API error")
 
-	// ErrStreamRead is returned when reading or scanning the response stream
+	// ErrStreamRead is returned when reading or scanning the response eventPub
 	// fails at the I/O level (e.g. scanner error, connection reset).
-	ErrStreamRead = errors.New("stream read error")
+	ErrStreamRead = errors.New("eventPub read error")
 
-	// ErrStreamDecode is returned when a stream chunk cannot be decoded
+	// ErrStreamDecode is returned when a eventPub chunk cannot be decoded
 	// (e.g. malformed JSON in an SSE data line).
-	ErrStreamDecode = errors.New("stream decode error")
+	ErrStreamDecode = errors.New("eventPub decode error")
 
 	// ErrProviderError is returned when the provider sends an explicit
-	// error inside the stream (e.g. Anthropic error event, OpenRouter
+	// error inside the eventPub (e.g. Anthropic error event, OpenRouter
 	// chunk-level error).
 	ErrProviderError = errors.New("provider error")
 
@@ -53,7 +53,7 @@ var (
 	// fails before it is sent.
 	ErrBuildRequest = errors.New("build request error")
 
-	// ErrUnknownModel is returned when a model ID or alias cannot be resolved.
+	// ErrUnknownModel is returned when a model ToolCallID or alias cannot be resolved.
 	ErrUnknownModel = errors.New("unknown model")
 
 	// ErrNoProviders is returned when no providers are configured or all
@@ -143,7 +143,7 @@ func (e *ProviderError) MarshalJSON() ([]byte, error) {
 
 // --- Constructors ---
 
-// NewErrContextCancelled wraps a context cancellation for a provider stream.
+// NewErrContextCancelled wraps a context cancellation for a provider eventPub.
 func NewErrContextCancelled(provider string, cause error) *ProviderError {
 	return &ProviderError{
 		Sentinel: ErrContextCancelled,
@@ -175,28 +175,28 @@ func NewErrAPIError(provider string, statusCode int, body string) *ProviderError
 }
 
 // NewErrStreamRead wraps an I/O or scanner error that occurred while reading
-// the response stream.
+// the response eventPub.
 func NewErrStreamRead(provider string, cause error) *ProviderError {
 	return &ProviderError{
 		Sentinel: ErrStreamRead,
 		Provider: provider,
-		Message:  "stream read error",
+		Message:  "eventPub read error",
 		Cause:    cause,
 	}
 }
 
-// NewErrStreamDecode wraps a JSON or protocol decode failure mid-stream.
+// NewErrStreamDecode wraps a JSON or protocol decode failure mid-eventPub.
 func NewErrStreamDecode(provider string, cause error) *ProviderError {
 	return &ProviderError{
 		Sentinel: ErrStreamDecode,
 		Provider: provider,
-		Message:  "stream decode error",
+		Message:  "eventPub decode error",
 		Cause:    cause,
 	}
 }
 
 // NewErrProviderMsg wraps an explicit error message sent by the provider
-// inside the stream (e.g. an Anthropic error event or OpenRouter chunk error).
+// inside the eventPub (e.g. an Anthropic error event or OpenRouter chunk error).
 func NewErrProviderMsg(provider string, msg string) *ProviderError {
 	return &ProviderError{
 		Sentinel: ErrProviderError,
@@ -226,7 +226,7 @@ func NewErrBuildRequest(provider string, cause error) *ProviderError {
 	}
 }
 
-// NewErrUnknownModel returns an error for a model ID or alias that cannot
+// NewErrUnknownModel returns an error for a model ToolCallID or alias that cannot
 // be resolved by the provider.
 func NewErrUnknownModel(provider string, modelID string) *ProviderError {
 	return &ProviderError{

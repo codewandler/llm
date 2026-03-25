@@ -3,6 +3,7 @@ package llm
 import (
 	"testing"
 
+	"github.com/codewandler/llm/tool"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -49,13 +50,13 @@ func TestCountMessage_AllRoles(t *testing.T) {
 		name string
 		msg  Message
 	}{
-		{"system", &SystemMsg{Content: "You are helpful."}},
+		{"system", &System{Content: "You are helpful."}},
 		{"user", &UserMsg{Content: "Hello there!"}},
-		{"assistant", &AssistantMsg{Content: "Hi back!"}},
-		{"tool_result", &ToolCallResult{ToolCallID: "c1", Output: "42"}},
-		{"assistant_with_tool_calls", &AssistantMsg{
+		{"assistant", &AssistantMessage{Content: "Hi back!"}},
+		{"tool_result", &ToolResult{ToolCallID: "c1", Output: "42"}},
+		{"assistant_with_tool_calls", &AssistantMessage{
 			Content: "Let me check.",
-			ToolCalls: []ToolCall{
+			ToolCalls: []MessageToolCall{
 				{ID: "c1", Name: "get_weather", Arguments: map[string]any{"location": "Berlin"}},
 			},
 		}},
@@ -74,9 +75,9 @@ func TestCountMessage_AllRoles(t *testing.T) {
 func TestCountMessage_ConsistentWithCountTokens(t *testing.T) {
 	model := "gpt-4o"
 	msgs := Messages{
-		&SystemMsg{Content: "You are helpful."},
+		&System{Content: "You are helpful."},
 		&UserMsg{Content: "What is 2+2?"},
-		&AssistantMsg{Content: "It is 4."},
+		&AssistantMessage{Content: "It is 4."},
 	}
 
 	// Get per-message counts from the batch API
@@ -98,10 +99,10 @@ func TestCountMessage_ConsistentWithCountTokens(t *testing.T) {
 
 func TestApplyRoleBreakdown_Invariant(t *testing.T) {
 	msgs := Messages{
-		&SystemMsg{Content: "be helpful"},
+		&System{Content: "be helpful"},
 		&UserMsg{Content: "hello"},
-		&AssistantMsg{Content: "hi"},
-		&ToolCallResult{ToolCallID: "c1", Output: "done"},
+		&AssistantMessage{Content: "hi"},
+		&ToolResult{ToolCallID: "c1", Output: "done"},
 	}
 	tc := &TokenCount{
 		PerMessage: []int{3, 2, 1, 4},
@@ -144,9 +145,9 @@ func TestCountMessagesAndTools_EmptyModel(t *testing.T) {
 // TestCountMessagesAndTools_PerMessageLen verifies len(PerMessage)==len(Messages).
 func TestCountMessagesAndTools_PerMessageLen(t *testing.T) {
 	msgs := Messages{
-		&SystemMsg{Content: "sys"},
+		&System{Content: "sys"},
 		&UserMsg{Content: "user"},
-		&AssistantMsg{Content: "asst"},
+		&AssistantMessage{Content: "asst"},
 	}
 	tc := &TokenCount{}
 	err := CountMessagesAndTools(tc, TokenCountRequest{
@@ -160,7 +161,7 @@ func TestCountMessagesAndTools_PerMessageLen(t *testing.T) {
 // TestCountMessagesAndToolsAnthropic_OverheadApplied verifies that when tools
 // are present, OverheadTokens is populated and ToolsTokens == sum(PerTool).
 func TestCountMessagesAndToolsAnthropic_OverheadApplied(t *testing.T) {
-	tools := []ToolDefinition{
+	tools := []tool.Definition{
 		{Name: "tool_a", Description: "First tool", Parameters: map[string]any{"type": "object"}},
 		{Name: "tool_b", Description: "Second tool", Parameters: map[string]any{"type": "object"}},
 	}

@@ -3,6 +3,8 @@ package llm
 import (
 	"errors"
 	"fmt"
+
+	llmtool "github.com/codewandler/llm/tool"
 )
 
 // --- ReasoningEffort ---
@@ -81,7 +83,7 @@ type Request struct {
 	OutputFormat OutputFormat `json:"output_format,omitempty"`
 
 	// Tools is the set of tools the model may call during the response.
-	Tools []ToolDefinition `json:"tools,omitempty"`
+	Tools []llmtool.Definition `json:"tools,omitempty"`
 
 	// ToolChoice controls how the model selects tools. Defaults to Auto when Tools are provided.
 	ToolChoice ToolChoice `json:"tool_choice,omitempty"`
@@ -152,7 +154,7 @@ func (o Request) Validate() error {
 
 	if tc, ok := o.ToolChoice.(ToolChoiceTool); ok {
 		if tc.Name == "" {
-			return errors.New("ToolChoiceTool.Name is required")
+			return errors.New("ToolChoiceTool.ToolName is required")
 		}
 		found := false
 		for _, t := range o.Tools {

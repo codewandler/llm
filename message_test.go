@@ -8,10 +8,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// --- SystemMsg Tests ---
+// --- System Tests ---
 
 func TestSystemMsg_MarshalJSON(t *testing.T) {
-	msg := &SystemMsg{Content: "You are a helpful assistant."}
+	msg := &System{Content: "You are a helpful assistant."}
 
 	data, err := json.Marshal(msg)
 	require.NoError(t, err)
@@ -27,17 +27,17 @@ func TestSystemMsg_MarshalJSON(t *testing.T) {
 func TestSystemMsg_Validate(t *testing.T) {
 	tests := []struct {
 		name    string
-		msg     *SystemMsg
+		msg     *System
 		wantErr bool
 	}{
 		{
 			name:    "valid",
-			msg:     &SystemMsg{Content: "You are helpful."},
+			msg:     &System{Content: "You are helpful."},
 			wantErr: false,
 		},
 		{
 			name:    "empty content",
-			msg:     &SystemMsg{Content: ""},
+			msg:     &System{Content: ""},
 			wantErr: true,
 		},
 	}
@@ -100,10 +100,10 @@ func TestUserMsg_Validate(t *testing.T) {
 	}
 }
 
-// --- AssistantMsg Tests ---
+// --- AssistantMessage Tests ---
 
 func TestAssistantMsg_MarshalJSON_ContentOnly(t *testing.T) {
-	msg := &AssistantMsg{Content: "Hello! How can I help?"}
+	msg := &AssistantMessage{Content: "Hello! How can I help?"}
 
 	data, err := json.Marshal(msg)
 	require.NoError(t, err)
@@ -118,8 +118,8 @@ func TestAssistantMsg_MarshalJSON_ContentOnly(t *testing.T) {
 }
 
 func TestAssistantMsg_MarshalJSON_ToolCallsOnly(t *testing.T) {
-	msg := &AssistantMsg{
-		ToolCalls: []ToolCall{
+	msg := &AssistantMessage{
+		ToolCalls: []MessageToolCall{
 			{
 				ID:        "call_123",
 				Name:      "get_weather",
@@ -151,9 +151,9 @@ func TestAssistantMsg_MarshalJSON_ToolCallsOnly(t *testing.T) {
 }
 
 func TestAssistantMsg_MarshalJSON_ContentAndToolCalls(t *testing.T) {
-	msg := &AssistantMsg{
+	msg := &AssistantMessage{
 		Content: "Let me check the weather for you.",
-		ToolCalls: []ToolCall{
+		ToolCalls: []MessageToolCall{
 			{ID: "call_456", Name: "get_weather", Arguments: map[string]any{"location": "London"}},
 		},
 	}
@@ -173,45 +173,45 @@ func TestAssistantMsg_MarshalJSON_ContentAndToolCalls(t *testing.T) {
 func TestAssistantMsg_Validate(t *testing.T) {
 	tests := []struct {
 		name    string
-		msg     *AssistantMsg
+		msg     *AssistantMessage
 		wantErr bool
 	}{
 		{
 			name:    "content only",
-			msg:     &AssistantMsg{Content: "Hello"},
+			msg:     &AssistantMessage{Content: "Hello"},
 			wantErr: false,
 		},
 		{
 			name: "tool calls only",
-			msg: &AssistantMsg{
-				ToolCalls: []ToolCall{{ID: "1", Name: "test"}},
+			msg: &AssistantMessage{
+				ToolCalls: []MessageToolCall{{ID: "1", Name: "test"}},
 			},
 			wantErr: false,
 		},
 		{
 			name: "content and tool calls",
-			msg: &AssistantMsg{
+			msg: &AssistantMessage{
 				Content:   "Here's the result",
-				ToolCalls: []ToolCall{{ID: "1", Name: "test"}},
+				ToolCalls: []MessageToolCall{{ID: "1", Name: "test"}},
 			},
 			wantErr: false,
 		},
 		{
 			name:    "empty - no content or tool calls",
-			msg:     &AssistantMsg{},
+			msg:     &AssistantMessage{},
 			wantErr: true,
 		},
 		{
-			name: "invalid tool call - missing ID",
-			msg: &AssistantMsg{
-				ToolCalls: []ToolCall{{Name: "test"}},
+			name: "invalid tool call - missing ToolCallID",
+			msg: &AssistantMessage{
+				ToolCalls: []MessageToolCall{{Name: "test"}},
 			},
 			wantErr: true,
 		},
 		{
 			name: "invalid tool call - missing name",
-			msg: &AssistantMsg{
-				ToolCalls: []ToolCall{{ID: "1"}},
+			msg: &AssistantMessage{
+				ToolCalls: []MessageToolCall{{ID: "1"}},
 			},
 			wantErr: true,
 		},
@@ -229,10 +229,10 @@ func TestAssistantMsg_Validate(t *testing.T) {
 	}
 }
 
-// --- ToolCallResult Tests ---
+// --- ToolResult Tests ---
 
 func TestToolCallResult_MarshalJSON(t *testing.T) {
-	msg := &ToolCallResult{
+	msg := &ToolResult{
 		ToolCallID: "call_123",
 		Output:     `{"temperature": 22}`,
 		IsError:    false,
@@ -247,12 +247,12 @@ func TestToolCallResult_MarshalJSON(t *testing.T) {
 
 	assert.Equal(t, "tool", result["role"])
 	assert.Equal(t, "call_123", result["tool_call_id"])
-	assert.Equal(t, `{"temperature": 22}`, result["content"]) // Output marshals as content
+	assert.Equal(t, `{"temperature": 22}`, result["content"]) // ToolOutput marshals as content
 	// is_error should be omitted when false (omitempty)
 }
 
 func TestToolCallResult_MarshalJSON_WithError(t *testing.T) {
-	msg := &ToolCallResult{
+	msg := &ToolResult{
 		ToolCallID: "call_456",
 		Output:     "Error: file not found",
 		IsError:    true,
@@ -274,32 +274,32 @@ func TestToolCallResult_MarshalJSON_WithError(t *testing.T) {
 func TestToolCallResult_Validate(t *testing.T) {
 	tests := []struct {
 		name    string
-		msg     *ToolCallResult
+		msg     *ToolResult
 		wantErr bool
 	}{
 		{
 			name:    "valid",
-			msg:     &ToolCallResult{ToolCallID: "123", Output: "result"},
+			msg:     &ToolResult{ToolCallID: "123", Output: "result"},
 			wantErr: false,
 		},
 		{
 			name:    "valid with error flag",
-			msg:     &ToolCallResult{ToolCallID: "123", Output: "error", IsError: true},
+			msg:     &ToolResult{ToolCallID: "123", Output: "error", IsError: true},
 			wantErr: false,
 		},
 		{
 			name:    "missing tool call id",
-			msg:     &ToolCallResult{Output: "result"},
+			msg:     &ToolResult{Output: "result"},
 			wantErr: true,
 		},
 		{
 			name:    "missing output",
-			msg:     &ToolCallResult{ToolCallID: "123"},
+			msg:     &ToolResult{ToolCallID: "123"},
 			wantErr: true,
 		},
 		{
 			name:    "empty",
-			msg:     &ToolCallResult{},
+			msg:     &ToolResult{},
 			wantErr: true,
 		},
 	}
@@ -316,10 +316,10 @@ func TestToolCallResult_Validate(t *testing.T) {
 	}
 }
 
-// --- ToolCall Tests ---
+// --- MessageToolCall Tests ---
 
 func TestToolCall_MarshalJSON(t *testing.T) {
-	tc := ToolCall{
+	tc := MessageToolCall{
 		ID:        "call_abc",
 		Name:      "search",
 		Arguments: map[string]any{"query": "golang", "limit": float64(10)},
@@ -343,7 +343,7 @@ func TestToolCall_MarshalJSON(t *testing.T) {
 func TestToolCall_UnmarshalJSON(t *testing.T) {
 	jsonData := `{"id": "call_xyz", "name": "get_weather", "arguments": {"location": "Paris", "unit": "celsius"}}`
 
-	var tc ToolCall
+	var tc MessageToolCall
 	err := json.Unmarshal([]byte(jsonData), &tc)
 	require.NoError(t, err)
 
@@ -354,7 +354,7 @@ func TestToolCall_UnmarshalJSON(t *testing.T) {
 }
 
 func TestToolCall_MarshalUnmarshalRoundTrip(t *testing.T) {
-	original := ToolCall{
+	original := MessageToolCall{
 		ID:        "call_roundtrip",
 		Name:      "complex_tool",
 		Arguments: map[string]any{"nested": map[string]any{"key": "value"}, "array": []any{1.0, 2.0, 3.0}},
@@ -363,7 +363,7 @@ func TestToolCall_MarshalUnmarshalRoundTrip(t *testing.T) {
 	data, err := json.Marshal(original)
 	require.NoError(t, err)
 
-	var restored ToolCall
+	var restored MessageToolCall
 	err = json.Unmarshal(data, &restored)
 	require.NoError(t, err)
 
@@ -381,32 +381,32 @@ func TestToolCall_MarshalUnmarshalRoundTrip(t *testing.T) {
 func TestToolCall_Validate(t *testing.T) {
 	tests := []struct {
 		name    string
-		tc      ToolCall
+		tc      MessageToolCall
 		wantErr bool
 	}{
 		{
 			name:    "valid",
-			tc:      ToolCall{ID: "123", Name: "test"},
+			tc:      MessageToolCall{ID: "123", Name: "test"},
 			wantErr: false,
 		},
 		{
 			name:    "valid with arguments",
-			tc:      ToolCall{ID: "123", Name: "test", Arguments: map[string]any{"key": "value"}},
+			tc:      MessageToolCall{ID: "123", Name: "test", Arguments: map[string]any{"key": "value"}},
 			wantErr: false,
 		},
 		{
 			name:    "missing id",
-			tc:      ToolCall{Name: "test"},
+			tc:      MessageToolCall{Name: "test"},
 			wantErr: true,
 		},
 		{
 			name:    "missing name",
-			tc:      ToolCall{ID: "123"},
+			tc:      MessageToolCall{ID: "123"},
 			wantErr: true,
 		},
 		{
 			name:    "empty",
-			tc:      ToolCall{},
+			tc:      MessageToolCall{},
 			wantErr: true,
 		},
 	}
@@ -454,9 +454,9 @@ func TestMessages_UnmarshalJSON_AllMessageTypes(t *testing.T) {
 
 	require.Len(t, msgs, 4)
 
-	// Check SystemMsg
-	sysMsg, ok := msgs[0].(*SystemMsg)
-	require.True(t, ok, "expected *SystemMsg, got %T", msgs[0])
+	// Check System
+	sysMsg, ok := msgs[0].(*System)
+	require.True(t, ok, "expected *System, got %T", msgs[0])
 	assert.Equal(t, "You are helpful.", sysMsg.Content)
 	assert.Equal(t, RoleSystem, sysMsg.Role())
 
@@ -466,18 +466,18 @@ func TestMessages_UnmarshalJSON_AllMessageTypes(t *testing.T) {
 	assert.Equal(t, "What's the weather?", userMsg.Content)
 	assert.Equal(t, RoleUser, userMsg.Role())
 
-	// Check AssistantMsg with ToolCalls
-	assistantMsg, ok := msgs[2].(*AssistantMsg)
-	require.True(t, ok, "expected *AssistantMsg, got %T", msgs[2])
+	// Check AssistantMessage with ToolCalls
+	assistantMsg, ok := msgs[2].(*AssistantMessage)
+	require.True(t, ok, "expected *AssistantMessage, got %T", msgs[2])
 	assert.Equal(t, RoleAssistant, assistantMsg.Role())
 	require.Len(t, assistantMsg.ToolCalls, 1)
 	assert.Equal(t, "call_1", assistantMsg.ToolCalls[0].ID)
 	assert.Equal(t, "get_weather", assistantMsg.ToolCalls[0].Name)
 	assert.Equal(t, "Paris", assistantMsg.ToolCalls[0].Arguments["location"])
 
-	// Check ToolCallResult
-	toolResult, ok := msgs[3].(*ToolCallResult)
-	require.True(t, ok, "expected *ToolCallResult, got %T", msgs[3])
+	// Check ToolResult
+	toolResult, ok := msgs[3].(*ToolResult)
+	require.True(t, ok, "expected *ToolResult, got %T", msgs[3])
 	assert.Equal(t, RoleTool, toolResult.Role())
 	assert.Equal(t, "call_1", toolResult.ToolCallID)
 	assert.Equal(t, `{"temp": 22}`, toolResult.Output)
@@ -493,7 +493,7 @@ func TestMessages_UnmarshalJSON_AssistantWithContent(t *testing.T) {
 
 	require.Len(t, msgs, 1)
 
-	assistantMsg, ok := msgs[0].(*AssistantMsg)
+	assistantMsg, ok := msgs[0].(*AssistantMessage)
 	require.True(t, ok)
 	assert.Equal(t, "Hello there!", assistantMsg.Content)
 	assert.Empty(t, assistantMsg.ToolCalls)
@@ -508,7 +508,7 @@ func TestMessages_UnmarshalJSON_AssistantWithContentAndToolCalls(t *testing.T) {
 
 	require.Len(t, msgs, 1)
 
-	assistantMsg, ok := msgs[0].(*AssistantMsg)
+	assistantMsg, ok := msgs[0].(*AssistantMessage)
 	require.True(t, ok)
 	assert.Equal(t, "Let me help.", assistantMsg.Content)
 	require.Len(t, assistantMsg.ToolCalls, 1)
@@ -524,7 +524,7 @@ func TestMessages_UnmarshalJSON_ToolResultWithError(t *testing.T) {
 
 	require.Len(t, msgs, 1)
 
-	toolResult, ok := msgs[0].(*ToolCallResult)
+	toolResult, ok := msgs[0].(*ToolResult)
 	require.True(t, ok)
 	assert.Equal(t, "call_err", toolResult.ToolCallID)
 	assert.Equal(t, "Something went wrong", toolResult.Output)
@@ -574,9 +574,9 @@ func TestMessages_UnmarshalJSON_MissingRole(t *testing.T) {
 
 func TestMessages_MarshalUnmarshalRoundTrip(t *testing.T) {
 	original := Messages{
-		&SystemMsg{Content: "You are a helpful assistant."},
+		&System{Content: "You are a helpful assistant."},
 		&UserMsg{Content: "What's 2+2?"},
-		&AssistantMsg{Content: "The answer is 4."},
+		&AssistantMessage{Content: "The answer is 4."},
 		&UserMsg{Content: "Thanks!"},
 	}
 
@@ -592,13 +592,13 @@ func TestMessages_MarshalUnmarshalRoundTrip(t *testing.T) {
 	// Verify
 	require.Len(t, restored, 4)
 
-	sysMsg := restored[0].(*SystemMsg)
+	sysMsg := restored[0].(*System)
 	assert.Equal(t, "You are a helpful assistant.", sysMsg.Content)
 
 	userMsg1 := restored[1].(*UserMsg)
 	assert.Equal(t, "What's 2+2?", userMsg1.Content)
 
-	assistantMsg := restored[2].(*AssistantMsg)
+	assistantMsg := restored[2].(*AssistantMessage)
 	assert.Equal(t, "The answer is 4.", assistantMsg.Content)
 
 	userMsg2 := restored[3].(*UserMsg)
@@ -608,13 +608,13 @@ func TestMessages_MarshalUnmarshalRoundTrip(t *testing.T) {
 func TestMessages_MarshalUnmarshalRoundTrip_WithToolCalls(t *testing.T) {
 	original := Messages{
 		&UserMsg{Content: "What's the weather in Paris?"},
-		&AssistantMsg{
-			ToolCalls: []ToolCall{
+		&AssistantMessage{
+			ToolCalls: []MessageToolCall{
 				{ID: "call_weather", Name: "get_weather", Arguments: map[string]any{"location": "Paris", "unit": "celsius"}},
 			},
 		},
-		&ToolCallResult{ToolCallID: "call_weather", Output: `{"temp": 22, "conditions": "sunny"}`},
-		&AssistantMsg{Content: "The weather in Paris is 22°C and sunny."},
+		&ToolResult{ToolCallID: "call_weather", Output: `{"temp": 22, "conditions": "sunny"}`},
+		&AssistantMessage{Content: "The weather in Paris is 22°C and sunny."},
 	}
 
 	// Marshal
@@ -630,7 +630,7 @@ func TestMessages_MarshalUnmarshalRoundTrip_WithToolCalls(t *testing.T) {
 	require.Len(t, restored, 4)
 
 	// Check assistant message with tool calls
-	assistantMsg := restored[1].(*AssistantMsg)
+	assistantMsg := restored[1].(*AssistantMessage)
 	require.Len(t, assistantMsg.ToolCalls, 1)
 	assert.Equal(t, "call_weather", assistantMsg.ToolCalls[0].ID)
 	assert.Equal(t, "get_weather", assistantMsg.ToolCalls[0].Name)
@@ -638,13 +638,13 @@ func TestMessages_MarshalUnmarshalRoundTrip_WithToolCalls(t *testing.T) {
 	assert.Equal(t, "celsius", assistantMsg.ToolCalls[0].Arguments["unit"])
 
 	// Check tool result
-	toolResult := restored[2].(*ToolCallResult)
+	toolResult := restored[2].(*ToolResult)
 	assert.Equal(t, "call_weather", toolResult.ToolCallID)
 	assert.Equal(t, `{"temp": 22, "conditions": "sunny"}`, toolResult.Output)
 	assert.False(t, toolResult.IsError)
 
 	// Check final assistant message
-	finalMsg := restored[3].(*AssistantMsg)
+	finalMsg := restored[3].(*AssistantMessage)
 	assert.Equal(t, "The weather in Paris is 22°C and sunny.", finalMsg.Content)
 }
 
@@ -657,8 +657,8 @@ func TestMessage_RoleMethod(t *testing.T) {
 		want Role
 	}{
 		{
-			name: "SystemMsg",
-			msg:  &SystemMsg{Content: "test"},
+			name: "System",
+			msg:  &System{Content: "test"},
 			want: RoleSystem,
 		},
 		{
@@ -667,13 +667,13 @@ func TestMessage_RoleMethod(t *testing.T) {
 			want: RoleUser,
 		},
 		{
-			name: "AssistantMsg",
-			msg:  &AssistantMsg{Content: "test"},
+			name: "AssistantMessage",
+			msg:  &AssistantMessage{Content: "test"},
 			want: RoleAssistant,
 		},
 		{
-			name: "ToolCallResult",
-			msg:  &ToolCallResult{ToolCallID: "1", Output: "test"},
+			name: "ToolResult",
+			msg:  &ToolResult{ToolCallID: "1", Output: "test"},
 			want: RoleTool,
 		},
 	}
@@ -702,18 +702,18 @@ func TestBackwardsCompatibility_OldJSONFormat(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Len(t, msgs, 5)
-	assert.IsType(t, &SystemMsg{}, msgs[0])
+	assert.IsType(t, &System{}, msgs[0])
 	assert.IsType(t, &UserMsg{}, msgs[1])
-	assert.IsType(t, &AssistantMsg{}, msgs[2])
-	assert.IsType(t, &AssistantMsg{}, msgs[3])
-	assert.IsType(t, &ToolCallResult{}, msgs[4])
+	assert.IsType(t, &AssistantMessage{}, msgs[2])
+	assert.IsType(t, &AssistantMessage{}, msgs[3])
+	assert.IsType(t, &ToolResult{}, msgs[4])
 }
 
 func TestBackwardsCompatibility_MarshalProducesOldFormat(t *testing.T) {
 	msgs := Messages{
 		&UserMsg{Content: "Hello"},
-		&AssistantMsg{ToolCalls: []ToolCall{{ID: "1", Name: "test", Arguments: map[string]any{}}}},
-		&ToolCallResult{ToolCallID: "1", Output: "result"},
+		&AssistantMessage{ToolCalls: []MessageToolCall{{ID: "1", Name: "test", Arguments: map[string]any{}}}},
+		&ToolResult{ToolCallID: "1", Output: "result"},
 	}
 
 	data, err := json.Marshal(msgs)
@@ -733,8 +733,8 @@ func TestBackwardsCompatibility_MarshalProducesOldFormat(t *testing.T) {
 	toolCalls := raw[1]["tool_calls"].([]any)
 	assert.Len(t, toolCalls, 1)
 
-	// Tool result - Output should be marshaled as "content"
+	// Tool result - ToolOutput should be marshaled as "content"
 	assert.Equal(t, "tool", raw[2]["role"])
 	assert.Equal(t, "1", raw[2]["tool_call_id"])
-	assert.Equal(t, "result", raw[2]["content"]) // Output -> content
+	assert.Equal(t, "result", raw[2]["content"]) // ToolOutput -> content
 }

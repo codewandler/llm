@@ -1,9 +1,10 @@
-package llm
+package tool
 
 import (
 	"encoding/json"
 	"testing"
 
+	"github.com/codewandler/llm/sortmap"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -11,14 +12,14 @@ import (
 // --- SortedMap tests ---
 
 func TestSortedMap_MarshalJSON_Flat(t *testing.T) {
-	m := NewSortedMap(map[string]any{"z": 1, "a": 2, "m": 3})
+	m := sortmap.NewSortedMap(map[string]any{"z": 1, "a": 2, "m": 3})
 	b, err := json.Marshal(m)
 	require.NoError(t, err)
 	assert.Equal(t, `{"a":2,"m":3,"z":1}`, string(b))
 }
 
 func TestSortedMap_MarshalJSON_Nested(t *testing.T) {
-	m := NewSortedMap(map[string]any{
+	m := sortmap.NewSortedMap(map[string]any{
 		"z": map[string]any{"b": 1, "a": 2},
 		"a": "hello",
 	})
@@ -28,7 +29,7 @@ func TestSortedMap_MarshalJSON_Nested(t *testing.T) {
 }
 
 func TestSortedMap_MarshalJSON_ArrayWithObjects(t *testing.T) {
-	m := NewSortedMap(map[string]any{
+	m := sortmap.NewSortedMap(map[string]any{
 		"items": []any{
 			map[string]any{"z": 9, "a": 1},
 		},
@@ -39,7 +40,7 @@ func TestSortedMap_MarshalJSON_ArrayWithObjects(t *testing.T) {
 }
 
 func TestSortedMap_MarshalJSON_Idempotent(t *testing.T) {
-	m := NewSortedMap(map[string]any{
+	m := sortmap.NewSortedMap(map[string]any{
 		"properties": map[string]any{
 			"unit":     map[string]any{"type": "string"},
 			"location": map[string]any{"type": "string", "description": "a city"},
@@ -55,14 +56,14 @@ func TestSortedMap_MarshalJSON_Idempotent(t *testing.T) {
 }
 
 func TestSortedMap_MarshalJSON_NilMap(t *testing.T) {
-	m := NewSortedMap(nil)
+	m := sortmap.NewSortedMap(nil)
 	b, err := json.Marshal(m)
 	require.NoError(t, err)
 	assert.Equal(t, `{}`, string(b))
 }
 
 func TestSortedMap_MarshalJSON_Scalars(t *testing.T) {
-	m := NewSortedMap(map[string]any{
+	m := sortmap.NewSortedMap(map[string]any{
 		"b": true,
 		"n": nil,
 		"f": 3.14,
@@ -81,8 +82,8 @@ func TestSortedMap_StableAcrossRuns(t *testing.T) {
 		Unit     string `json:"unit" jsonschema:"description=Temperature unit,enum=celsius,enum=fahrenheit"`
 		Days     int    `json:"days" jsonschema:"minimum=1,maximum=7"`
 	}
-	def := ToolDefinitionFor[Params]("get_weather", "Get weather")
-	sm := NewSortedMap(def.Parameters)
+	def := DefinitionFor[Params]("get_weather", "Get weather")
+	sm := sortmap.NewSortedMap(def.Parameters)
 
 	first, err := json.Marshal(sm)
 	require.NoError(t, err)
@@ -100,7 +101,7 @@ func TestToolDefinitionFor_BasicStruct(t *testing.T) {
 		Age  int    `json:"age"`
 	}
 
-	tool := ToolDefinitionFor[BasicParams]("test_tool", "A test tool")
+	tool := DefinitionFor[BasicParams]("test_tool", "A test tool")
 
 	assert.Equal(t, "test_tool", tool.Name)
 	assert.Equal(t, "A test tool", tool.Description)
@@ -128,10 +129,10 @@ func TestToolDefinitionFor_BasicStruct(t *testing.T) {
 func TestToolDefinitionFor_WithDescriptions(t *testing.T) {
 	type ParamsWithDesc struct {
 		Location string `json:"location" jsonschema:"description=City name or coordinates"`
-		Format   string `json:"format" jsonschema:"description=Output format"`
+		Format   string `json:"format" jsonschema:"description=ToolOutput format"`
 	}
 
-	tool := ToolDefinitionFor[ParamsWithDesc]("get_data", "Get some data")
+	tool := DefinitionFor[ParamsWithDesc]("get_data", "Get some data")
 
 	props := tool.Parameters["properties"].(map[string]any)
 
@@ -139,7 +140,7 @@ func TestToolDefinitionFor_WithDescriptions(t *testing.T) {
 	assert.Equal(t, "City name or coordinates", locationProp["description"])
 
 	formatProp := props["format"].(map[string]any)
-	assert.Equal(t, "Output format", formatProp["description"])
+	assert.Equal(t, "ToolOutput format", formatProp["description"])
 }
 
 func TestToolDefinitionFor_WithRequired(t *testing.T) {
@@ -148,7 +149,7 @@ func TestToolDefinitionFor_WithRequired(t *testing.T) {
 		FieldTwo string `json:"field_two"`
 	}
 
-	tool := ToolDefinitionFor[ParamsWithRequired]("test", "test")
+	tool := DefinitionFor[ParamsWithRequired]("test", "test")
 
 	// Only fields with jsonschema:"required" are marked as required
 	required, ok := tool.Parameters["required"].([]any)
@@ -162,7 +163,7 @@ func TestToolDefinitionFor_WithEnum(t *testing.T) {
 		Unit string `json:"unit" jsonschema:"enum=celsius,enum=fahrenheit,enum=kelvin"`
 	}
 
-	tool := ToolDefinitionFor[ParamsWithEnum]("test", "test")
+	tool := DefinitionFor[ParamsWithEnum]("test", "test")
 
 	props := tool.Parameters["properties"].(map[string]any)
 	unitProp := props["unit"].(map[string]any)
@@ -186,7 +187,7 @@ func TestToolDefinitionFor_NestedStruct(t *testing.T) {
 		Address Address `json:"address"`
 	}
 
-	tool := ToolDefinitionFor[Person]("test", "test")
+	tool := DefinitionFor[Person]("test", "test")
 
 	props := tool.Parameters["properties"].(map[string]any)
 
@@ -206,7 +207,7 @@ func TestToolDefinitionFor_PointerFields(t *testing.T) {
 		OptionalField *string `json:"optional_field"`
 	}
 
-	tool := ToolDefinitionFor[ParamsWithPointer]("test", "test")
+	tool := DefinitionFor[ParamsWithPointer]("test", "test")
 
 	props := tool.Parameters["properties"].(map[string]any)
 
@@ -229,7 +230,7 @@ func TestToolDefinitionFor_SliceFields(t *testing.T) {
 		Tags []string `json:"tags" jsonschema:"description=List of tags"`
 	}
 
-	tool := ToolDefinitionFor[ParamsWithSlice]("test", "test")
+	tool := DefinitionFor[ParamsWithSlice]("test", "test")
 
 	props := tool.Parameters["properties"].(map[string]any)
 	tagsProp := props["tags"].(map[string]any)
@@ -250,7 +251,7 @@ func TestToolDefinitionFor_ComplexExample(t *testing.T) {
 		Include  []string `json:"include" jsonschema:"description=Additional data to include"`
 	}
 
-	tool := ToolDefinitionFor[GetWeatherParams]("get_weather", "Get weather forecast for a location")
+	tool := DefinitionFor[GetWeatherParams]("get_weather", "Get weather forecast for a location")
 
 	// Check basic structure
 	assert.Equal(t, "get_weather", tool.Name)
@@ -291,7 +292,7 @@ func TestToolDefinitionFor_NoSchemaMetadata(t *testing.T) {
 		Value string `json:"value"`
 	}
 
-	tool := ToolDefinitionFor[SimpleParams]("test", "test")
+	tool := DefinitionFor[SimpleParams]("test", "test")
 
 	// Should not have $schema or $id fields
 	_, hasSchema := tool.Parameters["$schema"]
@@ -306,7 +307,7 @@ func TestToolDefinitionFor_BooleanField(t *testing.T) {
 		Enabled bool `json:"enabled" jsonschema:"description=Enable feature"`
 	}
 
-	tool := ToolDefinitionFor[ParamsWithBool]("test", "test")
+	tool := DefinitionFor[ParamsWithBool]("test", "test")
 
 	props := tool.Parameters["properties"].(map[string]any)
 	enabledProp := props["enabled"].(map[string]any)
@@ -323,7 +324,7 @@ func TestToolDefinitionFor_NumberTypes(t *testing.T) {
 		Float64Field float64 `json:"float64_field"`
 	}
 
-	tool := ToolDefinitionFor[ParamsWithNumbers]("test", "test")
+	tool := DefinitionFor[ParamsWithNumbers]("test", "test")
 
 	props := tool.Parameters["properties"].(map[string]any)
 
@@ -343,7 +344,7 @@ func TestToolDefinitionFor_NumberTypes(t *testing.T) {
 func TestToolDefinitionFor_EmptyStruct(t *testing.T) {
 	type EmptyParams struct{}
 
-	tool := ToolDefinitionFor[EmptyParams]("no_params", "A tool with no parameters")
+	tool := DefinitionFor[EmptyParams]("no_params", "A tool with no parameters")
 
 	assert.Equal(t, "no_params", tool.Name)
 	assert.Equal(t, "A tool with no parameters", tool.Description)
@@ -359,7 +360,7 @@ func TestToolDefinitionFor_CompatibleWithProviders(t *testing.T) {
 		Query string `json:"query" jsonschema:"description=Search query,required"`
 	}
 
-	tool := ToolDefinitionFor[TestParams]("search", "Search for items")
+	tool := DefinitionFor[TestParams]("search", "Search for items")
 
 	// Should have the basic structure providers expect
 	assert.NotNil(t, tool.Parameters["type"])
@@ -375,22 +376,22 @@ func TestToolDefinitionFor_CompatibleWithProviders(t *testing.T) {
 	assert.Contains(t, required, "query")
 }
 
-// --- ToolSpec Tests ---
+// --- Spec Tests ---
 
 func TestNewToolSpec_Definition(t *testing.T) {
 	type TestParams struct {
 		Name string `json:"name" jsonschema:"description=A name,required"`
 	}
 
-	spec := NewToolSpec[TestParams]("test_tool", "A test tool")
+	spec := NewSpec[TestParams]("test_tool", "A test tool")
 
 	def := spec.Definition()
 	assert.Equal(t, "test_tool", def.Name)
 	assert.Equal(t, "A test tool", def.Description)
 	assert.NotNil(t, def.Parameters)
 
-	// Should match ToolDefinitionFor output
-	expectedDef := ToolDefinitionFor[TestParams]("test_tool", "A test tool")
+	// Should match DefinitionFor output
+	expectedDef := DefinitionFor[TestParams]("test_tool", "A test tool")
 	assert.Equal(t, expectedDef, def)
 }
 
@@ -400,12 +401,12 @@ func TestToolSpec_ParseValid(t *testing.T) {
 		Unit     string `json:"unit"`
 	}
 
-	spec := NewToolSpec[GetWeatherParams]("get_weather", "Get weather")
+	spec := NewSpec[GetWeatherParams]("get_weather", "Get weather")
 
-	rawCall := ToolCall{
+	rawCall := &toolCall{
 		ID:   "call_123",
 		Name: "get_weather",
-		Arguments: map[string]any{
+		Args: map[string]any{
 			"location": "Paris",
 			"unit":     "celsius",
 		},
@@ -430,12 +431,12 @@ func TestToolSpec_ParseValidation_MissingRequired(t *testing.T) {
 		Optional string `json:"optional"`
 	}
 
-	spec := NewToolSpec[Params]("test", "test")
+	spec := NewSpec[Params]("test", "test")
 
-	rawCall := ToolCall{
-		ID:        "call_123",
-		Name:      "test",
-		Arguments: map[string]any{"optional": "value"},
+	rawCall := &toolCall{
+		ID:   "call_123",
+		Name: "test",
+		Args: map[string]any{"optional": "value"},
 	}
 
 	_, err := spec.parse(rawCall)
@@ -448,12 +449,12 @@ func TestToolSpec_ParseValidation_WrongType(t *testing.T) {
 		Count int `json:"count" jsonschema:"required"`
 	}
 
-	spec := NewToolSpec[Params]("test", "test")
+	spec := NewSpec[Params]("test", "test")
 
-	rawCall := ToolCall{
-		ID:        "call_123",
-		Name:      "test",
-		Arguments: map[string]any{"count": "not a number"},
+	rawCall := &toolCall{
+		ID:   "call_123",
+		Name: "test",
+		Args: map[string]any{"count": "not a number"},
 	}
 
 	_, err := spec.parse(rawCall)
@@ -466,12 +467,12 @@ func TestToolSpec_ParseValidation_InvalidEnum(t *testing.T) {
 		Unit string `json:"unit" jsonschema:"required,enum=celsius,enum=fahrenheit"`
 	}
 
-	spec := NewToolSpec[Params]("test", "test")
+	spec := NewSpec[Params]("test", "test")
 
-	rawCall := ToolCall{
-		ID:        "call_123",
-		Name:      "test",
-		Arguments: map[string]any{"unit": "kelvin"},
+	rawCall := &toolCall{
+		ID:   "call_123",
+		Name: "test",
+		Args: map[string]any{"unit": "kelvin"},
 	}
 
 	_, err := spec.parse(rawCall)
@@ -484,13 +485,13 @@ func TestToolSpec_ParseValidation_NumericRange(t *testing.T) {
 		Age int `json:"age" jsonschema:"required,minimum=0,maximum=120"`
 	}
 
-	spec := NewToolSpec[Params]("test", "test")
+	spec := NewSpec[Params]("test", "test")
 
 	// Test below minimum
-	rawCall := ToolCall{
-		ID:        "call_123",
-		Name:      "test",
-		Arguments: map[string]any{"age": -1},
+	rawCall := &toolCall{
+		ID:   "call_123",
+		Name: "test",
+		Args: map[string]any{"age": -1},
 	}
 
 	_, err := spec.parse(rawCall)
@@ -498,13 +499,13 @@ func TestToolSpec_ParseValidation_NumericRange(t *testing.T) {
 	assert.Contains(t, err.Error(), "validate")
 
 	// Test above maximum
-	rawCall.Arguments = map[string]any{"age": 150}
+	rawCall.Args = map[string]any{"age": 150}
 	_, err = spec.parse(rawCall)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "validate")
 
 	// Test valid range
-	rawCall.Arguments = map[string]any{"age": 25}
+	rawCall.Args = map[string]any{"age": 25}
 	parsed, err := spec.parse(rawCall)
 	require.NoError(t, err)
 	typedCall := parsed.(*TypedToolCall[Params])
@@ -514,12 +515,12 @@ func TestToolSpec_ParseValidation_NumericRange(t *testing.T) {
 func TestToolSpec_ParseEmptyArgs(t *testing.T) {
 	type EmptyParams struct{}
 
-	spec := NewToolSpec[EmptyParams]("test", "test")
+	spec := NewSpec[EmptyParams]("test", "test")
 
-	rawCall := ToolCall{
-		ID:        "call_123",
-		Name:      "test",
-		Arguments: map[string]any{},
+	rawCall := &toolCall{
+		ID:   "call_123",
+		Name: "test",
+		Args: map[string]any{},
 	}
 
 	parsed, err := spec.parse(rawCall)
@@ -529,7 +530,7 @@ func TestToolSpec_ParseEmptyArgs(t *testing.T) {
 	assert.Equal(t, "call_123", typedCall.ID)
 }
 
-// --- ToolSet Tests ---
+// --- Set Tests ---
 
 func TestToolSet_Definitions(t *testing.T) {
 	type Params1 struct {
@@ -539,8 +540,8 @@ func TestToolSet_Definitions(t *testing.T) {
 		Field2 int `json:"field2"`
 	}
 
-	spec1 := NewToolSpec[Params1]("tool1", "First tool")
-	spec2 := NewToolSpec[Params2]("tool2", "Second tool")
+	spec1 := NewSpec[Params1]("tool1", "First tool")
+	spec2 := NewSpec[Params2]("tool2", "Second tool")
 
 	toolSet := NewToolSet(spec1, spec2)
 
@@ -559,14 +560,14 @@ func TestToolSet_Parse_SingleTool(t *testing.T) {
 		Location string `json:"location" jsonschema:"required"`
 	}
 
-	spec := NewToolSpec[GetWeatherParams]("get_weather", "Get weather")
+	spec := NewSpec[GetWeatherParams]("get_weather", "Get weather")
 	toolSet := NewToolSet(spec)
 
-	rawCalls := []ToolCall{
-		{
-			ID:        "call_123",
-			Name:      "get_weather",
-			Arguments: map[string]any{"location": "Paris"},
+	rawCalls := []Call{
+		&toolCall{
+			ID:   "call_123",
+			Name: "get_weather",
+			Args: map[string]any{"location": "Paris"},
 		},
 	}
 
@@ -591,20 +592,20 @@ func TestToolSet_Parse_MultipleTools(t *testing.T) {
 		Query string `json:"query" jsonschema:"required"`
 	}
 
-	weatherSpec := NewToolSpec[GetWeatherParams]("get_weather", "Get weather")
-	searchSpec := NewToolSpec[SearchParams]("search", "Search")
+	weatherSpec := NewSpec[GetWeatherParams]("get_weather", "Get weather")
+	searchSpec := NewSpec[SearchParams]("search", "Search")
 	toolSet := NewToolSet(weatherSpec, searchSpec)
 
-	rawCalls := []ToolCall{
-		{
-			ID:        "call_1",
-			Name:      "get_weather",
-			Arguments: map[string]any{"location": "London"},
+	rawCalls := []Call{
+		&toolCall{
+			ID:   "call_1",
+			Name: "get_weather",
+			Args: map[string]any{"location": "London"},
 		},
-		{
-			ID:        "call_2",
-			Name:      "search",
-			Arguments: map[string]any{"query": "golang"},
+		&toolCall{
+			ID:   "call_2",
+			Name: "search",
+			Args: map[string]any{"query": "golang"},
 		},
 	}
 
@@ -632,12 +633,12 @@ func TestToolSet_Parse_UnknownTool(t *testing.T) {
 		Value string `json:"value"`
 	}
 
-	spec := NewToolSpec[Params]("known", "Known tool")
+	spec := NewSpec[Params]("known", "Known tool")
 	toolSet := NewToolSet(spec)
 
-	rawCalls := []ToolCall{
-		{ID: "call_1", Name: "known", Arguments: map[string]any{"value": "ok"}},
-		{ID: "call_2", Name: "unknown", Arguments: map[string]any{"value": "bad"}},
+	rawCalls := []Call{
+		&toolCall{ID: "call_1", Name: "known", Args: map[string]any{"value": "ok"}},
+		&toolCall{ID: "call_2", Name: "unknown", Args: map[string]any{"value": "bad"}},
 	}
 
 	parsed, err := toolSet.Parse(rawCalls)
@@ -656,12 +657,12 @@ func TestToolSet_Parse_ValidationError(t *testing.T) {
 		Required string `json:"required" jsonschema:"required"`
 	}
 
-	spec := NewToolSpec[Params]("test", "test")
+	spec := NewSpec[Params]("test", "test")
 	toolSet := NewToolSet(spec)
 
-	rawCalls := []ToolCall{
-		{ID: "call_1", Name: "test", Arguments: map[string]any{"required": "ok"}},
-		{ID: "call_2", Name: "test", Arguments: map[string]any{}}, // missing required
+	rawCalls := []Call{
+		&toolCall{ID: "call_1", Name: "test", Args: map[string]any{"required": "ok"}},
+		&toolCall{ID: "call_2", Name: "test", Args: map[string]any{}}, // missing required
 	}
 
 	parsed, err := toolSet.Parse(rawCalls)
@@ -678,14 +679,14 @@ func TestToolSet_Parse_ValidationError(t *testing.T) {
 func TestToolSet_Parse_EmptyCalls(t *testing.T) {
 	type Params struct{}
 
-	spec := NewToolSpec[Params]("test", "test")
+	spec := NewSpec[Params]("test", "test")
 	toolSet := NewToolSet(spec)
 
 	parsed, err := toolSet.Parse(nil)
 	assert.NoError(t, err)
 	assert.Empty(t, parsed)
 
-	parsed, err = toolSet.Parse([]ToolCall{})
+	parsed, err = toolSet.Parse([]Call{})
 	assert.NoError(t, err)
 	assert.Empty(t, parsed)
 }

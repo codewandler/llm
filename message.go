@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+
+	"github.com/codewandler/llm/tool"
 )
 
 // Role represents the role of a message in a conversation.
@@ -18,78 +20,172 @@ const (
 
 // --- Message Interface ---
 
-// Message is the interface all message types implement.
-type Message interface {
-	Role() Role
-	Validate() error
-	json.Marshaler
-	messageMarker() // unexported - prevents external implementations
-}
+type (
+	Messages []Message
+
+	// Message is the interface all message types implement.
+	Message interface {
+		Role() Role
+		Validate() error
+		CacheHint() *CacheHint
+		MarshalJSON() ([]byte, error)
+		UnmarshalJSON([]byte) error
+		applyCache(cache *CacheHint)
+	}
+
+	TextMessage interface {
+		Message
+		Content() string
+	}
+
+	UserMessage interface {
+		TextMessage
+		isUser()
+	}
+
+	SystemMessage interface {
+		TextMessage
+		isSystem()
+	}
+
+	AssistantMessage interface {
+		TextMessage
+		ToolCalls() []tool.Call
+		isAssistant()
+	}
+
+	ToolMessage interface {
+		Message
+		ToolCallID() string
+		ToolOutput() string
+		IsError() bool
+		isTool()
+	}
+)
 
 // --- Concrete Message Types ---
 
-// SystemMsg contains a system prompt.
-type SystemMsg struct {
-	Content   string
-	CacheHint *CacheHint
-}
+type (
+	textMsg struct {
+		content   string
+		role      Role
+		cacheHint *CacheHint
+	}
+	systemMsg    struct{ textMsg }
+	userMsg      struct{ textMsg }
+	assistantMsg struct {
+		textMsg
+		toolCalls []tool.Call
+	}
+	toolMsg struct {
+		textMsg
+		toolCallID string
+		isError    bool
+	}
+)
 
-func (m *SystemMsg) Role() Role { return RoleSystem }
-
-func (m *SystemMsg) Validate() error {
-	if m.Content == "" {
-		return errors.New("system message: content is required")
+func (m *textMsg) Role() Role            { return m.role }
+func (m *textMsg) Content() string       { return m.content }
+func (m *textMsg) CacheHint() *CacheHint { return m.cacheHint }
+func (m *textMsg) Validate() error {
+	if m.content == "" {
+		return errors.New("message: content is required")
 	}
 	return nil
 }
-
-func (m *SystemMsg) MarshalJSON() ([]byte, error) {
-	return json.Marshal(struct {
-		Role    Role   `json:"role"`
-		Content string `json:"content"`
-	}{RoleSystem, m.Content})
-}
-
-func (m *SystemMsg) messageMarker() {}
-
-// UserMsg contains user input.
-type UserMsg struct {
-	Content   string
-	CacheHint *CacheHint
-}
-
-func (m *UserMsg) Role() Role { return RoleUser }
-
-func (m *UserMsg) Validate() error {
-	if m.Content == "" {
-		return errors.New("user message: content is required")
+func (m *textMsg) applyCache(cache *CacheHint) {
+	if cache != nil {
+		m.cacheHint = cache
 	}
-	return nil
 }
 
-func (m *UserMsg) MarshalJSON() ([]byte, error) {
-	return json.Marshal(struct {
-		Role    Role   `json:"role"`
-		Content string `json:"content"`
-	}{RoleUser, m.Content})
-}
-
-func (m *UserMsg) messageMarker() {}
-
-// AssistantMsg contains an assistant response, optionally with tool calls.
-type AssistantMsg struct {
-	Content   string
-	ToolCalls []ToolCall
-	CacheHint *CacheHint
-}
-
-func (m *AssistantMsg) Role() Role { return RoleAssistant }
-
-func (m *AssistantMsg) Validate() error {
-	if m.Content == "" && len(m.ToolCalls) == 0 {
-		return errors.New("assistant message: content or tool_calls is required")
+func System(content string) SystemMessage {
+	return &systemMsg{
+		textMsg{
+			role:    RoleSystem,
+			content: content,
+		},
 	}
-	for i, tc := range m.ToolCalls {
+}
+
+func User(content string) UserMessage {
+	return &userMsg{
+		textMsg{
+			role:    RoleUser,
+			content: content,
+		},
+	}
+}
+
+func ToolCalls(toolCalls ...tool.Call) AssistantMessage {
+	return &assistantMsg{
+		textMsg: textMsg{
+			role: RoleAssistant,
+		},
+		toolCalls: toolCalls,
+	}
+}
+
+func Assistant(content string, toolCalls ...tool.Call) AssistantMessage {
+	return &assistantMsg{
+		textMsg: textMsg{
+			role:    RoleAssistant,
+			content: content,
+		},
+		toolCalls: toolCalls,
+	}
+}
+
+func newToolMsg(toolCallID, output string, isError bool) ToolMessage {
+	return &toolMsg{
+		textMsg: textMsg{
+			role:    RoleTool,
+			content: output,
+		},
+		toolCallID: toolCallID,
+		isError:    isError,
+	}
+}
+
+func ToolResult(tr tool.Result) ToolMessage {
+	var output string
+	switch x := tr.ToolOutput().(type) {
+	case string:
+		output = x
+	case fmt.Stringer:
+		output = x.String()
+	default:
+		d, _ := json.Marshal(x)
+		output = string(d)
+	}
+
+	return newToolMsg(tr.ToolCallID(), output, tr.IsError())
+}
+
+func Tool(toolCallID, output string) ToolMessage {
+	return newToolMsg(toolCallID, output, false)
+}
+
+func ToolErr(toolCallID, output string) ToolMessage {
+	return newToolMsg(toolCallID, output, true)
+}
+
+func (m *systemMsg) isSystem()        {}
+func (m *userMsg) isUser()            {}
+func (m *toolMsg) ToolCallID() string { return m.toolCallID }
+func (m *toolMsg) ToolOutput() string { return m.textMsg.content }
+func (m *toolMsg) IsError() bool      { return false }
+func (m *toolMsg) isTool()            {}
+func (m *assistantMsg) isAssistant()  {}
+func (m *assistantMsg) ToolCalls() []tool.Call {
+	return m.toolCalls
+}
+
+func (m *assistantMsg) Validate() error {
+	if err := m.textMsg.Validate(); err != nil {
+		return err
+	}
+	for i, tc := range m.toolCalls {
 		if err := tc.Validate(); err != nil {
 			return fmt.Errorf("assistant message: tool_calls[%d]: %w", i, err)
 		}
@@ -97,93 +193,17 @@ func (m *AssistantMsg) Validate() error {
 	return nil
 }
 
-func (m *AssistantMsg) MarshalJSON() ([]byte, error) {
-	type wire struct {
-		Role      Role       `json:"role"`
-		Content   string     `json:"content,omitempty"`
-		ToolCalls []ToolCall `json:"tool_calls,omitempty"`
-	}
-	return json.Marshal(wire{RoleAssistant, m.Content, m.ToolCalls})
-}
-
-func (m *AssistantMsg) messageMarker() {}
-
-// ToolCallResult contains the result of executing a tool call.
-type ToolCallResult struct {
-	ToolCallID string
-	Output     string
-	IsError    bool
-	CacheHint  *CacheHint
-}
-
-func (m *ToolCallResult) Role() Role { return RoleTool }
-
-func (m *ToolCallResult) Validate() error {
-	if m.ToolCallID == "" {
-		return errors.New("tool call result: tool_call_id is required")
-	}
-	if m.Output == "" {
-		return errors.New("tool call result: output is required")
-	}
-	return nil
-}
-
-func (m *ToolCallResult) MarshalJSON() ([]byte, error) {
-	// Output marshals as "content" for backwards compatibility
-	type wire struct {
-		Role       Role   `json:"role"`
-		ToolCallID string `json:"tool_call_id"`
-		Content    string `json:"content"`
-		IsError    bool   `json:"is_error,omitempty"`
-	}
-	return json.Marshal(wire{RoleTool, m.ToolCallID, m.Output, m.IsError})
-}
-
-func (m *ToolCallResult) messageMarker() {}
-
-// --- ToolCall ---
-
-// ToolCall represents a request from the LLM to invoke a tool.
-type ToolCall struct {
-	ID        string
-	Name      string
-	Arguments map[string]any
-}
-
-func (tc ToolCall) Validate() error {
-	if tc.ID == "" {
-		return errors.New("tool call: id is required")
-	}
-	if tc.Name == "" {
-		return errors.New("tool call: name is required")
-	}
-	return nil
-}
-
-func (tc ToolCall) MarshalJSON() ([]byte, error) {
-	type wire struct {
-		ID        string         `json:"id"`
-		Name      string         `json:"name"`
-		Arguments map[string]any `json:"arguments"`
-	}
-	return json.Marshal(wire{tc.ID, tc.Name, tc.Arguments})
-}
-
-func (tc *ToolCall) UnmarshalJSON(data []byte) error {
-	type wire struct {
-		ID        string         `json:"id"`
-		Name      string         `json:"name"`
-		Arguments map[string]any `json:"arguments"`
-	}
-	var w wire
-	if err := json.Unmarshal(data, &w); err != nil {
+func (m *toolMsg) Validate() error {
+	if err := m.textMsg.Validate(); err != nil {
 		return err
 	}
-	tc.ID = w.ID
-	tc.Name = w.Name
-	tc.Arguments = w.Arguments
+	if m.toolCallID == "" {
+		return errors.New("tool message: tool_call_id is required")
+	}
 	return nil
 }
+
+// --- MessageToolCall ---
 
 // --- ToolChoice ---
 
@@ -237,91 +257,33 @@ type CacheHint struct {
 // --- Messages Wrapper ---
 
 // Messages is a slice of Message with JSON unmarshal support.
-type Messages []Message
 
-func (m *Messages) Append(msg ...Message) {
-	*m = append(*m, msg...)
-}
-
-func (m *Messages) AddUserMsg(content string) {
-	*m = append(*m, &UserMsg{Content: content})
-}
-
-func (m *Messages) AddAssistantMsg(content string, toolCalls ...ToolCall) {
-	*m = append(*m, &AssistantMsg{Content: content, ToolCalls: toolCalls})
-}
-
-func (m *Messages) AddToolCallResult(toolCallID, output string, isError bool) {
-	*m = append(*m, &ToolCallResult{ToolCallID: toolCallID, Output: output, IsError: isError})
-}
-
-func (m *Messages) AddSystemMsg(content string) {
-	*m = append(*m, &SystemMsg{Content: content})
-}
-
-func (m *Messages) UnmarshalJSON(data []byte) error {
-	var rawMessages []json.RawMessage
-	if err := json.Unmarshal(data, &rawMessages); err != nil {
-		return err
+func (m *Messages) Add(all ...Message) *Messages {
+	for _, msg := range all {
+		if msg == nil {
+			continue
+		}
 	}
+	*m = append(*m, all...)
+	return m
+}
 
-	*m = make(Messages, 0, len(rawMessages))
-	for i, raw := range rawMessages {
-		// Peek at the role field
-		var peek struct {
-			Role Role `json:"role"`
-		}
-		if err := json.Unmarshal(raw, &peek); err != nil {
-			return fmt.Errorf("message[%d]: %w", i, err)
-		}
+func (m *Messages) System(content string) *Messages {
+	return m.Add(System(content))
+}
 
-		var msg Message
-		switch peek.Role {
-		case RoleSystem:
-			var sm struct {
-				Content string `json:"content"`
-			}
-			if err := json.Unmarshal(raw, &sm); err != nil {
-				return fmt.Errorf("message[%d]: %w", i, err)
-			}
-			msg = &SystemMsg{Content: sm.Content}
+func (m *Messages) User(content string) *Messages {
+	return m.Add(User(content))
+}
 
-		case RoleUser:
-			var um struct {
-				Content string `json:"content"`
-			}
-			if err := json.Unmarshal(raw, &um); err != nil {
-				return fmt.Errorf("message[%d]: %w", i, err)
-			}
-			msg = &UserMsg{Content: um.Content}
+func (m *Messages) ToolErr(toolCallID, output string) *Messages {
+	return m.Add(ToolErr(toolCallID, output))
+}
 
-		case RoleAssistant:
-			var am struct {
-				Content   string     `json:"content"`
-				ToolCalls []ToolCall `json:"tool_calls"`
-			}
-			if err := json.Unmarshal(raw, &am); err != nil {
-				return fmt.Errorf("message[%d]: %w", i, err)
-			}
-			msg = &AssistantMsg{Content: am.Content, ToolCalls: am.ToolCalls}
+func (m *Messages) Tool(toolCallID, output string) *Messages {
+	return m.Add(Tool(toolCallID, output))
+}
 
-		case RoleTool:
-			var tr struct {
-				ToolCallID string `json:"tool_call_id"`
-				Content    string `json:"content"`
-				IsError    bool   `json:"is_error"`
-			}
-			if err := json.Unmarshal(raw, &tr); err != nil {
-				return fmt.Errorf("message[%d]: %w", i, err)
-			}
-			msg = &ToolCallResult{ToolCallID: tr.ToolCallID, Output: tr.Content, IsError: tr.IsError}
-
-		default:
-			return fmt.Errorf("message[%d]: unknown role %q", i, peek.Role)
-		}
-
-		*m = append(*m, msg)
-	}
-
-	return nil
+func (m *Messages) Assistant(content string, toolCalls ...tool.Call) *Messages {
+	return m.Add(Assistant(content, toolCalls...))
 }

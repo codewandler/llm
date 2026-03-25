@@ -8,7 +8,7 @@ import (
 )
 
 // CountText returns the number of tokens in text for the given model.
-// The encoding is selected automatically based on the model ID:
+// The encoding is selected automatically based on the model ToolCallID:
 // o200k_base for GPT-4o/o-series, cl100k_base for everything else.
 //
 // This is a convenience function for callers that need to count raw text
@@ -22,7 +22,7 @@ func CountText(model, text string) (int, error) {
 // CountMessage returns the number of tokens for a single Message for the
 // given model. The message is converted to its text representation using the
 // same logic as CountTokens (role content + tool call names/args for
-// AssistantMsg, output for ToolCallResult, etc.).
+// AssistantMessage, output for ToolResult, etc.).
 //
 // This is a convenience function for callers that count messages individually
 // rather than as a batch — for example, per-entry token estimates in a
@@ -33,25 +33,23 @@ func CountMessage(model string, msg Message) (int, error) {
 }
 
 // messageText returns the text content of a message for token counting purposes.
-// For AssistantMsg it concatenates text content and serialised tool call names/args.
-// For ToolCallResult it uses the output.
+// For AssistantMessage it concatenates text content and serialised tool call names/args.
+// For ToolResult it uses the output.
 func messageText(msg Message) string {
 	switch m := msg.(type) {
-	case *SystemMsg:
-		return m.Content
-	case *UserMsg:
-		return m.Content
-	case *AssistantMsg:
-		text := m.Content
-		for _, tc := range m.ToolCalls {
+	case AssistantMessage:
+		text := m.Content()
+		for _, tc := range m.ToolCalls() {
 			// map[string]any marshal only fails on unmarshalable types (funcs,
 			// channels); tool arguments are always JSON-safe in practice.
-			args, _ := json.Marshal(tc.Arguments)
-			text += " " + tc.Name + " " + string(args)
+			args, _ := json.Marshal(tc.ToolArgs())
+			text += " " + tc.ToolName() + " " + string(args)
 		}
 		return text
-	case *ToolCallResult:
-		return m.Output
+	case ToolMessage:
+		return m.ToolOutput()
+	case TextMessage:
+		return m.Content()
 	default:
 		// Fallback: marshal and count the raw JSON
 		b, _ := json.Marshal(msg)

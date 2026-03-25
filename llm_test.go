@@ -3,14 +3,15 @@ package llm
 import (
 	"testing"
 
+	"github.com/codewandler/llm/tool"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestStreamOptions_Validate(t *testing.T) {
-	validTools := []ToolDefinition{
+	validTools := []tool.Definition{
 		{Name: "get_weather", Description: "Get weather", Parameters: map[string]any{"type": "object"}},
-		{Name: "send_email", Description: "Send email", Parameters: map[string]any{"type": "object"}},
+		{Name: "send_email", Description: "Publish email", Parameters: map[string]any{"type": "object"}},
 	}
 
 	tests := []struct {
@@ -57,7 +58,7 @@ func TestStreamOptions_Validate(t *testing.T) {
 			opts: Request{
 				Model:    "gpt-4",
 				Messages: Messages{&UserMsg{Content: "Hello"}},
-				Tools:    []ToolDefinition{{Name: "", Description: "No name"}},
+				Tools:    []tool.Definition{{Name: "", Description: "No name"}},
 			},
 			wantErr: "tools[0]: tool definition: name is required",
 		},
@@ -66,7 +67,7 @@ func TestStreamOptions_Validate(t *testing.T) {
 			opts: Request{
 				Model:    "gpt-4",
 				Messages: Messages{&UserMsg{Content: "Hello"}},
-				Tools:    []ToolDefinition{{Name: "bad_tool", Parameters: map[string]any{"type": "string"}}},
+				Tools:    []tool.Definition{{Name: "bad_tool", Parameters: map[string]any{"type": "string"}}},
 			},
 			wantErr: `tool definition "bad_tool": parameters type must be "object"`,
 		},
@@ -75,7 +76,7 @@ func TestStreamOptions_Validate(t *testing.T) {
 			opts: Request{
 				Model:    "gpt-4",
 				Messages: Messages{&UserMsg{Content: "Hello"}},
-				Tools:    []ToolDefinition{{Name: "simple_tool", Description: "No params"}},
+				Tools:    []tool.Definition{{Name: "simple_tool", Description: "No params"}},
 			},
 			wantErr: "",
 		},
@@ -147,7 +148,7 @@ func TestStreamOptions_Validate(t *testing.T) {
 				Tools:      validTools,
 				ToolChoice: ToolChoiceTool{Name: ""},
 			},
-			wantErr: "ToolChoiceTool.Name is required",
+			wantErr: "ToolChoiceTool.ToolName is required",
 		},
 		{
 			name: "invalid - ToolChoiceTool references unknown tool",
@@ -239,32 +240,32 @@ func TestReasoningEffort_Valid(t *testing.T) {
 func TestToolDefinition_Validate(t *testing.T) {
 	tests := []struct {
 		name    string
-		tool    ToolDefinition
+		tool    tool.Definition
 		wantErr string
 	}{
 		{
 			name:    "valid - with parameters",
-			tool:    ToolDefinition{Name: "get_weather", Parameters: map[string]any{"type": "object"}},
+			tool:    tool.Definition{Name: "get_weather", Parameters: map[string]any{"type": "object"}},
 			wantErr: "",
 		},
 		{
 			name:    "valid - nil parameters",
-			tool:    ToolDefinition{Name: "simple_tool"},
+			tool:    tool.Definition{Name: "simple_tool"},
 			wantErr: "",
 		},
 		{
 			name:    "valid - empty parameters map",
-			tool:    ToolDefinition{Name: "empty_params", Parameters: map[string]any{}},
+			tool:    tool.Definition{Name: "empty_params", Parameters: map[string]any{}},
 			wantErr: "",
 		},
 		{
 			name:    "invalid - empty name",
-			tool:    ToolDefinition{Name: ""},
+			tool:    tool.Definition{Name: ""},
 			wantErr: "name is required",
 		},
 		{
 			name:    "invalid - parameters type not object",
-			tool:    ToolDefinition{Name: "bad_tool", Parameters: map[string]any{"type": "array"}},
+			tool:    tool.Definition{Name: "bad_tool", Parameters: map[string]any{"type": "array"}},
 			wantErr: `parameters type must be "object"`,
 		},
 	}

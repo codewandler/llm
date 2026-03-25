@@ -8,9 +8,9 @@ type Model struct {
 	Aliases  []string `json:"aliases,omitempty"`
 }
 
-// Resolver resolves a model alias or ID to its full Model representation.
+// Resolver resolves a model alias or ToolCallID to its full Model representation.
 type Resolver interface {
-	// Resolve returns the Model for the given model ID or alias.
+	// Resolve returns the Model for the given model ToolCallID or alias.
 	// Returns an error if the model is not recognized.
 	Resolve(modelID string) (Model, error)
 }

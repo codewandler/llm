@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/codewandler/llm"
+	"github.com/codewandler/llm/tool"
 )
 
 const (
@@ -381,13 +382,12 @@ func parseStream(ctx context.Context, body io.ReadCloser, pub llm.Publisher) {
 	scanner := bufio.NewScanner(body)
 	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 
-	activeTools := make(map[int]*toolAccum)
+	activeTools := make(map[uint32]*toolAccum)
 	startEmitted := false
 	var usage *llm.Usage
 	var stopReason llm.StopReason
 
 	for scanner.Scan() {
-		// Check for context cancellation
 		select {
 		case <-ctx.Done():
 			pub.Error(llm.NewErrContextCancelled(llm.ProviderNameOpenRouter, ctx.Err()))
@@ -395,22 +395,22 @@ func parseStream(ctx context.Context, body io.ReadCloser, pub llm.Publisher) {
 		default:
 		}
 
-		// extract data
 		line := scanner.Text()
 		if !strings.HasPrefix(line, "data: ") {
 			continue
 		}
 		data := strings.TrimPrefix(line, "data: ")
 
-		// LINE: empty
 		if data == "" {
 			continue
 		}
 
-		// LINE: [DONE] -> OpenRouter returns this when the stream is done.
 		if data == "[DONE]" {
-			pub.Debug("OpenRouter [DONE] message received", nil)
-			continue
+			pub.Completed(llm.CompletedEvent{StopReason: stopReason})
+			if usage != nil {
+				pub.Usage(*usage)
+			}
+			return
 		}
 
 		var chunk streamChunk
@@ -419,7 +419,6 @@ func parseStream(ctx context.Context, body io.ReadCloser, pub llm.Publisher) {
 			continue
 		}
 
-		// Emit StreamEventStart on first chunk
 		if !startEmitted {
 			startEmitted = true
 			pub.Started(llm.StreamStartedEvent{
@@ -433,20 +432,16 @@ func parseStream(ctx context.Context, body io.ReadCloser, pub llm.Publisher) {
 			continue
 		}
 
-		// Capture usage from any chunk that includes it.
 		if chunk.Usage != nil {
 			usage = &llm.Usage{
 				InputTokens:  chunk.Usage.PromptTokens,
 				OutputTokens: chunk.Usage.CompletionTokens,
 				TotalTokens:  chunk.Usage.TotalTokens,
-				// Cost is API-reported by OpenRouter; it already incorporates
-				// cache read/write pricing for the underlying model.
-				Cost: chunk.Usage.Cost,
+				Cost:         chunk.Usage.Cost,
 			}
 			if chunk.Usage.PromptTokensDetails != nil {
 				usage.CacheReadTokens = chunk.Usage.PromptTokensDetails.CachedTokens
 			}
-			// CacheWriteTokens is not reported by OpenRouter's API; left as 0.
 			if chunk.Usage.CompletionTokensDetails != nil {
 				usage.ReasoningTokens = chunk.Usage.CompletionTokensDetails.ReasoningTokens
 			}
@@ -475,29 +470,28 @@ func parseStream(ctx context.Context, body io.ReadCloser, pub llm.Publisher) {
 				}
 				if tc.Function.Arguments != "" {
 					accum.argsBuf.WriteString(tc.Function.Arguments)
-					pub.Delta(llm.ToolDelta(accum.id, accum.name, tc.Function.Arguments).WithIndex(tc.Index))
+					d := llm.ToolDelta(accum.id, accum.name, tc.Function.Arguments)
+					d.Index = &tc.Index
+					pub.Delta(d)
 				}
-				// TODO: would be nice to know if we are already done, emit early ...
 			}
 			if choice.FinishReason != nil {
 				stopReason = finishReasonToStopReason(*choice.FinishReason)
 				emitToolCalls(activeTools, pub)
-				pub.Done(stopReason, usage)
 			}
 		}
 	}
 }
 
-func emitToolCalls(activeTools map[int]*toolAccum, events *llm.EventStream) {
+func emitToolCalls(activeTools map[uint32]*toolAccum, pub llm.Publisher) {
 	if len(activeTools) == 0 {
 		return
 	}
-	// Collect indices and sort so tool calls are emitted in LLM-production order.
-	indices := make([]int, 0, len(activeTools))
+	indices := make([]uint32, 0, len(activeTools))
 	for idx := range activeTools {
 		indices = append(indices, idx)
 	}
-	sort.Ints(indices)
+	sort.Slice(indices, func(i, j int) bool { return indices[i] < indices[j] })
 
 	for _, idx := range indices {
 		accum := activeTools[idx]
@@ -505,11 +499,7 @@ func emitToolCalls(activeTools map[int]*toolAccum, events *llm.EventStream) {
 		if accum.argsBuf.Len() > 0 {
 			_ = json.Unmarshal([]byte(accum.argsBuf.String()), &args)
 		}
-		events.ToolCall(llm.MessageToolCall{
-			ID:        accum.id,
-			Name:      accum.name,
-			Arguments: args,
-		})
+		pub.ToolCall(tool.NewToolCall(accum.id, accum.name, args))
 		delete(activeTools, idx)
 	}
 }

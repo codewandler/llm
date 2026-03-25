@@ -123,16 +123,9 @@ func TestBuildRequest_ToolResultEmptyContent(t *testing.T) {
 	opts := llm.Request{
 		Model: "test/model",
 		Messages: llm.Messages{
-			&llm.UserMsg{Content: "test"},
-			&llm.AssistantMessage{
-				ToolCalls: []llm.MessageToolCall{
-					{ID: "call_123", Name: "test_tool", Arguments: map[string]any{}},
-				},
-			},
-			&llm.ToolResult{
-				ToolCallID: "call_123",
-				Output:     "",
-			},
+			llm.User("test"),
+			llm.Assistant("", tool.NewToolCall("call_123", "test_tool", map[string]any{})),
+			llm.Tool("call_123", ""),
 		},
 	}
 
@@ -154,15 +147,13 @@ func TestBuildRequest_MultipleToolResults(t *testing.T) {
 	opts := llm.Request{
 		Model: "test/model",
 		Messages: llm.Messages{
-			&llm.UserMsg{Content: "test"},
-			&llm.AssistantMessage{
-				ToolCalls: []llm.MessageToolCall{
-					{ID: "call_1", Name: "tool_a", Arguments: map[string]any{}},
-					{ID: "call_2", Name: "tool_b", Arguments: map[string]any{}},
-				},
-			},
-			&llm.ToolResult{ToolCallID: "call_1", Output: "result_a"},
-			&llm.ToolResult{ToolCallID: "call_2", Output: "result_b"},
+			llm.User("test"),
+			llm.Assistant("",
+				tool.NewToolCall("call_1", "tool_a", map[string]any{}),
+				tool.NewToolCall("call_2", "tool_b", map[string]any{}),
+			),
+			llm.Tool("call_1", "result_a"),
+			llm.Tool("call_2", "result_b"),
 		},
 	}
 
@@ -190,15 +181,13 @@ func TestBuildRequest_FullConversationFlow(t *testing.T) {
 	opts := llm.Request{
 		Model: "test/model",
 		Messages: llm.Messages{
-			&llm.System{Content: "You are a helpful assistant."},
-			&llm.UserMsg{Content: "What's the weather in Paris?"},
-			&llm.AssistantMessage{
-				ToolCalls: []llm.MessageToolCall{
-					{ID: "call_123", Name: "get_weather", Arguments: map[string]any{"location": "Paris"}},
-				},
-			},
-			&llm.ToolResult{ToolCallID: "call_123", Output: `{"temp": 72}`},
-			&llm.AssistantMessage{Content: "It's 72 degrees in Paris."},
+			llm.System("You are a helpful assistant."),
+			llm.User("What's the weather in Paris?"),
+			llm.Assistant("",
+				tool.NewToolCall("call_123", "get_weather", map[string]any{"location": "Paris"}),
+			),
+			llm.Tool("call_123", `{"temp": 72}`),
+			llm.Assistant("It's 72 degrees in Paris."),
 		},
 	}
 
@@ -226,22 +215,22 @@ data: {"choices":[{"finish_reason":"stop"}]}
 data: [DONE]
 `
 
-	events := llm.NewEventStream()
-	go parseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), events)
+	pub, ch := llm.NewEventPublisher()
+	go parseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), pub)
 
 	var deltas []string
 	var gotDone bool
 
-	for event := range events.C() {
-		switch event.Type {
+	for env := range ch {
+		switch env.Type {
 		case llm.StreamEventDelta:
-			if event.Delta != nil {
-				deltas = append(deltas, event.Delta.Text)
-			}
-		case llm.StreamEventDone:
+			de := env.Data.(*llm.DeltaEvent)
+			deltas = append(deltas, de.Text)
+		case llm.StreamEventCompleted:
 			gotDone = true
 		case llm.StreamEventError:
-			t.Fatalf("Unexpected error: %v", event.Error)
+			ee := env.Data.(*llm.ErrorEvent)
+			t.Fatalf("Unexpected error: %v", ee.Error)
 		}
 	}
 
@@ -257,25 +246,25 @@ data: {"choices":[{"finish_reason":"tool_calls"}]}
 data: [DONE]
 `
 
-	events := llm.NewEventStream()
-	go parseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), events)
+	pub, ch := llm.NewEventPublisher()
+	go parseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), pub)
 
-	var toolCalls []*llm.MessageToolCall
-	for event := range events.C() {
-		if event.Type == llm.StreamEventToolCall {
-			toolCalls = append(toolCalls, event.ToolCall)
+	var toolCalls []tool.Call
+	for env := range ch {
+		if env.Type == llm.StreamEventToolCall {
+			tce := env.Data.(*llm.ToolCallEvent)
+			toolCalls = append(toolCalls, tce.ToolCall)
 		}
 	}
 
 	require.Len(t, toolCalls, 1)
 	tc := toolCalls[0]
-	assert.Equal(t, "call_123", tc.ID)
-	assert.Equal(t, "get_weather", tc.Name)
-	assert.Equal(t, "Paris", tc.Arguments["location"])
+	assert.Equal(t, "call_123", tc.ToolCallID())
+	assert.Equal(t, "get_weather", tc.ToolName())
+	assert.Equal(t, "Paris", tc.ToolArgs()["location"])
 }
 
 func TestParseStream_MultipleParallelToolCalls(t *testing.T) {
-	// ToolArgs for index 1 arrive before index 0; must still emit in LLM-production order (0, 1).
 	sseData := `data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_1","type":"function","function":{"name":"tool_a"}}]}}]}
 data: {"choices":[{"delta":{"tool_calls":[{"index":1,"id":"call_2","type":"function","function":{"name":"tool_b"}}]}}]}
 data: {"choices":[{"delta":{"tool_calls":[{"index":1,"function":{"arguments":"{\"b\":2}"}}]}}]}
@@ -284,25 +273,25 @@ data: {"choices":[{"finish_reason":"tool_calls"}]}
 data: [DONE]
 `
 
-	events := llm.NewEventStream()
-	go parseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), events)
+	pub, ch := llm.NewEventPublisher()
+	go parseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), pub)
 
-	var toolCalls []*llm.MessageToolCall
-	for event := range events.C() {
-		if event.Type == llm.StreamEventToolCall {
-			toolCalls = append(toolCalls, event.ToolCall)
+	var toolCalls []tool.Call
+	for env := range ch {
+		if env.Type == llm.StreamEventToolCall {
+			tce := env.Data.(*llm.ToolCallEvent)
+			toolCalls = append(toolCalls, tce.ToolCall)
 		}
 	}
 
 	require.Len(t, toolCalls, 2)
-	// Must be emitted in LLM-production order: index 0 first, then index 1
-	assert.Equal(t, "call_1", toolCalls[0].ID)
-	assert.Equal(t, "tool_a", toolCalls[0].Name)
-	assert.Equal(t, float64(1), toolCalls[0].Arguments["a"])
+	assert.Equal(t, "call_1", toolCalls[0].ToolCallID())
+	assert.Equal(t, "tool_a", toolCalls[0].ToolName())
+	assert.Equal(t, float64(1), toolCalls[0].ToolArgs()["a"])
 
-	assert.Equal(t, "call_2", toolCalls[1].ID)
-	assert.Equal(t, "tool_b", toolCalls[1].Name)
-	assert.Equal(t, float64(2), toolCalls[1].Arguments["b"])
+	assert.Equal(t, "call_2", toolCalls[1].ToolCallID())
+	assert.Equal(t, "tool_b", toolCalls[1].ToolName())
+	assert.Equal(t, float64(2), toolCalls[1].ToolArgs()["b"])
 }
 
 func TestParseStream_ReasoningContent(t *testing.T) {
@@ -312,23 +301,20 @@ data: {"choices":[{"finish_reason":"stop"}]}
 data: [DONE]
 `
 
-	events := llm.NewEventStream()
-	go parseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), events)
+	pub, ch := llm.NewEventPublisher()
+	go parseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), pub)
 
 	var reasoning []string
 	var content []string
 
-	for event := range events.C() {
-		switch event.Type {
-		case llm.StreamEventDelta:
-			if event.Delta == nil {
-				continue
-			}
-			switch event.Delta.Type {
+	for env := range ch {
+		if env.Type == llm.StreamEventDelta {
+			de := env.Data.(*llm.DeltaEvent)
+			switch de.Kind {
 			case llm.DeltaKindReasoning:
-				reasoning = append(reasoning, event.Delta.Reasoning)
+				reasoning = append(reasoning, de.Reasoning)
 			case llm.DeltaKindText:
-				content = append(content, event.Delta.Text)
+				content = append(content, de.Text)
 			}
 		}
 	}
@@ -343,13 +329,14 @@ data: {"choices":[{"finish_reason":"stop"}]}
 data: [DONE]
 `
 
-	events := llm.NewEventStream()
-	go parseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), events)
+	pub, ch := llm.NewEventPublisher()
+	go parseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), pub)
 
 	var usage *llm.Usage
-	for event := range events.C() {
-		if event.Type == llm.StreamEventDone && event.Usage != nil {
-			usage = event.Usage
+	for env := range ch {
+		if env.Type == llm.StreamEventUsageUpdated {
+			ue := env.Data.(*llm.UsageUpdatedEvent)
+			usage = &ue.Usage
 		}
 	}
 
@@ -366,13 +353,14 @@ data: {"choices":[],"usage":{"prompt_tokens":100,"completion_tokens":50,"total_t
 data: [DONE]
 `
 
-	events := llm.NewEventStream()
-	go parseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), events)
+	pub, ch := llm.NewEventPublisher()
+	go parseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), pub)
 
 	var usage *llm.Usage
-	for event := range events.C() {
-		if event.Type == llm.StreamEventDone && event.Usage != nil {
-			usage = event.Usage
+	for env := range ch {
+		if env.Type == llm.StreamEventUsageUpdated {
+			ue := env.Data.(*llm.UsageUpdatedEvent)
+			usage = &ue.Usage
 		}
 	}
 
@@ -389,16 +377,17 @@ func TestParseStream_ErrorHandling(t *testing.T) {
 	sseData := `data: {"error":{"message":"Rate limit exceeded"}}
 `
 
-	events := llm.NewEventStream()
-	go parseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), events)
+	pub, ch := llm.NewEventPublisher()
+	go parseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), pub)
 
 	var gotError bool
 	var errorMsg string
 
-	for event := range events.C() {
-		if event.Type == llm.StreamEventError {
+	for env := range ch {
+		if env.Type == llm.StreamEventError {
 			gotError = true
-			errorMsg = event.Error.Error()
+			ee := env.Data.(*llm.ErrorEvent)
+			errorMsg = ee.Error.Error()
 		}
 	}
 
@@ -407,24 +396,23 @@ func TestParseStream_ErrorHandling(t *testing.T) {
 }
 
 func TestParseStream_ContextCancellation(t *testing.T) {
-	// Long stream that would block
 	sseData := strings.Repeat("data: {\"choices\":[{\"delta\":{\"content\":\"x\"}}]}\n", 1000)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	events := llm.NewEventStream()
+	pub, ch := llm.NewEventPublisher()
 
-	go parseStream(ctx, io.NopCloser(strings.NewReader(sseData)), events)
+	go parseStream(ctx, io.NopCloser(strings.NewReader(sseData)), pub)
 
-	// Cancel after receiving a few events
 	eventCount := 0
-	for event := range events.C() {
+	for env := range ch {
 		eventCount++
 		if eventCount == 5 {
 			cancel()
 		}
-		if event.Type == llm.StreamEventError {
-			assert.Contains(t, event.Error.Error(), "context canceled")
+		if env.Type == llm.StreamEventError {
+			ee := env.Data.(*llm.ErrorEvent)
+			assert.Contains(t, ee.Error.Error(), "context canceled")
 			return
 		}
 	}
@@ -434,24 +422,23 @@ func TestParseStream_ContextCancellation(t *testing.T) {
 // NOT flushed when finish_reason == "stop" (normal text completion) and ARE
 // flushed when finish_reason == "tool_calls".
 func TestParseStream_ToolFlushOnlyOnToolCalls(t *testing.T) {
-	// A plain text response — no tool calls accumulated, finish_reason == "stop".
-	// The fix ensures emitToolCalls is NOT called on "stop"; behaviour is identical
-	// but the condition is semantically correct.
 	sseData := `data: {"choices":[{"delta":{"content":"Hello"}}]}
 data: {"choices":[{"finish_reason":"stop"}]}
 data: [DONE]
 `
-	events := llm.NewEventStream()
-	go parseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), events)
+	pub, ch := llm.NewEventPublisher()
+	go parseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), pub)
 
-	var toolCalls []*llm.MessageToolCall
+	var toolCalls []tool.Call
 	var stopReason llm.StopReason
-	for event := range events.C() {
-		switch event.Type {
+	for env := range ch {
+		switch env.Type {
 		case llm.StreamEventToolCall:
-			toolCalls = append(toolCalls, event.ToolCall)
-		case llm.StreamEventDone:
-			stopReason = event.StopReason
+			tce := env.Data.(*llm.ToolCallEvent)
+			toolCalls = append(toolCalls, tce.ToolCall)
+		case llm.StreamEventCompleted:
+			ce := env.Data.(*llm.CompletedEvent)
+			stopReason = ce.StopReason
 		}
 	}
 

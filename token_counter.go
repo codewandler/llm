@@ -1,15 +1,19 @@
 package llm
 
-import "context"
+import (
+	"context"
+
+	"github.com/codewandler/llm/tool"
+)
 
 // TokenCountRequest is the input to TokenCounter.CountTokens.
 // Model is required — providers use it to select the correct BPE encoding.
 type TokenCountRequest struct {
-	// Model is the model ID to count tokens for (e.g. "gpt-4o", "claude-sonnet-4-5").
+	// Model is the model ToolCallID to count tokens for (e.g. "gpt-4o", "claude-sonnet-4-5").
 	// Required — returns an error if empty.
 	Model    string
 	Messages Messages
-	Tools    []ToolDefinition
+	Tools    []tool.Definition
 }
 
 // TokenCounter is an optional interface providers may implement to estimate
@@ -61,14 +65,14 @@ type TokenCount struct {
 	SystemTokens     int // sum of PerMessage for all RoleSystem messages
 	UserTokens       int // sum of PerMessage for all RoleUser messages
 	AssistantTokens  int // sum of PerMessage for all RoleAssistant messages
-	ToolResultTokens int // sum of PerMessage for all RoleTool (ToolCallResult) messages
+	ToolResultTokens int // sum of PerMessage for all RoleTool (ToolResult) messages
 
 	// ToolsTokens is the total raw token count for all tool definitions combined,
 	// derived purely from the JSON-serialised tool schemas.
 	// sum(values(PerTool)) == ToolsTokens.
 	ToolsTokens int
 
-	// PerTool maps each tool definition's Name to its individual raw token count.
+	// PerTool maps each tool definition's ToolName to its individual raw token count.
 	// sum(values(PerTool)) == ToolsTokens.
 	PerTool map[string]int
 

@@ -29,7 +29,7 @@ type loggingTransport struct {
 }
 
 // streamLogger is a write-closer that logs each Write call as a debug line,
-// then forwards the data to the underlying writer so the stream flows through.
+// then forwards the data to the underlying writer so the eventPub flows through.
 type streamLogger struct {
 	underlying io.ReadCloser
 	logger     *slog.Logger
@@ -120,7 +120,7 @@ func (t *loggingTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 			)
 		} else {
 			// Wrap the response body in a tee so every chunk is logged as it is
-			// read by the caller (SSE parser, JSON decoder, etc.). The stream is
+			// read by the caller (SSE parser, JSON decoder, etc.). The eventPub is
 			// not buffered — data flows through at the same rate as without logging.
 			resp.Body = &streamLogger{
 				underlying: resp.Body,
@@ -141,7 +141,7 @@ func (t *loggingTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 //
 // When opts.Logger is non-nil, every request and response is logged at Debug
 // level. Set opts.Debug = true to also include headers and bodies. Response
-// bodies are tee-logged as they stream — no buffering, no broken SSE.
+// bodies are tee-logged as they eventPub — no buffering, no broken SSE.
 func NewHttpClient(opts HttpClientOpts) *http.Client {
 	var transport http.RoundTripper = &http.Transport{
 		TLSHandshakeTimeout:   10 * time.Second,

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/codewandler/llm/tool"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -22,7 +23,7 @@ func TestStreamResponse_TextAccumulation(t *testing.T) {
 		llmtest.DoneEvent(llm.StopReasonEndTurn, nil),
 	)
 
-	result := <-llm.Process(context.Background(), ch).Result()
+	result := <-llm.ProcessChan(context.Background(), ch).Result()
 
 	require.NoError(t, result.Error())
 	assert.Equal(t, "hello world", result.Text)
@@ -38,7 +39,7 @@ func TestStreamResponse_ReasoningAccumulation(t *testing.T) {
 		llmtest.DoneEvent(llm.StopReasonEndTurn, nil),
 	)
 
-	result := <-llm.Process(context.Background(), ch).Result()
+	result := <-llm.ProcessChan(context.Background(), ch).Result()
 
 	require.NoError(t, result.Error())
 	assert.Equal(t, "step1 step2", result.Reasoning)
@@ -49,7 +50,7 @@ func TestStreamResponse_Usage(t *testing.T) {
 	usage := &llm.Usage{InputTokens: 10, OutputTokens: 5, TotalTokens: 15, Cost: 0.001}
 	ch := llmtest.SendEvents(llmtest.TextEvent("hi"), llmtest.DoneEvent(llm.StopReasonEndTurn, usage))
 
-	result := <-llm.Process(context.Background(), ch).Result()
+	result := <-llm.ProcessChan(context.Background(), ch).Result()
 
 	require.NoError(t, result.Error())
 	require.NotNil(t, result.Usage)
@@ -61,8 +62,8 @@ func TestStreamResponse_OnTextCallback(t *testing.T) {
 	var received []string
 	ch := llmtest.SendEvents(llmtest.TextEvent("a"), llmtest.TextEvent("b"), llmtest.TextEvent("c"), llmtest.DoneEvent(llm.StopReasonEndTurn, nil))
 
-	result := <-llm.Process(context.Background(), ch).
-		OnText(func(s string) { received = append(received, s) }).
+	result := <-llm.ProcessChan(context.Background(), ch).
+		OnTextDelta(func(s string) { received = append(received, s) }).
 		Result()
 
 	require.NoError(t, result.Error())
@@ -73,8 +74,8 @@ func TestStreamResponse_OnReasoningCallback(t *testing.T) {
 	var received []string
 	ch := llmtest.SendEvents(llmtest.ReasoningEvent("r1"), llmtest.ReasoningEvent("r2"), llmtest.DoneEvent(llm.StopReasonEndTurn, nil))
 
-	result := <-llm.Process(context.Background(), ch).
-		OnReasoning(func(s string) { received = append(received, s) }).
+	result := <-llm.ProcessChan(context.Background(), ch).
+		OnReasoningDelta(func(s string) { received = append(received, s) }).
 		Result()
 
 	require.NoError(t, result.Error())
@@ -89,8 +90,8 @@ func TestStreamResponse_OnToolDeltaCallback(t *testing.T) {
 		llmtest.DoneEvent(llm.StopReasonEndTurn, nil),
 	)
 
-	result := <-llm.Process(context.Background(), deltaCh).
-		OnToolDelta(func(d *llm.Delta) { received = append(received, d.ToolArgs) }).
+	result := <-llm.ProcessChan(context.Background(), deltaCh).
+		OnToolDelta(func(d *llm.DeltaEvent) { received = append(received, d.ToolArgs) }).
 		Result()
 
 	require.NoError(t, result.Error())
@@ -103,7 +104,7 @@ func TestStreamResponse_StopReasonToolUse(t *testing.T) {
 		llmtest.DoneEvent(llm.StopReasonToolUse, nil),
 	)
 
-	result := <-llm.Process(context.Background(), ch).Result()
+	result := <-llm.ProcessChan(context.Background(), ch).Result()
 
 	require.NoError(t, result.Error())
 	assert.Equal(t, llm.StopReasonToolUse, result.StopReason)
@@ -124,9 +125,9 @@ func TestStreamResponse_ToolHandler_Sync(t *testing.T) {
 		llmtest.DoneEvent(llm.StopReasonToolUse, nil),
 	)
 
-	weatherSpec := llm.NewToolSpec[In]("get_weather", "Get weather")
-	result := <-llm.Process(context.Background(), ch).
-		HandleTool(llm.Handle(weatherSpec, func(_ context.Context, in In) (*Out, error) {
+	weatherSpec := tool.NewSpec[In]("get_weather", "Get weather")
+	result := <-llm.ProcessChan(context.Background(), ch).
+		HandleTool(tool.Handle(weatherSpec, func(_ context.Context, in In) (*Out, error) {
 			assert.Equal(t, "Berlin", in.Location)
 			return &Out{Temp: 22}, nil
 		})).
@@ -154,9 +155,9 @@ func TestStreamResponse_ToolHandler_Error(t *testing.T) {
 
 	boom := errors.New("service unavailable")
 
-	weatherSpec := llm.NewToolSpec[In]("get_weather", "Get weather")
-	result := <-llm.Process(context.Background(), ch).
-		HandleTool(llm.Handle(weatherSpec, func(_ context.Context, _ In) (*Out, error) { return nil, boom })).
+	weatherSpec := tool.NewSpec[In]("get_weather", "Get weather")
+	result := <-llm.ProcessChan(context.Background(), ch).
+		HandleTool(tool.Handle(weatherSpec, func(_ context.Context, _ In) (*Out, error) { return nil, boom })).
 		Result()
 
 	// The error is surfaced on the result.
@@ -179,10 +180,10 @@ func TestStreamResponse_ToolHandler_Async(t *testing.T) {
 		llmtest.DoneEvent(llm.StopReasonToolUse, nil),
 	)
 
-	doubleSpec := llm.NewToolSpec[In]("double", "Double a number")
-	result := <-llm.Process(context.Background(), ch).
-		HandleTool(llm.Handle(doubleSpec, func(_ context.Context, in In) (*Out, error) { return &Out{N: in.N * 2}, nil })).
-		DispatchAsync().
+	doubleSpec := tool.NewSpec[In]("double", "Double a number")
+	result := <-llm.ProcessChan(context.Background(), ch).
+		HandleTool(tool.Handle(doubleSpec, func(_ context.Context, in In) (*Out, error) { return &Out{N: in.N * 2}, nil })).
+		WithAsyncToolDispatch().
 		Result()
 
 	require.NoError(t, result.Error())
@@ -193,14 +194,14 @@ func TestStreamResponse_ToolHandler_Async(t *testing.T) {
 }
 
 func TestStreamResponse_UnhandledToolCall(t *testing.T) {
-	// Tool call with no handler registered — gets an error ToolCallResult so
+	// Tool call with no handler registered — gets an error ToolResult so
 	// the conversation history remains valid (model always gets a result back).
 	ch := llmtest.SendEvents(
 		llmtest.ToolEvent("id1", "unknown_tool", map[string]any{}),
 		llmtest.DoneEvent(llm.StopReasonToolUse, nil),
 	)
 
-	result := <-llm.Process(context.Background(), ch).Result()
+	result := <-llm.ProcessChan(context.Background(), ch).Result()
 
 	require.NoError(t, result.Error())
 	require.Len(t, result.ToolCalls, 1)
@@ -216,7 +217,7 @@ func TestStreamResponse_StreamError(t *testing.T) {
 		llmtest.ErrorEvent(llm.NewErrProviderMsg("test", "foo")),
 	)
 
-	result := <-llm.Process(context.Background(), ch).Result()
+	result := <-llm.ProcessChan(context.Background(), ch).Result()
 
 	assert.Error(t, result.Error())
 	assert.Equal(t, llm.StopReasonError, result.StopReason)
@@ -228,7 +229,7 @@ func TestStreamResponse_ContextCancellation(t *testing.T) {
 	live := make(chan llm.StreamEvent)
 	ctx, cancel := context.WithCancel(context.Background())
 
-	resp := llm.Process(ctx, live)
+	resp := llm.ProcessChan(ctx, live)
 	resultCh := resp.Result()
 
 	cancel()
@@ -241,8 +242,8 @@ func TestStreamResponse_ContextCancellation(t *testing.T) {
 func TestStreamResponse_CallbackPanicRecovered(t *testing.T) {
 	ch := llmtest.SendEvents(llmtest.TextEvent("x"), llmtest.DoneEvent(llm.StopReasonEndTurn, nil))
 
-	result := <-llm.Process(context.Background(), ch).
-		OnText(func(_ string) { panic("boom") }).
+	result := <-llm.ProcessChan(context.Background(), ch).
+		OnTextDelta(func(_ string) { panic("boom") }).
 		Result()
 
 	// Panic is recovered; result still has the text.
@@ -260,9 +261,9 @@ func TestStreamResponse_ToolHandlerPanicRecovered(t *testing.T) {
 		llmtest.DoneEvent(llm.StopReasonToolUse, nil),
 	)
 
-	explodeSpec := llm.NewToolSpec[In]("explode", "Explode")
-	result := <-llm.Process(context.Background(), ch).
-		HandleTool(llm.Handle(explodeSpec, func(_ context.Context, _ In) (*Out, error) { panic("kaboom") })).
+	explodeSpec := tool.NewSpec[In]("explode", "Explode")
+	result := <-llm.ProcessChan(context.Background(), ch).
+		HandleTool(tool.Handle(explodeSpec, func(_ context.Context, _ In) (*Out, error) { panic("kaboom") })).
 		Result()
 
 	assert.Error(t, result.Error())
@@ -278,7 +279,7 @@ func TestStreamResponse_Message(t *testing.T) {
 		llmtest.DoneEvent(llm.StopReasonToolUse, nil),
 	)
 
-	result := <-llm.Process(context.Background(), ch).Result()
+	result := <-llm.ProcessChan(context.Background(), ch).Result()
 
 	msg := result.Message()
 	assert.Equal(t, llm.RoleAssistant, msg.Role())
@@ -301,9 +302,9 @@ func TestStreamResponse_Next(t *testing.T) {
 		llmtest.DoneEvent(llm.StopReasonToolUse, nil),
 	)
 
-	searchSpec := llm.NewToolSpec[In]("search", "Search")
-	result := <-llm.Process(context.Background(), ch).
-		HandleTool(llm.Handle(searchSpec, func(_ context.Context, in In) (*Out, error) {
+	searchSpec := tool.NewSpec[In]("search", "Search")
+	result := <-llm.ProcessChan(context.Background(), ch).
+		HandleTool(tool.Handle(searchSpec, func(_ context.Context, in In) (*Out, error) {
 			return &Out{Results: []string{"golang.org"}}, nil
 		})).
 		Result()
@@ -312,11 +313,11 @@ func TestStreamResponse_Next(t *testing.T) {
 	next := result.Next()
 	require.Len(t, next, 2)
 
-	asst, ok := next[0].(*llm.AssistantMsg)
+	asst, ok := next[0].(*llm.AssistantMessage)
 	require.True(t, ok)
 	assert.Equal(t, "searching...", asst.Content)
 
-	tcr, ok := next[1].(*llm.ToolCallResult)
+	tcr, ok := next[1].(*llm.ToolResult)
 	require.True(t, ok)
 	assert.Equal(t, "id1", tcr.ToolCallID)
 	assert.JSONEq(t, `{"results":["golang.org"]}`, tcr.Output)
@@ -326,9 +327,9 @@ func TestStreamResponse_Apply(t *testing.T) {
 	ch := llmtest.SendEvents(llmtest.TextEvent("hi"), llmtest.DoneEvent(llm.StopReasonEndTurn, nil))
 
 	var msgs llm.Messages
-	msgs.AddUserMsg("hello")
+	msgs.User("hello")
 
-	result := <-llm.Process(context.Background(), ch).Result()
+	result := <-llm.ProcessChan(context.Background(), ch).Result()
 	result.Apply(&msgs)
 
 	assert.Len(t, msgs, 2)
@@ -339,7 +340,7 @@ func TestStreamResponse_Apply(t *testing.T) {
 func TestStreamResponse_ResultIdempotent(t *testing.T) {
 	ch := llmtest.SendEvents(llmtest.TextEvent("hi"), llmtest.DoneEvent(llm.StopReasonEndTurn, nil))
 
-	r := llm.Process(context.Background(), ch)
+	r := llm.ProcessChan(context.Background(), ch)
 	ch1 := r.Result()
 	ch2 := r.Result() // second call — same channel
 
@@ -350,7 +351,7 @@ func TestStreamResponse_ResultIdempotent(t *testing.T) {
 }
 
 // TestStreamResponse_HandleTool_BoundSpec verifies that llm.Handle(spec, fn)
-// satisfies ToolHandler and that HandleTool reads the name from the spec.
+// satisfies Handler and that HandleTool reads the name from the spec.
 func TestStreamResponse_HandleTool_BoundSpec(t *testing.T) {
 	type In struct {
 		Location string `json:"location" jsonschema:"required"`
@@ -359,15 +360,15 @@ func TestStreamResponse_HandleTool_BoundSpec(t *testing.T) {
 		Temp int `json:"temp"`
 	}
 
-	spec := llm.NewToolSpec[In]("get_weather", "Get weather")
+	spec := tool.NewSpec[In]("get_weather", "Get weather")
 
 	ch := llmtest.SendEvents(
 		llmtest.ToolEvent("id1", "get_weather", map[string]any{"location": "Paris"}),
 		llmtest.DoneEvent(llm.StopReasonToolUse, nil),
 	)
 
-	result := <-llm.Process(context.Background(), ch).
-		HandleTool(llm.Handle(spec, func(_ context.Context, in In) (*Out, error) {
+	result := <-llm.ProcessChan(context.Background(), ch).
+		HandleTool(tool.Handle(spec, func(_ context.Context, in In) (*Out, error) {
 			return &Out{Temp: 18}, nil
 		})).
 		Result()

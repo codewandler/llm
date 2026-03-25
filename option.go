@@ -25,7 +25,7 @@ type Options struct {
 	HTTPClient *http.Client
 
 	// Logger is used by providers that cannot log via the HTTP transport
-	// (e.g. Bedrock's binary eventstream). When set, stream events are logged
+	// (e.g. Bedrock's binary eventstream). When set, eventPub events are logged
 	// at Debug level using the same message format as the HTTP transport logger
 	// so the same renderer handles both.
 	Logger *slog.Logger
