@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/codewandler/llm"
+	"github.com/codewandler/llm/tool"
 )
 
 // Provider is a test-only provider that returns a single tool call
@@ -14,30 +15,28 @@ type Provider struct {
 
 func (f *Provider) Name() string { return "fake" }
 
-func (f *Provider) CreateStream(_ context.Context, opts llm.Request) (<-chan llm.StreamEvent, error) {
-	stream := llm.NewEventStream()
+func (f *Provider) CreateStream(_ context.Context, opts llm.Request) (llm.Stream, error) {
+	pub, ch := llm.NewEventPublisher()
 	go func() {
-		defer stream.Close()
-		// Emit start event first
-		stream.Start(llm.StreamStartOpts{
+		defer pub.Close()
+
+		pub.Started(llm.StreamStartedEvent{
 			Model:     "fake-model-v1",
 			RequestID: "fake-req-123",
 		})
 
 		if !f.called {
 			f.called = true
-			stream.ToolCall(llm.ToolCall{
-				Name:      "bash",
-				ID:        "bash-1",
-				Arguments: map[string]any{"command": "echo hello"},
-			})
-			stream.Done(llm.StopReasonToolUse, &llm.Usage{InputTokens: 1, OutputTokens: 1, TotalTokens: 2, Cost: 0.01})
+			pub.ToolCall(tool.NewToolCall("bash-1", "bash", map[string]any{"command": "echo hello"}))
+			pub.Completed(llm.CompletedEvent{StopReason: llm.StopReasonToolUse})
+			pub.Usage(llm.Usage{InputTokens: 1, OutputTokens: 1, TotalTokens: 2, Cost: 0.01})
 		} else {
-			stream.Delta(llm.TextDelta(nil, "done"))
-			stream.Done(llm.StopReasonEndTurn, &llm.Usage{InputTokens: 1, OutputTokens: 1, TotalTokens: 2, Cost: 0.01})
+			pub.Delta(llm.TextDelta("done"))
+			pub.Completed(llm.CompletedEvent{StopReason: llm.StopReasonEndTurn})
+			pub.Usage(llm.Usage{InputTokens: 1, OutputTokens: 1, TotalTokens: 2, Cost: 0.01})
 		}
 	}()
-	return stream.C(), nil
+	return ch, nil
 }
 
 // NewProvider returns a test-only provider.

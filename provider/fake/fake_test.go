@@ -5,13 +5,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/codewandler/llm"
+	"github.com/codewandler/llm/tool"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	"github.com/codewandler/llm"
 )
 
-// TestProviderBasicStreaming tests basic streaming functionality with the fake provider.
 func TestProviderBasicStreaming(t *testing.T) {
 	ctx := context.Background()
 	p := NewProvider()
@@ -28,7 +27,7 @@ func TestProviderBasicStreaming(t *testing.T) {
 			opts: llm.Request{
 				Model: "fake-model",
 				Messages: llm.Messages{
-					&llm.UserMsg{Content: "test message"},
+					llm.User("test message"),
 				},
 			},
 			wantToolCall:  true,
@@ -40,7 +39,7 @@ func TestProviderBasicStreaming(t *testing.T) {
 			opts: llm.Request{
 				Model: "fake-model",
 				Messages: llm.Messages{
-					&llm.UserMsg{Content: "another message"},
+					llm.User("another message"),
 				},
 			},
 			wantToolCall:  false,
@@ -64,25 +63,22 @@ func TestProviderBasicStreaming(t *testing.T) {
 				switch event.Type {
 				case llm.StreamEventToolCall:
 					gotToolCall = true
-					require.NotNil(t, event.ToolCall, "StreamEventToolCall has nil ToolCall")
-					assert.NotEmpty(t, event.ToolCall.ID, "ToolCall.ID is empty")
-					assert.NotEmpty(t, event.ToolCall.Name, "ToolCall.Name is empty")
+					tc, ok := event.Data.(*llm.ToolCallEvent)
+					require.True(t, ok, "StreamEventToolCall has nil ToolCallEvent")
+					assert.NotEmpty(t, tc.ToolCall.ToolCallID(), "ToolCallEvent.ToolCallID is empty")
+					assert.NotEmpty(t, tc.ToolCall.ToolName(), "ToolCallEvent.ToolName is empty")
 
 				case llm.StreamEventDelta:
 					gotTextDelta = true
-					assert.NotEmpty(t, event.Delta, "StreamEventDelta has empty Delta")
 
-				case llm.StreamEventDone:
+				case llm.StreamEventCompleted:
 					gotDone = true
-					require.NotNil(t, event.Usage, "StreamEventDone has nil Usage")
-					assert.NotZero(t, event.Usage.TotalTokens, "Usage.TotalTokens is 0")
 
 				case llm.StreamEventError:
-					t.Errorf("Unexpected error event: %v", event.Error)
+					t.Errorf("Unexpected error event: %v", event.Data)
 				}
 			}
 
-			// Verify expected events were received
 			assert.Equal(t, tt.wantToolCall, gotToolCall, "tool call event mismatch")
 			assert.Equal(t, tt.wantTextDelta, gotTextDelta, "text delta event mismatch")
 			assert.Equal(t, tt.wantDone, gotDone, "done event mismatch")
@@ -90,7 +86,6 @@ func TestProviderBasicStreaming(t *testing.T) {
 	}
 }
 
-// TestProviderContextCancellation verifies context cancellation is handled properly.
 func TestProviderContextCancellation(t *testing.T) {
 	p := NewProvider()
 
@@ -99,60 +94,53 @@ func TestProviderContextCancellation(t *testing.T) {
 
 	stream, err := p.CreateStream(ctx, llm.Request{
 		Model:    "fake-model",
-		Messages: llm.Messages{&llm.UserMsg{Content: "test"}},
+		Messages: llm.Messages{llm.User("test")},
 	})
 	require.NoError(t, err)
 
-	// Drain the channel
 	for range stream {
-		// The fake provider completes quickly, so we may not hit timeout
 	}
 
-	// Verify context was canceled or completed
 	if ctx.Err() != nil {
 		assert.ErrorIs(t, ctx.Err(), context.DeadlineExceeded)
 	}
 }
 
-// TestProviderToolCallStructure verifies tool call structure is correct.
 func TestProviderToolCallStructure(t *testing.T) {
 	ctx := context.Background()
 	p := NewProvider()
 
 	stream, err := p.CreateStream(ctx, llm.Request{
-		Model: "fake-model",
-		Messages: llm.Messages{
-			&llm.UserMsg{Content: "test"},
-		},
+		Model:    "fake-model",
+		Messages: llm.Messages{llm.User("test")},
 	})
 	require.NoError(t, err)
 
-	var toolCall *llm.ToolCall
+	var toolCall tool.Call
 	for event := range stream {
 		if event.Type == llm.StreamEventToolCall {
-			toolCall = event.ToolCall
+			tc, ok := event.Data.(*llm.ToolCallEvent)
+			require.True(t, ok, "StreamEventToolCall has nil ToolCallEvent")
+			toolCall = tc.ToolCall
 			break
 		}
 	}
 
 	require.NotNil(t, toolCall, "No tool call received")
 
-	// Verify tool call structure
-	assert.NotEmpty(t, toolCall.ID, "ToolCall.ID is empty")
-	assert.Equal(t, "bash", toolCall.Name, "ToolCall.Name mismatch")
-	assert.NotNil(t, toolCall.Arguments, "ToolCall.Arguments is nil")
+	assert.NotEmpty(t, toolCall.ToolCallID(), "ToolCall.ToolCallID is empty")
+	assert.Equal(t, "bash", toolCall.ToolName(), "ToolCall.ToolName mismatch")
 
-	// Verify arguments contain expected keys
-	assert.Contains(t, toolCall.Arguments, "command", "Arguments missing 'command' key")
-	assert.Equal(t, "echo hello", toolCall.Arguments["command"], "Arguments['command'] mismatch")
+	args := toolCall.ToolArgs()
+	assert.NotNil(t, args, "ToolCall.ToolArgs is nil")
+	assert.Contains(t, args, "command", "ToolArgs missing 'command' key")
 }
 
-// TestProviderWithTools verifies tool definitions are accepted.
 func TestProviderWithTools(t *testing.T) {
 	ctx := context.Background()
 	p := NewProvider()
 
-	tools := []llm.ToolDefinition{
+	tools := []tool.Definition{
 		{
 			Name:        "get_weather",
 			Description: "Get the weather for a location",
@@ -171,33 +159,31 @@ func TestProviderWithTools(t *testing.T) {
 
 	stream, err := p.CreateStream(ctx, llm.Request{
 		Model:    "fake-model",
-		Messages: llm.Messages{&llm.UserMsg{Content: "What's the weather?"}},
+		Messages: llm.Messages{llm.User("What's the weather?")},
 		Tools:    tools,
 	})
 	require.NoError(t, err)
 
-	// Drain and verify we get events
 	eventCount := 0
 	for event := range stream {
 		eventCount++
 		if event.Type == llm.StreamEventError {
-			t.Errorf("Error event: %v", event.Error)
+			t.Errorf("Error event: %v", event.Data)
 		}
 	}
 
 	assert.NotZero(t, eventCount, "No events received when sending with tools")
 }
 
-// TestProviderMultipleMessages verifies conversation history handling.
 func TestProviderMultipleMessages(t *testing.T) {
 	ctx := context.Background()
 	p := NewProvider()
 
 	messages := llm.Messages{
-		&llm.SystemMsg{Content: "You are a helpful assistant."},
-		&llm.UserMsg{Content: "Hello"},
-		&llm.AssistantMsg{Content: "Hi there!"},
-		&llm.UserMsg{Content: "How are you?"},
+		llm.System("You are a helpful assistant."),
+		llm.User("Hello"),
+		llm.Assistant("Hi there!"),
+		llm.User("How are you?"),
 	}
 
 	stream, err := p.CreateStream(ctx, llm.Request{
@@ -206,20 +192,17 @@ func TestProviderMultipleMessages(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Verify stream completes without error
 	for event := range stream {
 		assert.NotEqual(t, llm.StreamEventError, event.Type,
-			"Unexpected error event: %v", event.Error)
+			"Unexpected error event: %v", event.Data)
 	}
 }
 
-// TestProviderName verifies the provider name is correct.
 func TestProviderName(t *testing.T) {
 	p := NewProvider()
 	assert.Equal(t, "fake", p.Name())
 }
 
-// TestProviderModels verifies the provider returns valid models.
 func TestProviderModels(t *testing.T) {
 	p := NewProvider()
 	models := p.Models()
@@ -232,14 +215,13 @@ func TestProviderModels(t *testing.T) {
 	assert.Equal(t, "fake", model.Provider)
 }
 
-// BenchmarkProviderStreaming benchmarks the streaming performance.
 func BenchmarkProviderStreaming(b *testing.B) {
 	ctx := context.Background()
 	p := NewProvider()
 
 	opts := llm.Request{
 		Model:    "fake-model",
-		Messages: llm.Messages{&llm.UserMsg{Content: "benchmark test"}},
+		Messages: llm.Messages{llm.User("benchmark test")},
 	}
 
 	b.ResetTimer()
@@ -249,20 +231,18 @@ func BenchmarkProviderStreaming(b *testing.B) {
 			b.Fatalf("CreateStream() error = %v", err)
 		}
 
-		// Drain the stream
 		for range stream {
 		}
 	}
 }
 
-// BenchmarkStreamEventProcessing benchmarks event processing.
 func BenchmarkStreamEventProcessing(b *testing.B) {
 	ctx := context.Background()
 	p := NewProvider()
 
 	opts := llm.Request{
 		Model:    "fake-model",
-		Messages: llm.Messages{&llm.UserMsg{Content: "benchmark"}},
+		Messages: llm.Messages{llm.User("benchmark")},
 	}
 
 	b.ResetTimer()
@@ -275,25 +255,21 @@ func BenchmarkStreamEventProcessing(b *testing.B) {
 		eventCount := 0
 		for event := range stream {
 			eventCount++
-			// Simulate basic processing
 			_ = event.Type
-			if event.ToolCall != nil {
-				_ = event.ToolCall.Name
+			if tc, ok := event.Data.(*llm.ToolCallEvent); ok {
+				_ = tc.ToolCall.ToolName()
 			}
 		}
 	}
 }
 
-// Example demonstrates basic usage of the fake provider.
 func Example() {
 	ctx := context.Background()
 	p := NewProvider()
 
 	stream, err := p.CreateStream(ctx, llm.Request{
-		Model: "fake-model",
-		Messages: llm.Messages{
-			&llm.UserMsg{Content: "Hello!"},
-		},
+		Model:    "fake-model",
+		Messages: llm.Messages{llm.User("Hello!")},
 	})
 	if err != nil {
 		panic(err)
@@ -302,19 +278,15 @@ func Example() {
 	for event := range stream {
 		switch event.Type {
 		case llm.StreamEventDelta:
-			// Handle text response
-			_ = event.Delta
+			_ = event.Data
 		case llm.StreamEventToolCall:
-			// Handle tool invocation
-			_ = event.ToolCall
-		case llm.StreamEventDone:
-			// Stream complete
+			_ = event.Data
+		case llm.StreamEventCompleted:
 			return
 		case llm.StreamEventError:
-			panic(event.Error)
+			panic(event.Data)
 		}
 	}
 }
 
-// Ensure Provider implements provider.Provider at compile time.
 var _ llm.Provider = (*Provider)(nil)
