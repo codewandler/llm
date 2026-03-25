@@ -15,23 +15,23 @@ type mockProvider struct {
 	name       string
 	models     []llm.Model
 	returnErr  error
-	streamFunc func(ctx context.Context, opts llm.Request) (<-chan llm.StreamEvent, error)
+	streamFunc func(ctx context.Context, opts llm.Request) (llm.Stream, error)
 }
 
 func (m *mockProvider) Name() string { return m.name }
 
 func (m *mockProvider) Models() []llm.Model { return m.models }
 
-func (m *mockProvider) CreateStream(ctx context.Context, opts llm.Request) (<-chan llm.StreamEvent, error) {
+func (m *mockProvider) CreateStream(ctx context.Context, opts llm.Request) (llm.Stream, error) {
 	if m.returnErr != nil {
 		return nil, m.returnErr
 	}
 	if m.streamFunc != nil {
 		return m.streamFunc(ctx, opts)
 	}
-	ch := make(chan llm.StreamEvent, 1)
+	ch := make(chan llm.Envelope, 1)
 	go func() {
-		ch <- llm.StreamEvent{Type: llm.StreamEventDone}
+		ch <- llm.Envelope{Type: llm.StreamEventCompleted, Data: &llm.CompletedEvent{}}
 		close(ch)
 	}()
 	return ch, nil
@@ -237,7 +237,7 @@ func TestResolve(t *testing.T) {
 		{"smart", "work-claude/anthropic/claude-sonnet", false},
 		// Local alias does NOT work bare - must be prefixed
 		{"sonnet", "", true},
-		// Full model ID works
+		// Full model ToolCallID works
 		{"claude-sonnet", "work-claude/anthropic/claude-sonnet", false},
 		{"anthropic/claude-sonnet", "work-claude/anthropic/claude-sonnet", false},
 		{"work-claude/anthropic/claude-sonnet", "work-claude/anthropic/claude-sonnet", false},
@@ -265,11 +265,11 @@ func TestCreateStream(t *testing.T) {
 	t.Run("successful stream", func(t *testing.T) {
 		prov := &mockProvider{
 			name: "prov1",
-			streamFunc: func(ctx context.Context, opts llm.Request) (<-chan llm.StreamEvent, error) {
-				ch := make(chan llm.StreamEvent, 1)
+			streamFunc: func(ctx context.Context, opts llm.Request) (llm.Stream, error) {
+				ch := make(chan llm.Envelope, 2)
 				go func() {
-					ch <- llm.StreamEvent{Type: llm.StreamEventDelta, Delta: llm.TextDelta(nil, "hello")}
-					ch <- llm.StreamEvent{Type: llm.StreamEventDone}
+					ch <- llm.Envelope{Type: llm.StreamEventDelta, Data: llm.TextDelta("hello")}
+					ch <- llm.Envelope{Type: llm.StreamEventCompleted, Data: &llm.CompletedEvent{}}
 					close(ch)
 				}()
 				return ch, nil
@@ -289,11 +289,11 @@ func TestCreateStream(t *testing.T) {
 
 		stream, err := agg.CreateStream(context.Background(), llm.Request{
 			Model:    "gpt-4",
-			Messages: llm.Messages{&llm.UserMsg{Content: "hi"}},
+			Messages: llm.Messages{llm.User("hi")},
 		})
 		require.NoError(t, err)
 
-		var events []llm.StreamEvent
+		var events []llm.Envelope
 		for evt := range stream {
 			events = append(events, evt)
 		}
@@ -301,7 +301,7 @@ func TestCreateStream(t *testing.T) {
 		assert.Equal(t, llm.StreamEventCreated, events[0].Type)
 		assert.Equal(t, llm.StreamEventRouted, events[1].Type)
 		assert.Equal(t, llm.StreamEventDelta, events[2].Type)
-		assert.Equal(t, llm.StreamEventDone, events[3].Type)
+		assert.Equal(t, llm.StreamEventCompleted, events[3].Type)
 	})
 
 	t.Run("failover to second provider", func(t *testing.T) {
@@ -312,10 +312,10 @@ func TestCreateStream(t *testing.T) {
 		}
 		prov2 := &mockProvider{
 			name: "prov2",
-			streamFunc: func(ctx context.Context, opts llm.Request) (<-chan llm.StreamEvent, error) {
-				ch := make(chan llm.StreamEvent, 1)
+			streamFunc: func(ctx context.Context, opts llm.Request) (llm.Stream, error) {
+				ch := make(chan llm.Envelope, 1)
 				go func() {
-					ch <- llm.StreamEvent{Type: llm.StreamEventDone}
+					ch <- llm.Envelope{Type: llm.StreamEventCompleted, Data: &llm.CompletedEvent{}}
 					close(ch)
 				}()
 				return ch, nil
@@ -345,7 +345,7 @@ func TestCreateStream(t *testing.T) {
 
 		stream, err := agg.CreateStream(context.Background(), llm.Request{
 			Model:    "smart",
-			Messages: llm.Messages{&llm.UserMsg{Content: "hi"}},
+			Messages: llm.Messages{llm.User("hi")},
 		})
 		require.NoError(t, err)
 		<-stream
@@ -384,7 +384,7 @@ func TestCreateStream(t *testing.T) {
 
 		_, err = agg.CreateStream(context.Background(), llm.Request{
 			Model:    "smart",
-			Messages: llm.Messages{&llm.UserMsg{Content: "hi"}},
+			Messages: llm.Messages{llm.User("hi")},
 		})
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "prov1")
@@ -424,7 +424,7 @@ func TestCreateStream(t *testing.T) {
 
 		_, err = agg.CreateStream(context.Background(), llm.Request{
 			Model:    "smart",
-			Messages: llm.Messages{&llm.UserMsg{Content: "hi"}},
+			Messages: llm.Messages{llm.User("hi")},
 		})
 		require.Error(t, err)
 		assert.ErrorIs(t, err, llm.ErrNoProviders)
@@ -448,7 +448,7 @@ func TestCreateStream(t *testing.T) {
 
 		_, err = agg.CreateStream(context.Background(), llm.Request{
 			Model:    "unknown",
-			Messages: llm.Messages{&llm.UserMsg{Content: "hi"}},
+			Messages: llm.Messages{llm.User("hi")},
 		})
 		require.Error(t, err)
 		assert.ErrorIs(t, err, ErrUnknownModel)

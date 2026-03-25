@@ -8,10 +8,10 @@ import (
 )
 
 // CountTokens implements llm.TokenCounter by delegating to the first resolved
-// target provider for the given model alias or ID.
+// target provider for the given model alias or ToolCallID.
 //
 // The model alias is resolved using the same alias map as CreateStream, and the
-// underlying provider's native model ID is used for encoding selection. If the
+// underlying provider's native model ToolCallID is used for encoding selection. If the
 // resolved provider does not implement llm.TokenCounter, an error is returned.
 func (p *Provider) CountTokens(ctx context.Context, req llm.TokenCountRequest) (*llm.TokenCount, error) {
 	if req.Model == "" {
@@ -29,7 +29,7 @@ func (p *Provider) CountTokens(ctx context.Context, req llm.TokenCountRequest) (
 		return nil, fmt.Errorf("router: CountTokens: provider %q does not implement TokenCounter", target.providerName)
 	}
 
-	// Use the resolved native model ID so the provider picks the right encoding.
+	// Use the resolved native model ToolCallID so the provider picks the right encoding.
 	delegateReq := req
 	delegateReq.Model = target.modelID
 	return tc.CountTokens(ctx, delegateReq)

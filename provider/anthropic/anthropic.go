@@ -110,3 +110,5 @@ func (p *Provider) newAPIRequest(ctx context.Context, apiKey string, body []byte
 	req.Header.Set("x-api-key", apiKey)
 	return req, nil
 }
+
+var _ llm.Provider = (*Provider)(nil)

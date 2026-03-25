@@ -294,7 +294,7 @@ func (p *Provider) Resolve(modelID string) (llm.Model, error) {
 
 // CreateStream creates a stream by routing to the appropriate provider.
 // It tries each target in order until one succeeds or all fail.
-func (p *Provider) CreateStream(ctx context.Context, opts llm.Request) (<-chan llm.StreamEvent, error) {
+func (p *Provider) CreateStream(ctx context.Context, opts llm.Request) (llm.Stream, error) {
 	if err := opts.Validate(); err != nil {
 		return nil, llm.NewErrBuildRequest(llm.ProviderNameRouter, err)
 	}
@@ -319,26 +319,29 @@ func (p *Provider) CreateStream(ctx context.Context, opts llm.Request) (<-chan l
 			return nil, pe
 		}
 
-		out := llm.NewEventStream()
-		out.Routed(llm.Routed{
+		pub, ch := llm.NewEventPublisher()
+		pub.Routed(llm.RouteInfo{
 			Provider:       target.providerName,
 			ModelRequested: opts.Model,
 			ModelResolved:  target.fullID,
 			Errors:         triedErrors,
 		})
+
 		go func() {
-			defer out.Close()
+			defer pub.Close()
 			for evt := range stream {
 				if evt.Type == llm.StreamEventCreated {
 					continue
 				}
-				if evt.Start != nil && evt.Start.Model == "" {
-					evt.Start.Model = target.modelID
+
+				if started, ok := evt.Data.(*llm.StreamStartedEvent); ok {
+					started.Model = target.modelID
 				}
-				out.Send(evt)
+
+				pub.Publish(evt.Data.(llm.Event))
 			}
 		}()
-		return out.C(), nil
+		return ch, nil
 	}
 
 	return nil, llm.NewErrNoProviders(llm.ProviderNameRouter)
