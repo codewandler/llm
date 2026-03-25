@@ -50,16 +50,11 @@ func TestCountMessage_AllRoles(t *testing.T) {
 		name string
 		msg  Message
 	}{
-		{"system", &System{Content: "You are helpful."}},
-		{"user", &UserMsg{Content: "Hello there!"}},
-		{"assistant", &AssistantMessage{Content: "Hi back!"}},
-		{"tool_result", &ToolResult{ToolCallID: "c1", Output: "42"}},
-		{"assistant_with_tool_calls", &AssistantMessage{
-			Content: "Let me check.",
-			ToolCalls: []MessageToolCall{
-				{ID: "c1", Name: "get_weather", Arguments: map[string]any{"location": "Berlin"}},
-			},
-		}},
+		{"system", System("You are helpful.")},
+		{"user", User("Hello there!")},
+		{"assistant", Assistant("Hi back!")},
+		{"tool_result", Tool("c1", "42")},
+		{"assistant_with_tool_calls", Assistant("Let me check.", tool.NewToolCall("c1", "get_weather", map[string]any{"location": "Berlin"}))},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -75,9 +70,9 @@ func TestCountMessage_AllRoles(t *testing.T) {
 func TestCountMessage_ConsistentWithCountTokens(t *testing.T) {
 	model := "gpt-4o"
 	msgs := Messages{
-		&System{Content: "You are helpful."},
-		&UserMsg{Content: "What is 2+2?"},
-		&AssistantMessage{Content: "It is 4."},
+		System("You are helpful."),
+		User("What is 2+2?"),
+		Assistant("It is 4."),
 	}
 
 	// Get per-message counts from the batch API
@@ -99,10 +94,10 @@ func TestCountMessage_ConsistentWithCountTokens(t *testing.T) {
 
 func TestApplyRoleBreakdown_Invariant(t *testing.T) {
 	msgs := Messages{
-		&System{Content: "be helpful"},
-		&UserMsg{Content: "hello"},
-		&AssistantMessage{Content: "hi"},
-		&ToolResult{ToolCallID: "c1", Output: "done"},
+		System("be helpful"),
+		User("hello"),
+		Assistant("hi"),
+		Tool("c1", "done"),
 	}
 	tc := &TokenCount{
 		PerMessage: []int{3, 2, 1, 4},
@@ -124,7 +119,7 @@ func TestApplyRoleBreakdown_Invariant(t *testing.T) {
 
 // TestApplyRoleBreakdown_PanicOnMismatch confirms the invariant is enforced.
 func TestApplyRoleBreakdown_PanicOnMismatch(t *testing.T) {
-	msgs := Messages{&UserMsg{Content: "hi"}}
+	msgs := Messages{User("hi")}
 	tc := &TokenCount{PerMessage: []int{1, 2}} // wrong length
 
 	assert.Panics(t, func() {
@@ -136,7 +131,7 @@ func TestApplyRoleBreakdown_PanicOnMismatch(t *testing.T) {
 func TestCountMessagesAndTools_EmptyModel(t *testing.T) {
 	tc := &TokenCount{}
 	err := CountMessagesAndTools(tc, TokenCountRequest{
-		Messages: Messages{&UserMsg{Content: "hello"}},
+		Messages: Messages{User("hello")},
 	}, CountOpts{Encoding: "cl100k_base"})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "model is required")
@@ -145,9 +140,9 @@ func TestCountMessagesAndTools_EmptyModel(t *testing.T) {
 // TestCountMessagesAndTools_PerMessageLen verifies len(PerMessage)==len(Messages).
 func TestCountMessagesAndTools_PerMessageLen(t *testing.T) {
 	msgs := Messages{
-		&System{Content: "sys"},
-		&UserMsg{Content: "user"},
-		&AssistantMessage{Content: "asst"},
+		System("sys"),
+		User("user"),
+		Assistant("asst"),
 	}
 	tc := &TokenCount{}
 	err := CountMessagesAndTools(tc, TokenCountRequest{
@@ -168,7 +163,7 @@ func TestCountMessagesAndToolsAnthropic_OverheadApplied(t *testing.T) {
 	tc := &TokenCount{}
 	err := CountMessagesAndToolsAnthropic(tc, TokenCountRequest{
 		Model:    "claude-sonnet-4-5",
-		Messages: Messages{&UserMsg{Content: "hi"}},
+		Messages: Messages{User("hi")},
 		Tools:    tools,
 	})
 	require.NoError(t, err)
@@ -196,7 +191,7 @@ func TestCountMessagesAndToolsAnthropic_NoTools(t *testing.T) {
 	tc := &TokenCount{}
 	err := CountMessagesAndToolsAnthropic(tc, TokenCountRequest{
 		Model:    "claude-sonnet-4-5",
-		Messages: Messages{&UserMsg{Content: "hi"}},
+		Messages: Messages{User("hi")},
 	})
 	require.NoError(t, err)
 	assert.Equal(t, 0, tc.ToolsTokens)

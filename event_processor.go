@@ -76,14 +76,14 @@ type StreamProcessor struct {
 	result        *result
 	done          chan struct{}
 	mu            sync.Mutex
-	ch            <-chan Event
+	ch            <-chan Envelope
 	dispatcher    tool.DispatcherType
 	eventHandlers []EventHandler
 	toolHandlers  tool.Handlers
 	once          sync.Once
 }
 
-func ProcessChan(ctx context.Context, ch <-chan Event) *StreamProcessor {
+func ProcessChan(ctx context.Context, ch <-chan Envelope) *StreamProcessor {
 	return &StreamProcessor{
 		ctx:           ctx,
 		ch:            ch,
@@ -188,10 +188,11 @@ func (r *StreamProcessor) Result() (Result, error) {
 	return r.result, r.result.Error()
 }
 
-func (r *StreamProcessor) dispatchEvent(ev Event) {
+func (r *StreamProcessor) dispatchEvent(e Envelope) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
+	ev := e.Data.(Event)
 	for _, h := range r.eventHandlers {
 		func(h EventHandler, ev Event) {
 			var err error
@@ -234,21 +235,22 @@ func (r *StreamProcessor) doProcess() {
 	}
 }
 
-func (r *StreamProcessor) processEvent(e Event) {
-	defer r.dispatchEvent(e)
+func (r *StreamProcessor) processEvent(e Envelope) {
+	ev := e.Data
 
-	switch ev := e.(type) {
-
+	switch actual := ev.(type) {
 	case *DeltaEvent:
-		r.result.applyDelta(ev)
+		r.result.applyDelta(actual)
 	case *ToolCallEvent:
-		r.result.applyToolCall(ev.ToolCall)
+		r.result.applyToolCall(actual.ToolCall)
 	case *CompletedEvent:
-		r.result.stopReason = ev.StopReason
+		r.result.stopReason = actual.StopReason
 	case *UsageUpdatedEvent:
-		r.result.applyUsage(&ev.Usage)
+		r.result.applyUsage(&actual.Usage)
 	case *ErrorEvent:
-		r.result.addError(ev.Error)
+		r.result.addError(actual.Error)
 		r.result.stopReason = StopReasonError
 	}
+
+	r.dispatchEvent(e)
 }

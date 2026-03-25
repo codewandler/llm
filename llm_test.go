@@ -23,7 +23,7 @@ func TestStreamOptions_Validate(t *testing.T) {
 			name: "valid - no tools, no tool choice",
 			opts: Request{
 				Model:    "gpt-4",
-				Messages: Messages{&UserMsg{Content: "Hello"}},
+				Messages: Messages{User("Hello")},
 			},
 			wantErr: "",
 		},
@@ -31,7 +31,7 @@ func TestStreamOptions_Validate(t *testing.T) {
 			name: "invalid - empty model",
 			opts: Request{
 				Model:    "",
-				Messages: Messages{&UserMsg{Content: "Hello"}},
+				Messages: Messages{User("Hello")},
 			},
 			wantErr: "model is required",
 		},
@@ -39,7 +39,7 @@ func TestStreamOptions_Validate(t *testing.T) {
 			name: "invalid - bad ReasoningEffort",
 			opts: Request{
 				Model:           "gpt-4",
-				Messages:        Messages{&UserMsg{Content: "Hello"}},
+				Messages:        Messages{User("Hello")},
 				ReasoningEffort: "invalid_value",
 			},
 			wantErr: `invalid ReasoningEffort "invalid_value"`,
@@ -48,7 +48,7 @@ func TestStreamOptions_Validate(t *testing.T) {
 			name: "valid - ReasoningEffort empty (default)",
 			opts: Request{
 				Model:           "gpt-4",
-				Messages:        Messages{&UserMsg{Content: "Hello"}},
+				Messages:        Messages{User("Hello")},
 				ReasoningEffort: "",
 			},
 			wantErr: "",
@@ -57,7 +57,7 @@ func TestStreamOptions_Validate(t *testing.T) {
 			name: "invalid - tool without name",
 			opts: Request{
 				Model:    "gpt-4",
-				Messages: Messages{&UserMsg{Content: "Hello"}},
+				Messages: Messages{User("Hello")},
 				Tools:    []tool.Definition{{Name: "", Description: "No name"}},
 			},
 			wantErr: "tools[0]: tool definition: name is required",
@@ -66,7 +66,7 @@ func TestStreamOptions_Validate(t *testing.T) {
 			name: "invalid - tool parameters not object type",
 			opts: Request{
 				Model:    "gpt-4",
-				Messages: Messages{&UserMsg{Content: "Hello"}},
+				Messages: Messages{User("Hello")},
 				Tools:    []tool.Definition{{Name: "bad_tool", Parameters: map[string]any{"type": "string"}}},
 			},
 			wantErr: `tool definition "bad_tool": parameters type must be "object"`,
@@ -75,7 +75,7 @@ func TestStreamOptions_Validate(t *testing.T) {
 			name: "valid - tool with nil parameters",
 			opts: Request{
 				Model:    "gpt-4",
-				Messages: Messages{&UserMsg{Content: "Hello"}},
+				Messages: Messages{User("Hello")},
 				Tools:    []tool.Definition{{Name: "simple_tool", Description: "No params"}},
 			},
 			wantErr: "",
@@ -84,7 +84,7 @@ func TestStreamOptions_Validate(t *testing.T) {
 			name: "valid - tools with nil tool choice (defaults to auto)",
 			opts: Request{
 				Model:      "gpt-4",
-				Messages:   Messages{&UserMsg{Content: "Hello"}},
+				Messages:   Messages{User("Hello")},
 				Tools:      validTools,
 				ToolChoice: nil,
 			},
@@ -94,7 +94,7 @@ func TestStreamOptions_Validate(t *testing.T) {
 			name: "valid - tools with ToolChoiceAuto",
 			opts: Request{
 				Model:      "gpt-4",
-				Messages:   Messages{&UserMsg{Content: "Hello"}},
+				Messages:   Messages{User("Hello")},
 				Tools:      validTools,
 				ToolChoice: ToolChoiceAuto{},
 			},
@@ -104,7 +104,7 @@ func TestStreamOptions_Validate(t *testing.T) {
 			name: "valid - tools with ToolChoiceRequired",
 			opts: Request{
 				Model:      "gpt-4",
-				Messages:   Messages{&UserMsg{Content: "Hello"}},
+				Messages:   Messages{User("Hello")},
 				Tools:      validTools,
 				ToolChoice: ToolChoiceRequired{},
 			},
@@ -114,7 +114,7 @@ func TestStreamOptions_Validate(t *testing.T) {
 			name: "valid - tools with ToolChoiceNone",
 			opts: Request{
 				Model:      "gpt-4",
-				Messages:   Messages{&UserMsg{Content: "Hello"}},
+				Messages:   Messages{User("Hello")},
 				Tools:      validTools,
 				ToolChoice: ToolChoiceNone{},
 			},
@@ -124,7 +124,7 @@ func TestStreamOptions_Validate(t *testing.T) {
 			name: "valid - tools with ToolChoiceTool referencing existing tool",
 			opts: Request{
 				Model:      "gpt-4",
-				Messages:   Messages{&UserMsg{Content: "Hello"}},
+				Messages:   Messages{User("Hello")},
 				Tools:      validTools,
 				ToolChoice: ToolChoiceTool{Name: "get_weather"},
 			},
@@ -134,7 +134,7 @@ func TestStreamOptions_Validate(t *testing.T) {
 			name: "invalid - ToolChoice set but no tools",
 			opts: Request{
 				Model:      "gpt-4",
-				Messages:   Messages{&UserMsg{Content: "Hello"}},
+				Messages:   Messages{User("Hello")},
 				Tools:      nil,
 				ToolChoice: ToolChoiceRequired{},
 			},
@@ -144,7 +144,7 @@ func TestStreamOptions_Validate(t *testing.T) {
 			name: "invalid - ToolChoiceTool with empty name",
 			opts: Request{
 				Model:      "gpt-4",
-				Messages:   Messages{&UserMsg{Content: "Hello"}},
+				Messages:   Messages{User("Hello")},
 				Tools:      validTools,
 				ToolChoice: ToolChoiceTool{Name: ""},
 			},
@@ -154,7 +154,7 @@ func TestStreamOptions_Validate(t *testing.T) {
 			name: "invalid - ToolChoiceTool references unknown tool",
 			opts: Request{
 				Model:      "gpt-4",
-				Messages:   Messages{&UserMsg{Content: "Hello"}},
+				Messages:   Messages{User("Hello")},
 				Tools:      validTools,
 				ToolChoice: ToolChoiceTool{Name: "unknown_tool"},
 			},
@@ -164,7 +164,7 @@ func TestStreamOptions_Validate(t *testing.T) {
 			name: "invalid - message validation fails",
 			opts: Request{
 				Model:    "gpt-4",
-				Messages: Messages{&UserMsg{Content: ""}}, // empty content is invalid
+				Messages: Messages{User("")}, // empty content is invalid
 			},
 			wantErr: "messages[0]:",
 		},
@@ -204,7 +204,7 @@ func TestReasoningEffort_Constants(t *testing.T) {
 func TestStreamOptions_WithReasoningEffort(t *testing.T) {
 	opts := Request{
 		Model:           "gpt-5",
-		Messages:        Messages{&UserMsg{Content: "Hello"}},
+		Messages:        Messages{User("Hello")},
 		ReasoningEffort: ReasoningEffortLow,
 	}
 

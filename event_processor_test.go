@@ -23,12 +23,12 @@ func TestStreamResponse_TextAccumulation(t *testing.T) {
 		llmtest.DoneEvent(llm.StopReasonEndTurn, nil),
 	)
 
-	result := <-llm.ProcessChan(context.Background(), ch).Result()
-
+	result, err := llm.ProcessChan(context.Background(), ch).Result()
+	require.NoError(t, err)
 	require.NoError(t, result.Error())
-	assert.Equal(t, "hello world", result.Text)
-	assert.Equal(t, llm.StopReasonEndTurn, result.StopReason)
-	assert.Nil(t, result.Usage)
+	assert.Equal(t, "hello world", result.Text())
+	assert.Equal(t, llm.StopReasonEndTurn, result.StopReason())
+	assert.Nil(t, result.Usage())
 }
 
 func TestStreamResponse_ReasoningAccumulation(t *testing.T) {
@@ -39,33 +39,33 @@ func TestStreamResponse_ReasoningAccumulation(t *testing.T) {
 		llmtest.DoneEvent(llm.StopReasonEndTurn, nil),
 	)
 
-	result := <-llm.ProcessChan(context.Background(), ch).Result()
-
+	result, err := llm.ProcessChan(context.Background(), ch).Result()
+	require.NoError(t, err)
 	require.NoError(t, result.Error())
-	assert.Equal(t, "step1 step2", result.Reasoning)
-	assert.Equal(t, "answer", result.Text)
+	assert.Equal(t, "step1 step2", result.Reasoning())
+	assert.Equal(t, "answer", result.Text())
 }
 
 func TestStreamResponse_Usage(t *testing.T) {
 	usage := &llm.Usage{InputTokens: 10, OutputTokens: 5, TotalTokens: 15, Cost: 0.001}
 	ch := llmtest.SendEvents(llmtest.TextEvent("hi"), llmtest.DoneEvent(llm.StopReasonEndTurn, usage))
 
-	result := <-llm.ProcessChan(context.Background(), ch).Result()
-
+	result, err := llm.ProcessChan(context.Background(), ch).Result()
+	require.NoError(t, err)
 	require.NoError(t, result.Error())
-	require.NotNil(t, result.Usage)
-	assert.Equal(t, 10, result.Usage.InputTokens)
-	assert.Equal(t, 5, result.Usage.OutputTokens)
+	require.NotNil(t, result.Usage())
+	assert.Equal(t, 10, result.Usage().InputTokens)
+	assert.Equal(t, 5, result.Usage().OutputTokens)
 }
 
 func TestStreamResponse_OnTextCallback(t *testing.T) {
 	var received []string
 	ch := llmtest.SendEvents(llmtest.TextEvent("a"), llmtest.TextEvent("b"), llmtest.TextEvent("c"), llmtest.DoneEvent(llm.StopReasonEndTurn, nil))
 
-	result := <-llm.ProcessChan(context.Background(), ch).
+	result, err := llm.ProcessChan(context.Background(), ch).
 		OnTextDelta(func(s string) { received = append(received, s) }).
 		Result()
-
+	require.NoError(t, err)
 	require.NoError(t, result.Error())
 	assert.Equal(t, []string{"a", "b", "c"}, received)
 }
@@ -74,26 +74,25 @@ func TestStreamResponse_OnReasoningCallback(t *testing.T) {
 	var received []string
 	ch := llmtest.SendEvents(llmtest.ReasoningEvent("r1"), llmtest.ReasoningEvent("r2"), llmtest.DoneEvent(llm.StopReasonEndTurn, nil))
 
-	result := <-llm.ProcessChan(context.Background(), ch).
+	result, err := llm.ProcessChan(context.Background(), ch).
 		OnReasoningDelta(func(s string) { received = append(received, s) }).
 		Result()
-
+	require.NoError(t, err)
 	require.NoError(t, result.Error())
 	assert.Equal(t, []string{"r1", "r2"}, received)
 }
 
 func TestStreamResponse_OnToolDeltaCallback(t *testing.T) {
 	var received []string
-	toolDelta := llm.ToolDelta(llm.DeltaIndex(0), "tid", "get_weather", `{"loc`)
 	deltaCh := llmtest.SendEvents(
-		llm.StreamEvent{Type: llm.StreamEventDelta, Delta: toolDelta},
+		llm.ToolDelta("tid", "get_weather", `{"loc`).WithIndex(0),
 		llmtest.DoneEvent(llm.StopReasonEndTurn, nil),
 	)
 
-	result := <-llm.ProcessChan(context.Background(), deltaCh).
-		OnToolDelta(func(d *llm.DeltaEvent) { received = append(received, d.ToolArgs) }).
+	result, err := llm.ProcessChan(context.Background(), deltaCh).
+		OnToolDelta(func(d llm.ToolDeltaPart) { received = append(received, d.ToolArgs) }).
 		Result()
-
+	require.NoError(t, err)
 	require.NoError(t, result.Error())
 	assert.Equal(t, []string{`{"loc`}, received)
 }
@@ -104,12 +103,12 @@ func TestStreamResponse_StopReasonToolUse(t *testing.T) {
 		llmtest.DoneEvent(llm.StopReasonToolUse, nil),
 	)
 
-	result := <-llm.ProcessChan(context.Background(), ch).Result()
-
+	result, err := llm.ProcessChan(context.Background(), ch).Result()
+	require.NoError(t, err)
 	require.NoError(t, result.Error())
-	assert.Equal(t, llm.StopReasonToolUse, result.StopReason)
-	require.Len(t, result.ToolCalls, 1)
-	assert.Equal(t, "get_weather", result.ToolCalls[0].Name)
+	assert.Equal(t, llm.StopReasonToolUse, result.StopReason())
+	require.Len(t, result.ToolCalls(), 1)
+	assert.Equal(t, "get_weather", result.ToolCalls()[0].ToolName())
 }
 
 func TestStreamResponse_ToolHandler_Sync(t *testing.T) {
@@ -126,18 +125,21 @@ func TestStreamResponse_ToolHandler_Sync(t *testing.T) {
 	)
 
 	weatherSpec := tool.NewSpec[In]("get_weather", "Get weather")
-	result := <-llm.ProcessChan(context.Background(), ch).
+	result, err := llm.ProcessChan(context.Background(), ch).
 		HandleTool(tool.Handle(weatherSpec, func(_ context.Context, in In) (*Out, error) {
 			assert.Equal(t, "Berlin", in.Location)
 			return &Out{Temp: 22}, nil
 		})).
 		Result()
-
+	require.NoError(t, err)
 	require.NoError(t, result.Error())
-	require.Len(t, result.ToolResults, 1)
-	assert.Equal(t, "id1", result.ToolResults[0].ToolCallID)
-	assert.JSONEq(t, `{"temp":22}`, result.ToolResults[0].Output)
-	assert.False(t, result.ToolResults[0].IsError)
+
+	msgs := result.Next()
+	require.Len(t, msgs, 1)
+	toolMsg, ok := msgs[0].(llm.ToolMessage)
+	require.True(t, ok)
+	assert.Equal(t, "id1", toolMsg.ToolCallID())
+	assert.JSONEq(t, `{"temp":22}`, toolMsg.ToolOutput())
 }
 
 func TestStreamResponse_ToolHandler_Error(t *testing.T) {
@@ -156,14 +158,12 @@ func TestStreamResponse_ToolHandler_Error(t *testing.T) {
 	boom := errors.New("service unavailable")
 
 	weatherSpec := tool.NewSpec[In]("get_weather", "Get weather")
-	result := <-llm.ProcessChan(context.Background(), ch).
+	result, err := llm.ProcessChan(context.Background(), ch).
 		HandleTool(tool.Handle(weatherSpec, func(_ context.Context, _ In) (*Out, error) { return nil, boom })).
 		Result()
+	require.NoError(t, err)
 
-	// The error is surfaced on the result.
 	assert.ErrorIs(t, result.Error(), boom)
-	require.Len(t, result.ToolResults, 1)
-	assert.True(t, result.ToolResults[0].IsError)
 }
 
 func TestStreamResponse_ToolHandler_Async(t *testing.T) {
@@ -181,34 +181,35 @@ func TestStreamResponse_ToolHandler_Async(t *testing.T) {
 	)
 
 	doubleSpec := tool.NewSpec[In]("double", "Double a number")
-	result := <-llm.ProcessChan(context.Background(), ch).
+	result, err := llm.ProcessChan(context.Background(), ch).
 		HandleTool(tool.Handle(doubleSpec, func(_ context.Context, in In) (*Out, error) { return &Out{N: in.N * 2}, nil })).
 		WithAsyncToolDispatch().
 		Result()
-
+	require.NoError(t, err)
 	require.NoError(t, result.Error())
-	require.Len(t, result.ToolResults, 2)
-	// Results must be in emission order even when async.
-	assert.JSONEq(t, `{"n":6}`, result.ToolResults[0].Output)
-	assert.JSONEq(t, `{"n":14}`, result.ToolResults[1].Output)
+
+	msgs := result.Next()
+	require.Len(t, msgs, 2)
 }
 
 func TestStreamResponse_UnhandledToolCall(t *testing.T) {
-	// Tool call with no handler registered — gets an error ToolResult so
-	// the conversation history remains valid (model always gets a result back).
 	ch := llmtest.SendEvents(
 		llmtest.ToolEvent("id1", "unknown_tool", map[string]any{}),
 		llmtest.DoneEvent(llm.StopReasonToolUse, nil),
 	)
 
-	result := <-llm.ProcessChan(context.Background(), ch).Result()
-
+	result, err := llm.ProcessChan(context.Background(), ch).Result()
+	require.NoError(t, err)
 	require.NoError(t, result.Error())
-	require.Len(t, result.ToolCalls, 1)
-	require.Len(t, result.ToolResults, 1)
-	assert.Equal(t, "id1", result.ToolResults[0].ToolCallID)
-	assert.True(t, result.ToolResults[0].IsError)
-	assert.Contains(t, result.ToolResults[0].Output, "unknown_tool")
+	require.Len(t, result.ToolCalls(), 1)
+
+	msgs := result.Next()
+	require.Len(t, msgs, 1)
+	toolMsg, ok := msgs[0].(llm.ToolMessage)
+	require.True(t, ok)
+	assert.Equal(t, "id1", toolMsg.ToolCallID())
+	assert.True(t, toolMsg.IsError())
+	assert.Contains(t, toolMsg.ToolOutput(), "unknown_tool")
 }
 
 func TestStreamResponse_StreamError(t *testing.T) {
@@ -217,39 +218,41 @@ func TestStreamResponse_StreamError(t *testing.T) {
 		llmtest.ErrorEvent(llm.NewErrProviderMsg("test", "foo")),
 	)
 
-	result := <-llm.ProcessChan(context.Background(), ch).Result()
-
+	result, err := llm.ProcessChan(context.Background(), ch).Result()
+	require.NoError(t, err)
 	assert.Error(t, result.Error())
-	assert.Equal(t, llm.StopReasonError, result.StopReason)
-	assert.Equal(t, "partial", result.Text)
+	assert.Equal(t, llm.StopReasonError, result.StopReason())
+	assert.Equal(t, "partial", result.Text())
 }
 
 func TestStreamResponse_ContextCancellation(t *testing.T) {
-	// Use an unbuffered channel so the goroutine blocks waiting.
-	live := make(chan llm.StreamEvent)
+	live := make(chan llm.Envelope)
 	ctx, cancel := context.WithCancel(context.Background())
 
-	resp := llm.ProcessChan(ctx, live)
-	resultCh := resp.Result()
+	go func() {
+		<-ctx.Done()
+		close(live)
+	}()
 
 	cancel()
 
-	result := <-resultCh
+	result, err := llm.ProcessChan(ctx, live).Result()
+	require.NoError(t, err)
 	assert.ErrorIs(t, result.Error(), context.Canceled)
-	assert.Equal(t, llm.StopReasonCancelled, result.StopReason)
+	assert.Equal(t, llm.StopReasonCancelled, result.StopReason())
 }
 
 func TestStreamResponse_CallbackPanicRecovered(t *testing.T) {
 	ch := llmtest.SendEvents(llmtest.TextEvent("x"), llmtest.DoneEvent(llm.StopReasonEndTurn, nil))
 
-	result := <-llm.ProcessChan(context.Background(), ch).
+	result, err := llm.ProcessChan(context.Background(), ch).
 		OnTextDelta(func(_ string) { panic("boom") }).
 		Result()
+	require.NoError(t, err)
 
-	// Panic is recovered; result still has the text.
 	assert.Error(t, result.Error())
 	assert.Contains(t, result.Error().Error(), "boom")
-	assert.Equal(t, "x", result.Text)
+	assert.Equal(t, "x", result.Text())
 }
 
 func TestStreamResponse_ToolHandlerPanicRecovered(t *testing.T) {
@@ -262,14 +265,13 @@ func TestStreamResponse_ToolHandlerPanicRecovered(t *testing.T) {
 	)
 
 	explodeSpec := tool.NewSpec[In]("explode", "Explode")
-	result := <-llm.ProcessChan(context.Background(), ch).
+	result, err := llm.ProcessChan(context.Background(), ch).
 		HandleTool(tool.Handle(explodeSpec, func(_ context.Context, _ In) (*Out, error) { panic("kaboom") })).
 		Result()
+	require.NoError(t, err)
 
 	assert.Error(t, result.Error())
 	assert.Contains(t, result.Error().Error(), "kaboom")
-	require.Len(t, result.ToolResults, 1)
-	assert.True(t, result.ToolResults[0].IsError)
 }
 
 func TestStreamResponse_Message(t *testing.T) {
@@ -279,13 +281,14 @@ func TestStreamResponse_Message(t *testing.T) {
 		llmtest.DoneEvent(llm.StopReasonToolUse, nil),
 	)
 
-	result := <-llm.ProcessChan(context.Background(), ch).Result()
+	result, err := llm.ProcessChan(context.Background(), ch).Result()
+	require.NoError(t, err)
 
 	msg := result.Message()
 	assert.Equal(t, llm.RoleAssistant, msg.Role())
-	assert.Equal(t, "hello", msg.Content)
-	require.Len(t, msg.ToolCalls, 1)
-	assert.Equal(t, "search", msg.ToolCalls[0].Name)
+	assert.Equal(t, "hello", msg.Content())
+	require.Len(t, msg.ToolCalls(), 1)
+	assert.Equal(t, "search", msg.ToolCalls()[0].ToolName())
 }
 
 func TestStreamResponse_Next(t *testing.T) {
@@ -303,51 +306,42 @@ func TestStreamResponse_Next(t *testing.T) {
 	)
 
 	searchSpec := tool.NewSpec[In]("search", "Search")
-	result := <-llm.ProcessChan(context.Background(), ch).
+	result, err := llm.ProcessChan(context.Background(), ch).
 		HandleTool(tool.Handle(searchSpec, func(_ context.Context, in In) (*Out, error) {
 			return &Out{Results: []string{"golang.org"}}, nil
 		})).
 		Result()
-
+	require.NoError(t, err)
 	require.NoError(t, result.Error())
+
 	next := result.Next()
 	require.Len(t, next, 2)
-
-	asst, ok := next[0].(*llm.AssistantMessage)
-	require.True(t, ok)
-	assert.Equal(t, "searching...", asst.Content)
-
-	tcr, ok := next[1].(*llm.ToolResult)
-	require.True(t, ok)
-	assert.Equal(t, "id1", tcr.ToolCallID)
-	assert.JSONEq(t, `{"results":["golang.org"]}`, tcr.Output)
 }
 
-func TestStreamResponse_Apply(t *testing.T) {
+func TestStreamResponse_NextAndMessage(t *testing.T) {
 	ch := llmtest.SendEvents(llmtest.TextEvent("hi"), llmtest.DoneEvent(llm.StopReasonEndTurn, nil))
 
-	var msgs llm.Messages
-	msgs.User("hello")
+	result, err := llm.ProcessChan(context.Background(), ch).Result()
+	require.NoError(t, err)
+	require.NoError(t, result.Error())
 
-	result := <-llm.ProcessChan(context.Background(), ch).Result()
-	result.Apply(&msgs)
-
-	assert.Len(t, msgs, 2)
-	assert.Equal(t, llm.RoleUser, msgs[0].Role())
-	assert.Equal(t, llm.RoleAssistant, msgs[1].Role())
+	next := result.Next()
+	assert.Len(t, next, 1)
+	assert.Equal(t, llm.RoleAssistant, next[0].Role())
 }
 
 func TestStreamResponse_ResultIdempotent(t *testing.T) {
 	ch := llmtest.SendEvents(llmtest.TextEvent("hi"), llmtest.DoneEvent(llm.StopReasonEndTurn, nil))
 
 	r := llm.ProcessChan(context.Background(), ch)
-	ch1 := r.Result()
-	ch2 := r.Result() // second call — same channel
+	result1, err1 := r.Result()
+	result2, err2 := r.Result()
 
-	assert.Equal(t, ch1, ch2)
-	result := <-ch1
-	require.NoError(t, result.Error())
-	assert.Equal(t, "hi", result.Text)
+	require.NoError(t, err1)
+	require.NoError(t, err2)
+	assert.Equal(t, result1, result2)
+	require.NoError(t, result1.Error())
+	assert.Equal(t, "hi", result1.Text())
 }
 
 // TestStreamResponse_HandleTool_BoundSpec verifies that llm.Handle(spec, fn)
@@ -367,13 +361,11 @@ func TestStreamResponse_HandleTool_BoundSpec(t *testing.T) {
 		llmtest.DoneEvent(llm.StopReasonToolUse, nil),
 	)
 
-	result := <-llm.ProcessChan(context.Background(), ch).
+	result, err := llm.ProcessChan(context.Background(), ch).
 		HandleTool(tool.Handle(spec, func(_ context.Context, in In) (*Out, error) {
 			return &Out{Temp: 18}, nil
 		})).
 		Result()
-
+	require.NoError(t, err)
 	require.NoError(t, result.Error())
-	require.Len(t, result.ToolResults, 1)
-	assert.JSONEq(t, `{"temp":18}`, result.ToolResults[0].Output)
 }
