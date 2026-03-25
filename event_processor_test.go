@@ -20,10 +20,10 @@ func TestStreamResponse_TextAccumulation(t *testing.T) {
 		llmtest.TextEvent("hello"),
 		llmtest.TextEvent(" "),
 		llmtest.TextEvent("world"),
-		llmtest.DoneEvent(llm.StopReasonEndTurn, nil),
+		llmtest.CompletedEvent(llm.StopReasonEndTurn),
 	)
 
-	result, err := llm.ProcessChan(context.Background(), ch).Result()
+	result, err := llm.NewEventProcessor(context.Background(), ch).Result()
 	require.NoError(t, err)
 	require.NoError(t, result.Error())
 	assert.Equal(t, "hello world", result.Text())
@@ -36,10 +36,10 @@ func TestStreamResponse_ReasoningAccumulation(t *testing.T) {
 		llmtest.ReasoningEvent("step1 "),
 		llmtest.ReasoningEvent("step2"),
 		llmtest.TextEvent("answer"),
-		llmtest.DoneEvent(llm.StopReasonEndTurn, nil),
+		llmtest.CompletedEvent(llm.StopReasonEndTurn),
 	)
 
-	result, err := llm.ProcessChan(context.Background(), ch).Result()
+	result, err := llm.NewEventProcessor(context.Background(), ch).Result()
 	require.NoError(t, err)
 	require.NoError(t, result.Error())
 	assert.Equal(t, "step1 step2", result.Reasoning())
@@ -47,10 +47,10 @@ func TestStreamResponse_ReasoningAccumulation(t *testing.T) {
 }
 
 func TestStreamResponse_Usage(t *testing.T) {
-	usage := &llm.Usage{InputTokens: 10, OutputTokens: 5, TotalTokens: 15, Cost: 0.001}
-	ch := llmtest.SendEvents(llmtest.TextEvent("hi"), llmtest.DoneEvent(llm.StopReasonEndTurn, usage))
+	usage := llm.Usage{InputTokens: 10, OutputTokens: 5, TotalTokens: 15, Cost: 0.001}
+	ch := llmtest.SendEvents(llmtest.TextEvent("hi"), llmtest.UsageEvent(usage), llmtest.CompletedEvent(llm.StopReasonEndTurn))
 
-	result, err := llm.ProcessChan(context.Background(), ch).Result()
+	result, err := llm.NewEventProcessor(context.Background(), ch).Result()
 	require.NoError(t, err)
 	require.NoError(t, result.Error())
 	require.NotNil(t, result.Usage())
@@ -60,9 +60,9 @@ func TestStreamResponse_Usage(t *testing.T) {
 
 func TestStreamResponse_OnTextCallback(t *testing.T) {
 	var received []string
-	ch := llmtest.SendEvents(llmtest.TextEvent("a"), llmtest.TextEvent("b"), llmtest.TextEvent("c"), llmtest.DoneEvent(llm.StopReasonEndTurn, nil))
+	ch := llmtest.SendEvents(llmtest.TextEvent("a"), llmtest.TextEvent("b"), llmtest.TextEvent("c"), llmtest.CompletedEvent(llm.StopReasonEndTurn))
 
-	result, err := llm.ProcessChan(context.Background(), ch).
+	result, err := llm.NewEventProcessor(context.Background(), ch).
 		OnTextDelta(func(s string) { received = append(received, s) }).
 		Result()
 	require.NoError(t, err)
@@ -72,9 +72,9 @@ func TestStreamResponse_OnTextCallback(t *testing.T) {
 
 func TestStreamResponse_OnReasoningCallback(t *testing.T) {
 	var received []string
-	ch := llmtest.SendEvents(llmtest.ReasoningEvent("r1"), llmtest.ReasoningEvent("r2"), llmtest.DoneEvent(llm.StopReasonEndTurn, nil))
+	ch := llmtest.SendEvents(llmtest.ReasoningEvent("r1"), llmtest.ReasoningEvent("r2"), llmtest.CompletedEvent(llm.StopReasonEndTurn))
 
-	result, err := llm.ProcessChan(context.Background(), ch).
+	result, err := llm.NewEventProcessor(context.Background(), ch).
 		OnReasoningDelta(func(s string) { received = append(received, s) }).
 		Result()
 	require.NoError(t, err)
@@ -86,10 +86,10 @@ func TestStreamResponse_OnToolDeltaCallback(t *testing.T) {
 	var received []string
 	deltaCh := llmtest.SendEvents(
 		llm.ToolDelta("tid", "get_weather", `{"loc`).WithIndex(0),
-		llmtest.DoneEvent(llm.StopReasonEndTurn, nil),
+		llmtest.CompletedEvent(llm.StopReasonEndTurn),
 	)
 
-	result, err := llm.ProcessChan(context.Background(), deltaCh).
+	result, err := llm.NewEventProcessor(context.Background(), deltaCh).
 		OnToolDelta(func(d llm.ToolDeltaPart) { received = append(received, d.ToolArgs) }).
 		Result()
 	require.NoError(t, err)
@@ -100,10 +100,10 @@ func TestStreamResponse_OnToolDeltaCallback(t *testing.T) {
 func TestStreamResponse_StopReasonToolUse(t *testing.T) {
 	ch := llmtest.SendEvents(
 		llmtest.ToolEvent("id1", "get_weather", map[string]any{"location": "Berlin"}),
-		llmtest.DoneEvent(llm.StopReasonToolUse, nil),
+		llmtest.CompletedEvent(llm.StopReasonToolUse),
 	)
 
-	result, err := llm.ProcessChan(context.Background(), ch).Result()
+	result, err := llm.NewEventProcessor(context.Background(), ch).Result()
 	require.NoError(t, err)
 	require.NoError(t, result.Error())
 	assert.Equal(t, llm.StopReasonToolUse, result.StopReason())
@@ -121,11 +121,11 @@ func TestStreamResponse_ToolHandler_Sync(t *testing.T) {
 
 	ch := llmtest.SendEvents(
 		llmtest.ToolEvent("id1", "get_weather", map[string]any{"location": "Berlin"}),
-		llmtest.DoneEvent(llm.StopReasonToolUse, nil),
+		llmtest.CompletedEvent(llm.StopReasonToolUse),
 	)
 
 	weatherSpec := tool.NewSpec[In]("get_weather", "Get weather")
-	result, err := llm.ProcessChan(context.Background(), ch).
+	result, err := llm.NewEventProcessor(context.Background(), ch).
 		HandleTool(tool.Handle(weatherSpec, func(_ context.Context, in In) (*Out, error) {
 			assert.Equal(t, "Berlin", in.Location)
 			return &Out{Temp: 22}, nil
@@ -152,13 +152,13 @@ func TestStreamResponse_ToolHandler_Error(t *testing.T) {
 
 	ch := llmtest.SendEvents(
 		llmtest.ToolEvent("id1", "get_weather", map[string]any{"location": "Berlin"}),
-		llmtest.DoneEvent(llm.StopReasonToolUse, nil),
+		llmtest.CompletedEvent(llm.StopReasonToolUse),
 	)
 
 	boom := errors.New("service unavailable")
 
 	weatherSpec := tool.NewSpec[In]("get_weather", "Get weather")
-	result, err := llm.ProcessChan(context.Background(), ch).
+	result, err := llm.NewEventProcessor(context.Background(), ch).
 		HandleTool(tool.Handle(weatherSpec, func(_ context.Context, _ In) (*Out, error) { return nil, boom })).
 		Result()
 	require.NoError(t, err)
@@ -177,11 +177,11 @@ func TestStreamResponse_ToolHandler_Async(t *testing.T) {
 	ch := llmtest.SendEvents(
 		llmtest.ToolEvent("id1", "double", map[string]any{"n": 3}),
 		llmtest.ToolEvent("id2", "double", map[string]any{"n": 7}),
-		llmtest.DoneEvent(llm.StopReasonToolUse, nil),
+		llmtest.CompletedEvent(llm.StopReasonToolUse),
 	)
 
 	doubleSpec := tool.NewSpec[In]("double", "Double a number")
-	result, err := llm.ProcessChan(context.Background(), ch).
+	result, err := llm.NewEventProcessor(context.Background(), ch).
 		HandleTool(tool.Handle(doubleSpec, func(_ context.Context, in In) (*Out, error) { return &Out{N: in.N * 2}, nil })).
 		WithAsyncToolDispatch().
 		Result()
@@ -195,10 +195,10 @@ func TestStreamResponse_ToolHandler_Async(t *testing.T) {
 func TestStreamResponse_UnhandledToolCall(t *testing.T) {
 	ch := llmtest.SendEvents(
 		llmtest.ToolEvent("id1", "unknown_tool", map[string]any{}),
-		llmtest.DoneEvent(llm.StopReasonToolUse, nil),
+		llmtest.CompletedEvent(llm.StopReasonToolUse),
 	)
 
-	result, err := llm.ProcessChan(context.Background(), ch).Result()
+	result, err := llm.NewEventProcessor(context.Background(), ch).Result()
 	require.NoError(t, err)
 	require.NoError(t, result.Error())
 	require.Len(t, result.ToolCalls(), 1)
@@ -218,7 +218,7 @@ func TestStreamResponse_StreamError(t *testing.T) {
 		llmtest.ErrorEvent(llm.NewErrProviderMsg("test", "foo")),
 	)
 
-	result, err := llm.ProcessChan(context.Background(), ch).Result()
+	result, err := llm.NewEventProcessor(context.Background(), ch).Result()
 	require.NoError(t, err)
 	assert.Error(t, result.Error())
 	assert.Equal(t, llm.StopReasonError, result.StopReason())
@@ -236,16 +236,16 @@ func TestStreamResponse_ContextCancellation(t *testing.T) {
 
 	cancel()
 
-	result, err := llm.ProcessChan(ctx, live).Result()
+	result, err := llm.NewEventProcessor(ctx, live).Result()
 	require.NoError(t, err)
 	assert.ErrorIs(t, result.Error(), context.Canceled)
 	assert.Equal(t, llm.StopReasonCancelled, result.StopReason())
 }
 
 func TestStreamResponse_CallbackPanicRecovered(t *testing.T) {
-	ch := llmtest.SendEvents(llmtest.TextEvent("x"), llmtest.DoneEvent(llm.StopReasonEndTurn, nil))
+	ch := llmtest.SendEvents(llmtest.TextEvent("x"), llmtest.CompletedEvent(llm.StopReasonEndTurn))
 
-	result, err := llm.ProcessChan(context.Background(), ch).
+	result, err := llm.NewEventProcessor(context.Background(), ch).
 		OnTextDelta(func(_ string) { panic("boom") }).
 		Result()
 	require.NoError(t, err)
@@ -261,11 +261,11 @@ func TestStreamResponse_ToolHandlerPanicRecovered(t *testing.T) {
 
 	ch := llmtest.SendEvents(
 		llmtest.ToolEvent("id1", "explode", map[string]any{}),
-		llmtest.DoneEvent(llm.StopReasonToolUse, nil),
+		llmtest.CompletedEvent(llm.StopReasonToolUse),
 	)
 
 	explodeSpec := tool.NewSpec[In]("explode", "Explode")
-	result, err := llm.ProcessChan(context.Background(), ch).
+	result, err := llm.NewEventProcessor(context.Background(), ch).
 		HandleTool(tool.Handle(explodeSpec, func(_ context.Context, _ In) (*Out, error) { panic("kaboom") })).
 		Result()
 	require.NoError(t, err)
@@ -278,10 +278,10 @@ func TestStreamResponse_Message(t *testing.T) {
 	ch := llmtest.SendEvents(
 		llmtest.TextEvent("hello"),
 		llmtest.ToolEvent("id1", "search", map[string]any{"q": "go"}),
-		llmtest.DoneEvent(llm.StopReasonToolUse, nil),
+		llmtest.CompletedEvent(llm.StopReasonToolUse),
 	)
 
-	result, err := llm.ProcessChan(context.Background(), ch).Result()
+	result, err := llm.NewEventProcessor(context.Background(), ch).Result()
 	require.NoError(t, err)
 
 	msg := result.Message()
@@ -302,11 +302,11 @@ func TestStreamResponse_Next(t *testing.T) {
 	ch := llmtest.SendEvents(
 		llmtest.TextEvent("searching..."),
 		llmtest.ToolEvent("id1", "search", map[string]any{"q": "go"}),
-		llmtest.DoneEvent(llm.StopReasonToolUse, nil),
+		llmtest.CompletedEvent(llm.StopReasonToolUse),
 	)
 
 	searchSpec := tool.NewSpec[In]("search", "Search")
-	result, err := llm.ProcessChan(context.Background(), ch).
+	result, err := llm.NewEventProcessor(context.Background(), ch).
 		HandleTool(tool.Handle(searchSpec, func(_ context.Context, in In) (*Out, error) {
 			return &Out{Results: []string{"golang.org"}}, nil
 		})).
@@ -319,9 +319,9 @@ func TestStreamResponse_Next(t *testing.T) {
 }
 
 func TestStreamResponse_NextAndMessage(t *testing.T) {
-	ch := llmtest.SendEvents(llmtest.TextEvent("hi"), llmtest.DoneEvent(llm.StopReasonEndTurn, nil))
+	ch := llmtest.SendEvents(llmtest.TextEvent("hi"), llmtest.CompletedEvent(llm.StopReasonEndTurn))
 
-	result, err := llm.ProcessChan(context.Background(), ch).Result()
+	result, err := llm.NewEventProcessor(context.Background(), ch).Result()
 	require.NoError(t, err)
 	require.NoError(t, result.Error())
 
@@ -331,9 +331,9 @@ func TestStreamResponse_NextAndMessage(t *testing.T) {
 }
 
 func TestStreamResponse_ResultIdempotent(t *testing.T) {
-	ch := llmtest.SendEvents(llmtest.TextEvent("hi"), llmtest.DoneEvent(llm.StopReasonEndTurn, nil))
+	ch := llmtest.SendEvents(llmtest.TextEvent("hi"), llmtest.CompletedEvent(llm.StopReasonEndTurn))
 
-	r := llm.ProcessChan(context.Background(), ch)
+	r := llm.NewEventProcessor(context.Background(), ch)
 	result1, err1 := r.Result()
 	result2, err2 := r.Result()
 
@@ -358,10 +358,10 @@ func TestStreamResponse_HandleTool_BoundSpec(t *testing.T) {
 
 	ch := llmtest.SendEvents(
 		llmtest.ToolEvent("id1", "get_weather", map[string]any{"location": "Paris"}),
-		llmtest.DoneEvent(llm.StopReasonToolUse, nil),
+		llmtest.CompletedEvent(llm.StopReasonToolUse),
 	)
 
-	result, err := llm.ProcessChan(context.Background(), ch).
+	result, err := llm.NewEventProcessor(context.Background(), ch).
 		HandleTool(tool.Handle(spec, func(_ context.Context, in In) (*Out, error) {
 			return &Out{Temp: 18}, nil
 		})).
