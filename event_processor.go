@@ -24,6 +24,14 @@ type result struct {
 	errors                []error
 }
 
+func newResult() *result {
+	return &result{
+		assistantMsg: Assistant(""),
+		toolResults:  make([]tool.Result, 0),
+		errors:       make([]error, 0),
+	}
+}
+
 func (r *result) Message() AssistantMessage { return r.assistantMsg }
 func (r *result) Text() string              { return r.textBuf.String() }
 func (r *result) Reasoning() string         { return r.reasoningBuf.String() }
@@ -90,7 +98,7 @@ func NewEventProcessor(ctx context.Context, ch <-chan Envelope) *StreamProcessor
 		dispatcher:    tool.DispatchTypeSync,
 		toolHandlers:  tool.NewHandlers(),
 		eventHandlers: make([]EventHandler, 0),
-		result:        &result{},
+		result:        newResult(),
 		done:          make(chan struct{}, 1),
 	}
 }

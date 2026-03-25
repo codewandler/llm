@@ -142,7 +142,7 @@ func TestAssistantMsg_MarshalJSON_ToolCallsOnly(t *testing.T) {
 	assert.Equal(t, "call_123", tc["id"])
 	assert.Equal(t, "get_weather", tc["name"])
 
-	args := tc["arguments"].(map[string]any)
+	args := tc["args"].(map[string]any)
 	assert.Equal(t, "Paris", args["location"])
 }
 
@@ -325,7 +325,7 @@ func TestToolCall_MarshalJSON(t *testing.T) {
 	assert.Equal(t, "call_abc", result["id"])
 	assert.Equal(t, "search", result["name"])
 
-	args := result["arguments"].(map[string]any)
+	args := result["args"].(map[string]any)
 	assert.Equal(t, "golang", args["query"])
 	assert.Equal(t, float64(10), args["limit"])
 }
