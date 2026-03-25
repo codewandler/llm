@@ -259,20 +259,21 @@ func (r *StreamProcessor) dispatchToolCalls() {
 		return
 	}
 
-	if len(r.toolHandlers) == 0 {
-		return
-	}
+	var results []tool.Result
+	var err error
 
-	var dispatcher tool.Dispatcher
-	if r.dispatcher == tool.DispatchTypeAsync {
-		dispatcher = &tool.AsyncDispatcher{Handlers: r.toolHandlers}
-	} else {
-		dispatcher = tool.NewSyncDispatcher(r.toolHandlers)
-	}
+	if len(r.toolHandlers) > 0 {
+		var dispatcher tool.Dispatcher
+		if r.dispatcher == tool.DispatchTypeAsync {
+			dispatcher = &tool.AsyncDispatcher{Handlers: r.toolHandlers}
+		} else {
+			dispatcher = tool.NewSyncDispatcher(r.toolHandlers)
+		}
 
-	results, err := dispatcher.Dispatch(r.ctx, r.result.toolCalls...)
-	if err != nil {
-		r.result.addError(err)
+		results, err = dispatcher.Dispatch(r.ctx, r.result.toolCalls...)
+		if err != nil {
+			r.result.addError(err)
+		}
 	}
 
 	if len(results) == 0 && len(r.result.toolCalls) > 0 {

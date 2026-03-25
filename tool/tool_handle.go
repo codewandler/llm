@@ -161,8 +161,7 @@ func SafeCall(fn func(), errPtr *error) {
 func SafeHandle(ctx context.Context, h Handler, call Call) (output any, err error) {
 	defer func() {
 		if p := recover(); p != nil {
-			output = fmt.Sprintf("tool handler %s panic: %v", call.ToolName(), p)
-			err = nil
+			err = fmt.Errorf("tool handler %s panic: %v", call.ToolName(), p)
 		}
 	}()
 	return h.Handle(ctx, call)
