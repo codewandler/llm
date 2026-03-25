@@ -7,9 +7,9 @@ import (
 	"strings"
 
 	"github.com/codewandler/llm"
-	"github.com/codewandler/llm/provider/router"
 	"github.com/codewandler/llm/provider/anthropic"
 	"github.com/codewandler/llm/provider/anthropic/claude"
+	"github.com/codewandler/llm/provider/router"
 )
 
 const defaultName = "auto"
