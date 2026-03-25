@@ -694,7 +694,7 @@ func parseStream(ctx context.Context, output *bedrockruntime.ConverseStreamOutpu
 
 		if !startEmitted {
 			startEmitted = true
-			pub.Started(llm.StreamStartedEvent{})
+			pub.Started(llm.StreamStartedEvent{Model: meta.ResolvedModel})
 		}
 
 		switch e := event.(type) {

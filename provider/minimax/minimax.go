@@ -126,21 +126,22 @@ func (p *Provider) parseStreamWithCost(ctx context.Context, body io.ReadCloser, 
 	defer pub.Close()
 	defer body.Close()
 
-	intermediate, intermediateCh := llm.NewEventPublisher()
-
-	go anthropic.ParseStream(ctx, body, intermediate, anthropic.StreamMeta{
+	costPub := &costInjector{Publisher: pub, model: model}
+	go anthropic.ParseStream(ctx, body, costPub, anthropic.StreamMeta{
 		RequestedModel: model,
 		ResolvedModel:  model,
 		StartTime:      startTime,
 	})
+}
 
-	for env := range intermediateCh {
-		if env.Type == llm.StreamEventUsageUpdated {
-			ue := env.Data.(*llm.UsageUpdatedEvent)
-			FillCost(model, &ue.Usage)
-		}
-		pub.Publish(env.Data.(llm.Event))
-	}
+type costInjector struct {
+	llm.Publisher
+	model string
+}
+
+func (c *costInjector) Usage(u llm.Usage) {
+	FillCost(c.model, &u)
+	c.Publisher.Usage(u)
 }
 
 func (p *Provider) newAPIRequest(ctx context.Context, apiKey string, body []byte) (*http.Request, error) {

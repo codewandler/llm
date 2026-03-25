@@ -34,11 +34,11 @@ var (
 
 	// ErrStreamRead is returned when reading or scanning the response eventPub
 	// fails at the I/O level (e.g. scanner error, connection reset).
-	ErrStreamRead = errors.New("eventPub read error")
+	ErrStreamRead = errors.New("eventPub read/decode error")
 
 	// ErrStreamDecode is returned when a eventPub chunk cannot be decoded
 	// (e.g. malformed JSON in an SSE data line).
-	ErrStreamDecode = errors.New("eventPub decode error")
+	ErrStreamDecode = errors.New("eventPub read/decode error")
 
 	// ErrProviderError is returned when the provider sends an explicit
 	// error inside the eventPub (e.g. Anthropic error event, OpenRouter
@@ -180,7 +180,7 @@ func NewErrStreamRead(provider string, cause error) *ProviderError {
 	return &ProviderError{
 		Sentinel: ErrStreamRead,
 		Provider: provider,
-		Message:  "eventPub read error",
+		Message:  "eventPub read/decode error",
 		Cause:    cause,
 	}
 }
@@ -190,7 +190,7 @@ func NewErrStreamDecode(provider string, cause error) *ProviderError {
 	return &ProviderError{
 		Sentinel: ErrStreamDecode,
 		Provider: provider,
-		Message:  "eventPub decode error",
+		Message:  "eventPub read/decode error",
 		Cause:    cause,
 	}
 }

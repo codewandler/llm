@@ -429,7 +429,7 @@ func parseStream(ctx context.Context, body io.ReadCloser, pub llm.Publisher) {
 
 		if chunk.Error != nil {
 			pub.Error(llm.NewErrProviderMsg(llm.ProviderNameOpenRouter, chunk.Error.Message))
-			continue
+			return
 		}
 
 		if chunk.Usage != nil {

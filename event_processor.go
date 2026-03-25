@@ -121,7 +121,7 @@ func (r *StreamProcessor) OnEvent(fn EventHandler) *StreamProcessor {
 
 // OnStart registers a callback that is called when the StreamEventStarted event
 // arrives, carrying provider metadata (request ToolCallID, model, time-to-first-token).
-func (r *StreamProcessor) OnStart(fn TypedEventHandler[StreamStartedEvent]) *StreamProcessor {
+func (r *StreamProcessor) OnStart(fn TypedEventHandler[*StreamStartedEvent]) *StreamProcessor {
 	return r.OnEvent(fn)
 }
 

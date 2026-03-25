@@ -291,8 +291,8 @@ func (m *Messages) Add(all ...Message) *Messages {
 		if msg == nil {
 			continue
 		}
+		*m = append(*m, msg)
 	}
-	*m = append(*m, all...)
 	return m
 }
 

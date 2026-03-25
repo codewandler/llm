@@ -6,7 +6,10 @@ type DeltaKind string
 const (
 	DeltaKindText      DeltaKind = "text"
 	DeltaKindReasoning DeltaKind = "reasoning"
-	DeltaTypeTool      DeltaKind = "tool"
+	DeltaKindTool      DeltaKind = "tool"
+
+	// Deprecated: use DeltaKindTool.
+	DeltaTypeTool DeltaKind = "tool"
 )
 
 type ToolDeltaPart struct {
