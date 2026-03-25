@@ -43,12 +43,6 @@ func TestParseStream_CacheTokens(t *testing.T) {
 
 	var doneUsage *llm.Usage
 	for env := range ch {
-		if env.Type == llm.StreamEventCompleted {
-			ce := env.Data.(*llm.CompletedEvent)
-			if ce.StopReason == llm.StopReasonEndTurn {
-				doneUsage = &llm.Usage{}
-			}
-		}
 		if env.Type == llm.StreamEventUsageUpdated {
 			ue := env.Data.(*llm.UsageUpdatedEvent)
 			doneUsage = &ue.Usage

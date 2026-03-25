@@ -406,10 +406,10 @@ func parseStream(ctx context.Context, body io.ReadCloser, pub llm.Publisher) {
 		}
 
 		if data == "[DONE]" {
-			pub.Completed(llm.CompletedEvent{StopReason: stopReason})
 			if usage != nil {
 				pub.Usage(*usage)
 			}
+			pub.Completed(llm.CompletedEvent{StopReason: stopReason})
 			return
 		}
 

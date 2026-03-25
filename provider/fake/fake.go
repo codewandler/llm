@@ -28,12 +28,12 @@ func (f *Provider) CreateStream(_ context.Context, opts llm.Request) (llm.Stream
 		if !f.called {
 			f.called = true
 			pub.ToolCall(tool.NewToolCall("bash-1", "bash", map[string]any{"command": "echo hello"}))
-			pub.Completed(llm.CompletedEvent{StopReason: llm.StopReasonToolUse})
 			pub.Usage(llm.Usage{InputTokens: 1, OutputTokens: 1, TotalTokens: 2, Cost: 0.01})
+			pub.Completed(llm.CompletedEvent{StopReason: llm.StopReasonToolUse})
 		} else {
 			pub.Delta(llm.TextDelta("done"))
-			pub.Completed(llm.CompletedEvent{StopReason: llm.StopReasonEndTurn})
 			pub.Usage(llm.Usage{InputTokens: 1, OutputTokens: 1, TotalTokens: 2, Cost: 0.01})
+			pub.Completed(llm.CompletedEvent{StopReason: llm.StopReasonEndTurn})
 		}
 	}()
 	return ch, nil

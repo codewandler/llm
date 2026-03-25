@@ -170,8 +170,8 @@ func ParseStream(ctx context.Context, body io.ReadCloser, pub llm.Publisher, met
 
 		case "message_stop":
 			FillCost(meta.ResolvedModel, &usage)
-			pub.Completed(llm.CompletedEvent{StopReason: stopReason})
 			pub.Usage(usage)
+			pub.Completed(llm.CompletedEvent{StopReason: stopReason})
 			return
 
 		case "error":
