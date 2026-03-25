@@ -27,14 +27,14 @@ func TestProviderModels_HaveCorrectIDs(t *testing.T) {
 	models := p.Models()
 
 	expectedIDs := map[string]bool{
-		ModelM27:   true,
-		ModelM25:   true,
-		ModelM21:   true,
-		ModelM2:    true,
+		ModelM27: true,
+		ModelM25: true,
+		ModelM21: true,
+		ModelM2:  true,
 	}
 
 	for _, m := range models {
-		assert.True(t, expectedIDs[m.ID], "unexpected model ID: %s", m.ID)
+		assert.True(t, expectedIDs[m.ID], "unexpected model ToolCallID: %s", m.ID)
 		delete(expectedIDs, m.ID)
 	}
 	assert.Empty(t, expectedIDs, "missing expected models")
@@ -81,7 +81,7 @@ func TestCreateStream_MissingAPIKey(t *testing.T) {
 	p := New(WithLLMOpts(llm.WithAPIKey("")))
 	_, err := p.CreateStream(context.Background(), llm.Request{
 		Model:    ModelM27,
-		Messages: llm.Messages{&llm.UserMsg{Content: "hello"}},
+		Messages: llm.Messages{llm.User("hello")},
 	})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "API key")
@@ -92,8 +92,8 @@ func TestCreateStream_EmptyModel(t *testing.T) {
 
 	p := New(WithLLMOpts(llm.WithAPIKey("test-key")))
 	_, err := p.CreateStream(context.Background(), llm.Request{
-		Model: "", // empty model
-		Messages: llm.Messages{&llm.UserMsg{Content: "hello"}},
+		Model:    "", // empty model
+		Messages: llm.Messages{llm.User("hello")},
 	})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "model")

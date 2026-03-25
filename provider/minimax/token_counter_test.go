@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/codewandler/llm"
+	"github.com/codewandler/llm/tool"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -14,9 +15,9 @@ func TestProvider_CountTokens_PerMessageLen(t *testing.T) {
 
 	p := New()
 	msgs := llm.Messages{
-		&llm.SystemMsg{Content: "You are helpful."},
-		&llm.UserMsg{Content: "What is 2+2?"},
-		&llm.AssistantMsg{Content: "It is 4."},
+		llm.System("You are helpful."),
+		llm.User("What is 2+2?"),
+		llm.Assistant("It is 4."),
 	}
 	got, err := p.CountTokens(context.Background(), llm.TokenCountRequest{
 		Model:    ModelM27,
@@ -31,10 +32,10 @@ func TestProvider_CountTokens_RoleBreakdown(t *testing.T) {
 
 	p := New()
 	msgs := llm.Messages{
-		&llm.SystemMsg{Content: "You are helpful."},
-		&llm.UserMsg{Content: "What is 2+2?"},
-		&llm.AssistantMsg{Content: "It is 4."},
-		&llm.ToolCallResult{ToolCallID: "c1", Output: "done"},
+		llm.System("You are helpful."),
+		llm.User("What is 2+2?"),
+		llm.Assistant("It is 4."),
+		llm.Tool("c1", "done"),
 	}
 	got, err := p.CountTokens(context.Background(), llm.TokenCountRequest{
 		Model:    ModelM27,
@@ -60,7 +61,7 @@ func TestProvider_CountTokens_Tools(t *testing.T) {
 	t.Parallel()
 
 	p := New()
-	tools := []llm.ToolDefinition{
+	tools := []tool.Definition{
 		{Name: "get_weather", Description: "Get current weather", Parameters: map[string]any{
 			"type": "object",
 			"properties": map[string]any{
@@ -76,7 +77,7 @@ func TestProvider_CountTokens_Tools(t *testing.T) {
 	}
 	got, err := p.CountTokens(context.Background(), llm.TokenCountRequest{
 		Model:    ModelM27,
-		Messages: llm.Messages{&llm.UserMsg{Content: "hello"}},
+		Messages: llm.Messages{llm.User("hello")},
 		Tools:    tools,
 	})
 	require.NoError(t, err)
@@ -100,7 +101,7 @@ func TestProvider_CountTokens_InputTokensPositive(t *testing.T) {
 	p := New()
 	got, err := p.CountTokens(context.Background(), llm.TokenCountRequest{
 		Model:    ModelM27,
-		Messages: llm.Messages{&llm.UserMsg{Content: "Hello, how are you?"}},
+		Messages: llm.Messages{llm.User("Hello, how are you?")},
 	})
 	require.NoError(t, err)
 	assert.Greater(t, got.InputTokens, 0)
@@ -115,18 +116,18 @@ func TestProvider_CountTokens_NoToolsHiddenSystemPrompt(t *testing.T) {
 	// The overhead must reflect the measured cost of that hidden prompt.
 	got, err := p.CountTokens(context.Background(), llm.TokenCountRequest{
 		Model:    ModelM27,
-		Messages: llm.Messages{&llm.UserMsg{Content: "hi"}},
+		Messages: llm.Messages{llm.User("hi")},
 	})
 	require.NoError(t, err)
 	assert.Equal(t, minimaxHiddenSystemPromptTokens, got.OverheadTokens,
 		"user-only request must account for hidden system prompt overhead")
 
-	// With a system message, the hidden prompt is suppressed — no overhead.
+	// Add a system message, the hidden prompt is suppressed — no overhead.
 	gotWithSystem, err := p.CountTokens(context.Background(), llm.TokenCountRequest{
 		Model: ModelM27,
 		Messages: llm.Messages{
-			&llm.SystemMsg{Content: "You are a helpful assistant."},
-			&llm.UserMsg{Content: "hi"},
+			llm.System("You are a helpful assistant."),
+			llm.User("hi"),
 		},
 	})
 	require.NoError(t, err)
@@ -138,7 +139,7 @@ func TestProvider_CountTokens_AllModels(t *testing.T) {
 	t.Parallel()
 
 	p := New()
-	msgs := llm.Messages{&llm.UserMsg{Content: "Hello world"}}
+	msgs := llm.Messages{llm.User("Hello world")}
 
 	models := []string{ModelM27, ModelM25, ModelM21, ModelM2}
 	for _, model := range models {
@@ -158,12 +159,9 @@ func TestProvider_CountTokens_WithToolCallInAssistantMessage(t *testing.T) {
 
 	p := New()
 	msgs := llm.Messages{
-		&llm.UserMsg{Content: "What's the weather?"},
-		&llm.AssistantMsg{
-			Content:   "",
-			ToolCalls: []llm.ToolCall{{ID: "call_1", Name: "get_weather", Arguments: map[string]any{"location": "Berlin"}}},
-		},
-		&llm.ToolCallResult{ToolCallID: "call_1", Output: "Sunny, 20C"},
+		llm.User("What's the weather?"),
+		llm.Assistant("", tool.NewToolCall("call_1", "get_weather", map[string]any{"location": "Berlin"})),
+		llm.Tool("call_1", "Sunny, 20C"),
 	}
 	got, err := p.CountTokens(context.Background(), llm.TokenCountRequest{
 		Model:    ModelM27,

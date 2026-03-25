@@ -14,8 +14,8 @@ var _ llm.TokenCounter = (*Provider)(nil)
 // Token overhead constants measured empirically against MiniMax-M2.7 API.
 //
 // Base framing:
-//   - MiniMax injects a hidden default system prompt when no SystemMsg is provided.
-//     Cost: ~35 tokens. With a system message, this disappears (user's system message
+//   - MiniMax injects a hidden default system prompt when no System is provided.
+//     Cost: ~35 tokens. Add a system message, this disappears (user's system message
 //     replaces the hidden one). For realistic multi-message conversations with a system
 //     message, perMsgOverhead=6 covers the per-message framing with 0–7% drift.
 //
@@ -50,10 +50,10 @@ const (
 	minimaxToolPerExtra = 20
 )
 
-// hasSystemMessage reports whether msgs contains at least one SystemMsg.
+// hasSystemMessage reports whether msgs contains at least one System.
 func hasSystemMessage(msgs llm.Messages) bool {
 	for _, m := range msgs {
-		if _, ok := m.(*llm.SystemMsg); ok {
+		if _, ok := m.(llm.SystemMessage); ok {
 			return true
 		}
 	}

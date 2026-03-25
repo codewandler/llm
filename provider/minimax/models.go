@@ -2,7 +2,7 @@ package minimax
 
 import "github.com/codewandler/llm"
 
-// Model ID constants for programmatic use.
+// Model ToolCallID constants for programmatic use.
 const (
 	ModelM27          = "MiniMax-M2.7"
 	ModelM27Highspeed = "MiniMax-M2.7-highspeed"
@@ -27,10 +27,10 @@ var ModelAliases = map[string]string{
 // modelPricing holds USD per million tokens for a model.
 // Source: https://platform.minimax.io/docs/guides/pricing-paygo
 type modelPricing struct {
-	InputPrice        float64
-	OutputPrice       float64
-	CacheReadPrice    float64
-	CacheWritePrice   float64
+	InputPrice      float64
+	OutputPrice     float64
+	CacheReadPrice  float64
+	CacheWritePrice float64
 }
 
 // modelPricingRegistry maps model IDs to their pricing in USD per million tokens.

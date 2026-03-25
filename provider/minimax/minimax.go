@@ -81,7 +81,7 @@ func (p *Provider) Models() []llm.Model {
 	}
 }
 
-func (p *Provider) CreateStream(ctx context.Context, opts llm.Request) (<-chan llm.StreamEvent, error) {
+func (p *Provider) CreateStream(ctx context.Context, opts llm.Request) (llm.Stream, error) {
 	startTime := time.Now()
 
 	if err := opts.Validate(); err != nil {
@@ -117,33 +117,30 @@ func (p *Provider) CreateStream(ctx context.Context, opts llm.Request) (<-chan l
 		return nil, llm.NewErrAPIError(providerName, resp.StatusCode, string(errBody))
 	}
 
-	stream := llm.NewEventStream()
-	go p.parseStreamWithCost(ctx, resp.Body, stream, opts.Model, startTime)
-	return stream.C(), nil
+	pub, ch := llm.NewEventPublisher()
+	go p.parseStreamWithCost(ctx, resp.Body, pub, opts.Model, startTime)
+	return ch, nil
 }
 
-// parseStreamWithCost wraps anthropic.ParseStream and intercepts the Done event
-// to apply MiniMax pricing instead of Anthropic pricing.
-func (p *Provider) parseStreamWithCost(ctx context.Context, body io.ReadCloser, stream *llm.EventStream, model string, startTime time.Time) {
-	// Create an intermediate stream for anthropic parsing
-	intermediate := llm.NewEventStream()
+func (p *Provider) parseStreamWithCost(ctx context.Context, body io.ReadCloser, pub llm.Publisher, model string, startTime time.Time) {
+	defer pub.Close()
+	defer body.Close()
 
-	// Parse using anthropic (which will fill with anthropic pricing initially)
+	intermediate, intermediateCh := llm.NewEventPublisher()
+
 	go anthropic.ParseStream(ctx, body, intermediate, anthropic.StreamMeta{
 		RequestedModel: model,
 		ResolvedModel:  model,
 		StartTime:      startTime,
 	})
 
-	// Relay events from intermediate to final stream, updating cost on Done events
-	for event := range intermediate.C() {
-		if event.Type == llm.StreamEventDone && event.Usage != nil {
-			// Re-fill with MiniMax pricing
-			FillCost(model, event.Usage)
+	for env := range intermediateCh {
+		if env.Type == llm.StreamEventUsageUpdated {
+			ue := env.Data.(*llm.UsageUpdatedEvent)
+			FillCost(model, &ue.Usage)
 		}
-		stream.Send(event)
+		pub.Publish(env.Data.(llm.Event))
 	}
-	stream.Close()
 }
 
 func (p *Provider) newAPIRequest(ctx context.Context, apiKey string, body []byte) (*http.Request, error) {
@@ -158,3 +155,5 @@ func (p *Provider) newAPIRequest(ctx context.Context, apiKey string, body []byte
 	req.Header.Set("x-api-key", apiKey)
 	return req, nil
 }
+
+var _ llm.Provider = (*Provider)(nil)

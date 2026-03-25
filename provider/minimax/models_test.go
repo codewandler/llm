@@ -27,7 +27,7 @@ func TestFillCost_WithCacheTokens(t *testing.T) {
 	assert.InDelta(t, 0.000036, usage.CacheReadCost, 0.0000001)
 	// Cache write: 200 tokens -> $0.375/M * 200/1M = $0.000075
 	assert.InDelta(t, 0.000075, usage.CacheWriteCost, 0.0000001)
-	// Output: 500 tokens -> $1.2/M * 500/1M = $0.0006
+	// ToolOutput: 500 tokens -> $1.2/M * 500/1M = $0.0006
 	assert.InDelta(t, 0.0006, usage.OutputCost, 0.0000001)
 	// Total: $0.00006 + $0.000036 + $0.000075 + $0.0006 = $0.000771
 	assert.InDelta(t, 0.000771, usage.Cost, 0.000001)
@@ -45,7 +45,7 @@ func TestFillCost_WithoutCacheTokens(t *testing.T) {
 	FillCost(ModelM27, usage)
 
 	// All 1000 input tokens are regular input
-	assert.Equal(t, 0.0003, usage.InputCost)   // $0.3/M * 1000/1M
+	assert.Equal(t, 0.0003, usage.InputCost) // $0.3/M * 1000/1M
 	assert.Equal(t, 0.0, usage.CacheReadCost)
 	assert.Equal(t, 0.0, usage.CacheWriteCost)
 	assert.Equal(t, 0.0006, usage.OutputCost) // $1.2/M * 500/1M
@@ -68,7 +68,7 @@ func TestFillCost_OnlyCacheReadTokens(t *testing.T) {
 	// All input charged at cache-read rate: $0.06/M * 500/1M = $0.00003
 	assert.Equal(t, 0.00003, usage.CacheReadCost)
 	assert.Equal(t, 0.0, usage.CacheWriteCost)
-	// Output: $1.2/M * 100/1M = $0.00012
+	// ToolOutput: $1.2/M * 100/1M = $0.00012
 	assert.Equal(t, 0.00012, usage.OutputCost)
 	assert.InDelta(t, 0.00015, usage.Cost, 0.000001)
 }
@@ -95,32 +95,32 @@ func TestFillCost_OnlyCacheWriteTokens(t *testing.T) {
 
 func TestFillCost_DifferentModels(t *testing.T) {
 	tests := []struct {
-		model           string
-		wantInputCost   float64
-		wantCacheRead   float64
-		wantCacheWrite  float64
-		wantOutputCost  float64
+		model          string
+		wantInputCost  float64
+		wantCacheRead  float64
+		wantCacheWrite float64
+		wantOutputCost float64
 	}{
 		{
-			model:           ModelM27,
-			wantInputCost:   0.00003,   // 100 tokens * $0.3/M
-			wantCacheRead:   0.000003,  // 50 tokens * $0.06/M
-			wantCacheWrite:  0.00001875, // 50 tokens * $0.375/M
-			wantOutputCost:  0.00006,   // 50 tokens * $1.2/M
+			model:          ModelM27,
+			wantInputCost:  0.00003,    // 100 tokens * $0.3/M
+			wantCacheRead:  0.000003,   // 50 tokens * $0.06/M
+			wantCacheWrite: 0.00001875, // 50 tokens * $0.375/M
+			wantOutputCost: 0.00006,    // 50 tokens * $1.2/M
 		},
 		{
 			model:          ModelM25,
-			wantInputCost:  0.00003,   // 100 tokens * $0.3/M
-			wantCacheRead:  0.0000015, // 50 tokens * $0.03/M
+			wantInputCost:  0.00003,    // 100 tokens * $0.3/M
+			wantCacheRead:  0.0000015,  // 50 tokens * $0.03/M
 			wantCacheWrite: 0.00001875, // 50 tokens * $0.375/M
-			wantOutputCost: 0.00006,   // 50 tokens * $1.2/M
+			wantOutputCost: 0.00006,    // 50 tokens * $1.2/M
 		},
 		{
 			model:          ModelM21,
-			wantInputCost:  0.00003,   // 100 tokens * $0.3/M
-			wantCacheRead:  0.0000015, // 50 tokens * $0.03/M
+			wantInputCost:  0.00003,    // 100 tokens * $0.3/M
+			wantCacheRead:  0.0000015,  // 50 tokens * $0.03/M
 			wantCacheWrite: 0.00001875, // 50 tokens * $0.375/M
-			wantOutputCost: 0.00006,   // 50 tokens * $1.2/M
+			wantOutputCost: 0.00006,    // 50 tokens * $1.2/M
 		},
 	}
 
@@ -171,10 +171,10 @@ func TestFillCost_HighspeedModels(t *testing.T) {
 	// Highspeed variants cost 2× the standard rate: input $0.60/M, output $2.40/M.
 	// Source: https://platform.minimax.io/docs/guides/pricing-paygo
 	tests := []struct {
-		model           string
-		wantInputCost   float64 // 1000 tokens * price/M
-		wantOutputCost  float64 // 500 tokens * price/M
-		wantCacheRead   float64 // cache read price/M
+		model          string
+		wantInputCost  float64 // 1000 tokens * price/M
+		wantOutputCost float64 // 500 tokens * price/M
+		wantCacheRead  float64 // cache read price/M
 	}{
 		{
 			// M2.7-highspeed: input $0.60/M, output $2.40/M, cache-read $0.06/M
@@ -186,15 +186,15 @@ func TestFillCost_HighspeedModels(t *testing.T) {
 		{
 			// M2.5-highspeed: input $0.60/M, output $2.40/M, cache-read $0.03/M
 			model:          ModelM25Highspeed,
-			wantInputCost:  0.0006,  // 1000 * $0.60/M
-			wantOutputCost: 0.0012,  // 500 * $2.40/M
+			wantInputCost:  0.0006,   // 1000 * $0.60/M
+			wantOutputCost: 0.0012,   // 500 * $2.40/M
 			wantCacheRead:  0.000003, // 100 * $0.03/M
 		},
 		{
 			// M2.1-highspeed: input $0.60/M, output $2.40/M, cache-read $0.03/M
 			model:          ModelM21Highspeed,
-			wantInputCost:  0.0006,  // 1000 * $0.60/M
-			wantOutputCost: 0.0012,  // 500 * $2.40/M
+			wantInputCost:  0.0006,   // 1000 * $0.60/M
+			wantOutputCost: 0.0012,   // 500 * $2.40/M
 			wantCacheRead:  0.000003, // 100 * $0.03/M
 		},
 	}
