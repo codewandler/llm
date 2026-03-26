@@ -60,16 +60,20 @@ go run ./cmd/llmcli infer -v -m default "Explain Go channels"  # Verbose: tokens
 
 ```
 llm/
-├── llm.go              # Provider interface, Streamer interface
-├── stream.go           # StreamEvent, Delta, EventStream, Usage
-├── request.go          # StreamRequest, OutputFormat, ReasoningEffort constants
-├── stream_response.go  # StreamResponse, Process(), StreamResult
-├── message.go          # Message types: UserMsg, AssistantMsg, ToolCallResult, etc.
-├── tool.go             # ToolDefinition, ToolSpec, ToolSet, TypedToolCall
-├── errors.go           # ProviderError, error sentinels
+├── llm.go               # Provider interface, Streamer interface
+├── event.go              # Envelope, EventType, event structs
+├── event_delta.go        # DeltaEvent, TextDelta, ReasoningDelta, ToolDelta
+├── event_publisher.go    # EventPublisher
+├── event_handler.go      # EventHandler interface
+├── event_processor.go    # StreamProcessor, NewEventProcessor, Result
+├── response.go           # StopReason, Response interface
+├── request.go           # StreamRequest, ReasoningEffort, OutputFormat
+├── message.go           # Message types: UserMsg, AssistantMsg, ToolCallResult, etc.
+├── errors.go            # ProviderError, error sentinels
 ├── model.go            # Model type
 ├── option.go           # Functional options (WithAPIKey, WithHTTPClient, etc.)
-├── llmtest/            # Test helpers (SendEvents, TextEvent, etc.)
+├── tool/               # Tool types: NewSpec, Handle, TypedToolCall, Set, etc.
+├── llmtest/            # Test helpers: SendEvents, TextEvent, etc.
 │
 └── provider/
     ├── anthropic/      # Direct Anthropic API
@@ -86,11 +90,11 @@ llm/
 
 **Key concepts:**
 - All LLM providers implement `llm.Provider` (`CreateStream`, `Name`, `Models`)
-- Streams are `<-chan llm.StreamEvent` — every event is stamped with `RequestID`, `Seq`, `Timestamp`
+- Streams are `<-chan llm.Envelope` — every event has `Type EventType`, `Meta`, and `Data`
 - `provider/auto` is the primary entry point for consumers: `auto.New(ctx, ...Option)`
 - `provider/router` handles multi-provider routing, failover, and alias resolution
-- Tool calling: `ToolSpec` + `ToolSet` for type-safe parse/dispatch; `ToolDefinitionFor[T]()` for simple cases
-- `StreamResponse` / `Process()` for agentic tool-dispatch loops with typed handlers
+- Tool calling: `tool.NewSpec[T]`, `tool.Handle`, `tool.Set` for type-safe tools (from `github.com/codewandler/llm/tool`)
+- `StreamProcessor` / `NewEventProcessor()` for stream consumption with typed callbacks
 
 ---
 
@@ -266,10 +270,10 @@ type SearchParams struct {
     Limit int    `json:"limit" jsonschema:"description=Max results,minimum=1,maximum=50"`
 }
 
-spec := llm.NewToolSpec[SearchParams]("search", "Search the web")
+spec := tool.NewSpec[SearchParams]("search", "Search the web")
 
-result := <-llm.Process(ctx, stream).
-    HandleTool(llm.Handle(spec, func(ctx context.Context, p SearchParams) (*SearchResult, error) {
+result := llm.NewEventProcessor(ctx, stream).
+    HandleTool(tool.Handle(spec, func(ctx context.Context, p SearchParams) (*SearchResult, error) {
         return doSearch(p.Query, p.Limit)
     })).
     Result()
@@ -277,8 +281,8 @@ result := <-llm.Process(ctx, stream).
 
 **Type-safe with manual dispatch:**
 ```go
-toolset := llm.NewToolSet(
-    llm.NewToolSpec[SearchParams]("search", "Search the web"),
+toolset := tool.NewSet(
+    tool.NewSpec[SearchParams]("search", "Search the web"),
 )
 
 stream, _ := p.CreateStream(ctx, llm.StreamRequest{Tools: toolset.Definitions(), ...})
@@ -286,7 +290,7 @@ stream, _ := p.CreateStream(ctx, llm.StreamRequest{Tools: toolset.Definitions(),
 calls, _ := toolset.Parse(rawToolCalls)
 for _, call := range calls {
     switch c := call.(type) {
-    case *llm.TypedToolCall[SearchParams]:
+    case *tool.TypedToolCall[SearchParams]:
         // c.Params.Query is strongly typed
     }
 }
@@ -294,7 +298,7 @@ for _, call := range calls {
 
 **Simple definition without typed dispatch:**
 ```go
-tool := llm.ToolDefinitionFor[SearchParams]("search", "Search the web")
+tool := tool.DefinitionFor[SearchParams]("search", "Search the web")
 ```
 
 ### Tool Call Accumulation (in stream parsers)

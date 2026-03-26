@@ -186,162 +186,114 @@ p, err := router.New(cfg, factories)
 
 ## Stream Events
 
-```go
-type StreamEvent struct {
-    // Metadata stamped on every event
-    RequestID string
-    Seq       uint64
-    Timestamp time.Time
-
-    Type     StreamEventType
-    Start    *StreamStart  // StreamEventStart
-    Delta    *Delta        // StreamEventDelta
-    ToolCall *ToolCall     // StreamEventToolCall
-    Routed   *Routed       // StreamEventRouted
-    Usage    *Usage        // StreamEventDone
-    Error    *ProviderError // StreamEventError
-}
-
-const (
-    StreamEventCreated  // emitted immediately when stream is opened
-    StreamEventStart    // first content event; carries request metadata
-    StreamEventDelta    // text or reasoning token
-    StreamEventToolCall // completed tool call
-    StreamEventRouted   // router selected a backend
-    StreamEventDone     // stream complete; carries usage
-    StreamEventError    // error occurred
-)
-```
-
-### Reading Deltas
+Events arrive as `<-chan llm.Envelope` where each envelope has:
 
 ```go
-for event := range stream {
-    switch event.Type {
-    case llm.StreamEventDelta:
-        fmt.Print(event.Text())          // text tokens
-        fmt.Print(event.ReasoningText()) // reasoning tokens (thinking models)
-    }
+type Envelope struct {
+    Type EventType  // EventType constant (see below)
+    Meta EventMeta  // RequestID, Seq, Timestamp
+    Data any        // Polymorphic event data
 }
 ```
 
-`event.Delta` is a `*Delta` struct:
+**EventType constants:**
+- `StreamEventCreated` — emitted when stream is opened
+- `StreamEventStarted` — first content event with metadata (model, request_id)
+- `StreamEventDelta` — text, reasoning, or tool tokens
+- `StreamEventToolCall` — completed tool call
+- `StreamEventUsageUpdated` — usage update
+- `StreamEventCompleted` — stream finished with stop_reason
+- `StreamEventError` — error occurred
+
+**Event data structs:**
+- `DeltaEvent` — text/reasoning/tool delta with `Kind` (Text/Reasoning/Tool)
+- `ToolCallEvent` — completed tool call with `ToolCall tool.Call`
+- `StreamStartedEvent` — metadata with `RequestID`, `Model`
+- `CompletedEvent` — `StopReason`
+- `UsageUpdatedEvent` — `Usage` with token counts
+- `ErrorEvent` — `Error`
+
+### Stream Processing
+
+Use `StreamProcessor` with callbacks for clean event handling:
 
 ```go
-type Delta struct {
-    Type      DeltaType // DeltaTypeText | DeltaTypeReasoning
-    Text      string
-    Reasoning string
-    Index     *uint32   // block index, provider-dependent
-}
-```
-
-### StreamStart Metadata
-
-```go
-case llm.StreamEventStart:
-    fmt.Printf("Request ID: %s\n", event.Start.RequestID)
-    fmt.Printf("Model: %s\n", event.Start.Model)
-    fmt.Printf("TTFT: %s\n", event.Start.TimeToFirstToken)
-```
-
-### Error Handling
-
-```go
-events, err := p.CreateStream(ctx, req)
+stream, err := p.CreateStream(ctx, req)
 if err != nil {
-    // Initial request failed (auth, bad params, etc.)
+    // handle error
 }
 
-for event := range events {
-    if event.Type == llm.StreamEventError {
-        if errors.Is(event.Error, llm.ErrAPIError) {
-            fmt.Printf("API error %d: %s\n", event.Error.StatusCode, event.Error.Body)
-        }
-        if errors.Is(event.Error, llm.ErrContextCancelled) {
-            fmt.Println("cancelled")
-        }
-    }
-}
+result := llm.NewEventProcessor(ctx, stream).
+    OnTextDelta(func(text string) { fmt.Print(text) }).
+    OnReasoningDelta(func(thinking string) { /* optional */ }).
+    OnStart(func(s *llm.StreamStartedEvent) { log.Printf("request %s", s.RequestID) }).
+    HandleTool(tool.Handle(spec, func(ctx context.Context, p GetWeatherParams) (*GetWeatherResult, error) {
+        return doWeather(p.Location, p.Unit)
+    })).
+    Result()
 ```
 
-Error sentinels: `ErrContextCancelled`, `ErrRequestFailed`, `ErrAPIError`,
-`ErrStreamRead`, `ErrStreamDecode`, `ErrMissingAPIKey`, `ErrBuildRequest`,
-`ErrUnknownModel`, `ErrNoProviders`.
+**Callbacks:**
+- `OnTextDelta(fn func(string))` — text tokens
+- `OnReasoningDelta(fn func(string))` — thinking/reasoning tokens
+- `OnToolDelta(fn func(ToolDeltaPart))` — partial tool arguments
+- `OnStart(fn func(*StreamStartedEvent))` — stream metadata
+- `OnEvent(fn EventHandler)` — all events
 
-### Usage Information
+**Result fields:**
+- `Text() string` — accumulated text
+- `Reasoning() string` — accumulated thinking tokens
+- `ToolCalls() []tool.Call` — all tool calls
+- `StopReason() StopReason` — end_turn, tool_use, max_tokens, etc.
+- `Usage() *Usage` — token counts and cache stats
+- `Message() AssistantMessage` — complete response
+- `Next() Messages` — messages ready to append to conversation
 
+**Async tool dispatch:**
 ```go
-case llm.StreamEventDone:
-    fmt.Println(event.StopReason) // EndTurn, ToolUse, MaxTokens, ContentFilter
-    if event.Usage != nil {
-        fmt.Printf("in=%d out=%d cost=$%.6f\n",
-            event.Usage.InputTokens, event.Usage.OutputTokens, event.Usage.Cost)
-        fmt.Printf("cache read=%d write=%d\n",
-            event.Usage.CacheReadTokens, event.Usage.CacheWriteTokens)
-        fmt.Printf("reasoning=%d\n", event.Usage.ReasoningTokens)
-    }
+llm.NewEventProcessor(ctx, ch).
+    WithAsyncToolDispatch().
+    HandleTool(...).
+    Result()
 ```
 
 ## Tool Calling
 
-### Typed Tool Dispatch with `StreamResponse`
+### Type-Safe Tools
 
-The recommended approach for agentic tool use. `Process` accumulates the stream
-and dispatches tool calls to typed handlers:
+Define tools with `tool.NewSpec[T]` from `github.com/codewandler/llm/tool`:
 
 ```go
+import "github.com/codewandler/llm/tool"
+
 type GetWeatherParams struct {
     Location string `json:"location" jsonschema:"description=City name,required"`
     Unit     string `json:"unit"     jsonschema:"description=Unit,enum=celsius,enum=fahrenheit"`
 }
 
-type GetWeatherResult struct {
-    Temp int    `json:"temp"`
-    Desc string `json:"desc"`
-}
+spec := tool.NewSpec[GetWeatherParams]("get_weather", "Get current weather")
+```
 
-spec := llm.NewToolSpec[GetWeatherParams]("get_weather", "Get current weather")
+### Typed Dispatch
 
-result := <-llm.Process(ctx, stream).
-    HandleTool(llm.Handle(spec, func(ctx context.Context, p GetWeatherParams) (*GetWeatherResult, error) {
-        return &GetWeatherResult{Temp: 22, Desc: "sunny"}, nil
+```go
+result := llm.NewEventProcessor(ctx, stream).
+    HandleTool(tool.Handle(spec, func(ctx context.Context, p GetWeatherParams) (*GetWeatherResult, error) {
+        return doWeather(p.Location, p.Unit)
     })).
     Result()
 
-fmt.Println(result.Text)
-fmt.Println(result.ToolResults) // []ToolCallResult ready to append to messages
+// Append tool result to messages
+messages = append(messages, result.Next()...)
 ```
 
-For concurrent tool execution:
+### Tool Definitions (Low-Level)
 
-```go
-result := <-llm.Process(ctx, stream).
-    DispatchAsync().
-    HandleTool(...).
-    Result()
-```
-
-Callback hooks:
-
-```go
-result := <-llm.Process(ctx, stream).
-    OnText(func(s string) { fmt.Print(s) }).
-    OnReasoning(func(s string) { /* handle thinking */ }).
-    OnStart(func(s *llm.StreamStart) { log.Println(s.RequestID) }).
-    HandleTool(...).
-    Result()
-```
-
-`StreamResult` fields: `Text`, `Reasoning`, `ToolCalls`, `ToolResults`, `Usage`, `StopReason`, `Start`.
-
-### Low-Level Tool Definitions
-
-For manual tool management:
+For providers that need raw definitions:
 
 ```go
 tools := []llm.ToolDefinition{
-    llm.ToolDefinitionFor[GetWeatherParams]("get_weather", "Get current weather"),
+    tool.DefinitionFor[GetWeatherParams]("get_weather", "Get current weather"),
 }
 
 events, err := p.CreateStream(ctx, llm.StreamRequest{
@@ -349,35 +301,6 @@ events, err := p.CreateStream(ctx, llm.StreamRequest{
     Messages: messages,
     Tools:    tools,
 })
-
-for event := range events {
-    if event.Type == llm.StreamEventToolCall {
-        tc := event.ToolCall
-        // tc.ID, tc.Name, tc.Arguments (map[string]any)
-    }
-}
-```
-
-### ToolSet — Type-Safe Parse + Dispatch
-
-```go
-toolset := llm.NewToolSet(
-    llm.NewToolSpec[GetWeatherParams]("get_weather", "Get weather"),
-)
-
-stream, _ := p.CreateStream(ctx, llm.StreamRequest{
-    Tools: toolset.Definitions(),
-    ...
-})
-
-// collect raw tool calls from stream, then:
-calls, err := toolset.Parse(rawToolCalls)
-for _, call := range calls {
-    switch c := call.(type) {
-    case *llm.TypedToolCall[GetWeatherParams]:
-        fmt.Println(c.Params.Location) // strongly typed
-    }
-}
 ```
 
 ### Tool Choice
@@ -519,7 +442,7 @@ ch := llmtest.SendEvents(
     llmtest.DoneEvent(nil),
 )
 
-result := <-llm.Process(ctx, ch).HandleTool(...).Result()
+result := llm.NewEventProcessor(ctx, ch).HandleTool(...).Result()
 ```
 
 Functions: `SendEvents`, `TextEvent`, `ReasoningEvent`, `ToolEvent`, `DoneEvent`, `ErrorEvent`.
@@ -556,28 +479,32 @@ export AWS_SECRET_ACCESS_KEY="your-secret-key"
 
 ```
 llm/
-├── llm.go              # Provider interface, Streamer interface
-├── stream.go           # StreamEvent, Delta, EventStream, Usage
-├── request.go          # StreamRequest, OutputFormat, ReasoningEffort constants
-├── stream_response.go  # StreamResponse, Process(), StreamResult
-├── message.go          # Message types: UserMsg, AssistantMsg, ToolCallResult, etc.
-├── tool.go             # ToolDefinition, ToolSpec, ToolSet, TypedToolCall
-├── errors.go           # ProviderError, error sentinels
-├── model.go            # Model type
-├── option.go           # Functional options (WithAPIKey, WithHTTPClient, etc.)
-├── llmtest/            # Test helpers (SendEvents, TextEvent, etc.)
+├── llm.go               # Provider interface, Streamer interface
+├── event.go              # Envelope, EventType, event structs
+├── event_delta.go        # DeltaEvent, TextDelta, ReasoningDelta, ToolDelta
+├── event_publisher.go    # EventPublisher
+├── event_handler.go      # EventHandler interface
+├── event_processor.go    # StreamProcessor, NewEventProcessor, Result
+├── response.go           # StopReason, Response interface
+├── request.go            # StreamRequest, ReasoningEffort, OutputFormat
+├── message.go            # Message types: UserMsg, AssistantMsg, ToolCallResult, etc.
+├── errors.go             # ProviderError, error sentinels
+├── model.go              # Model type
+├── option.go             # Functional options (WithAPIKey, WithHTTPClient, etc.)
+├── tool/                 # Tool types: NewSpec, Handle, TypedToolCall, Set, etc.
+├── llmtest/              # Test helpers: SendEvents, TextEvent, etc.
 │
 └── provider/
-    ├── anthropic/      # Direct Anthropic API
-    │   └── claude/     # OAuth-based Claude provider
-    ├── bedrock/        # AWS Bedrock
-    ├── minimax/        # MiniMax API (Anthropic-compatible endpoint)
-    ├── openai/         # OpenAI API (Chat + Responses API)
-    ├── openrouter/     # OpenRouter proxy
-    ├── ollama/         # Local Ollama
-    ├── auto/           # Zero-config multi-provider setup
-    ├── router/         # Multi-provider routing with failover
-    └── fake/           # Test provider
+    ├── anthropic/        # Direct Anthropic API
+    │   └── claude/       # OAuth-based Claude provider
+    ├── bedrock/          # AWS Bedrock
+    ├── minimax/          # MiniMax API (Anthropic-compatible endpoint)
+    ├── openai/           # OpenAI API (Chat + Responses API)
+    ├── openrouter/       # OpenRouter proxy
+    ├── ollama/           # Local Ollama
+    ├── auto/             # Zero-config multi-provider setup
+    ├── router/           # Multi-provider routing with failover
+    └── fake/             # Test provider
 ```
 
 ## CLI Tool
