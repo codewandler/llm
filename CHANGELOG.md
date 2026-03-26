@@ -1,5 +1,52 @@
 # Changelog
 
+## v0.27.0
+
+### Bug Fixes
+
+#### OpenRouter stream termination
+- Emit `CompletedEvent` after scanner loop ends (fixes missing `CompletedEvent` when server closes stream without `[DONE]` line)
+- Return after chunk error to properly terminate stream
+
+#### MiniMax provider
+- Eliminate intermediate relay publisher; pass pub directly to anthropic ParseStream with costInjector wrapper for FillCost injection
+
+#### Bedrock
+- Populate `StreamStartedEvent.Model` from `meta.ResolvedModel`
+
+### Refactoring
+
+#### Unified SSE stream parsing (`provider/internal/sse/lines.go`)
+- New `sse.Lines` helper for robust line-based SSE parsing across providers
+- Shared by OpenAI (completions), OpenRouter, and MiniMax
+- Handles chunked transfer encoding and malformed lines gracefully
+
+#### MiniMax HTTP client wiring
+- Fixed HTTP client configuration to use proper transport settings
+
+### New Features
+
+#### ClaudeForge CLI analysis tool (`.agents/`)
+- HTTP proxy tool for capturing Claude Code CLI traffic
+- Logs requests/responses to `.agents/logs/claudeforge/` for diff analysis
+- Used to track changes in Claude CLI behavior vs provider implementation
+- See `.agents/skills/claudeforge/SKILL.md` for usage
+
+### Tests
+
+#### llmcli command tests
+- Added `auth_test.go`, `infer_test.go`, `models_test.go`
+- Refactored CLI code to be more testable
+
+### Documentation
+
+#### README.md and AGENTS.md
+- Fixed architecture diagrams with correct file names
+- Updated API examples to match actual code (`Envelope`/`StreamProcessor` pattern)
+- Fixed `tool.` package references
+
+---
+
 ## v0.26.0
 
 ### Breaking Changes
