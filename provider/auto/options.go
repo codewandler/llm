@@ -4,12 +4,12 @@ import (
 	"net/http"
 
 	"github.com/codewandler/llm"
-	"github.com/codewandler/llm/provider/router"
 	"github.com/codewandler/llm/provider/anthropic"
 	"github.com/codewandler/llm/provider/anthropic/claude"
 	"github.com/codewandler/llm/provider/bedrock"
 	"github.com/codewandler/llm/provider/openai"
 	"github.com/codewandler/llm/provider/openrouter"
+	"github.com/codewandler/llm/provider/router"
 )
 
 // providerEntry holds configuration for a single provider instance.
@@ -28,14 +28,14 @@ type claudeStoreEntry struct {
 
 // config holds the auto provider configuration.
 type config struct {
-	name           string
-	providers      []providerEntry
-	claudeStores   []claudeStoreEntry // stores to enumerate accounts from
-	autoDetect     bool
-	disabledTypes  map[string]bool     // provider types excluded from auto-detection
-	globalAliases  map[string][]string // user-defined global aliases: alias -> []targets
-	httpClient     *http.Client        // optional shared HTTP client for all providers
-	llmOpts        []llm.Option        // optional shared llm.Options for all providers (e.g. logger)
+	name          string
+	providers     []providerEntry
+	claudeStores  []claudeStoreEntry // stores to enumerate accounts from
+	autoDetect    bool
+	disabledTypes map[string]bool     // provider types excluded from auto-detection
+	globalAliases map[string][]string // user-defined global aliases: alias -> []targets
+	httpClient    *http.Client        // optional shared HTTP client for all providers
+	llmOpts       []llm.Option        // optional shared llm.Options for all providers (e.g. logger)
 }
 
 // Option configures the auto provider.

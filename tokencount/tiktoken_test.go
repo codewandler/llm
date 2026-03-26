@@ -9,8 +9,8 @@ import (
 
 func TestEncodingForModel(t *testing.T) {
 	tests := []struct {
-		model    string
-		wantEnc  string
+		model     string
+		wantEnc   string
 		wantKnown bool
 	}{
 		// o200k_base
@@ -57,8 +57,8 @@ func TestEncodingForModel(t *testing.T) {
 
 func TestCountText_CL100K(t *testing.T) {
 	tests := []struct {
-		name      string
-		text      string
+		name       string
+		text       string
 		wantTokens int
 	}{
 		// Well-known tiktoken values for cl100k_base
