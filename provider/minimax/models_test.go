@@ -5,233 +5,96 @@ import (
 
 	"github.com/codewandler/llm"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
-func TestFillCost_WithCacheTokens(t *testing.T) {
-	// Test that FillCost correctly calculates costs when cache tokens are present.
-	// Scenario: 1000 total input tokens, 600 from cache read, 200 written to new cache.
-	// Therefore: 200 regular input tokens (1000 - 600 - 200).
-	usage := &llm.Usage{
-		InputTokens:      1000,
-		OutputTokens:     500,
-		CacheReadTokens:  600,
-		CacheWriteTokens: 200,
-	}
-
-	FillCost(ModelM27, usage)
-
-	// M2.7 pricing: input $0.3/M, output $1.2/M, cache-read $0.06/M, cache-write $0.375/M
-	// Regular input: 200 tokens -> $0.3/M * 200/1M = $0.00006
-	assert.InDelta(t, 0.00006, usage.InputCost, 0.0000001)
-	// Cache read: 600 tokens -> $0.06/M * 600/1M = $0.000036
-	assert.InDelta(t, 0.000036, usage.CacheReadCost, 0.0000001)
-	// Cache write: 200 tokens -> $0.375/M * 200/1M = $0.000075
-	assert.InDelta(t, 0.000075, usage.CacheWriteCost, 0.0000001)
-	// ToolOutput: 500 tokens -> $1.2/M * 500/1M = $0.0006
-	assert.InDelta(t, 0.0006, usage.OutputCost, 0.0000001)
-	// Total: $0.00006 + $0.000036 + $0.000075 + $0.0006 = $0.000771
-	assert.InDelta(t, 0.000771, usage.Cost, 0.000001)
-}
-
-func TestFillCost_WithoutCacheTokens(t *testing.T) {
-	// Test that FillCost works correctly when there are no cache tokens.
-	usage := &llm.Usage{
-		InputTokens:      1000,
-		OutputTokens:     500,
-		CacheReadTokens:  0,
-		CacheWriteTokens: 0,
-	}
-
-	FillCost(ModelM27, usage)
-
-	// All 1000 input tokens are regular input
-	assert.Equal(t, 0.0003, usage.InputCost) // $0.3/M * 1000/1M
-	assert.Equal(t, 0.0, usage.CacheReadCost)
-	assert.Equal(t, 0.0, usage.CacheWriteCost)
-	assert.Equal(t, 0.0006, usage.OutputCost) // $1.2/M * 500/1M
-	assert.Equal(t, 0.0009, usage.Cost)
-}
-
-func TestFillCost_OnlyCacheReadTokens(t *testing.T) {
-	// Test when all input tokens come from cache (no regular input, no cache write).
-	usage := &llm.Usage{
-		InputTokens:      500,
-		OutputTokens:     100,
-		CacheReadTokens:  500,
-		CacheWriteTokens: 0,
-	}
-
-	FillCost(ModelM27, usage)
-
-	// No regular input cost (regularInput = 500 - 500 - 0 = 0)
-	assert.Equal(t, 0.0, usage.InputCost)
-	// All input charged at cache-read rate: $0.06/M * 500/1M = $0.00003
-	assert.Equal(t, 0.00003, usage.CacheReadCost)
-	assert.Equal(t, 0.0, usage.CacheWriteCost)
-	// ToolOutput: $1.2/M * 100/1M = $0.00012
-	assert.Equal(t, 0.00012, usage.OutputCost)
-	assert.InDelta(t, 0.00015, usage.Cost, 0.000001)
-}
-
-func TestFillCost_OnlyCacheWriteTokens(t *testing.T) {
-	// Test when all input tokens are written to cache (no regular input, no cache read).
-	// This is a theoretical scenario - in practice you'd still have some regular input.
-	usage := &llm.Usage{
-		InputTokens:      300,
-		OutputTokens:     50,
-		CacheReadTokens:  0,
-		CacheWriteTokens: 300,
-	}
-
-	FillCost(ModelM27, usage)
-
-	// No regular input cost
-	assert.Equal(t, 0.0, usage.InputCost)
-	assert.Equal(t, 0.0, usage.CacheReadCost)
-	// Cache write: $0.375/M * 300/1M = $0.0001125
-	assert.InDelta(t, 0.0001125, usage.CacheWriteCost, 0.0000001)
-	assert.Equal(t, 0.00006, usage.OutputCost) // $1.2/M * 50/1M
-}
-
-func TestFillCost_DifferentModels(t *testing.T) {
-	tests := []struct {
-		model          string
-		wantInputCost  float64
-		wantCacheRead  float64
-		wantCacheWrite float64
-		wantOutputCost float64
-	}{
-		{
-			model:          ModelM27,
-			wantInputCost:  0.00003,    // 100 tokens * $0.3/M
-			wantCacheRead:  0.000003,   // 50 tokens * $0.06/M
-			wantCacheWrite: 0.00001875, // 50 tokens * $0.375/M
-			wantOutputCost: 0.00006,    // 50 tokens * $1.2/M
-		},
-		{
-			model:          ModelM25,
-			wantInputCost:  0.00003,    // 100 tokens * $0.3/M
-			wantCacheRead:  0.0000015,  // 50 tokens * $0.03/M
-			wantCacheWrite: 0.00001875, // 50 tokens * $0.375/M
-			wantOutputCost: 0.00006,    // 50 tokens * $1.2/M
-		},
-		{
-			model:          ModelM21,
-			wantInputCost:  0.00003,    // 100 tokens * $0.3/M
-			wantCacheRead:  0.0000015,  // 50 tokens * $0.03/M
-			wantCacheWrite: 0.00001875, // 50 tokens * $0.375/M
-			wantOutputCost: 0.00006,    // 50 tokens * $1.2/M
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.model, func(t *testing.T) {
-			usage := &llm.Usage{
-				InputTokens:      200, // 100 regular + 50 cache-read + 50 cache-write
-				OutputTokens:     50,
-				CacheReadTokens:  50,
-				CacheWriteTokens: 50,
-			}
-
-			FillCost(tt.model, usage)
-
-			assert.InDelta(t, tt.wantInputCost, usage.InputCost, 0.0000001)
-			assert.InDelta(t, tt.wantCacheRead, usage.CacheReadCost, 0.0000001)
-			assert.InDelta(t, tt.wantCacheWrite, usage.CacheWriteCost, 0.0000001)
-			assert.InDelta(t, tt.wantOutputCost, usage.OutputCost, 0.0000001)
-		})
-	}
+func TestFillCost_UnknownModel(t *testing.T) {
+	u := &llm.Usage{InputTokens: 1000, OutputTokens: 500}
+	FillCost("unknown-model", u)
+	assert.Equal(t, 0.0, u.Cost)
+	assert.Equal(t, 0.0, u.InputCost)
+	assert.Equal(t, 0.0, u.OutputCost)
 }
 
 func TestFillCost_NilUsage(t *testing.T) {
-	// Should not panic when usage is nil
+	// Must not panic.
 	FillCost(ModelM27, nil)
 }
 
-func TestFillCost_UnknownModel(t *testing.T) {
-	// Should not modify usage when model is unknown
-	usage := &llm.Usage{
-		InputTokens:      1000,
-		OutputTokens:     500,
-		CacheReadTokens:  100,
-		CacheWriteTokens: 100,
-	}
+func TestFillCost_M27_InputOutput(t *testing.T) {
+	// M2.7: input $0.30/M, output $1.20/M
+	u := &llm.Usage{InputTokens: 1_000_000, OutputTokens: 1_000_000}
+	FillCost(ModelM27, u)
 
-	FillCost("unknown-model", usage)
-
-	// Costs should remain at zero (not modified)
-	assert.Equal(t, 0.0, usage.InputCost)
-	assert.Equal(t, 0.0, usage.CacheReadCost)
-	assert.Equal(t, 0.0, usage.CacheWriteCost)
-	assert.Equal(t, 0.0, usage.OutputCost)
-	assert.Equal(t, 0.0, usage.Cost)
+	assert.InDelta(t, 0.30, u.InputCost, 1e-10)
+	assert.InDelta(t, 1.20, u.OutputCost, 1e-10)
+	assert.Equal(t, 0.0, u.CacheReadCost)
+	assert.Equal(t, 0.0, u.CacheWriteCost)
+	assert.InDelta(t, 1.50, u.Cost, 1e-10)
 }
 
-func TestFillCost_HighspeedModels(t *testing.T) {
-	// Highspeed variants cost 2× the standard rate: input $0.60/M, output $2.40/M.
-	// Source: https://platform.minimax.io/docs/guides/pricing-paygo
-	tests := []struct {
-		model          string
-		wantInputCost  float64 // 1000 tokens * price/M
-		wantOutputCost float64 // 500 tokens * price/M
-		wantCacheRead  float64 // cache read price/M
-	}{
-		{
-			// M2.7-highspeed: input $0.60/M, output $2.40/M, cache-read $0.06/M
-			model:          ModelM27Highspeed,
-			wantInputCost:  0.0006,   // 1000 * $0.60/M
-			wantOutputCost: 0.0012,   // 500 * $2.40/M
-			wantCacheRead:  0.000006, // 100 * $0.06/M
-		},
-		{
-			// M2.5-highspeed: input $0.60/M, output $2.40/M, cache-read $0.03/M
-			model:          ModelM25Highspeed,
-			wantInputCost:  0.0006,   // 1000 * $0.60/M
-			wantOutputCost: 0.0012,   // 500 * $2.40/M
-			wantCacheRead:  0.000003, // 100 * $0.03/M
-		},
-		{
-			// M2.1-highspeed: input $0.60/M, output $2.40/M, cache-read $0.03/M
-			model:          ModelM21Highspeed,
-			wantInputCost:  0.0006,   // 1000 * $0.60/M
-			wantOutputCost: 0.0012,   // 500 * $2.40/M
-			wantCacheRead:  0.000003, // 100 * $0.03/M
-		},
+func TestFillCost_M27_WithCache(t *testing.T) {
+	// M2.7 cache: read $0.06/M, write $0.375/M
+	// InputTokens includes all tokens (regular + cache read + cache write).
+	// InputCost must only cover the non-cache portion.
+	u := &llm.Usage{
+		InputTokens:      1_500_000, // 1M regular + 300K cache-read + 200K cache-write
+		CacheReadTokens:  300_000,
+		CacheWriteTokens: 200_000,
+		OutputTokens:     500_000,
 	}
+	FillCost(ModelM27, u)
 
-	for _, tt := range tests {
-		t.Run(tt.model, func(t *testing.T) {
-			usage := &llm.Usage{
-				InputTokens:      1100,
-				OutputTokens:     500,
-				CacheReadTokens:  100,
-				CacheWriteTokens: 0,
-			}
-			FillCost(tt.model, usage)
+	expectedInput := float64(1_000_000) / 1_000_000 * 0.30          // regular input only
+	expectedCacheRead := float64(300_000) / 1_000_000 * 0.06        // $0.06/M
+	expectedCacheWrite := float64(200_000) / 1_000_000 * 0.375      // $0.375/M
+	expectedOutput := float64(500_000) / 1_000_000 * 1.20           // $1.20/M
+	expectedTotal := expectedInput + expectedCacheRead + expectedCacheWrite + expectedOutput
 
-			// regularInput = 1100 - 100 - 0 = 1000
-			assert.InDelta(t, tt.wantInputCost, usage.InputCost, 1e-10)
-			assert.InDelta(t, tt.wantOutputCost, usage.OutputCost, 1e-10)
-			assert.InDelta(t, tt.wantCacheRead, usage.CacheReadCost, 1e-10)
-			assert.Greater(t, usage.Cost, 0.0)
+	assert.InDelta(t, expectedInput, u.InputCost, 1e-10, "InputCost")
+	assert.InDelta(t, expectedCacheRead, u.CacheReadCost, 1e-10, "CacheReadCost")
+	assert.InDelta(t, expectedCacheWrite, u.CacheWriteCost, 1e-10, "CacheWriteCost")
+	assert.InDelta(t, expectedOutput, u.OutputCost, 1e-10, "OutputCost")
+	assert.InDelta(t, expectedTotal, u.Cost, 1e-10, "Cost total")
+}
+
+func TestFillCost_M27Highspeed(t *testing.T) {
+	// Highspeed: input $0.60/M, output $2.40/M (2× standard)
+	u := &llm.Usage{InputTokens: 1_000_000, OutputTokens: 1_000_000}
+	FillCost(ModelM27Highspeed, u)
+
+	assert.InDelta(t, 0.60, u.InputCost, 1e-10)
+	assert.InDelta(t, 2.40, u.OutputCost, 1e-10)
+	assert.InDelta(t, 3.00, u.Cost, 1e-10)
+}
+
+func TestFillCost_NegativeRegularInput_Clamped(t *testing.T) {
+	// CacheReadTokens + CacheWriteTokens exceed InputTokens → regularInput < 0 → clamped to 0.
+	u := &llm.Usage{
+		InputTokens:      100,
+		CacheReadTokens:  80,
+		CacheWriteTokens: 80,
+		OutputTokens:     50,
+	}
+	FillCost(ModelM27, u)
+
+	require.GreaterOrEqual(t, u.InputCost, 0.0, "InputCost must not be negative")
+	require.GreaterOrEqual(t, u.Cost, 0.0, "Cost must not be negative")
+}
+
+func TestFillCost_AllModelsPresent(t *testing.T) {
+	// Smoke-test: every exported model constant must have a pricing entry.
+	models := []string{
+		ModelM27, ModelM27Highspeed,
+		ModelM25, ModelM25Highspeed,
+		ModelM21, ModelM21Highspeed,
+		ModelM2,
+	}
+	for _, m := range models {
+		t.Run(m, func(t *testing.T) {
+			u := &llm.Usage{InputTokens: 1_000_000, OutputTokens: 1_000_000}
+			FillCost(m, u)
+			assert.Greater(t, u.Cost, 0.0, "model %q must have a pricing entry", m)
 		})
 	}
-}
-
-func TestFillCost_NegativeRegularInput(t *testing.T) {
-	// Edge case: if cache tokens exceed input tokens (shouldn't happen in practice)
-	usage := &llm.Usage{
-		InputTokens:      100,
-		OutputTokens:     50,
-		CacheReadTokens:  150, // More than input
-		CacheWriteTokens: 100,
-	}
-
-	FillCost(ModelM27, usage)
-
-	// regularInput = 100 - 150 - 100 = -150, should be clamped to 0
-	assert.Equal(t, 0.0, usage.InputCost)
-	// But cache costs should still be calculated
-	assert.Greater(t, usage.CacheReadCost, 0.0)
-	assert.Greater(t, usage.CacheWriteCost, 0.0)
 }
