@@ -305,8 +305,8 @@ func TestBuildRequest_OutputEffort(t *testing.T) {
 	}
 }
 
-func TestBuildRequest_OutputEffort_DefaultLow(t *testing.T) {
-	// When OutputEffort is not set, it should default to "low" on supported models
+func TestBuildRequest_OutputEffort_DefaultMedium(t *testing.T) {
+	// When OutputEffort is not set, it should default to "medium" on supported models
 	m := buildRequestMap(t, RequestOptions{
 		Model: "claude-sonnet-4-6-20251120",
 		StreamOptions: llm.Request{
@@ -317,7 +317,7 @@ func TestBuildRequest_OutputEffort_DefaultLow(t *testing.T) {
 	})
 	oc, ok := m["output_config"].(map[string]any)
 	require.True(t, ok, "output_config should be present on supported model")
-	assert.Equal(t, "low", oc["effort"], "default effort should be low")
+	assert.Equal(t, "medium", oc["effort"], "default effort should be medium")
 }
 
 func TestBuildRequest_OutputEffortAndFormat(t *testing.T) {

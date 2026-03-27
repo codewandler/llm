@@ -33,9 +33,8 @@ const (
 	defaultModelOpus   = "claude-opus-4-6"
 	defaultModelHaiku  = "claude-haiku-4-5-20251001"
 
-	billingHeader  = "x-anthropic-billing-header: cc_version=2.1.72.364; cc_entrypoint=sdk-cli;"
-	systemCore     = "You are a Claude agent, built on Anthropic's Claude Agent SDK."
-	systemIdentity = "You are Claude Code, Anthropic's official CLI for Claude."
+	billingHeader = "x-anthropic-billing-header: cc_version=2.1.85.613; cc_entrypoint=sdk-cli; cch=1757e;"
+	systemCore = "You are a Claude agent, built on Anthropic's Claude Agent SDK."
 )
 
 // supportedModels is the allowlist of model IDs that work with Claude OAuth API.
@@ -265,8 +264,7 @@ func (p *Provider) buildRequest(opts llm.Request) ([]byte, error) {
 	userBlocks := anthropic.CollectSystemBlocks(opts.Messages)
 	claudeBlocks := []anthropic.SystemBlock{
 		{Type: "text", Text: billingHeader},
-		{Type: "text", Text: systemCore, CacheControl: &anthropic.CacheControl{Type: "ephemeral"}},
-		{Type: "text", Text: systemIdentity},
+		{Type: "text", Text: systemCore, CacheControl: &anthropic.CacheControl{Type: "ephemeral", TTL: "1h"}},
 	}
 	systemBlocks := anthropic.PrependSystemBlocks(claudeBlocks, userBlocks)
 

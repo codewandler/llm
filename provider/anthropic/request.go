@@ -221,13 +221,12 @@ func BuildRequest(reqOpts RequestOptions) ([]byte, error) {
 		opts.ToolChoice = llm.ToolChoiceAuto{}
 	}
 
-	// Wire output effort (Anthropic only). Default to low to avoid Anthropic's
-	// expensive high/max default. Only set max effort on Opus 4.6.
-	// Effort is only supported on Sonnet 4.5+ and Opus 4.5+.
+	// Wire output effort (Anthropic only). Default to medium effort.
+	// Only set max effort on Opus 4.6. Effort is only supported on Sonnet 4.6, Opus 4.5, Opus 4.6.
 	if isEffortSupported(reqOpts.Model) {
 		effort := opts.OutputEffort
 		if effort == "" {
-			effort = llm.OutputEffortLow
+			effort = llm.OutputEffortMedium
 		}
 		effortStr := string(effort)
 		if effort == llm.OutputEffortMax && !isMaxEffortSupported(reqOpts.Model) {

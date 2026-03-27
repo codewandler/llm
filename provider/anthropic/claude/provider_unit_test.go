@@ -66,7 +66,7 @@ func TestBuildRequest_PrependsBillingAndSystemBlocks(t *testing.T) {
 	require.True(t, ok, "system field must be present")
 	blocks, ok := rawSystem.([]any)
 	require.True(t, ok, "system must be an array")
-	require.GreaterOrEqual(t, len(blocks), 3, "must have at least billing + systemCore + systemIdentity blocks")
+	require.GreaterOrEqual(t, len(blocks), 2, "must have at least billing + systemCore blocks")
 
 	firstBlock := blocks[0].(map[string]any)
 	assert.Equal(t, "text", firstBlock["type"])
@@ -74,9 +74,6 @@ func TestBuildRequest_PrependsBillingAndSystemBlocks(t *testing.T) {
 
 	secondBlock := blocks[1].(map[string]any)
 	assert.Equal(t, systemCore, secondBlock["text"])
-
-	thirdBlock := blocks[2].(map[string]any)
-	assert.Equal(t, systemIdentity, thirdBlock["text"])
 }
 
 func TestBuildRequest_UserSystemBlockAppended(t *testing.T) {
@@ -95,7 +92,7 @@ func TestBuildRequest_UserSystemBlockAppended(t *testing.T) {
 	require.NoError(t, json.Unmarshal(body, &req))
 
 	blocks := req["system"].([]any)
-	require.GreaterOrEqual(t, len(blocks), 4, "billing + core + identity + user system")
+	require.Equal(t, 3, len(blocks), "billing + core + user system")
 
 	last := blocks[len(blocks)-1].(map[string]any)
 	assert.Equal(t, "be helpful", last["text"])
