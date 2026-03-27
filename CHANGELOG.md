@@ -1,5 +1,67 @@
 # Changelog
 
+## v0.28.0
+
+### Bug Fixes
+
+#### Haiku thinking defaults
+- Haiku now defaults to `thinking: {type: "enabled", budget_tokens: 31999}` instead of `disabled`
+- This matches Claude Code's default behavior for agentic use cases
+
+#### Max tokens default
+- Default `max_tokens` changed from 16384 to 32000 across all Anthropic providers
+- Matches Claude Code's default for better response capacity
+
+#### Metadata user_id format
+- `metadata.user_id` now uses JSON object format `{"device_id": "...", "account_uuid": "...", "session_id": "..."}`
+- Previously used a flattened string format that didn't match Claude Code
+
+#### Output effort only on supported models
+- `output_config.effort` is now only sent for Sonnet 4.6, Opus 4.5, and Opus 4.6
+- Sonnet 4.5 does not support effort and would return HTTP 400 if sent
+
+### New Features
+
+#### Adaptive thinking support
+- Sonnet 4.6 and Opus 4.6 now default to `thinking: {type: "adaptive"}`
+- `ThinkingEffort` values (low/medium/high) use adaptive on 4.6 models
+- Older models use `enabled` mode with `budget_tokens` mapping
+
+#### OutputEffort for response thoroughness
+- New `OutputEffort` field in `llm.Request` controls response depth
+- Values: `low`, `medium`, `high`, `max` (max only on Opus 4.6)
+- Defaults to `medium` effort on supported models
+- New `--effort` CLI flag for `llmcli infer`
+
+#### Prompt caching improvements
+- System prompts now include `cache_control: {type: "ephemeral", ttl: "1h"}`
+- User messages in CLI also include cache control with 1h TTL
+- Claude Code uses 1-hour cache TTL for better cost optimization
+
+#### Brotli and zstd decompression support
+- HTTP transport now handles `gzip`, `deflate`, `br` (brotli), and `zstd` compression
+- Added `github.com/andybalholm/brotli` and `github.com/klauspost/compress/zstd` dependencies
+
+### Alignment with Claude Code
+
+#### Request headers
+- `Accept-Encoding: gzip, deflate, br, zstd` now matches Claude Code exactly
+- `Connection: keep-alive` header added for connection reuse
+- `User-Agent` updated to `claude-cli/2.1.85`
+
+#### Request body
+- System blocks reduced to 2: billing header + systemCore (removed extra identity block)
+- Billing header version updated to `2.1.85.613`
+
+### Tests
+
+#### Comprehensive thinking and effort tests
+- Added `TestIsEffortSupported`, `TestIsMaxEffortSupported`, `TestIsAdaptiveThinkingSupported`
+- Added `TestBuildRequest_OutputEffort` with 16 model/effort combinations
+- Added `TestBuildRequest_ThinkingEffort_Defaults` for all model variants
+
+---
+
 ## v0.27.0
 
 ### Bug Fixes
