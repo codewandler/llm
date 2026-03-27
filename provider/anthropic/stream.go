@@ -2,180 +2,29 @@ package anthropic
 
 import (
 	"context"
-	"encoding/json"
 	"io"
-	"strings"
 	"time"
 
 	"github.com/codewandler/llm"
 	"github.com/codewandler/llm/provider/internal/sse"
-	"github.com/codewandler/llm/tool"
 )
 
-type contentBlockStartEvent struct {
-	Type         string `json:"type"`
-	Index        int    `json:"index"`
-	ContentBlock struct {
-		Type string `json:"type"`
-		Text string `json:"text,omitempty"`
-		ID   string `json:"id,omitempty"`
-		Name string `json:"name,omitempty"`
-	} `json:"content_block"`
-}
-
-type contentBlockDeltaEvent struct {
-	Type  string `json:"type"`
-	Index int    `json:"index"`
-	Delta struct {
-		Type        string `json:"type"`
-		Text        string `json:"text,omitempty"`
-		PartialJSON string `json:"partial_json,omitempty"`
-		Thinking    string `json:"thinking,omitempty"`
-	} `json:"delta"`
-}
-
+// StreamMeta carries provider-level metadata forwarded into ParseStream.
 type StreamMeta struct {
 	RequestedModel string
 	ResolvedModel  string
 	StartTime      time.Time
 }
 
+// ParseStream reads an Anthropic-format SSE response body and publishes
+// structured events to pub. It blocks until the stream ends or ctx is done.
 func ParseStream(ctx context.Context, body io.ReadCloser, pub llm.Publisher, meta StreamMeta) {
 	defer pub.Close()
 	defer body.Close()
 
-	type toolBlock struct {
-		id      string
-		name    string
-		jsonBuf strings.Builder
-	}
-	activeTools := make(map[int]*toolBlock)
-	var usage llm.Usage
-	var stopReason llm.StopReason
-
+	proc := newStreamProcessor(meta, pub)
 	err := sse.ForEachDataLine(ctx, body, func(ev sse.Event) bool {
-		data := ev.Data
-		if data == "" {
-			return true
-		}
-
-		var base struct {
-			Type string `json:"type"`
-		}
-		if err := json.Unmarshal([]byte(data), &base); err != nil {
-			return true
-		}
-
-		switch base.Type {
-		case "message_start":
-			var evt struct {
-				Message struct {
-					ID    string `json:"id"`
-					Model string `json:"model"`
-					Usage struct {
-						InputTokens              int `json:"input_tokens"`
-						CacheCreationInputTokens int `json:"cache_creation_input_tokens"`
-						CacheReadInputTokens     int `json:"cache_read_input_tokens"`
-					} `json:"usage"`
-				} `json:"message"`
-			}
-			if err := json.Unmarshal([]byte(data), &evt); err == nil {
-				usage.CacheWriteTokens = evt.Message.Usage.CacheCreationInputTokens
-				usage.CacheReadTokens = evt.Message.Usage.CacheReadInputTokens
-				usage.InputTokens = evt.Message.Usage.InputTokens +
-					usage.CacheWriteTokens + usage.CacheReadTokens
-
-				pub.Started(llm.StreamStartedEvent{
-					Model:     evt.Message.Model,
-					RequestID: evt.Message.ID,
-				})
-			}
-
-		case "message_delta":
-			var evt struct {
-				Delta struct {
-					StopReason string `json:"stop_reason"`
-				} `json:"delta"`
-				Usage struct {
-					OutputTokens int `json:"output_tokens"`
-				} `json:"usage"`
-			}
-			if err := json.Unmarshal([]byte(data), &evt); err == nil {
-				usage.OutputTokens = evt.Usage.OutputTokens
-				usage.TotalTokens = usage.InputTokens + usage.OutputTokens
-				if evt.Delta.StopReason != "" {
-					stopReason = mapAnthropicStopReason(evt.Delta.StopReason)
-				}
-			}
-
-		case "content_block_start":
-			var evt contentBlockStartEvent
-			if err := json.Unmarshal([]byte(data), &evt); err != nil {
-				return true
-			}
-			if evt.ContentBlock.Type == "tool_use" {
-				activeTools[evt.Index] = &toolBlock{id: evt.ContentBlock.ID, name: evt.ContentBlock.Name}
-			}
-
-		case "content_block_delta":
-			var evt contentBlockDeltaEvent
-			if err := json.Unmarshal([]byte(data), &evt); err != nil {
-				return true
-			}
-			idx := uint32(evt.Index)
-			switch evt.Delta.Type {
-			case "text_delta":
-				d := llm.TextDelta(evt.Delta.Text)
-				d.Index = &idx
-				pub.Delta(d)
-			case "thinking_delta":
-				d := llm.ReasoningDelta(evt.Delta.Thinking)
-				d.Index = &idx
-				pub.Delta(d)
-			case "input_json_delta":
-				if tb, ok := activeTools[evt.Index]; ok {
-					tb.jsonBuf.WriteString(evt.Delta.PartialJSON)
-					d := llm.ToolDelta(tb.id, tb.name, evt.Delta.PartialJSON)
-					d.Index = &idx
-					pub.Delta(d)
-				}
-			}
-
-		case "content_block_stop":
-			var evt struct {
-				Index int `json:"index"`
-			}
-			if err := json.Unmarshal([]byte(data), &evt); err != nil {
-				return true
-			}
-			if tb, ok := activeTools[evt.Index]; ok {
-				var args map[string]any
-				if tb.jsonBuf.Len() > 0 {
-					_ = json.Unmarshal([]byte(tb.jsonBuf.String()), &args)
-				}
-				pub.ToolCall(tool.NewToolCall(tb.id, tb.name, args))
-				delete(activeTools, evt.Index)
-			}
-
-		case "message_stop":
-			FillCost(meta.ResolvedModel, &usage)
-			pub.Usage(usage)
-			pub.Completed(llm.CompletedEvent{StopReason: stopReason})
-			return false
-
-		case "error":
-			var errEvt struct {
-				Error struct {
-					Message string `json:"message"`
-				} `json:"error"`
-			}
-			if err := json.Unmarshal([]byte(data), &errEvt); err == nil {
-				pub.Error(llm.NewErrProviderMsg(llm.ProviderNameAnthropic, errEvt.Error.Message))
-			}
-			return false
-		}
-
-		return true
+		return proc.dispatch(ev.Data)
 	})
 	if err != nil {
 		if ctx.Err() != nil {
@@ -183,18 +32,5 @@ func ParseStream(ctx context.Context, body io.ReadCloser, pub llm.Publisher, met
 			return
 		}
 		pub.Error(llm.NewErrStreamRead(llm.ProviderNameAnthropic, err))
-	}
-}
-
-func mapAnthropicStopReason(s string) llm.StopReason {
-	switch s {
-	case "end_turn":
-		return llm.StopReasonEndTurn
-	case "tool_use":
-		return llm.StopReasonToolUse
-	case "max_tokens":
-		return llm.StopReasonMaxTokens
-	default:
-		return llm.StopReason(s)
 	}
 }
