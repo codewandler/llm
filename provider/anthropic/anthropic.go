@@ -5,7 +5,6 @@ import (
 	"context"
 	"io"
 	"net/http"
-	"time"
 
 	"github.com/codewandler/llm"
 )
@@ -51,8 +50,6 @@ func (p *Provider) Models() []llm.Model {
 }
 
 func (p *Provider) CreateStream(ctx context.Context, opts llm.Request) (llm.Stream, error) {
-	startTime := time.Now()
-
 	if err := opts.Validate(); err != nil {
 		return nil, llm.NewErrBuildRequest(llm.ProviderNameAnthropic, err)
 	}
@@ -89,13 +86,10 @@ func (p *Provider) CreateStream(ctx context.Context, opts llm.Request) (llm.Stre
 		return nil, llm.NewErrAPIError(llm.ProviderNameAnthropic, resp.StatusCode, string(errBody))
 	}
 
-	pub, ch := llm.NewEventPublisher()
-	go ParseStream(ctx, resp.Body, pub, StreamMeta{
+	return ParseStream(ctx, resp.Body, ParseOpts{
 		RequestedModel: opts.Model,
 		ResolvedModel:  opts.Model,
-		StartTime:      startTime,
-	})
-	return ch, nil
+	}), nil
 }
 
 func (p *Provider) newAPIRequest(ctx context.Context, apiKey string, body []byte) (*http.Request, error) {

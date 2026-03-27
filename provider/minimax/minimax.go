@@ -8,7 +8,6 @@ import (
 	"context"
 	"io"
 	"net/http"
-	"time"
 
 	"github.com/codewandler/llm"
 	"github.com/codewandler/llm/provider/anthropic"
@@ -82,8 +81,6 @@ func (p *Provider) Models() []llm.Model {
 }
 
 func (p *Provider) CreateStream(ctx context.Context, opts llm.Request) (llm.Stream, error) {
-	startTime := time.Now()
-
 	if err := opts.Validate(); err != nil {
 		return nil, llm.NewErrBuildRequest(providerName, err)
 	}
@@ -117,31 +114,11 @@ func (p *Provider) CreateStream(ctx context.Context, opts llm.Request) (llm.Stre
 		return nil, llm.NewErrAPIError(providerName, resp.StatusCode, string(errBody))
 	}
 
-	pub, ch := llm.NewEventPublisher()
-	go p.parseStreamWithCost(ctx, resp.Body, pub, opts.Model, startTime)
-	return ch, nil
-}
-
-func (p *Provider) parseStreamWithCost(ctx context.Context, body io.ReadCloser, pub llm.Publisher, model string, startTime time.Time) {
-	defer pub.Close()
-	defer body.Close()
-
-	costPub := &costInjector{Publisher: pub, model: model}
-	anthropic.ParseStream(ctx, body, costPub, anthropic.StreamMeta{
-		RequestedModel: model,
-		ResolvedModel:  model,
-		StartTime:      startTime,
-	})
-}
-
-type costInjector struct {
-	llm.Publisher
-	model string
-}
-
-func (c *costInjector) Usage(u llm.Usage) {
-	FillCost(c.model, &u)
-	c.Publisher.Usage(u)
+	return anthropic.ParseStream(ctx, resp.Body, anthropic.ParseOpts{
+		RequestedModel: opts.Model,
+		ResolvedModel:  opts.Model,
+		CostFn:         FillCost,
+	}), nil
 }
 
 func (p *Provider) newAPIRequest(ctx context.Context, apiKey string, body []byte) (*http.Request, error) {

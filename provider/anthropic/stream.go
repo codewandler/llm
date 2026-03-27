@@ -3,26 +3,46 @@ package anthropic
 import (
 	"context"
 	"io"
-	"time"
 
 	"github.com/codewandler/llm"
 	"github.com/codewandler/llm/provider/internal/sse"
 )
 
-// StreamMeta carries provider-level metadata forwarded into ParseStream.
-type StreamMeta struct {
+// CostFn calculates token costs for a given model and populates the cost
+// fields on usage. Providers that reuse ParseStream with different pricing
+// (e.g. MiniMax) supply their own CostFn instead of wrapping the publisher.
+type CostFn func(model string, usage *llm.Usage)
+
+// ParseOpts configures how ParseStream processes an Anthropic-format SSE body.
+type ParseOpts struct {
 	RequestedModel string
 	ResolvedModel  string
-	StartTime      time.Time
+
+	// CostFn overrides the default Anthropic cost calculation.
+	// When nil, FillCost (Anthropic pricing) is used.
+	CostFn CostFn
 }
 
-// ParseStream reads an Anthropic-format SSE response body and publishes
-// structured events to pub. It blocks until the stream ends or ctx is done.
-func ParseStream(ctx context.Context, body io.ReadCloser, pub llm.Publisher, meta StreamMeta) {
-	defer pub.Close()
-	defer body.Close()
+// ParseStream reads an Anthropic-format SSE response body in a background
+// goroutine and returns a stream of structured events.
+//
+// Ownership: ParseStream takes ownership of body and closes it when the
+// stream ends or ctx is cancelled.
+func ParseStream(ctx context.Context, body io.ReadCloser, opts ParseOpts) llm.Stream {
+	pub, ch := llm.NewEventPublisher()
+	go func() {
+		defer body.Close()
+		parseStream(ctx, body, pub, opts)
+	}()
+	return ch
+}
 
-	proc := newStreamProcessor(meta, pub)
+// parseStream is the blocking core that reads SSE lines from body and
+// publishes events to pub. It closes pub when done.
+func parseStream(ctx context.Context, body io.ReadCloser, pub llm.Publisher, opts ParseOpts) {
+	defer pub.Close()
+
+	proc := newStreamProcessor(opts, pub)
 	err := sse.ForEachDataLine(ctx, body, func(ev sse.Event) bool {
 		return proc.dispatch(ev.Data)
 	})

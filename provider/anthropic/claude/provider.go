@@ -13,7 +13,6 @@ import (
 	"runtime"
 	"sort"
 	"strings"
-	"time"
 
 	"github.com/codewandler/llm"
 	"github.com/codewandler/llm/modeldb"
@@ -183,7 +182,6 @@ func (p *Provider) Models() []llm.Model {
 
 // CreateStream implements llm.Provider.
 func (p *Provider) CreateStream(ctx context.Context, opts llm.Request) (llm.Stream, error) {
-	startTime := time.Now()
 	requestedModel := opts.Model
 
 	if err := opts.Validate(); err != nil {
@@ -221,13 +219,10 @@ func (p *Provider) CreateStream(ctx context.Context, opts llm.Request) (llm.Stre
 		return nil, llm.NewErrAPIError(llm.ProviderNameClaude, resp.StatusCode, string(errBody))
 	}
 
-	pub, ch := llm.NewEventPublisher()
-	go anthropic.ParseStream(ctx, resp.Body, pub, anthropic.StreamMeta{
+	return anthropic.ParseStream(ctx, resp.Body, anthropic.ParseOpts{
 		RequestedModel: requestedModel,
 		ResolvedModel:  opts.Model,
-		StartTime:      startTime,
-	})
-	return ch, nil
+	}), nil
 }
 
 func (p *Provider) newAPIRequest(ctx context.Context, accessToken string, body []byte) (*http.Request, error) {

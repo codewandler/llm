@@ -21,14 +21,14 @@ type toolBlock struct {
 //
 // ParseStream feeds it via dispatch; tests feed it directly via the on* methods.
 type streamProcessor struct {
-	meta        StreamMeta
+	meta        ParseOpts
 	pub         llm.Publisher
 	activeTools map[int]*toolBlock
 	usage       llm.Usage
 	stopReason  llm.StopReason
 }
 
-func newStreamProcessor(meta StreamMeta, pub llm.Publisher) *streamProcessor {
+func newStreamProcessor(meta ParseOpts, pub llm.Publisher) *streamProcessor {
 	return &streamProcessor{
 		meta:        meta,
 		pub:         pub,
@@ -108,7 +108,11 @@ func (p *streamProcessor) onMessageDelta(evt MessageDeltaEvent) {
 }
 
 func (p *streamProcessor) onMessageStop() {
-	FillCost(p.meta.ResolvedModel, &p.usage)
+	costFn := p.meta.CostFn
+	if costFn == nil {
+		costFn = FillCost
+	}
+	costFn(p.meta.ResolvedModel, &p.usage)
 	p.pub.Usage(p.usage)
 	p.pub.Completed(llm.CompletedEvent{StopReason: p.stopReason})
 }

@@ -23,10 +23,10 @@ type Harness struct {
 }
 
 // NewHarness creates a Harness backed by a fresh streamProcessor and publisher.
-func NewHarness(meta StreamMeta) *Harness {
+func NewHarness(opts ParseOpts) *Harness {
 	pub, ch := llm.NewEventPublisher()
 	return &Harness{
-		proc: newStreamProcessor(meta, pub),
+		proc: newStreamProcessor(opts, pub),
 		pub:  pub,
 		ch:   ch,
 	}

@@ -34,9 +34,8 @@ func TestParseStream_CacheTokens(t *testing.T) {
 		``,
 	}, "\n")
 
-	pub, ch := llm.NewEventPublisher()
 	body := io.NopCloser(strings.NewReader(sse))
-	go ParseStream(context.Background(), body, pub, StreamMeta{
+	ch := ParseStream(context.Background(), body, ParseOpts{
 		RequestedModel: "claude-sonnet-4-5",
 		ResolvedModel:  "claude-sonnet-4-5",
 	})
@@ -84,9 +83,8 @@ func TestParseStream_NoCacheTokens(t *testing.T) {
 		``,
 	}, "\n")
 
-	pub, ch := llm.NewEventPublisher()
 	body := io.NopCloser(strings.NewReader(sse))
-	go ParseStream(context.Background(), body, pub, StreamMeta{
+	ch := ParseStream(context.Background(), body, ParseOpts{
 		RequestedModel: "claude-haiku-4-5",
 	})
 
