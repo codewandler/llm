@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/codewandler/llm/tool"
 )
@@ -49,8 +50,13 @@ type (
 	}
 
 	AssistantMessage interface {
-		TextMessage
+		Message
 		ToolCalls() []tool.Call
+		// ContentBlocks returns the ordered content blocks (text + thinking)
+		// for this message. All constructors populate this field; it is non-nil
+		// when content is non-empty. Blocks must be serialized in index order
+		// before any tool_use blocks on the wire.
+		ContentBlocks() []ContentBlock
 		isAssistant()
 	}
 
@@ -75,11 +81,12 @@ type (
 		role      Role
 		cacheHint *CacheHint
 	}
-	systemMsg    struct{ textMsg }
-	userMsg      struct{ textMsg }
+	systemMsg struct{ textMsg }
+	userMsg   struct{ textMsg }
 	assistantMsg struct {
 		textMsg
-		toolCalls []tool.Call
+		toolCalls     []tool.Call
+		contentBlocks []ContentBlock // ordered text+thinking blocks; always populated by constructors
 	}
 	toolMsg struct {
 		textMsg
@@ -141,27 +148,56 @@ func ToolCalls(toolCalls ...tool.Call) AssistantMessage {
 }
 
 func Assistant(content string, toolCalls ...tool.Call) AssistantMessage {
+	var blocks []ContentBlock
+	if content != "" {
+		blocks = []ContentBlock{{Kind: ContentBlockKindText, Text: content}}
+	}
 	return &assistantMsg{
-		textMsg: textMsg{
-			role:    RoleAssistant,
-			content: content,
-		},
-		toolCalls: toolCalls,
+		textMsg:       textMsg{role: RoleAssistant},
+		toolCalls:     toolCalls,
+		contentBlocks: blocks,
 	}
 }
 
 func AssistantWithCacheHint(content string, cacheHint *CacheHint, toolCalls ...tool.Call) AssistantMessage {
+	var blocks []ContentBlock
+	if content != "" {
+		blocks = []ContentBlock{{Kind: ContentBlockKindText, Text: content}}
+	}
 	msg := &assistantMsg{
-		textMsg: textMsg{
-			role:    RoleAssistant,
-			content: content,
-		},
-		toolCalls: toolCalls,
+		textMsg:       textMsg{role: RoleAssistant},
+		toolCalls:     toolCalls,
+		contentBlocks: blocks,
 	}
 	if cacheHint != nil {
 		msg.applyCache(cacheHint)
 	}
 	return msg
+}
+
+// AssistantWithBlocks creates an assistant message whose content is expressed
+// as an ordered sequence of content blocks (text + thinking). This is required
+// when the response interleaved thinking and text blocks — the blocks must be
+// re-submitted to the API in their original index order.
+func AssistantWithBlocks(blocks []ContentBlock, toolCalls ...tool.Call) AssistantMessage {
+	return &assistantMsg{
+		textMsg:       textMsg{role: RoleAssistant},
+		toolCalls:     toolCalls,
+		contentBlocks: blocks,
+	}
+}
+
+// AssistantText returns the concatenated text from all text-kind ContentBlocks
+// in the message. Thinking blocks are excluded. Use this in provider
+// implementations instead of a Content() call on AssistantMessage.
+func AssistantText(m AssistantMessage) string {
+	var sb strings.Builder
+	for _, b := range m.ContentBlocks() {
+		if b.Kind == ContentBlockKindText {
+			sb.WriteString(b.Text)
+		}
+	}
+	return sb.String()
 }
 
 func newToolMsg(toolCallID, output string, isError bool) ToolMessage {
@@ -205,12 +241,11 @@ func (m *toolMsg) ToolOutput() string { return m.content }
 func (m *toolMsg) IsError() bool      { return m.isError }
 func (m *toolMsg) isTool()            {}
 func (m *assistantMsg) isAssistant()  {}
-func (m *assistantMsg) ToolCalls() []tool.Call {
-	return m.toolCalls
-}
+func (m *assistantMsg) ToolCalls() []tool.Call      { return m.toolCalls }
+func (m *assistantMsg) ContentBlocks() []ContentBlock { return m.contentBlocks }
 
 func (m *assistantMsg) Validate() error {
-	if m.content == "" && len(m.toolCalls) == 0 {
+	if len(m.toolCalls) == 0 && len(m.contentBlocks) == 0 {
 		return errors.New("message: content is required")
 	}
 	for i, tc := range m.toolCalls {

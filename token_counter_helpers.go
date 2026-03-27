@@ -3,6 +3,7 @@ package llm
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/codewandler/llm/tokencount"
 )
@@ -33,12 +34,20 @@ func CountMessage(model string, msg Message) (int, error) {
 }
 
 // messageText returns the text content of a message for token counting purposes.
-// For AssistantMessage it concatenates text content and serialised tool call names/args.
+// For AssistantMessage it derives text from ContentBlocks (text blocks only;
+// thinking blocks are excluded) plus serialised tool call names/args.
 // For ToolResult it uses the output.
 func messageText(msg Message) string {
 	switch m := msg.(type) {
 	case AssistantMessage:
-		text := m.Content()
+		// Derive text from content blocks (text blocks only; thinking blocks excluded).
+		var sb strings.Builder
+		for _, b := range m.ContentBlocks() {
+			if b.Kind == ContentBlockKindText {
+				sb.WriteString(b.Text)
+			}
+		}
+		text := sb.String()
 		for _, tc := range m.ToolCalls() {
 			// map[string]any marshal only fails on unmarshalable types (funcs,
 			// channels); tool arguments are always JSON-safe in practice.

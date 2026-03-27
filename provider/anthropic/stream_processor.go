@@ -15,27 +15,42 @@ type toolBlock struct {
 	jsonBuf strings.Builder
 }
 
+// textBlock accumulates streaming text content for a single content block.
+type textBlock struct {
+	text strings.Builder
+}
+
+// thinkingBlock accumulates streaming thinking content and its signature.
+type thinkingBlock struct {
+	thinking  strings.Builder
+	signature string
+}
+
 // streamProcessor owns all mutable state and the per-event dispatch logic for
 // an Anthropic-format SSE stream. It is the single authoritative place for the
 // rule "when event X arrives, do Y to the publisher".
 //
 // ParseStream feeds it via dispatch; tests feed it directly via the on* methods.
 type streamProcessor struct {
-	meta        ParseOpts
-	pub         llm.Publisher
-	activeTools map[int]*toolBlock
-	usage       llm.Usage
-	stopReason  llm.StopReason
-	rateLimits  *llm.RateLimits
+	meta           ParseOpts
+	pub            llm.Publisher
+	activeTools    map[int]*toolBlock
+	activeText     map[int]*textBlock
+	activeThinking map[int]*thinkingBlock
+	usage          llm.Usage
+	stopReason     llm.StopReason
+	rateLimits     *llm.RateLimits
 }
 
 func newStreamProcessor(meta ParseOpts, pub llm.Publisher) *streamProcessor {
 	rl := llm.ParseRateLimits(meta.ResponseHeaders)
 	return &streamProcessor{
-		meta:        meta,
-		pub:         pub,
-		activeTools: make(map[int]*toolBlock),
-		rateLimits:  rl,
+		meta:           meta,
+		pub:            pub,
+		activeTools:    make(map[int]*toolBlock),
+		activeText:     make(map[int]*textBlock),
+		activeThinking: make(map[int]*thinkingBlock),
+		rateLimits:     rl,
 	}
 }
 
@@ -133,11 +148,16 @@ func (p *streamProcessor) onMessageStop() {
 }
 
 func (p *streamProcessor) onContentBlockStart(evt ContentBlockStartEvent) {
-	if evt.ContentBlock.Type == "tool_use" {
+	switch evt.ContentBlock.Type {
+	case "tool_use":
 		p.activeTools[evt.Index] = &toolBlock{
 			id:   evt.ContentBlock.ID,
 			name: evt.ContentBlock.Name,
 		}
+	case "text":
+		p.activeText[evt.Index] = &textBlock{}
+	case "thinking":
+		p.activeThinking[evt.Index] = &thinkingBlock{}
 	}
 }
 
@@ -145,13 +165,29 @@ func (p *streamProcessor) onContentBlockDelta(evt ContentBlockDeltaEvent) {
 	idx := uint32(evt.Index)
 	switch evt.Delta.Type {
 	case "text_delta":
+		// Accumulate for block-level tracking
+		if tb, ok := p.activeText[evt.Index]; ok {
+			tb.text.WriteString(evt.Delta.Text)
+		}
+		// Also stream per-token delta for TUI display
 		d := llm.TextDelta(evt.Delta.Text)
 		d.Index = &idx
 		p.pub.Delta(d)
 	case "thinking_delta":
+		// Accumulate for block-level tracking
+		if tb, ok := p.activeThinking[evt.Index]; ok {
+			tb.thinking.WriteString(evt.Delta.Thinking)
+		}
+		// Also stream per-token delta for TUI display
 		d := llm.ReasoningDelta(evt.Delta.Thinking)
 		d.Index = &idx
 		p.pub.Delta(d)
+	case "signature_delta":
+		// Capture the cryptographic signature for the thinking block.
+		// It arrives as a single event (not streamed char-by-char).
+		if tb, ok := p.activeThinking[evt.Index]; ok {
+			tb.signature = evt.Delta.Signature
+		}
 	case "input_json_delta":
 		if tb, ok := p.activeTools[evt.Index]; ok {
 			tb.jsonBuf.WriteString(evt.Delta.PartialJSON)
@@ -163,16 +199,44 @@ func (p *streamProcessor) onContentBlockDelta(evt ContentBlockDeltaEvent) {
 }
 
 func (p *streamProcessor) onContentBlockStop(evt ContentBlockStopEvent) {
-	tb, ok := p.activeTools[evt.Index]
-	if !ok {
+	// Tool blocks: emit ToolCall event (existing behaviour, unchanged).
+	if tb, ok := p.activeTools[evt.Index]; ok {
+		var args map[string]any
+		if tb.jsonBuf.Len() > 0 {
+			_ = json.Unmarshal([]byte(tb.jsonBuf.String()), &args)
+		}
+		p.pub.ToolCall(tool.NewToolCall(tb.id, tb.name, args))
+		delete(p.activeTools, evt.Index)
 		return
 	}
-	var args map[string]any
-	if tb.jsonBuf.Len() > 0 {
-		_ = json.Unmarshal([]byte(tb.jsonBuf.String()), &args)
+
+	// Text blocks: emit ContentBlockEvent so the caller can store the full
+	// block and preserve its index position relative to other blocks.
+	if tb, ok := p.activeText[evt.Index]; ok {
+		p.pub.ContentBlock(llm.ContentBlockEvent{
+			ContentBlock: llm.ContentBlock{
+				Kind: llm.ContentBlockKindText,
+				Text: tb.text.String(),
+			},
+			Index: evt.Index,
+		})
+		delete(p.activeText, evt.Index)
+		return
 	}
-	p.pub.ToolCall(tool.NewToolCall(tb.id, tb.name, args))
-	delete(p.activeTools, evt.Index)
+
+	// Thinking blocks: emit ContentBlockEvent with the accumulated thinking
+	// text and the signature required for tool-use loop re-submission.
+	if tb, ok := p.activeThinking[evt.Index]; ok {
+		p.pub.ContentBlock(llm.ContentBlockEvent{
+			ContentBlock: llm.ContentBlock{
+				Kind:      llm.ContentBlockKindThinking,
+				Text:      tb.thinking.String(),
+				Signature: tb.signature,
+			},
+			Index: evt.Index,
+		})
+		delete(p.activeThinking, evt.Index)
+	}
 }
 
 func (p *streamProcessor) onError(evt StreamErrorEvent) {

@@ -64,6 +64,10 @@ type ContentBlockDelta struct {
 	Text        string `json:"text,omitempty"`
 	PartialJSON string `json:"partial_json,omitempty"`
 	Thinking    string `json:"thinking,omitempty"`
+	// Signature is the cryptographic verification token emitted by a
+	// signature_delta event at the end of a thinking block. It must be
+	// passed back verbatim to the API in subsequent requests.
+	Signature string `json:"signature,omitempty"`
 }
 
 // ContentBlockStopEvent signals the end of a content block.

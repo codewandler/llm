@@ -44,7 +44,8 @@ type (
 
 	wireAssistantMsg struct {
 		wireTextMsg
-		ToolCalls wireToolCalls `json:"tool_calls,omitempty"`
+		ContentBlocks []ContentBlock `json:"content_blocks,omitempty"`
+		ToolCalls     wireToolCalls  `json:"tool_calls,omitempty"`
 	}
 
 	wireToolMsg struct {
@@ -89,10 +90,10 @@ func (m *assistantMsg) MarshalJSON() ([]byte, error) {
 	return json.Marshal(wireAssistantMsg{
 		wireTextMsg: wireTextMsg{
 			Role:      RoleAssistant,
-			Content:   m.content,
 			CacheHint: m.cacheHint,
 		},
-		ToolCalls: m.toolCalls,
+		ContentBlocks: m.contentBlocks,
+		ToolCalls:     m.toolCalls,
 	})
 }
 
@@ -135,7 +136,13 @@ func (m *Messages) UnmarshalJSON(data []byte) error {
 			if err := json.Unmarshal(raw, &am); err != nil {
 				return fmt.Errorf("message[%d]: %w", i, err)
 			}
-			msg = Assistant(am.Content, am.ToolCalls...)
+			if len(am.ContentBlocks) > 0 {
+				// Full block representation: thinking+text blocks present.
+				msg = AssistantWithBlocks(am.ContentBlocks, am.ToolCalls...)
+			} else {
+				// Flat-text representation: old serialized messages without blocks.
+				msg = Assistant(am.Content, am.ToolCalls...)
+			}
 			msg.applyCache(am.CacheHint)
 
 		case RoleTool:

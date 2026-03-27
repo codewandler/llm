@@ -176,10 +176,10 @@ func respBuildRequest(opts llm.Request) ([]byte, error) {
 			})
 
 		case llm.AssistantMessage:
-			if m.Content() != "" {
+			if llm.AssistantText(m) != "" {
 				r.Input = append(r.Input, respInput{
 					Role:    "assistant",
-					Content: m.Content(),
+					Content: llm.AssistantText(m),
 				})
 			}
 			for _, tc := range m.ToolCalls() {

@@ -121,6 +121,22 @@ func isEffortSupported(model string) bool {
 		strings.Contains(model, "claude-opus-4-6")
 }
 
+// contentBlockFromLLM converts an llm.ContentBlock to the appropriate Anthropic
+// wire representation: a plain contentBlock for text, or a thinking map for
+// thinking blocks (which require "type", "thinking", and "signature" fields).
+func contentBlockFromLLM(cb llm.ContentBlock) any {
+	switch cb.Kind {
+	case llm.ContentBlockKindThinking:
+		return map[string]string{
+			"type":      "thinking",
+			"thinking":  cb.Text,
+			"signature": cb.Signature,
+		}
+	default:
+		return contentBlock{Type: "text", Text: cb.Text}
+	}
+}
+
 // buildCacheControl converts a CacheHint to the Anthropic wire type.
 // Returns nil if hint is nil or not enabled.
 func buildCacheControl(h *llm.CacheHint) *CacheControl {
@@ -269,13 +285,28 @@ func BuildRequest(reqOpts RequestOptions) ([]byte, error) {
 			r.Messages = append(r.Messages, messagePayload{Role: "user", Content: []contentBlock{block}})
 		case llm.AssistantMessage:
 			if len(m.ToolCalls()) == 0 {
-				block := contentBlock{Type: "text", Text: m.Content(), CacheControl: buildCacheControl(m.CacheHint())}
-				r.Messages = append(r.Messages, messagePayload{Role: "assistant", Content: []contentBlock{block}})
+				// Block-aware path: emit text+thinking in original index order.
+				// Every AssistantMessage now has ContentBlocks populated; apply cache hint to last block.
+				var blocks []any
+				for _, cb := range m.ContentBlocks() {
+					blocks = append(blocks, contentBlockFromLLM(cb))
+				}
+				if len(blocks) > 0 {
+					// Apply cache hint to the last content block if present.
+					if m.CacheHint() != nil {
+						if last, ok := blocks[len(blocks)-1].(contentBlock); ok {
+							last.CacheControl = buildCacheControl(m.CacheHint())
+							blocks[len(blocks)-1] = last
+						}
+					}
+				}
+				r.Messages = append(r.Messages, messagePayload{Role: "assistant", Content: blocks})
 				continue
 			}
 			var blocks []any
-			if m.Content() != "" {
-				blocks = append(blocks, contentBlock{Type: "text", Text: m.Content()})
+			// Block-aware path: emit text+thinking in original index order, then tool_use follows.
+			for _, cb := range m.ContentBlocks() {
+				blocks = append(blocks, contentBlockFromLLM(cb))
 			}
 			for j, tc := range m.ToolCalls() {
 				tub := toolUseBlock{Type: "tool_use", ID: tc.ToolCallID(), Name: tc.ToolName(), Input: ensureInputMap(tc.ToolArgs())}

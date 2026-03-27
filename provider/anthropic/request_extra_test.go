@@ -191,7 +191,7 @@ func TestFindPrecedingAssistant_WithPreceding(t *testing.T) {
 	}
 	result := FindPrecedingAssistant(msgs, 2)
 	require.NotNil(t, result)
-	assert.Equal(t, "I am the assistant", result.Content())
+	assert.Equal(t, "I am the assistant", llm.AssistantText(result))
 }
 
 func TestIsEffortSupported(t *testing.T) {

@@ -302,7 +302,7 @@ func buildRequest(opts llm.Request) ([]byte, error) {
 		case llm.AssistantMessage:
 			mp := messagePayload{
 				Role:    "assistant",
-				Content: m.Content(),
+				Content: llm.AssistantText(m),
 			}
 			for _, tc := range m.ToolCalls() {
 				argsJSON, _ := json.Marshal(tc.ToolArgs())

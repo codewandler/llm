@@ -105,7 +105,7 @@ func TestUserMsg_Validate(t *testing.T) {
 // --- AssistantMessage Tests ---
 
 func TestAssistantMsg_MarshalJSON_ContentOnly(t *testing.T) {
-	msg := &assistantMsg{textMsg: textMsg{role: RoleAssistant, content: "Hello! How can I help?"}}
+	msg := Assistant("Hello! How can I help?")
 
 	data, err := json.Marshal(msg)
 	require.NoError(t, err)
@@ -115,13 +115,14 @@ func TestAssistantMsg_MarshalJSON_ContentOnly(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, "assistant", result["role"])
-	assert.Equal(t, "Hello! How can I help?", result["content"])
+	assert.Nil(t, result["content"])      // no longer emitted
+	assert.NotNil(t, result["content_blocks"]) // blocks are used instead
 	assert.Nil(t, result["tool_calls"]) // omitempty
 }
 
 func TestAssistantMsg_MarshalJSON_ToolCallsOnly(t *testing.T) {
 	msg := &assistantMsg{
-		textMsg:   textMsg{role: RoleAssistant, content: ""},
+		textMsg:   textMsg{role: RoleAssistant},
 		toolCalls: []tool.Call{tool.NewToolCall("call_123", "get_weather", map[string]any{"location": "Paris"})},
 	}
 
@@ -149,8 +150,9 @@ func TestAssistantMsg_MarshalJSON_ToolCallsOnly(t *testing.T) {
 
 func TestAssistantMsg_MarshalJSON_ContentAndToolCalls(t *testing.T) {
 	msg := &assistantMsg{
-		textMsg:   textMsg{role: RoleAssistant, content: "Let me check the weather for you."},
-		toolCalls: []tool.Call{tool.NewToolCall("call_456", "get_weather", map[string]any{"location": "London"})},
+		textMsg:       textMsg{role: RoleAssistant},
+		contentBlocks: []ContentBlock{{Kind: ContentBlockKindText, Text: "Let me check the weather for you."}},
+		toolCalls:     []tool.Call{tool.NewToolCall("call_456", "get_weather", map[string]any{"location": "London"})},
 	}
 
 	data, err := json.Marshal(msg)
@@ -161,7 +163,8 @@ func TestAssistantMsg_MarshalJSON_ContentAndToolCalls(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, "assistant", result["role"])
-	assert.Equal(t, "Let me check the weather for you.", result["content"])
+	assert.Nil(t, result["content"])          // no longer emitted
+	assert.NotNil(t, result["content_blocks"]) // blocks are used instead
 	assert.NotNil(t, result["tool_calls"])
 }
 
@@ -173,7 +176,7 @@ func TestAssistantMsg_Validate(t *testing.T) {
 	}{
 		{
 			name:    "content only",
-			msg:     &assistantMsg{textMsg: textMsg{role: RoleAssistant, content: "Hello"}},
+			msg:     &assistantMsg{textMsg: textMsg{role: RoleAssistant}, contentBlocks: []ContentBlock{{Kind: ContentBlockKindText, Text: "Hello"}}},
 			wantErr: false,
 		},
 		{
@@ -186,8 +189,9 @@ func TestAssistantMsg_Validate(t *testing.T) {
 		{
 			name: "content and tool calls",
 			msg: &assistantMsg{
-				textMsg:   textMsg{role: RoleAssistant, content: "Here's the result"},
-				toolCalls: []tool.Call{tool.NewToolCall("1", "test", nil)},
+				textMsg:       textMsg{role: RoleAssistant},
+				contentBlocks: []ContentBlock{{Kind: ContentBlockKindText, Text: "Here's the result"}},
+				toolCalls:     []tool.Call{tool.NewToolCall("1", "test", nil)},
 			},
 			wantErr: false,
 		},
@@ -468,7 +472,8 @@ func TestMessages_UnmarshalJSON_AssistantWithContent(t *testing.T) {
 
 	asstMsg, ok := msgs[0].(*assistantMsg)
 	require.True(t, ok)
-	assert.Equal(t, "Hello there!", asstMsg.content)
+	// Old JSON with flat "content" is restored via Assistant() → text block is auto-wrapped.
+	assert.Equal(t, "Hello there!", AssistantText(asstMsg))
 	assert.Empty(t, asstMsg.toolCalls)
 }
 
@@ -483,7 +488,8 @@ func TestMessages_UnmarshalJSON_AssistantWithContentAndToolCalls(t *testing.T) {
 
 	asstMsg, ok := msgs[0].(*assistantMsg)
 	require.True(t, ok)
-	assert.Equal(t, "Let me help.", asstMsg.content)
+	// Old JSON with flat "content" is restored via Assistant() → text block is auto-wrapped.
+	assert.Equal(t, "Let me help.", AssistantText(asstMsg))
 	require.Len(t, asstMsg.toolCalls, 1)
 	assert.Equal(t, "1", asstMsg.toolCalls[0].ToolCallID())
 }
@@ -572,7 +578,7 @@ func TestMessages_MarshalUnmarshalRoundTrip(t *testing.T) {
 	assert.Equal(t, "What's 2+2?", userMsg1.content)
 
 	asstMsg := restored[2].(*assistantMsg)
-	assert.Equal(t, "The answer is 4.", asstMsg.content)
+	assert.Equal(t, "The answer is 4.", AssistantText(asstMsg))
 
 	userMsg2 := restored[3].(*userMsg)
 	assert.Equal(t, "Thanks!", userMsg2.content)
@@ -614,7 +620,7 @@ func TestMessages_MarshalUnmarshalRoundTrip_WithToolCalls(t *testing.T) {
 
 	// Check final assistant message
 	finalMsg := restored[3].(*assistantMsg)
-	assert.Equal(t, "The weather in Paris is 22°C and sunny.", finalMsg.content)
+	assert.Equal(t, "The weather in Paris is 22°C and sunny.", AssistantText(finalMsg))
 }
 
 // --- Message Interface Tests ---
@@ -654,7 +660,115 @@ func TestMessage_RoleMethod(t *testing.T) {
 	}
 }
 
-// --- Backwards Compatibility Tests ---
+// --- Content Block JSON Round-Trip Tests ---
+
+// TestAssistantMsg_MarshalJSON_WithContentBlocks verifies that an assistant message
+// created via Assistant() has its ContentBlocks serialized as "content_blocks" in JSON.
+func TestAssistantMsg_MarshalJSON_WithContentBlocks(t *testing.T) {
+	msg := Assistant("The answer is 42.")
+
+	data, err := json.Marshal(msg)
+	require.NoError(t, err)
+
+	var raw map[string]any
+	require.NoError(t, json.Unmarshal(data, &raw))
+
+	assert.Equal(t, "assistant", raw["role"])
+	// content field is no longer emitted; only content_blocks.
+	assert.Nil(t, raw["content"])
+	blocks, ok := raw["content_blocks"].([]any)
+	require.True(t, ok, "content_blocks must be present in JSON")
+	require.Len(t, blocks, 1)
+	b := blocks[0].(map[string]any)
+	assert.Equal(t, "text", b["kind"])
+	assert.Equal(t, "The answer is 42.", b["text"])
+}
+
+// TestAssistantMsg_MarshalJSON_WithThinkingBlock verifies that thinking blocks
+// (including their signatures) survive marshal → unmarshal with zero mutation.
+func TestAssistantMsg_MarshalJSON_WithThinkingBlock(t *testing.T) {
+	const sig = "eyJhbGciOiJFZERTQSJ9.opaque-signature"
+	msg := AssistantWithBlocks([]ContentBlock{
+		{Kind: ContentBlockKindThinking, Text: "My reasoning", Signature: sig},
+		{Kind: ContentBlockKindText, Text: "The answer"},
+	})
+
+	data, err := json.Marshal(msg)
+	require.NoError(t, err)
+
+	var raw map[string]any
+	require.NoError(t, json.Unmarshal(data, &raw))
+
+	blocks, ok := raw["content_blocks"].([]any)
+	require.True(t, ok)
+	require.Len(t, blocks, 2)
+
+	b0 := blocks[0].(map[string]any)
+	assert.Equal(t, "thinking", b0["kind"])
+	assert.Equal(t, "My reasoning", b0["text"])
+	assert.Equal(t, sig, b0["signature"], "signature must survive JSON marshal")
+
+	b1 := blocks[1].(map[string]any)
+	assert.Equal(t, "text", b1["kind"])
+	assert.Equal(t, "The answer", b1["text"])
+}
+
+// TestMessages_RoundTrip_ContentBlocks verifies that a Messages slice containing
+// an assistant message with thinking+text blocks survives a full JSON round-trip,
+// with ContentBlocks, signatures, and Content() all preserved.
+func TestMessages_RoundTrip_ContentBlocks(t *testing.T) {
+	const sig = "sig-round-trip-must-survive"
+
+	original := Messages{
+		User("think about this"),
+		AssistantWithBlocks([]ContentBlock{
+			{Kind: ContentBlockKindThinking, Text: "reasoning", Signature: sig},
+			{Kind: ContentBlockKindText, Text: "answer"},
+		}),
+	}
+
+	data, err := json.Marshal(original)
+	require.NoError(t, err)
+
+	var restored Messages
+	require.NoError(t, json.Unmarshal(data, &restored))
+	require.Len(t, restored, 2)
+
+	am, ok := restored[1].(AssistantMessage)
+	require.True(t, ok)
+
+	blocks := am.ContentBlocks()
+	require.Len(t, blocks, 2)
+	assert.Equal(t, ContentBlockKindThinking, blocks[0].Kind)
+	assert.Equal(t, "reasoning", blocks[0].Text)
+	assert.Equal(t, sig, blocks[0].Signature, "signature must survive round-trip")
+	assert.Equal(t, ContentBlockKindText, blocks[1].Kind)
+	assert.Equal(t, "answer", blocks[1].Text)
+
+	// AssistantText() returns the text for providers that use flat text.
+	assert.Equal(t, "answer", AssistantText(am))
+}
+
+// TestMessages_RoundTrip_OldFormat_NoBlocks verifies backward compatibility:
+// old JSON without "content_blocks" deserializes correctly via the flat-text path,
+// and the restored message auto-wraps into a ContentBlock.
+func TestMessages_RoundTrip_OldFormat_NoBlocks(t *testing.T) {
+	oldJSON := `[{"role":"assistant","content":"Legacy response"}]`
+
+	var msgs Messages
+	require.NoError(t, json.Unmarshal([]byte(oldJSON), &msgs))
+	require.Len(t, msgs, 1)
+
+	am, ok := msgs[0].(AssistantMessage)
+	require.True(t, ok)
+
+	// Old format: no blocks in JSON → Assistant() is called → auto-wraps into text block.
+	assert.Equal(t, "Legacy response", AssistantText(am))
+	blocks := am.ContentBlocks()
+	require.Len(t, blocks, 1, "Assistant() must auto-wrap text into a ContentBlock")
+	assert.Equal(t, ContentBlockKindText, blocks[0].Kind)
+	assert.Equal(t, "Legacy response", blocks[0].Text)
+}
 
 func TestBackwardsCompatibility_OldJSONFormat(t *testing.T) {
 	oldFormatJSON := `[

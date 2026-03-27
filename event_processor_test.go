@@ -287,7 +287,7 @@ func TestStreamResponse_Message(t *testing.T) {
 
 	msg := result.Message()
 	assert.Equal(t, llm.RoleAssistant, msg.Role())
-	assert.Equal(t, "hello", msg.Content())
+	assert.Equal(t, "hello", llm.AssistantText(msg))
 	require.Len(t, msg.ToolCalls(), 1)
 	assert.Equal(t, "search", msg.ToolCalls()[0].ToolName())
 }

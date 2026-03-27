@@ -419,8 +419,8 @@ func buildRequest(opts llm.Request) (*bedrockruntime.ConverseStreamInput, error)
 
 		case llm.AssistantMessage:
 			var content []types.ContentBlock
-			if m.Content() != "" {
-				content = append(content, &types.ContentBlockMemberText{Value: m.Content()})
+			if llm.AssistantText(m) != "" {
+				content = append(content, &types.ContentBlockMemberText{Value: llm.AssistantText(m)})
 			}
 			for _, tc := range m.ToolCalls() {
 				inputDoc, err := toDocument(tc.ToolArgs())
