@@ -28,11 +28,13 @@ func TestNew_DefaultCredentials(t *testing.T) {
 	// Clear env vars to test default behavior
 	oldRegion := os.Getenv(EnvAWSRegion)
 	oldDefaultRegion := os.Getenv(EnvAWSDefaultRegion)
-	os.Unsetenv(EnvAWSRegion)
-	os.Unsetenv(EnvAWSDefaultRegion)
+	_ = os.Unsetenv(EnvAWSRegion)
+	_ = os.Unsetenv(EnvAWSDefaultRegion)
 	defer func() {
-		os.Setenv(EnvAWSRegion, oldRegion)
-		os.Setenv(EnvAWSDefaultRegion, oldDefaultRegion)
+		_ = os.Setenv(EnvAWSDefaultRegion, oldDefaultRegion)
+		_ = os.Setenv(EnvAWSRegion, oldRegion)
+		_ = os.Setenv(EnvAWSDefaultRegion, oldDefaultRegion)
+		_ = os.Setenv(EnvAWSRegion, oldRegion)
 	}()
 
 	// Without custom credentials provider, client is created immediately
@@ -184,13 +186,15 @@ func TestNew_ReadsRegionFromEnv(t *testing.T) {
 	oldRegion := os.Getenv(EnvAWSRegion)
 	oldDefaultRegion := os.Getenv(EnvAWSDefaultRegion)
 	defer func() {
-		os.Setenv(EnvAWSRegion, oldRegion)
-		os.Setenv(EnvAWSDefaultRegion, oldDefaultRegion)
+		_ = os.Setenv(EnvAWSDefaultRegion, oldDefaultRegion)
+		_ = os.Setenv(EnvAWSRegion, oldRegion)
+		_ = os.Setenv(EnvAWSDefaultRegion, oldDefaultRegion)
+		_ = os.Setenv(EnvAWSRegion, oldRegion)
 	}()
 
 	// Test AWS_REGION takes precedence
-	os.Setenv(EnvAWSRegion, RegionEUCentral1)
-	os.Setenv(EnvAWSDefaultRegion, RegionUSWest2)
+	_ = os.Setenv(EnvAWSRegion, RegionEUCentral1)
+	_ = os.Setenv(EnvAWSDefaultRegion, RegionUSWest2)
 
 	p := New()
 	assert.Equal(t, RegionEUCentral1, p.region)
@@ -202,13 +206,15 @@ func TestNew_ReadsDefaultRegionFromEnv(t *testing.T) {
 	oldRegion := os.Getenv(EnvAWSRegion)
 	oldDefaultRegion := os.Getenv(EnvAWSDefaultRegion)
 	defer func() {
-		os.Setenv(EnvAWSRegion, oldRegion)
-		os.Setenv(EnvAWSDefaultRegion, oldDefaultRegion)
+		_ = os.Setenv(EnvAWSDefaultRegion, oldDefaultRegion)
+		_ = os.Setenv(EnvAWSRegion, oldRegion)
+		_ = os.Setenv(EnvAWSDefaultRegion, oldDefaultRegion)
+		_ = os.Setenv(EnvAWSRegion, oldRegion)
 	}()
 
 	// Test AWS_DEFAULT_REGION is used when AWS_REGION is not set
-	os.Unsetenv(EnvAWSRegion)
-	os.Setenv(EnvAWSDefaultRegion, RegionAPNortheast1)
+	_ = os.Unsetenv(EnvAWSRegion)
+	_ = os.Setenv(EnvAWSDefaultRegion, RegionAPNortheast1)
 
 	p := New()
 	assert.Equal(t, RegionAPNortheast1, p.region)
@@ -223,9 +229,9 @@ func TestNew_WithProfile(t *testing.T) {
 func TestWithRegionFromEnv(t *testing.T) {
 	// Save and restore env vars
 	oldRegion := os.Getenv(EnvAWSRegion)
-	defer os.Setenv(EnvAWSRegion, oldRegion)
+	defer func() { _ = os.Setenv(EnvAWSRegion, oldRegion) }()
 
-	os.Setenv(EnvAWSRegion, RegionAPNortheast1)
+	_ = os.Setenv(EnvAWSRegion, RegionAPNortheast1)
 
 	// WithRegion overrides env, then WithRegionFromEnv re-reads from env
 	p := New(
@@ -239,9 +245,9 @@ func TestWithRegionFromEnv(t *testing.T) {
 func TestWithRegion_OverridesEnv(t *testing.T) {
 	// Save and restore env vars
 	oldRegion := os.Getenv(EnvAWSRegion)
-	defer os.Setenv(EnvAWSRegion, oldRegion)
+	defer func() { _ = os.Setenv(EnvAWSRegion, oldRegion) }()
 
-	os.Setenv(EnvAWSRegion, RegionAPNortheast1)
+	_ = os.Setenv(EnvAWSRegion, RegionAPNortheast1)
 
 	// WithRegion should override the env var
 	p := New(WithRegion(RegionEUWest1))
@@ -254,8 +260,10 @@ func TestGetRegionFromEnv(t *testing.T) {
 	oldRegion := os.Getenv(EnvAWSRegion)
 	oldDefaultRegion := os.Getenv(EnvAWSDefaultRegion)
 	defer func() {
-		os.Setenv(EnvAWSRegion, oldRegion)
-		os.Setenv(EnvAWSDefaultRegion, oldDefaultRegion)
+		_ = os.Setenv(EnvAWSDefaultRegion, oldDefaultRegion)
+		_ = os.Setenv(EnvAWSRegion, oldRegion)
+		_ = os.Setenv(EnvAWSDefaultRegion, oldDefaultRegion)
+		_ = os.Setenv(EnvAWSRegion, oldRegion)
 	}()
 
 	tests := []struct {
@@ -293,14 +301,14 @@ func TestGetRegionFromEnv(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			if tt.awsRegion != "" {
-				os.Setenv(EnvAWSRegion, tt.awsRegion)
+				_ = os.Setenv(EnvAWSRegion, tt.awsRegion)
 			} else {
-				os.Unsetenv(EnvAWSRegion)
+				_ = os.Unsetenv(EnvAWSRegion)
 			}
 			if tt.awsDefault != "" {
-				os.Setenv(EnvAWSDefaultRegion, tt.awsDefault)
+				_ = os.Setenv(EnvAWSDefaultRegion, tt.awsDefault)
 			} else {
-				os.Unsetenv(EnvAWSDefaultRegion)
+				_ = os.Unsetenv(EnvAWSDefaultRegion)
 			}
 
 			result := getRegionFromEnv()

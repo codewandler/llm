@@ -10,7 +10,7 @@ import (
 //go:embed models.json
 var modelsJSON []byte
 
-// ModelData represents the full structure of a model from OpenRouter API
+// ModelData represents the full structure of a model from OpenRouter API.
 type ModelData struct {
 	ID            string `json:"id"`
 	CanonicalSlug string `json:"canonical_slug"`

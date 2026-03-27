@@ -45,7 +45,7 @@ type toolRegistration interface {
 	parse(raw Call) (ParsedToolCall, error)
 }
 
-// Ensure Spec implements toolRegistration
+// Ensure Spec implements toolRegistration.
 var _ toolRegistration = (*Spec[struct{}])(nil)
 
 // Spec is a type-safe tool specification that pairs a tool name/description

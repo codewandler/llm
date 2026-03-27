@@ -19,7 +19,7 @@ const (
 	defaultBaseURL = "https://openrouter.ai/api"
 	providerName   = "openrouter"
 
-	// DefaultModel is the recommended default model for OpenRouter
+	// DefaultModel is the recommended default model for OpenRouter.
 	DefaultModel = "auto"
 )
 
@@ -97,6 +97,7 @@ func (p *Provider) FetchModels(ctx context.Context) ([]llm.Model, error) {
 	if err != nil {
 		return nil, fmt.Errorf("openrouter list models: %w", err)
 	}
+	//nolint:errcheck // intentional: defer Close is only for cleanup, failure after response reading is non-fatal
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
@@ -157,6 +158,8 @@ func (p *Provider) CreateStream(ctx context.Context, opts llm.Request) (llm.Stre
 	}
 
 	if resp.StatusCode != http.StatusOK {
+		//nolint:errcheck // intentional: defer Close is only for cleanup, failure after response reading is non-fatal
+		//nolint:errcheck // intentional: defer Close is only for cleanup, failure after response reading is non-fatal
 		defer resp.Body.Close()
 		errBody, _ := io.ReadAll(resp.Body)
 		return nil, llm.NewErrAPIError(llm.ProviderNameOpenRouter, resp.StatusCode, string(errBody))

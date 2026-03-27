@@ -59,7 +59,7 @@ func TestForEachDataLine_ContextCancellation(t *testing.T) {
 	cancel() // already cancelled
 
 	pr, pw := io.Pipe()
-	t.Cleanup(func() { pw.Close() })
+	t.Cleanup(func() { _ = pw.Close() }) // nolint:errcheck
 
 	done := make(chan error, 1)
 	go func() {
@@ -79,12 +79,12 @@ func TestForEachDataLine_ContextCancelledMidStream(t *testing.T) {
 	t.Cleanup(cancel)
 
 	pr, pw := io.Pipe()
-	t.Cleanup(func() { pw.Close() })
+	t.Cleanup(func() { _ = pw.Close() }) // nolint:errcheck
 
 	// Write one event then block.
 	go func() {
-		fmt.Fprintln(pw, "data: first")
-		fmt.Fprintln(pw, "")
+		_, _ = fmt.Fprintln(pw, "data: first")
+		_, _ = fmt.Fprintln(pw, "")
 		// Cancel after the first event is written, then block indefinitely.
 		cancel()
 		// Keep pipe open so scanner blocks on next read.

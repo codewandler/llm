@@ -3,8 +3,9 @@ package cmds
 import (
 	"testing"
 
-	"github.com/codewandler/llm"
 	"github.com/stretchr/testify/require"
+
+	"github.com/codewandler/llm"
 )
 
 func TestBuildInferSpec_Default_NoDemoTools(t *testing.T) {

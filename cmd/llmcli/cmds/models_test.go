@@ -6,8 +6,9 @@ import (
 	"os"
 	"testing"
 
-	"github.com/codewandler/llm"
 	"github.com/stretchr/testify/require"
+
+	"github.com/codewandler/llm"
 )
 
 func TestPrintAliasEntry_SortsTargetsDeterministically(t *testing.T) {

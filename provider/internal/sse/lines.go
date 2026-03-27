@@ -61,9 +61,7 @@ func ForEachDataLine(ctx context.Context, r io.Reader, fn func(Event) bool) erro
 				pendingEvent = strings.TrimSpace(strings.TrimPrefix(line, "event:"))
 			case strings.HasPrefix(line, "data:"):
 				data := strings.TrimPrefix(line, "data:")
-				if strings.HasPrefix(data, " ") {
-					data = data[1:]
-				}
+				data = strings.TrimPrefix(data, " ")
 				if !fn(Event{Name: pendingEvent, Data: data}) {
 					return nil
 				}

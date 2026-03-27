@@ -90,7 +90,7 @@ type ProviderError struct {
 }
 
 // Error returns a human-readable error string in the form:
-// "<provider>: <sentinel>: <message>" or "<provider>: <sentinel>: <message>: <cause>"
+// "<provider>: <sentinel>: <message>" or "<provider>: <sentinel>: <message>: <cause>".
 func (e *ProviderError) Error() string {
 	base := fmt.Sprintf("%s: %s: %s", e.Provider, e.Sentinel.Error(), e.Message)
 	if e.Cause != nil {

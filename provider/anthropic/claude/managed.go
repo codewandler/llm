@@ -57,11 +57,10 @@ func (p *ManagedTokenProvider) Token(ctx context.Context) (*Token, error) {
 			return nil, fmt.Errorf("save refreshed token: %w", err)
 		}
 
-		// Notify callback
+		// Notify callback — best-effort; notification failure does not abort the refresh.
 		if p.onRefreshed != nil {
-			if err := p.onRefreshed(ctx, p.key, newToken); err != nil {
-				// Log but don't fail - token refresh succeeded
-			}
+			//nolint:errcheck // intentional: callback failure is non-fatal
+			_ = p.onRefreshed(ctx, p.key, newToken)
 		}
 
 		token = newToken
@@ -90,8 +89,9 @@ func (p *ManagedTokenProvider) Refresh(ctx context.Context) (*Token, error) {
 		return nil, fmt.Errorf("save refreshed token: %w", err)
 	}
 
+	//nolint:errcheck // intentional: callback failure is non-fatal
 	if p.onRefreshed != nil {
-		p.onRefreshed(ctx, p.key, newToken)
+		_ = p.onRefreshed(ctx, p.key, newToken)
 	}
 
 	p.cached = newToken

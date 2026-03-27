@@ -13,16 +13,16 @@ import (
 
 // Anthropic Claude models.
 const (
-	// Claude latest (recommended)
+	// Claude latest (recommended).
 	ModelHaikuLatest  = "anthropic.claude-haiku-4-5-20251001-v1:0"
 	ModelOpusLatest   = "anthropic.claude-opus-4-6-v1"
 	ModelSonnetLatest = "anthropic.claude-sonnet-4-6"
 
-	// Claude 4.5 series
+	// Claude 4.5 series.
 	ModelOpus45   = "anthropic.claude-opus-4-5-20251101-v1:0"
 	ModelSonnet45 = "anthropic.claude-sonnet-4-5-20250929-v1:0"
 
-	// Claude 3.x series
+	// Claude 3.x series.
 	ModelHaiku3   = "anthropic.claude-3-haiku-20240307-v1:0"
 	ModelSonnet35 = "anthropic.claude-3-5-sonnet-20240620-v1:0"
 	ModelSonnet37 = "anthropic.claude-3-7-sonnet-20250219-v1:0"
@@ -51,24 +51,24 @@ const (
 
 // Meta Llama models.
 const (
-	// Llama 4
+	// Llama 4.
 	ModelLlama4Maverick = "meta.llama4-maverick-17b-instruct-v1:0"
 	ModelLlama4Scout    = "meta.llama4-scout-17b-instruct-v1:0"
 
-	// Llama 3.3
+	// Llama 3.3.
 	ModelLlama33_70B = "meta.llama3-3-70b-instruct-v1:0"
 
-	// Llama 3.2
+	// Llama 3.2.
 	ModelLlama32_1B  = "meta.llama3-2-1b-instruct-v1:0"
 	ModelLlama32_3B  = "meta.llama3-2-3b-instruct-v1:0"
 	ModelLlama32_11B = "meta.llama3-2-11b-instruct-v1:0"
 	ModelLlama32_90B = "meta.llama3-2-90b-instruct-v1:0"
 
-	// Llama 3.1
+	// Llama 3.1.
 	ModelLlama31_8B  = "meta.llama3-1-8b-instruct-v1:0"
 	ModelLlama31_70B = "meta.llama3-1-70b-instruct-v1:0"
 
-	// Llama 3
+	// Llama 3.
 	ModelLlama3_8B  = "meta.llama3-8b-instruct-v1:0"
 	ModelLlama3_70B = "meta.llama3-70b-instruct-v1:0"
 )
@@ -254,42 +254,6 @@ var ModelAliases = map[string]string{
 	"haiku":  ModelHaikuLatest,
 	"sonnet": ModelSonnetLatest,
 	"opus":   ModelOpusLatest,
-}
-
-// calculateCost computes the cost in USD for the given usage and model.
-// Returns 0 if the model is unknown or has no pricing data.
-func calculateCost(model string, usage *llm.Usage) float64 {
-	if usage == nil {
-		return 0
-	}
-
-	// Strip inference profile prefix (us., eu., global., etc.) to match registry
-	modelID := model
-	if idx := strings.Index(model, "."); idx != -1 {
-		// Check if prefix is a region indicator (us, eu, global, apac, etc.)
-		prefix := model[:idx]
-		if prefix == PrefixUS || prefix == PrefixEU || prefix == PrefixGlobal || prefix == PrefixAPAC || prefix == "ap" {
-			modelID = model[idx+1:]
-		}
-	}
-
-	info, ok := modelRegistry[modelID]
-	if !ok {
-		return 0 // unknown model, can't calculate cost
-	}
-
-	// Regular input = total input minus cached (read) and written-to-cache tokens
-	regularInput := usage.InputTokens - usage.CacheReadTokens - usage.CacheWriteTokens
-	if regularInput < 0 {
-		regularInput = 0
-	}
-
-	cost := (float64(regularInput) / 1_000_000) * info.InputPrice
-	cost += (float64(usage.CacheReadTokens) / 1_000_000) * info.CachedInputPrice
-	cost += (float64(usage.CacheWriteTokens) / 1_000_000) * info.CacheWritePrice
-	cost += (float64(usage.OutputTokens) / 1_000_000) * info.OutputPrice
-
-	return cost
 }
 
 // fillCost calculates the cost for the given usage and model and populates

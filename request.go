@@ -129,7 +129,7 @@ func (o Request) Validate() error {
 
 	// Validate Temperature
 	if o.Temperature < 0 || o.Temperature > 2.0 {
-		return errors.New("Temperature must be between 0.0 and 2.0")
+		return errors.New("temperature must be between 0.0 and 2.0")
 	}
 
 	// Validate TopP

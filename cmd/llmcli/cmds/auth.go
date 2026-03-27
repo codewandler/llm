@@ -11,8 +11,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/codewandler/llm/provider/anthropic/claude"
 	"github.com/spf13/cobra"
+
+	"github.com/codewandler/llm/provider/anthropic/claude"
 )
 
 const (

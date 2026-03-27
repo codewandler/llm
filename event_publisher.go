@@ -5,8 +5,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/codewandler/llm/tool"
 	gonanoid "github.com/matoous/go-nanoid/v2"
+
+	"github.com/codewandler/llm/tool"
 )
 
 type eventPub struct {
@@ -35,7 +36,7 @@ func createEnvelope(s *eventPub, payload Event) Envelope {
 		Meta: EventMeta{
 			Seq:       atomic.AddUint64(&s.seq, 1),
 			CreatedAt: time.Now(),
-			After:     time.Now().Sub(s.createdAt),
+			After:     time.Since(s.createdAt),
 			RequestID: s.id,
 		},
 	}

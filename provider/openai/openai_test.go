@@ -8,11 +8,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/codewandler/llm/tool"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/codewandler/llm"
+	"github.com/codewandler/llm/tool"
 )
 
 // testMeta returns a ccStreamMeta for testing.
@@ -143,7 +143,7 @@ func TestBuildRequest_GenerationParameters(t *testing.T) {
 				// Unmarshal to map to check field presence
 				var reqMap map[string]any
 				body, _ := json.Marshal(r)
-				json.Unmarshal(body, &reqMap)
+				_ = json.Unmarshal(body, &reqMap)
 				_, hasMaxTokens := reqMap["max_tokens"]
 				_, hasTemperature := reqMap["temperature"]
 				_, hasTopP := reqMap["top_p"]
@@ -359,7 +359,7 @@ data: [DONE]
 	var toolCalls []*llm.DeltaEvent
 	for event := range ch {
 		if event.Type == llm.StreamEventDelta {
-			if de, ok := event.Data.(*llm.DeltaEvent); ok && de.Kind == llm.DeltaTypeTool {
+			if de, ok := event.Data.(*llm.DeltaEvent); ok && de.Kind == llm.DeltaKindTool {
 				toolCalls = append(toolCalls, de)
 			}
 		}

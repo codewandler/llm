@@ -69,6 +69,7 @@ func downloadAndExtract() error {
 	if err != nil {
 		return fmt.Errorf("minimax bpe: download tokenizer: %w", err)
 	}
+	//nolint:errcheck // intentional: defer Close is only for cleanup, failure after response reading is non-fatal
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {

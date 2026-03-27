@@ -128,6 +128,7 @@ func (p *Provider) FetchModels(ctx context.Context) ([]llm.Model, error) {
 	if err != nil {
 		return nil, fmt.Errorf("ollama list models: %w", err)
 	}
+	//nolint:errcheck // intentional: defer Close is only for cleanup, failure after response reading is non-fatal
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
@@ -202,6 +203,7 @@ func (p *Provider) downloadModel(ctx context.Context, modelID string) error {
 	if err != nil {
 		return llm.NewErrRequestFailed(llm.ProviderNameOllama, err)
 	}
+	//nolint:errcheck // intentional: defer Close is only for cleanup, failure after response reading is non-fatal
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
@@ -264,6 +266,8 @@ func (p *Provider) CreateStream(ctx context.Context, opts llm.Request) (llm.Stre
 	}
 
 	if resp.StatusCode != http.StatusOK {
+		//nolint:errcheck // intentional: defer Close is only for cleanup, failure after response reading is non-fatal
+		//nolint:errcheck // intentional: defer Close is only for cleanup, failure after response reading is non-fatal
 		defer resp.Body.Close()
 		errBody, _ := io.ReadAll(resp.Body)
 		return nil, llm.NewErrAPIError(llm.ProviderNameOllama, resp.StatusCode, string(errBody))
@@ -425,6 +429,7 @@ type streamChunk struct {
 
 func parseStream(ctx context.Context, body io.ReadCloser, pub llm.Publisher, meta streamMeta) {
 	defer pub.Close()
+	//nolint:errcheck // intentional: defer Close is only for cleanup, failure after body consumption is non-fatal
 	defer body.Close()
 
 	scanner := bufio.NewScanner(body)

@@ -124,12 +124,12 @@ func (h *httpLogHandler) Handle(_ context.Context, r slog.Record) error {
 }
 
 func (h *httpLogHandler) printRequest(attrs map[string]string) {
-	fmt.Fprintf(h.w, "\n──► %s %s\n", attrs["method"], attrs["url"])
+	_, _ = fmt.Fprintf(h.w, "\n──► %s %s\n", attrs["method"], attrs["url"])
 	h.printHeaders(attrs, "req.header.", nil)
 	if body, ok := attrs["req.body"]; ok {
-		fmt.Fprintln(h.w, indentAll(prettyJSON(body), "    "))
+		_, _ = fmt.Fprintln(h.w, indentAll(prettyJSON(body), "    "))
 	}
-	fmt.Fprintln(h.w)
+	_, _ = fmt.Fprintln(h.w)
 }
 
 func (h *httpLogHandler) printResponse(attrs map[string]string) {
@@ -137,13 +137,13 @@ func (h *httpLogHandler) printResponse(attrs map[string]string) {
 	h.flushSSEFrame()
 	h.lineBuf.Reset()
 
-	fmt.Fprintf(h.w, "◄── %s  (%s)\n", attrs["status"], attrs["duration"])
+	_, _ = fmt.Fprintf(h.w, "◄── %s  (%s)\n", attrs["status"], attrs["duration"])
 	var allowlist map[string]bool
 	if !h.allHeaders {
 		allowlist = responseHeaderAllowlist
 	}
 	h.printHeaders(attrs, "resp.header.", allowlist)
-	fmt.Fprintln(h.w)
+	_, _ = fmt.Fprintln(h.w)
 }
 
 // feedChunk accumulates raw bytes from the stream and processes complete lines.
@@ -185,7 +185,7 @@ func (h *httpLogHandler) handleSSELine(line string) {
 
 	default:
 		// Non-SSE line (e.g. HTTP/1.1 trailers) — print as-is
-		fmt.Fprintf(h.w, "    %s\n", line)
+		_, _ = fmt.Fprintf(h.w, "    %s\n", line)
 	}
 }
 
@@ -216,28 +216,28 @@ func (h *httpLogHandler) flushSSEFrame() {
 	// If token output was printed to stdout, emit a blank separator line first
 	// so the SSE frame starts on a clean line.
 	if h.pendingNewline {
-		fmt.Fprintln(h.w)
+		_, _ = fmt.Fprintln(h.w)
 		h.pendingNewline = false
 	}
 
 	if noisySSEEvents[eventType] {
-		fmt.Fprintf(h.w, "\n    %s[%s]%s\n", ansiBold, eventType, ansiReset)
+		_, _ = fmt.Fprintf(h.w, "\n    %s[%s]%s\n", ansiBold, eventType, ansiReset)
 		return
 	}
 
-	fmt.Fprintf(h.w, "\n    %s[%s]%s\n", ansiBold, eventType, ansiReset)
+	_, _ = fmt.Fprintf(h.w, "\n    %s[%s]%s\n", ansiBold, eventType, ansiReset)
 
 	if data == "[DONE]" {
-		fmt.Fprintf(h.w, "    [DONE]\n")
+		_, _ = fmt.Fprintf(h.w, "    [DONE]\n")
 		return
 	}
 
 	pretty := prettyJSON(data)
-	fmt.Fprintln(h.w, indentAll(pretty, "    "))
+	_, _ = fmt.Fprintln(h.w, indentAll(pretty, "    "))
 }
 
 func (h *httpLogHandler) printError(attrs map[string]string) {
-	fmt.Fprintf(h.w, "%s✗   %s %s  (%s)  error: %s%s\n",
+	_, _ = fmt.Fprintf(h.w, "%s✗   %s %s  (%s)  error: %s%s\n",
 		ansiBold, attrs["method"], attrs["url"], attrs["duration"], attrs["error"], ansiReset)
 }
 
@@ -265,7 +265,7 @@ func (h *httpLogHandler) printHeaders(attrs map[string]string, prefix string, al
 		if strings.EqualFold(name, "Authorization") {
 			v = redactAuth(v)
 		}
-		fmt.Fprintf(h.w, "    %s: %s\n", name, v)
+		_, _ = fmt.Fprintf(h.w, "    %s: %s\n", name, v)
 	}
 }
 

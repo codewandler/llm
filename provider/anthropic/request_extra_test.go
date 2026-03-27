@@ -4,10 +4,11 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/codewandler/llm"
-	"github.com/codewandler/llm/tool"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/codewandler/llm"
+	"github.com/codewandler/llm/tool"
 )
 
 func buildRequestMap(t *testing.T, opts RequestOptions) map[string]any {

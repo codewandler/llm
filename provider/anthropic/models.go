@@ -9,11 +9,11 @@ import (
 
 // Model ID constants for programmatic use.
 const (
-	// Claude 4.6 (current)
+	// Claude 4.6 (current).
 	ModelOpus   = "claude-opus-4-6"
 	ModelSonnet = "claude-sonnet-4-6"
 
-	// Claude 4.5 (Haiku latest)
+	// Claude 4.5 (Haiku latest).
 	ModelHaiku = "claude-haiku-4-5-20251001"
 )
 
@@ -26,7 +26,7 @@ var ModelAliases = map[string]string{
 }
 
 // Model pricing in USD per million tokens.
-// Source: https://www.anthropic.com/pricing (as of 2025)
+// Source: https://www.anthropic.com/pricing (as of 2025).
 type modelPricing struct {
 	InputPrice       float64 // Regular input tokens
 	OutputPrice      float64 // Output tokens

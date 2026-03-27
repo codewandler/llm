@@ -4,9 +4,10 @@ import (
 	"context"
 	"testing"
 
-	"github.com/codewandler/llm"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/codewandler/llm"
 )
 
 func TestProviderNameAndModels(t *testing.T) {

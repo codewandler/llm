@@ -62,8 +62,6 @@ func (r *result) applyDelta(ev *DeltaEvent) {
 func (r *result) applyUsage(u *Usage) {
 	if r.usage == nil {
 		r.usage = u
-	} else {
-		// TODO merge usage
 	}
 }
 
@@ -289,9 +287,7 @@ func (r *StreamProcessor) dispatchToolCalls() {
 		}
 	}
 
-	for _, tr := range results {
-		r.result.toolResults = append(r.result.toolResults, tr)
-	}
+	r.result.toolResults = append(r.result.toolResults, results...)
 }
 
 func (r *StreamProcessor) processEvent(e Envelope) {

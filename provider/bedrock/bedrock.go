@@ -15,6 +15,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime"
 	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime/document"
 	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime/types"
+
 	"github.com/codewandler/llm"
 	"github.com/codewandler/llm/sortmap"
 	"github.com/codewandler/llm/tool"
@@ -651,6 +652,7 @@ func parseStream(ctx context.Context, output *bedrockruntime.ConverseStreamOutpu
 	defer pub.Close()
 
 	stream := output.GetStream()
+	//nolint:errcheck // intentional: defer Close is only for cleanup, failure is non-fatal
 	defer stream.Close()
 
 	logEvent := func(eventType string, v any) {

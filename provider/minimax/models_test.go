@@ -3,9 +3,10 @@ package minimax
 import (
 	"testing"
 
-	"github.com/codewandler/llm"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/codewandler/llm"
 )
 
 func TestFillCost_UnknownModel(t *testing.T) {
@@ -45,10 +46,10 @@ func TestFillCost_M27_WithCache(t *testing.T) {
 	}
 	FillCost(ModelM27, u)
 
-	expectedInput := float64(1_000_000) / 1_000_000 * 0.30          // regular input only
-	expectedCacheRead := float64(300_000) / 1_000_000 * 0.06        // $0.06/M
-	expectedCacheWrite := float64(200_000) / 1_000_000 * 0.375      // $0.375/M
-	expectedOutput := float64(500_000) / 1_000_000 * 1.20           // $1.20/M
+	expectedInput := float64(1_000_000) / 1_000_000 * 0.30     // regular input only
+	expectedCacheRead := float64(300_000) / 1_000_000 * 0.06   // $0.06/M
+	expectedCacheWrite := float64(200_000) / 1_000_000 * 0.375 // $0.375/M
+	expectedOutput := float64(500_000) / 1_000_000 * 1.20      // $1.20/M
 	expectedTotal := expectedInput + expectedCacheRead + expectedCacheWrite + expectedOutput
 
 	assert.InDelta(t, expectedInput, u.InputCost, 1e-10, "InputCost")

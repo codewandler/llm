@@ -48,6 +48,7 @@ func (p *Provider) streamCompletions(ctx context.Context, opts llm.Request) (llm
 		return nil, llm.NewErrRequestFailed(llm.ProviderNameOpenAI, err)
 	}
 	if resp.StatusCode != http.StatusOK {
+		//nolint:errcheck // intentional: defer Close is only for cleanup, failure after response reading is non-fatal
 		defer resp.Body.Close()
 		errBody, _ := io.ReadAll(resp.Body)
 		return nil, llm.NewErrAPIError(llm.ProviderNameOpenAI, resp.StatusCode, string(errBody))
@@ -278,6 +279,7 @@ type ccToolAccum struct {
 
 func ccParseStream(ctx context.Context, body io.ReadCloser, pub llm.Publisher, meta ccStreamMeta) {
 	defer pub.Close()
+	//nolint:errcheck // intentional: defer Close is only for cleanup, failure after body consumption is non-fatal
 	defer body.Close()
 
 	activeTools := make(map[int]*ccToolAccum)

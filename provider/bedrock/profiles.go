@@ -58,7 +58,7 @@ var validPrefixes = []string{
 // -----------------------------------------------------------------------------
 
 // computeRegionPrefix determines the inference profile prefix for an AWS region.
-// Examples: "us-east-1" -> "us", "eu-central-1" -> "eu", "ap-northeast-1" -> "apac"
+// Examples: "us-east-1" -> "us", "eu-central-1" -> "eu", "ap-northeast-1" -> "apac".
 func computeRegionPrefix(region string) string {
 	for regionPrefix, profilePrefix := range regionPrefixes {
 		if len(region) >= len(regionPrefix) && region[:len(regionPrefix)] == regionPrefix {

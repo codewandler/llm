@@ -38,12 +38,15 @@ func isOllamaAvailable() bool {
 	if err != nil {
 		return false
 	}
-	defer resp.Body.Close()
+	defer resp.Body.Close() // nolint:errcheck
 	return resp.StatusCode == http.StatusOK
 }
 
 // isBedrockAvailable checks if AWS credentials are configured for Bedrock.
 func isBedrockAvailable() bool {
+	if os.Getenv("LLM_TEST_BEDROCK_ENABLED") != "1" {
+		return false
+	}
 	// Check environment variables
 	if os.Getenv(bedrock.EnvAWSAccessKeyID) != "" {
 		return true
@@ -136,12 +139,6 @@ func TestProviders(t *testing.T) {
 			skip:     os.Getenv("MINIMAX_API_KEY") == "",
 			skipMsg:  "requires MINIMAX_API_KEY",
 		},
-		/*{
-			name:     "ollama",
-			provider: ollama.New(),
-			skip:     !isOllamaAvailable(),
-			skipMsg:  "requires ollama running on localhost:11434",
-		},*/
 	}
 
 	for _, tt := range tests {

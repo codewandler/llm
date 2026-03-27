@@ -2,7 +2,6 @@ package router
 
 import (
 	"errors"
-	"fmt"
 	"regexp"
 	"strings"
 
@@ -28,33 +27,6 @@ type resolvedTarget struct {
 	providerType string // provider type, e.g., "anthropic"
 	modelID      string // underlying model ID, e.g., "claude-sonnet-4-5"
 	fullID       string // fully qualified ID: "work-claude/anthropic/claude-sonnet-4-5"
-}
-
-// resolveTarget resolves an AliasTarget to a resolvedTarget.
-func (p *Provider) resolveTarget(target AliasTarget) (resolvedTarget, error) {
-	prov, ok := p.providers[target.Provider]
-	if !ok {
-		return resolvedTarget{}, fmt.Errorf("%w: %s", ErrProviderNotFound, target.Provider)
-	}
-
-	// Resolve local alias if present
-	modelID := target.Model
-	if localAliases, ok := p.localAliases[target.Provider]; ok {
-		if resolved, ok := localAliases[modelID]; ok {
-			modelID = resolved
-		}
-	}
-
-	providerType := p.providerTypes[target.Provider]
-	fullID := fmt.Sprintf("%s/%s/%s", target.Provider, providerType, modelID)
-
-	return resolvedTarget{
-		provider:     prov,
-		providerName: target.Provider,
-		providerType: providerType,
-		modelID:      modelID,
-		fullID:       fullID,
-	}, nil
 }
 
 // isRetriableError checks if an error should trigger failover to the next target.

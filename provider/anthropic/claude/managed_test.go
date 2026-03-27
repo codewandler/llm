@@ -155,7 +155,7 @@ func TestManagedTokenProvider_Token_RefreshesExpiredToken(t *testing.T) {
 	// Setup mock refresh server
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]any{
+		_ = json.NewEncoder(w).Encode(map[string]any{
 			"access_token":  "refreshed-access",
 			"refresh_token": "refreshed-refresh",
 			"expires_in":    3600,
@@ -195,7 +195,7 @@ func TestManagedTokenProvider_Token_RefreshError(t *testing.T) {
 	// Setup mock server that returns error
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusUnauthorized)
-		json.NewEncoder(w).Encode(map[string]any{
+		_ = json.NewEncoder(w).Encode(map[string]any{
 			"error": "invalid_grant",
 		})
 	}))
@@ -229,7 +229,7 @@ func TestManagedTokenProvider_Token_RefreshError(t *testing.T) {
 func TestManagedTokenProvider_Token_CallsOnRefreshed(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]any{
+		_ = json.NewEncoder(w).Encode(map[string]any{
 			"access_token":  "new-access",
 			"refresh_token": "new-refresh",
 			"expires_in":    3600,
@@ -325,7 +325,7 @@ func TestManagedTokenProvider_Key(t *testing.T) {
 func TestManagedTokenProvider_Refresh_Success(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]any{
+		_ = json.NewEncoder(w).Encode(map[string]any{
 			"access_token":  "force-refreshed-access",
 			"refresh_token": "force-refreshed-refresh",
 			"expires_in":    7200,
@@ -420,7 +420,7 @@ func TestManagedTokenProvider_ConcurrentAccess(t *testing.T) {
 	assert.Equal(t, 100, count)
 }
 
-// Verify interface compliance
+// Verify interface compliance.
 var _ TokenStore = (*mockTokenStore)(nil)
 var _ TokenProvider = (*ManagedTokenProvider)(nil)
 var _ TokenRefresher = (*ManagedTokenProvider)(nil)

@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/codewandler/llm/tool"
 	"github.com/spf13/cobra"
 
 	"github.com/codewandler/llm"
+	"github.com/codewandler/llm/tool"
 )
 
 // NewInferCmd returns the infer command.

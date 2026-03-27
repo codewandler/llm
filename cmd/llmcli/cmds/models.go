@@ -11,7 +11,7 @@ import (
 	"github.com/codewandler/llm"
 )
 
-// top-level aliases shown in their own section
+// Top-level aliases shown in their own section.
 var topLevelAliases = []string{"fast", "default", "powerful"}
 
 // NewModelsCmd returns the models command.

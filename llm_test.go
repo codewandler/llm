@@ -3,9 +3,10 @@ package llm
 import (
 	"testing"
 
-	"github.com/codewandler/llm/tool"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/codewandler/llm/tool"
 )
 
 func TestStreamOptions_Validate(t *testing.T) {

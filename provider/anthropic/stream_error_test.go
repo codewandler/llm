@@ -6,9 +6,10 @@ import (
 	"io"
 	"testing"
 
-	"github.com/codewandler/llm"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/codewandler/llm"
 )
 
 func TestParseStream_ContextCancellation(t *testing.T) {
@@ -16,7 +17,7 @@ func TestParseStream_ContextCancellation(t *testing.T) {
 	cancel() // cancel before ParseStream is called
 
 	pr, pw := io.Pipe()
-	t.Cleanup(func() { pw.Close() }) // prevent goroutine leak if test fails
+	t.Cleanup(func() { _ = pw.Close() }) // nolint:errcheck // prevent goroutine leak if test fails
 
 	ch := ParseStream(ctx, io.NopCloser(pr), ParseOpts{
 		RequestedModel: "claude-sonnet-4-5",

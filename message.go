@@ -201,7 +201,7 @@ func ToolErr(toolCallID, output string) ToolMessage {
 func (m *systemMsg) isSystem()        {}
 func (m *userMsg) isUser()            {}
 func (m *toolMsg) ToolCallID() string { return m.toolCallID }
-func (m *toolMsg) ToolOutput() string { return m.textMsg.content }
+func (m *toolMsg) ToolOutput() string { return m.content }
 func (m *toolMsg) IsError() bool      { return m.isError }
 func (m *toolMsg) isTool()            {}
 func (m *assistantMsg) isAssistant()  {}

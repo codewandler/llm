@@ -5,9 +5,10 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/codewandler/llm"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/codewandler/llm"
 )
 
 // mockProvider is a test provider that can be configured to succeed or fail.

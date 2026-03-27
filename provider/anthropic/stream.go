@@ -31,6 +31,7 @@ type ParseOpts struct {
 func ParseStream(ctx context.Context, body io.ReadCloser, opts ParseOpts) llm.Stream {
 	pub, ch := llm.NewEventPublisher()
 	go func() {
+		//nolint:errcheck // intentional: defer Close is only for cleanup, failure after body consumption is non-fatal
 		defer body.Close()
 		parseStream(ctx, body, pub, opts)
 	}()

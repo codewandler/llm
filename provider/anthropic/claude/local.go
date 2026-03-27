@@ -219,7 +219,7 @@ func (s *LocalTokenStore) Save(ctx context.Context, key string, token *Token) er
 		return fmt.Errorf("write temp credentials file: %w", err)
 	}
 	if err := os.Rename(tmpPath, s.path); err != nil {
-		os.Remove(tmpPath) // cleanup on failure
+		_ = os.Remove(tmpPath) // cleanup on failure; ignore error
 		return fmt.Errorf("rename credentials file: %w", err)
 	}
 
@@ -244,5 +244,5 @@ func (s *LocalTokenStore) List(ctx context.Context) ([]string, error) {
 	return []string{localTokenKey}, nil
 }
 
-// Ensure LocalTokenStore implements TokenStore
+// Ensure LocalTokenStore implements TokenStore.
 var _ TokenStore = (*LocalTokenStore)(nil)

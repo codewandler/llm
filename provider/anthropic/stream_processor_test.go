@@ -4,9 +4,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/codewandler/llm"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/codewandler/llm"
 )
 
 // collectText returns all text content from delta envelopes.

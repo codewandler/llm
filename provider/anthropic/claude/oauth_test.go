@@ -114,7 +114,7 @@ func TestOAuthFlow_Exchange_Success(t *testing.T) {
 		assert.Equal(t, AnthropicClientID, body["client_id"])
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]any{
+		_ = json.NewEncoder(w).Encode(map[string]any{
 			"access_token":  "access-123",
 			"refresh_token": "refresh-456",
 			"expires_in":    3600,
@@ -148,9 +148,9 @@ func TestOAuthFlow_Exchange_WithState(t *testing.T) {
 	// Setup mock server
 	var receivedBody map[string]string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewDecoder(r.Body).Decode(&receivedBody)
+		_ = json.NewDecoder(r.Body).Decode(&receivedBody)
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]any{
+		_ = json.NewEncoder(w).Encode(map[string]any{
 			"access_token":  "access",
 			"refresh_token": "refresh",
 			"expires_in":    3600,
@@ -182,7 +182,7 @@ func TestOAuthFlow_Exchange_HTTPError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]any{
+		_ = json.NewEncoder(w).Encode(map[string]any{
 			"error":             "invalid_grant",
 			"error_description": "The authorization code has expired",
 		})
@@ -210,14 +210,14 @@ func TestOAuthFlow_Exchange_HTTPError(t *testing.T) {
 func TestRefreshToken_Success(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var body map[string]string
-		json.NewDecoder(r.Body).Decode(&body)
+		_ = json.NewDecoder(r.Body).Decode(&body)
 
 		assert.Equal(t, "refresh_token", body["grant_type"])
 		assert.Equal(t, "old-refresh-token", body["refresh_token"])
 		assert.Equal(t, AnthropicClientID, body["client_id"])
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]any{
+		_ = json.NewEncoder(w).Encode(map[string]any{
 			"access_token":  "new-access-token",
 			"refresh_token": "new-refresh-token",
 			"expires_in":    7200,
@@ -246,7 +246,7 @@ func TestRefreshToken_Success(t *testing.T) {
 func TestRefreshToken_HTTPError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusUnauthorized)
-		json.NewEncoder(w).Encode(map[string]any{
+		_ = json.NewEncoder(w).Encode(map[string]any{
 			"error": "invalid_grant",
 		})
 	}))
@@ -286,7 +286,7 @@ func TestRefreshToken_NetworkError(t *testing.T) {
 func TestRefreshToken_InvalidJSON(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte("not valid json"))
+		_, _ = w.Write([]byte("not valid json"))
 	}))
 	defer server.Close()
 

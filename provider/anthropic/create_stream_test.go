@@ -8,9 +8,10 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/codewandler/llm"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/codewandler/llm"
 )
 
 func TestCreateStream_ValidateError(t *testing.T) {
@@ -35,7 +36,7 @@ func TestCreateStream_MissingAPIKey(t *testing.T) {
 func TestCreateStream_NonOKResponse(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusTooManyRequests)
-		fmt.Fprint(w, `{"error":{"type":"rate_limit_error","message":"too many requests"}}`)
+		_, _ = fmt.Fprint(w, `{"error":{"type":"rate_limit_error","message":"too many requests"}}`)
 	}))
 	t.Cleanup(srv.Close)
 
@@ -86,7 +87,7 @@ func TestCreateStream_HappyPath(t *testing.T) {
 		assert.Equal(t, "test-key", r.Header.Get("x-api-key"))
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.WriteHeader(http.StatusOK)
-		w.Write(rawSSE)
+		_, _ = w.Write(rawSSE)
 	}))
 	t.Cleanup(srv.Close)
 

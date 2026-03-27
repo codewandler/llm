@@ -109,6 +109,7 @@ func (p *Provider) CreateStream(ctx context.Context, opts llm.Request) (llm.Stre
 	}
 
 	if resp.StatusCode != http.StatusOK {
+		//nolint:errcheck // intentional: defer Close is only for cleanup, failure after response reading is non-fatal
 		defer resp.Body.Close()
 		errBody, _ := io.ReadAll(resp.Body)
 		return nil, llm.NewErrAPIError(providerName, resp.StatusCode, string(errBody))

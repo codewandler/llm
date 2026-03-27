@@ -7,8 +7,9 @@ import (
 	"os"
 	"os/signal"
 
-	"github.com/codewandler/llm/cmd/llmcli/cmds"
 	"github.com/spf13/cobra"
+
+	"github.com/codewandler/llm/cmd/llmcli/cmds"
 )
 
 func main() {

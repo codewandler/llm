@@ -104,7 +104,7 @@ func (f *OAuthFlow) AuthorizeURL() string {
 }
 
 // Exchange trades an authorization code for tokens.
-// The code format from Anthropic is: "authorization_code#state"
+// The code format from Anthropic is: "authorization_code#state".
 func (f *OAuthFlow) Exchange(ctx context.Context, code string) (*Token, error) {
 	// Split code and state if present
 	parts := strings.SplitN(code, "#", 2)
@@ -179,11 +179,12 @@ func exchangeToken(ctx context.Context, body map[string]string) (*Token, error) 
 	if err != nil {
 		return nil, fmt.Errorf("token exchange request: %w", err)
 	}
+	//nolint:errcheck // intentional: defer Close is only for cleanup, failure after response reading is non-fatal
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		var errBody map[string]any
-		json.NewDecoder(resp.Body).Decode(&errBody)
+		_ = json.NewDecoder(resp.Body).Decode(&errBody)
 		return nil, fmt.Errorf("token exchange failed (HTTP %d): %v", resp.StatusCode, errBody)
 	}
 

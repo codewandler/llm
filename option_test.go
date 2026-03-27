@@ -105,13 +105,13 @@ func TestWithAPIKeyFunc(t *testing.T) {
 func TestAPIKeyFromEnv(t *testing.T) {
 	// Clean up env vars after tests
 	defer func() {
-		os.Unsetenv("TEST_API_KEY_1")
-		os.Unsetenv("TEST_API_KEY_2")
+		_ = os.Unsetenv("TEST_API_KEY_1")
+		_ = os.Unsetenv("TEST_API_KEY_2")
 	}()
 
 	t.Run("first candidate found", func(t *testing.T) {
-		os.Setenv("TEST_API_KEY_1", "key-from-first")
-		os.Setenv("TEST_API_KEY_2", "key-from-second")
+		_ = os.Setenv("TEST_API_KEY_1", "key-from-first")
+		_ = os.Setenv("TEST_API_KEY_2", "key-from-second")
 
 		opts := Apply(APIKeyFromEnv("TEST_API_KEY_1", "TEST_API_KEY_2"))
 		key, err := opts.APIKeyFunc(context.Background())
@@ -120,8 +120,8 @@ func TestAPIKeyFromEnv(t *testing.T) {
 	})
 
 	t.Run("fallback to second candidate", func(t *testing.T) {
-		os.Unsetenv("TEST_API_KEY_1")
-		os.Setenv("TEST_API_KEY_2", "key-from-second")
+		_ = os.Unsetenv("TEST_API_KEY_1")
+		_ = os.Setenv("TEST_API_KEY_2", "key-from-second")
 
 		opts := Apply(APIKeyFromEnv("TEST_API_KEY_1", "TEST_API_KEY_2"))
 		key, err := opts.APIKeyFunc(context.Background())
@@ -130,8 +130,8 @@ func TestAPIKeyFromEnv(t *testing.T) {
 	})
 
 	t.Run("no candidates found", func(t *testing.T) {
-		os.Unsetenv("TEST_API_KEY_1")
-		os.Unsetenv("TEST_API_KEY_2")
+		_ = os.Unsetenv("TEST_API_KEY_1")
+		_ = os.Unsetenv("TEST_API_KEY_2")
 
 		opts := Apply(APIKeyFromEnv("TEST_API_KEY_1", "TEST_API_KEY_2"))
 		_, err := opts.APIKeyFunc(context.Background())
@@ -141,8 +141,8 @@ func TestAPIKeyFromEnv(t *testing.T) {
 	})
 
 	t.Run("empty string is not valid", func(t *testing.T) {
-		os.Setenv("TEST_API_KEY_1", "")
-		os.Setenv("TEST_API_KEY_2", "actual-key")
+		_ = os.Setenv("TEST_API_KEY_1", "")
+		_ = os.Setenv("TEST_API_KEY_2", "actual-key")
 
 		opts := Apply(APIKeyFromEnv("TEST_API_KEY_1", "TEST_API_KEY_2"))
 		key, err := opts.APIKeyFunc(context.Background())

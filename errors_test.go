@@ -31,7 +31,8 @@ func TestProviderError_Is(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			assert.True(t, errors.Is(tt.err, tt.sentinel),
 				"errors.Is(%v, %v) should be true", tt.err, tt.sentinel)
-			// Must not match a different sentinel
+			// Must not match a different sentinel — comparing sentinel identity, not wrapped errors.
+			//nolint:errorlint // intentional: comparing sentinel identity (tt.sentinel), not wrapped errors
 			assert.False(t, errors.Is(tt.err, llm.ErrMissingAPIKey) && tt.sentinel != llm.ErrMissingAPIKey,
 				"error should not match wrong sentinel")
 		})

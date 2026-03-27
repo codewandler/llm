@@ -131,5 +131,5 @@ func TestStaticTokenProvider_ReturnsNilToken(t *testing.T) {
 }
 
 func TestStaticTokenProvider_ImplementsInterface(t *testing.T) {
-	var _ TokenProvider = NewStaticTokenProvider(nil)
+	_ = NewStaticTokenProvider(nil)
 }

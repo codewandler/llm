@@ -1,0 +1,83 @@
+version: "2"
+
+run:
+  timeout: 5m
+
+linters:
+  default: none
+  enable:
+    # --- Correctness ---
+    - errcheck       # unchecked error returns
+    - errorlint      # misuse of errors.Is/As; incorrect %w wrapping
+    - nilnesserr     # nil pointer dereference via error-typed nils
+    - govet          # suspicious constructs (shadow, printf, etc.)
+    - staticcheck    # SA*, S*, ST*, QF* — broad correctness + style
+    - unused         # unexported identifiers that are never used
+
+    # --- Security / Bugs ---
+    - bodyclose      # HTTP response bodies left unclosed
+
+    # --- Style & Readability ---
+    - misspell       # common English spelling errors
+    - godot          # exported doc comments must end with a period
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/codewandler/llm
+
+linters-settings:
+  errcheck:
+    exclude: "/home/timo/projects/llm/.errcheck_ignores"
+
+
+  govet:
+    enable-all: true
+    disable:
+      - fieldalignment  # layout optimisation — not a bug, noisy during dev
+
+  staticcheck:
+    checks:
+      - "all"
+      - "-SA1019"  # deprecated-symbol warnings — we manage deprecations deliberately
+      - "-ST1000"  # package comment format — too strict for sub-packages
+      - "-ST1003"  # naming conventions — conflicts with idiomatic Go in some places
+
+  misspell:
+    locale: US
+
+  godot:
+    scope: declarations   # only exported declarations, not inline comments
+    capital: false
+
+issues:
+  # Top-level exclude uses RE2 regexes matched against the full issue text.
+  exclude:
+    # defer resp.Body.Close(), body.Close(), stream.Close() — non-actionable in defers.
+    - "Error return value of `.*\\.Close` is not checked"
+    # fmt.Fprintf/Println to terminal writers — write errors are not actionable in CLIs.
+    - "Error return value of `fmt\\.F(print|println|printf)` is not checked"
+
+  exclude-rules:
+    # defer body/stream/response close — error cannot be handled meaningfully.
+    - linters: [errcheck]
+      text: "Error return value of `.*\\.Close` is not checked"
+
+    # SA9003: empty branch is a deliberate TODO placeholder — keep it in
+    # production code but allow it in tests (less strict).
+    - path: "_test\\.go"
+      linters: [staticcheck]
+      text: "SA9003"
+
+    # QF1011: omit type from declaration — idiomatic but can hurt readability
+    # in test files where explicit interface assertions are useful.
+    - path: "_test\\.go"
+      linters: [staticcheck]
+      text: "QF1011"
+
+  max-issues-per-linter: 0
+  max-same-issues: 0

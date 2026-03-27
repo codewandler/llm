@@ -8,48 +8,48 @@ import (
 
 // Model ID constants for programmatic use.
 const (
-	// GPT-5.4 series (flagship, latest)
+	// GPT-5.4 series (flagship, latest).
 	ModelGPT54     = "gpt-5.4"
 	ModelGPT54Mini = "gpt-5.4-mini"
 	ModelGPT54Nano = "gpt-5.4-nano"
 	ModelGPT54Pro  = "gpt-5.4-pro"
 
-	// GPT-5.3 series
+	// GPT-5.3 series.
 	ModelGPT53Codex = "gpt-5.3-codex"
 
-	// GPT-5.2 series
+	// GPT-5.2 series.
 	ModelGPT52      = "gpt-5.2"
 	ModelGPT52Pro   = "gpt-5.2-pro"
 	ModelGPT52Codex = "gpt-5.2-codex"
 
-	// GPT-5.1 series
+	// GPT-5.1 series.
 	ModelGPT51          = "gpt-5.1"
 	ModelGPT51Codex     = "gpt-5.1-codex"
 	ModelGPT51CodexMax  = "gpt-5.1-codex-max"
 	ModelGPT51CodexMini = "gpt-5.1-codex-mini"
 
-	// GPT-5 series
+	// GPT-5 series.
 	ModelGPT5      = "gpt-5"
 	ModelGPT5Mini  = "gpt-5-mini"
 	ModelGPT5Nano  = "gpt-5-nano"
 	ModelGPT5Pro   = "gpt-5-pro"
 	ModelGPT5Codex = "gpt-5-codex"
 
-	// GPT-4o series
+	// GPT-4o series.
 	ModelGPT4o     = "gpt-4o"
 	ModelGPT4oMini = "gpt-4o-mini"
 
-	// GPT-4.1 series
+	// GPT-4.1 series.
 	ModelGPT41     = "gpt-4.1"
 	ModelGPT41Mini = "gpt-4.1-mini"
 	ModelGPT41Nano = "gpt-4.1-nano"
 
-	// Legacy models
+	// Legacy models.
 	ModelGPT4Turbo = "gpt-4-turbo"
 	ModelGPT4      = "gpt-4"
 	ModelGPT35     = "gpt-3.5-turbo"
 
-	// o-series reasoning models
+	// O-series reasoning models.
 	ModelO4Mini = "o4-mini"
 	ModelO3     = "o3"
 	ModelO3Mini = "o3-mini"
