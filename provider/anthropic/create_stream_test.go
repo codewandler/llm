@@ -63,7 +63,7 @@ func TestCreateStream_NetworkError(t *testing.T) {
 }
 
 func TestCreateStream_HappyPath(t *testing.T) {
-	sseBody := BuildSSEBody(
+	sseBody := buildSSEBody(
 		MessageStartEvent{Message: MessageStartPayload{
 			ID: "msg_01", Model: "claude-sonnet-4-5",
 			Usage: MessageUsage{InputTokens: 10},

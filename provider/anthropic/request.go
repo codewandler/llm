@@ -71,10 +71,11 @@ type contentBlock struct {
 // toolUseBlock is a specialized content block for tool_use that always includes the input field.
 // Anthropic API requires the "input" field to be present in tool_use blocks, even if empty.
 type toolUseBlock struct {
-	Type  string         `json:"type"`
-	ID    string         `json:"id"`
-	Name  string         `json:"name"`
-	Input map[string]any `json:"input"` // No omitempty - must always be present
+	Type         string         `json:"type"`
+	ID           string         `json:"id"`
+	Name         string         `json:"name"`
+	Input        map[string]any `json:"input"` // No omitempty - must always be present
+	CacheControl *cacheControl  `json:"cache_control,omitempty"`
 }
 
 type toolPayload struct {
@@ -115,23 +116,8 @@ func buildCacheControl(h *llm.CacheHint) *cacheControl {
 // hasPerMessageCacheHints returns true if any message carries an enabled CacheHint.
 func hasPerMessageCacheHints(msgs llm.Messages) bool {
 	for _, msg := range msgs {
-		switch m := msg.(type) {
-		case llm.SystemMessage:
-			if m.CacheHint() != nil && m.CacheHint().Enabled {
-				return true
-			}
-		case llm.UserMessage:
-			if m.CacheHint() != nil && m.CacheHint().Enabled {
-				return true
-			}
-		case llm.AssistantMessage:
-			if m.CacheHint() != nil && m.CacheHint().Enabled {
-				return true
-			}
-		case llm.ToolMessage:
-			if m.CacheHint() != nil && m.CacheHint().Enabled {
-				return true
-			}
+		if h := msg.CacheHint(); h != nil && h.Enabled {
+			return true
 		}
 	}
 	return false
@@ -237,16 +223,9 @@ func BuildRequest(reqOpts RequestOptions) ([]byte, error) {
 			for j, tc := range m.ToolCalls() {
 				tub := toolUseBlock{Type: "tool_use", ID: tc.ToolCallID(), Name: tc.ToolName(), Input: ensureInputMap(tc.ToolArgs())}
 				if m.CacheHint() != nil && m.CacheHint().Enabled && j == len(m.ToolCalls())-1 {
-					blocks = append(blocks, struct {
-						Type         string         `json:"type"`
-						ID           string         `json:"id"`
-						Name         string         `json:"name"`
-						Input        map[string]any `json:"input"`
-						CacheControl *cacheControl  `json:"cache_control,omitempty"`
-					}{tub.Type, tub.ID, tub.Name, tub.Input, buildCacheControl(m.CacheHint())})
-				} else {
-					blocks = append(blocks, tub)
+					tub.CacheControl = buildCacheControl(m.CacheHint())
 				}
+				blocks = append(blocks, tub)
 			}
 			r.Messages = append(r.Messages, messagePayload{Role: "assistant", Content: blocks})
 		case llm.ToolMessage:

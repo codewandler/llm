@@ -9,23 +9,23 @@ import (
 	"github.com/codewandler/llm"
 )
 
-// Harness wires a streamProcessor to a collector so tests can feed typed
+// harness wires a streamProcessor to a collector so tests can feed typed
 // Anthropic events directly and inspect all emitted llm.Envelope values —
 // no SSE encoding or decoding involved.
 //
-// Use NewHarness to create one. Call Send with any sequence of event structs;
+// Use newHarness to create one. Call Send with any sequence of event structs;
 // it routes each to the matching processor method and returns all envelopes
 // emitted during that sequence.
-type Harness struct {
+type harness struct {
 	proc *streamProcessor
 	pub  llm.Publisher
 	ch   <-chan llm.Envelope
 }
 
-// NewHarness creates a Harness backed by a fresh streamProcessor and publisher.
-func NewHarness(opts ParseOpts) *Harness {
+// newHarness creates a harness backed by a fresh streamProcessor and publisher.
+func newHarness(opts ParseOpts) *harness {
 	pub, ch := llm.NewEventPublisher()
-	return &Harness{
+	return &harness{
 		proc: newStreamProcessor(opts, pub),
 		pub:  pub,
 		ch:   ch,
@@ -45,7 +45,7 @@ func NewHarness(opts ParseOpts) *Harness {
 //   - StreamErrorEvent
 //
 // Unrecognised types cause a panic to surface test mistakes early.
-func (h *Harness) Send(events ...any) []llm.Envelope {
+func (h *harness) Send(events ...any) []llm.Envelope {
 	for _, ev := range events {
 		switch evt := ev.(type) {
 		case MessageStartEvent:
@@ -63,7 +63,7 @@ func (h *Harness) Send(events ...any) []llm.Envelope {
 		case StreamErrorEvent:
 			h.proc.onError(evt)
 		default:
-			panic(fmt.Sprintf("anthropic.Harness.Send: unsupported event type %T", ev))
+			panic(fmt.Sprintf("harness.Send: unsupported event type %T", ev))
 		}
 	}
 	h.pub.Close()
@@ -75,9 +75,9 @@ func (h *Harness) Send(events ...any) []llm.Envelope {
 	return out
 }
 
-// BuildSSEBody serialises a sequence of typed Anthropic event structs into a
+// buildSSEBody serialises a sequence of typed Anthropic event structs into a
 // valid SSE wire-format io.ReadCloser. The returned body can be passed directly
-// to ParseStream or any provider that delegates to it (e.g. minimax).
+// to ParseStream or any provider that delegates to it.
 //
 // Accepted event types:
 //   - MessageStartEvent       → "message_start"
@@ -89,7 +89,7 @@ func (h *Harness) Send(events ...any) []llm.Envelope {
 //   - StreamErrorEvent        → "error"
 //
 // Unrecognised types cause a panic to surface test mistakes early.
-func BuildSSEBody(events ...any) io.ReadCloser {
+func buildSSEBody(events ...any) io.ReadCloser {
 	var b strings.Builder
 	for _, ev := range events {
 		var eventType string
@@ -109,13 +109,13 @@ func BuildSSEBody(events ...any) io.ReadCloser {
 		case StreamErrorEvent:
 			eventType = "error"
 		default:
-			panic(fmt.Sprintf("anthropic.BuildSSEBody: unsupported event type %T", ev))
+			panic(fmt.Sprintf("buildSSEBody: unsupported event type %T", ev))
 		}
 
 		payload := sseWithTypeField(ev, eventType)
 		data, err := json.Marshal(payload)
 		if err != nil {
-			panic(fmt.Sprintf("anthropic.BuildSSEBody: marshal %T: %v", ev, err))
+			panic(fmt.Sprintf("buildSSEBody: marshal %T: %v", ev, err))
 		}
 		fmt.Fprintf(&b, "event: %s\ndata: %s\n\n", eventType, data)
 	}
@@ -128,7 +128,7 @@ func BuildSSEBody(events ...any) io.ReadCloser {
 func sseWithTypeField(v any, typeName string) map[string]any {
 	raw, err := json.Marshal(v)
 	if err != nil {
-		panic(fmt.Sprintf("anthropic.BuildSSEBody: marshal: %v", err))
+		panic(fmt.Sprintf("sseWithTypeField: marshal: %v", err))
 	}
 	var m map[string]any
 	if err := json.Unmarshal(raw, &m); err != nil || m == nil {

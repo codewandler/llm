@@ -10,9 +10,14 @@ import (
 )
 
 const (
-	providerName     = "anthropic"
-	defaultBaseURL   = "https://api.anthropic.com"
-	anthropicVersion = "2023-06-01"
+	providerName   = "anthropic"
+	defaultBaseURL = "https://api.anthropic.com"
+	// AnthropicVersion is the Anthropic API version header value used by all
+	// providers that speak the Anthropic API (anthropic, claude).
+	AnthropicVersion = "2023-06-01"
+
+	// Keep the unexported alias so existing internal usages compile.
+	anthropicVersion = AnthropicVersion
 )
 
 // Provider implements the direct Anthropic API backend.

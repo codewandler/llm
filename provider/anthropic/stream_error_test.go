@@ -13,16 +13,10 @@ import (
 
 func TestParseStream_ContextCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // cancel before ParseStream is called
 
 	pr, pw := io.Pipe()
-	// When the context is cancelled, close the write end so the scanner unblocks.
-	go func() {
-		<-ctx.Done()
-		pw.CloseWithError(ctx.Err())
-	}()
-	t.Cleanup(func() { pw.Close() })
-
-	cancel() // cancel immediately — goroutine above will close pw
+	t.Cleanup(func() { pw.Close() }) // prevent goroutine leak if test fails
 
 	ch := ParseStream(ctx, io.NopCloser(pr), ParseOpts{
 		RequestedModel: "claude-sonnet-4-5",

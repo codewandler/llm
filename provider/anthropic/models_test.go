@@ -66,6 +66,28 @@ func TestMatchPricingByPrefix_NoMatch(t *testing.T) {
 	assert.False(t, ok)
 }
 
+func TestMatchPricingByPrefix_DerivedFromRegistry(t *testing.T) {
+	// Every key in modelPricingRegistry must produce a working prefix fallback
+	// when a synthetic future-dated variant is looked up.
+	for id := range modelPricingRegistry {
+		base := dateSuffix.ReplaceAllString(id, "")
+		futureID := base + "-20991231"
+		pricing, ok := matchPricingByPrefix(futureID)
+		assert.True(t, ok, "prefix lookup failed for future variant of %q (%q)", id, futureID)
+		if ok {
+			expected := modelPricingRegistry[base]
+			if expected == (modelPricing{}) {
+				// base itself is a dated-only entry; just check non-zero output price
+				assert.Greater(t, pricing.OutputPrice, 0.0,
+					"pricing for %q has zero output price", futureID)
+			} else {
+				assert.Equal(t, expected, pricing,
+					"pricing mismatch for future variant of %q", id)
+			}
+		}
+	}
+}
+
 func TestFillCost_NilUsage(t *testing.T) {
 	// Must not panic.
 	FillCost("claude-sonnet-4-6", nil)

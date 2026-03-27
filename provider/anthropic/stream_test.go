@@ -32,7 +32,7 @@ func TestParseStream_LargeStreamNoDeadlock(t *testing.T) {
 		MessageStopEvent{},
 	)
 
-	body := BuildSSEBody(events...)
+	body := buildSSEBody(events...)
 
 	done := make(chan struct{})
 	go func() {

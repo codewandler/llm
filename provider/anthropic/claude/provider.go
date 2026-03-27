@@ -69,6 +69,7 @@ type Provider struct {
 	tokenProvider TokenProvider
 	userID        string
 	sessionID     string
+	initErr       error // set when a With* option fails to initialise its token provider
 }
 
 // Option configures the Claude provider.
@@ -110,7 +111,7 @@ func WithLocalTokenProvider() Option {
 	return func(p *Provider) {
 		tp, err := NewLocalTokenProvider()
 		if err != nil {
-			// Don't fail - let CreateStream report the error
+			p.initErr = fmt.Errorf("WithLocalTokenProvider: %w", err)
 			return
 		}
 		p.tokenProvider = tp
@@ -123,7 +124,7 @@ func WithClaudeDir(dir string) Option {
 	return func(p *Provider) {
 		tp, err := NewLocalTokenProviderWithDir(dir)
 		if err != nil {
-			// Don't fail - let CreateStream report the error
+			p.initErr = fmt.Errorf("WithClaudeDir(%q): %w", dir, err)
 			return
 		}
 		p.tokenProvider = tp
@@ -182,6 +183,10 @@ func (p *Provider) Models() []llm.Model {
 
 // CreateStream implements llm.Provider.
 func (p *Provider) CreateStream(ctx context.Context, opts llm.Request) (llm.Stream, error) {
+	if p.initErr != nil {
+		return nil, llm.NewErrProviderMsg(llm.ProviderNameClaude, p.initErr.Error())
+	}
+
 	requestedModel := opts.Model
 
 	if err := opts.Validate(); err != nil {
@@ -235,7 +240,7 @@ func (p *Provider) newAPIRequest(ctx context.Context, accessToken string, body [
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Authorization", "Bearer "+accessToken)
-	req.Header.Set("Anthropic-Version", "2023-06-01")
+	req.Header.Set("Anthropic-Version", anthropic.AnthropicVersion)
 	req.Header.Set("Anthropic-Beta", claudeBeta)
 	req.Header.Set("Anthropic-Dangerous-Direct-Browser-Access", "true")
 	req.Header.Set("User-Agent", claudeUserAgent)
@@ -344,7 +349,9 @@ func normalizeModel(model string) string {
 
 func randomUUID() string {
 	var b [16]byte
-	_, _ = rand.Read(b[:])
+	if _, err := rand.Read(b[:]); err != nil {
+		panic("anthropic: crypto/rand unavailable: " + err.Error())
+	}
 	b[6] = (b[6] & 0x0f) | 0x40
 	b[8] = (b[8] & 0x3f) | 0x80
 	return fmt.Sprintf("%08x-%04x-%04x-%04x-%012x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:16])

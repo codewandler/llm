@@ -1,12 +1,13 @@
 package anthropic
 
 import (
-	"strings"
+	"regexp"
+	"sort"
 
 	"github.com/codewandler/llm"
 )
 
-// Model ToolCallID constants for programmatic use.
+// Model ID constants for programmatic use.
 const (
 	// Claude 4.6 (current)
 	ModelOpus   = "claude-opus-4-6"
@@ -28,13 +29,14 @@ var ModelAliases = map[string]string{
 // Source: https://www.anthropic.com/pricing (as of 2025)
 type modelPricing struct {
 	InputPrice       float64 // Regular input tokens
-	OutputPrice      float64 // ToolOutput tokens
+	OutputPrice      float64 // Output tokens
 	CachedInputPrice float64 // Cached input tokens (prompt caching read) — ~0.1× input
 	CacheWritePrice  float64 // Cache write tokens (prompt caching write) — ~1.25× input
 }
 
 // modelPricingRegistry maps model IDs to their pricing.
 // Includes both dated and undated model IDs.
+// This is the single source of truth — pricingPrefixes is derived from it at init.
 var modelPricingRegistry = map[string]modelPricing{
 	// Claude 4.6 (current)
 	"claude-opus-4-6":   {InputPrice: 5.0, OutputPrice: 25.0, CachedInputPrice: 0.50, CacheWritePrice: 6.25},
@@ -69,6 +71,35 @@ var modelPricingRegistry = map[string]modelPricing{
 	"claude-3-haiku-20240307":  {InputPrice: 0.25, OutputPrice: 1.25, CachedInputPrice: 0.03, CacheWritePrice: 0.3125},
 }
 
+// prefixEntry pairs a model-ID prefix with its pricing.
+type prefixEntry struct {
+	prefix  string
+	pricing modelPricing
+}
+
+// pricingPrefixes is derived from modelPricingRegistry at init time.
+// It is sorted longest-prefix-first so that more specific prefixes win.
+var pricingPrefixes []prefixEntry
+
+// dateSuffix matches a trailing 8-digit date segment (e.g. "-20250929").
+var dateSuffix = regexp.MustCompile(`-\d{8}$`)
+
+func init() {
+	seen := make(map[string]modelPricing)
+	for id, pricing := range modelPricingRegistry {
+		prefix := dateSuffix.ReplaceAllString(id, "")
+		seen[prefix] = pricing // last-write wins; all dated variants should be identical
+	}
+	pricingPrefixes = make([]prefixEntry, 0, len(seen))
+	for prefix, pricing := range seen {
+		pricingPrefixes = append(pricingPrefixes, prefixEntry{prefix, pricing})
+	}
+	// Sort longest-first so more-specific prefixes are tried first.
+	sort.Slice(pricingPrefixes, func(i, j int) bool {
+		return len(pricingPrefixes[i].prefix) > len(pricingPrefixes[j].prefix)
+	})
+}
+
 // CalculateCost computes the total cost in USD for the given usage and model.
 // Returns 0 if the model is unknown.
 func CalculateCost(model string, usage *llm.Usage) float64 {
@@ -78,14 +109,12 @@ func CalculateCost(model string, usage *llm.Usage) float64 {
 
 	pricing, ok := modelPricingRegistry[model]
 	if !ok {
-		// Try to match by prefix for unknown dated versions
 		pricing, ok = matchPricingByPrefix(model)
 		if !ok {
 			return 0
 		}
 	}
 
-	// Regular input tokens (non-cached, non-written)
 	regularInput := usage.InputTokens - usage.CacheReadTokens - usage.CacheWriteTokens
 	if regularInput < 0 {
 		regularInput = 0
@@ -127,39 +156,14 @@ func FillCost(model string, usage *llm.Usage) {
 	usage.Cost = usage.InputCost + usage.CacheReadCost + usage.CacheWriteCost + usage.OutputCost
 }
 
-// matchPricingByPrefix tries to find pricing for a model by matching prefixes.
-// This handles future dated model versions (e.g., "claude-sonnet-4-6-20260101").
+// matchPricingByPrefix tries to find pricing for a model by matching prefixes
+// derived from modelPricingRegistry. Handles future dated model versions
+// (e.g., "claude-sonnet-4-6-20991231").
 func matchPricingByPrefix(model string) (modelPricing, bool) {
-	// Try progressively shorter prefixes
-	prefixes := []struct {
-		prefix  string
-		pricing modelPricing
-	}{
-		// Opus models (most expensive first)
-		{"claude-opus-4-6", modelPricing{5.0, 25.0, 0.50, 6.25}},
-		{"claude-opus-4-5", modelPricing{5.0, 25.0, 0.50, 6.25}},
-		{"claude-opus-4-1", modelPricing{15.0, 75.0, 1.50, 18.75}},
-		{"claude-opus-4", modelPricing{15.0, 75.0, 1.50, 18.75}},
-		{"claude-opus-3", modelPricing{15.0, 75.0, 1.50, 18.75}},
-
-		// Sonnet models
-		{"claude-sonnet-4-6", modelPricing{3.0, 15.0, 0.30, 3.75}},
-		{"claude-sonnet-4-5", modelPricing{3.0, 15.0, 0.30, 3.75}},
-		{"claude-sonnet-4", modelPricing{3.0, 15.0, 0.30, 3.75}},
-		{"claude-3-5-sonnet", modelPricing{3.0, 15.0, 0.30, 3.75}},
-		{"claude-3-sonnet", modelPricing{3.0, 15.0, 0.30, 3.75}},
-
-		// Haiku models (cheapest)
-		{"claude-haiku-4-5", modelPricing{1.0, 5.0, 0.10, 1.25}},
-		{"claude-3-5-haiku", modelPricing{1.0, 5.0, 0.10, 1.25}},
-		{"claude-3-haiku", modelPricing{0.25, 1.25, 0.03, 0.3125}},
-	}
-
-	for _, p := range prefixes {
-		if strings.HasPrefix(model, p.prefix) {
+	for _, p := range pricingPrefixes {
+		if len(model) > len(p.prefix) && model[:len(p.prefix)] == p.prefix {
 			return p.pricing, true
 		}
 	}
-
 	return modelPricing{}, false
 }

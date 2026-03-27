@@ -38,25 +38,28 @@ func newStreamProcessor(meta ParseOpts, pub llm.Publisher) *streamProcessor {
 
 // dispatch JSON-decodes one SSE data line and routes to the appropriate on*
 // method. Returns false when the stream should stop (message_stop or error).
+// When returning false after "error", the error has already been published by
+// onError — no second error event will be emitted.
 func (p *streamProcessor) dispatch(data string) bool {
 	if data == "" {
 		return true
 	}
+	b := []byte(data)
 	var base struct {
 		Type string `json:"type"`
 	}
-	if err := json.Unmarshal([]byte(data), &base); err != nil {
+	if err := json.Unmarshal(b, &base); err != nil {
 		return true
 	}
 	switch base.Type {
 	case "message_start":
 		var evt MessageStartEvent
-		if err := json.Unmarshal([]byte(data), &evt); err == nil {
+		if err := json.Unmarshal(b, &evt); err == nil {
 			p.onMessageStart(evt)
 		}
 	case "message_delta":
 		var evt MessageDeltaEvent
-		if err := json.Unmarshal([]byte(data), &evt); err == nil {
+		if err := json.Unmarshal(b, &evt); err == nil {
 			p.onMessageDelta(evt)
 		}
 	case "message_stop":
@@ -64,22 +67,24 @@ func (p *streamProcessor) dispatch(data string) bool {
 		return false
 	case "content_block_start":
 		var evt ContentBlockStartEvent
-		if err := json.Unmarshal([]byte(data), &evt); err == nil {
+		if err := json.Unmarshal(b, &evt); err == nil {
 			p.onContentBlockStart(evt)
 		}
 	case "content_block_delta":
 		var evt ContentBlockDeltaEvent
-		if err := json.Unmarshal([]byte(data), &evt); err == nil {
+		if err := json.Unmarshal(b, &evt); err == nil {
 			p.onContentBlockDelta(evt)
 		}
 	case "content_block_stop":
 		var evt ContentBlockStopEvent
-		if err := json.Unmarshal([]byte(data), &evt); err == nil {
+		if err := json.Unmarshal(b, &evt); err == nil {
 			p.onContentBlockStop(evt)
 		}
 	case "error":
+		// error was published by onError below; return false to stop the loop
+		// without emitting a second error event.
 		var evt StreamErrorEvent
-		if err := json.Unmarshal([]byte(data), &evt); err == nil {
+		if err := json.Unmarshal(b, &evt); err == nil {
 			p.onError(evt)
 		}
 		return false
@@ -102,9 +107,7 @@ func (p *streamProcessor) onMessageStart(evt MessageStartEvent) {
 func (p *streamProcessor) onMessageDelta(evt MessageDeltaEvent) {
 	p.usage.OutputTokens = evt.Usage.OutputTokens
 	p.usage.TotalTokens = p.usage.InputTokens + p.usage.OutputTokens
-	if evt.Delta.StopReason != "" {
-		p.stopReason = mapAnthropicStopReason(evt.Delta.StopReason)
-	}
+	p.stopReason = mapAnthropicStopReason(evt.Delta.StopReason)
 }
 
 func (p *streamProcessor) onMessageStop() {
