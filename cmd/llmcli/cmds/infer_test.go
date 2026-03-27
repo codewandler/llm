@@ -9,7 +9,7 @@ import (
 )
 
 func TestBuildInferSpec_Default_NoDemoTools(t *testing.T) {
-	spec := buildInferSpec("hi", "fast", "", "", false)
+	spec := buildInferSpec("hi", "fast", "", "", "", false)
 
 	require.Len(t, spec.Messages, 1)
 	require.Equal(t, llm.RoleUser, spec.Messages[0].Role())
@@ -20,7 +20,7 @@ func TestBuildInferSpec_Default_NoDemoTools(t *testing.T) {
 }
 
 func TestBuildInferSpec_WithSystem_NoDemoTools(t *testing.T) {
-	spec := buildInferSpec("hi", "fast", "you are concise", "", false)
+	spec := buildInferSpec("hi", "fast", "you are concise", "", "", false)
 
 	require.Len(t, spec.Messages, 2)
 	require.Equal(t, llm.RoleSystem, spec.Messages[0].Role())
@@ -31,7 +31,7 @@ func TestBuildInferSpec_WithSystem_NoDemoTools(t *testing.T) {
 }
 
 func TestBuildInferSpec_DemoTools_EnablesDefaultPersonaAndRequiredTools(t *testing.T) {
-	spec := buildInferSpec("hi", "fast", "", "", true)
+	spec := buildInferSpec("hi", "fast", "", "", "", true)
 
 	require.Len(t, spec.Messages, 2)
 	require.Equal(t, llm.RoleSystem, spec.Messages[0].Role())

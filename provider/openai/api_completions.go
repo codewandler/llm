@@ -69,7 +69,7 @@ type ccRequest struct {
 	Messages             []ccMessagePayload `json:"messages"`
 	Tools                []ccToolPayload    `json:"tools,omitempty"`
 	ToolChoice           any                `json:"tool_choice,omitempty"`
-	ReasoningEffort      string             `json:"reasoning_effort,omitempty"`
+	ThinkingEffort       string             `json:"reasoning_effort,omitempty"`
 	PromptCacheRetention string             `json:"prompt_cache_retention,omitempty"`
 	MaxTokens            int                `json:"max_tokens,omitempty"`
 	Temperature          float64            `json:"temperature,omitempty"`
@@ -173,8 +173,8 @@ func ccBuildRequest(opts llm.Request) ([]byte, error) {
 	}
 
 	// Reasoning effort (already mapped/validated by Provider.Publisher).
-	if opts.ReasoningEffort != "" {
-		r.ReasoningEffort = string(opts.ReasoningEffort)
+	if opts.ThinkingEffort != "" {
+		r.ThinkingEffort = string(opts.ThinkingEffort)
 	}
 
 	// Prompt cache retention: 24h for models that support it or when explicitly

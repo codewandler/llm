@@ -2,12 +2,17 @@ package llm
 
 import (
 	"bytes"
+	"compress/flate"
+	"compress/gzip"
 	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/andybalholm/brotli"
+	"github.com/klauspost/compress/zstd"
 )
 
 // HttpClientOpts configures the HTTP client created by NewHttpClient.
@@ -148,8 +153,13 @@ func NewHttpClient(opts HttpClientOpts) *http.Client {
 		ResponseHeaderTimeout: 30 * time.Second,
 		MaxIdleConns:          100,
 		IdleConnTimeout:       90 * time.Second,
-		DisableCompression:    false,
+		// Disable automatic decompression — we handle gzip, deflate, br, and
+		// zstd ourselves in decompressingTransport so we can support brotli
+		// and zstd which the standard Transport doesn't handle.
+		DisableCompression: true,
 	}
+	// Decompressing transport handles gzip, deflate, brotli (br), and zstd.
+	transport = &decompressingTransport{wrapped: transport}
 	if opts.Logger != nil {
 		transport = &loggingTransport{
 			wrapped: transport,
@@ -158,6 +168,114 @@ func NewHttpClient(opts HttpClientOpts) *http.Client {
 		}
 	}
 	return &http.Client{Transport: transport}
+}
+
+// decompressingTransport wraps an http.RoundTripper and automatically
+// decompresses response bodies based on Content-Encoding.
+// Go's standard Transport handles gzip and deflate, but not brotli (br)
+// or zstd. This transport adds support for those.
+type decompressingTransport struct {
+	wrapped http.RoundTripper
+}
+
+func (t *decompressingTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	resp, err := t.wrapped.RoundTrip(req)
+	if err != nil || resp == nil {
+		return resp, err
+	}
+
+	// Remove Content-Length since decompressed body size is unknown
+	resp.Header.Del("Content-Length")
+
+	encoding := resp.Header.Get("Content-Encoding")
+	switch encoding {
+	case "br":
+		// Brotli decompression
+		resp.Body = &brotliReadCloser{underlying: resp.Body}
+	case "zstd":
+		// Zstd decompression
+		decoder, err := zstd.NewReader(resp.Body)
+		if err != nil {
+			resp.Body.Close()
+			return nil, fmt.Errorf("zstd decompression: %w", err)
+		}
+		resp.Body = &zstdReadCloser{decoder: decoder, underlying: resp.Body}
+	case "gzip":
+		// We handle gzip ourselves since DisableCompression is true.
+		gz, err := gzip.NewReader(resp.Body)
+		if err != nil {
+			resp.Body.Close()
+			return nil, fmt.Errorf("gzip decompression: %w", err)
+		}
+		resp.Body = &gzipReadCloser{Reader: gz, underlying: resp.Body}
+	case "deflate":
+		// We handle deflate ourselves since DisableCompression is true.
+		resp.Body = &flateReadCloser{underlying: resp.Body}
+	}
+
+	return resp, nil
+}
+
+// brotliReadCloser wraps brotli decompression around a ReadCloser.
+type brotliReadCloser struct {
+	underlying io.ReadCloser
+	reader     *brotli.Reader
+}
+
+func (b *brotliReadCloser) Read(p []byte) (int, error) {
+	if b.reader == nil {
+		b.reader = brotli.NewReader(b.underlying)
+	}
+	return b.reader.Read(p)
+}
+
+func (b *brotliReadCloser) Close() error {
+	b.reader = nil
+	return b.underlying.Close()
+}
+
+// zstdReadCloser wraps zstd decompression around a ReadCloser.
+type zstdReadCloser struct {
+	decoder   *zstd.Decoder
+	underlying io.ReadCloser
+}
+
+func (z *zstdReadCloser) Read(p []byte) (int, error) {
+	return z.decoder.Read(p)
+}
+
+func (z *zstdReadCloser) Close() error {
+	z.decoder.Close()
+	return z.underlying.Close()
+}
+
+// gzipReadCloser wraps gzip decompression and tracks the underlying body for closing.
+type gzipReadCloser struct {
+	*gzip.Reader
+	underlying io.ReadCloser
+}
+
+func (g *gzipReadCloser) Close() error {
+	g.Reader.Close()
+	return g.underlying.Close()
+}
+
+// flateReadCloser wraps flate decompression around a ReadCloser.
+type flateReadCloser struct {
+	underlying io.ReadCloser
+	reader     io.ReadCloser
+}
+
+func (f *flateReadCloser) Read(p []byte) (int, error) {
+	if f.reader == nil {
+		f.reader = flate.NewReader(f.underlying)
+	}
+	return f.reader.Read(p)
+}
+
+func (f *flateReadCloser) Close() error {
+	f.reader = nil
+	return f.underlying.Close()
 }
 
 // defaultHttpClient is the package-level singleton used when no custom client

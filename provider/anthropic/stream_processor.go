@@ -26,13 +26,16 @@ type streamProcessor struct {
 	activeTools map[int]*toolBlock
 	usage       llm.Usage
 	stopReason  llm.StopReason
+	rateLimits  *llm.RateLimits
 }
 
 func newStreamProcessor(meta ParseOpts, pub llm.Publisher) *streamProcessor {
+	rl := llm.ParseRateLimits(meta.ResponseHeaders)
 	return &streamProcessor{
 		meta:        meta,
 		pub:         pub,
 		activeTools: make(map[int]*toolBlock),
+		rateLimits:  rl,
 	}
 }
 
@@ -98,9 +101,18 @@ func (p *streamProcessor) onMessageStart(evt MessageStartEvent) {
 	p.usage.InputTokens = evt.Message.Usage.InputTokens +
 		p.usage.CacheWriteTokens + p.usage.CacheReadTokens
 
+	// Build Extra map with rate limits if available
+	var extra map[string]any
+	if p.rateLimits != nil {
+		extra = map[string]any{
+			"rate_limits": p.rateLimits,
+		}
+	}
+
 	p.pub.Started(llm.StreamStartedEvent{
 		Model:     evt.Message.Model,
 		RequestID: evt.Message.ID,
+		Extra:     extra,
 	})
 }
 

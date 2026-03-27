@@ -37,20 +37,20 @@ func TestStreamOptions_Validate(t *testing.T) {
 			wantErr: "model is required",
 		},
 		{
-			name: "invalid - bad ReasoningEffort",
+			name: "invalid - bad ThinkingEffort",
 			opts: Request{
-				Model:           "gpt-4",
-				Messages:        Messages{User("Hello")},
-				ReasoningEffort: "invalid_value",
+				Model:          "gpt-4",
+				Messages:       Messages{User("Hello")},
+				ThinkingEffort: "invalid_value",
 			},
-			wantErr: `invalid ReasoningEffort "invalid_value"`,
+			wantErr: `invalid ThinkingEffort "invalid_value"`,
 		},
 		{
-			name: "valid - ReasoningEffort empty (default)",
+			name: "valid - ThinkingEffort empty (default)",
 			opts: Request{
-				Model:           "gpt-4",
-				Messages:        Messages{User("Hello")},
-				ReasoningEffort: "",
+				Model:          "gpt-4",
+				Messages:       Messages{User("Hello")},
+				ThinkingEffort: "",
 			},
 			wantErr: "",
 		},
@@ -192,40 +192,40 @@ func TestToolChoice_Interface(t *testing.T) {
 	var _ ToolChoice = ToolChoiceTool{Name: "test"}
 }
 
-func TestReasoningEffort_Constants(t *testing.T) {
+func TestThinkingEffort_Constants(t *testing.T) {
 	// Verify constant values match OpenAI API expectations
-	assert.Equal(t, ReasoningEffort("none"), ReasoningEffortNone)
-	assert.Equal(t, ReasoningEffort("minimal"), ReasoningEffortMinimal)
-	assert.Equal(t, ReasoningEffort("low"), ReasoningEffortLow)
-	assert.Equal(t, ReasoningEffort("medium"), ReasoningEffortMedium)
-	assert.Equal(t, ReasoningEffort("high"), ReasoningEffortHigh)
-	assert.Equal(t, ReasoningEffort("xhigh"), ReasoningEffortXHigh)
+	assert.Equal(t, ThinkingEffort("none"), ThinkingEffortNone)
+	assert.Equal(t, ThinkingEffort("minimal"), ThinkingEffortMinimal)
+	assert.Equal(t, ThinkingEffort("low"), ThinkingEffortLow)
+	assert.Equal(t, ThinkingEffort("medium"), ThinkingEffortMedium)
+	assert.Equal(t, ThinkingEffort("high"), ThinkingEffortHigh)
+	assert.Equal(t, ThinkingEffort("xhigh"), ThinkingEffortXHigh)
 }
 
-func TestStreamOptions_WithReasoningEffort(t *testing.T) {
+func TestStreamOptions_WithThinkingEffort(t *testing.T) {
 	opts := Request{
-		Model:           "gpt-5",
-		Messages:        Messages{User("Hello")},
-		ReasoningEffort: ReasoningEffortLow,
+		Model:          "gpt-5",
+		Messages:       Messages{User("Hello")},
+		ThinkingEffort: ThinkingEffortLow,
 	}
 
 	err := opts.Validate()
 	require.NoError(t, err)
-	assert.Equal(t, ReasoningEffortLow, opts.ReasoningEffort)
+	assert.Equal(t, ThinkingEffortLow, opts.ThinkingEffort)
 }
 
-func TestReasoningEffort_Valid(t *testing.T) {
+func TestThinkingEffort_Valid(t *testing.T) {
 	tests := []struct {
-		effort ReasoningEffort
+		effort ThinkingEffort
 		want   bool
 	}{
 		{"", true},
-		{ReasoningEffortNone, true},
-		{ReasoningEffortMinimal, true},
-		{ReasoningEffortLow, true},
-		{ReasoningEffortMedium, true},
-		{ReasoningEffortHigh, true},
-		{ReasoningEffortXHigh, true},
+		{ThinkingEffortNone, true},
+		{ThinkingEffortMinimal, true},
+		{ThinkingEffortLow, true},
+		{ThinkingEffortMedium, true},
+		{ThinkingEffortHigh, true},
+		{ThinkingEffortXHigh, true},
 		{"invalid", false},
 		{"MEDIUM", false}, // case sensitive
 		{"max", false},

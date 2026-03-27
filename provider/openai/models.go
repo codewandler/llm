@@ -236,9 +236,9 @@ func getModelInfo(model string) (modelInfo, error) {
 	return info, nil
 }
 
-// mapReasoningEffort maps the user-requested reasoning effort to a valid OpenAI API value.
+// mapThinkingEffort maps the user-requested reasoning effort to a valid OpenAI API value.
 // Returns empty string if the parameter should be omitted, or an error if the value is invalid.
-func mapReasoningEffort(model string, effort llm.ReasoningEffort) (string, error) {
+func mapThinkingEffort(model string, effort llm.ThinkingEffort) (string, error) {
 	if effort == "" {
 		return "", nil // omit, let API use its default
 	}
@@ -257,11 +257,11 @@ func mapReasoningEffort(model string, effort llm.ReasoningEffort) (string, error
 		// Supports: minimal, low, medium, high
 		// Does NOT support: none, xhigh
 		switch effort {
-		case llm.ReasoningEffortNone:
+		case llm.ThinkingEffortNone:
 			return "", fmt.Errorf("reasoning_effort %q not supported for model %q (use minimal, low, medium, or high)", effort, model)
-		case llm.ReasoningEffortXHigh:
+		case llm.ThinkingEffortXHigh:
 			return "", fmt.Errorf("reasoning_effort %q not supported for model %q (use minimal, low, medium, or high)", effort, model)
-		case llm.ReasoningEffortMinimal, llm.ReasoningEffortLow, llm.ReasoningEffortMedium, llm.ReasoningEffortHigh:
+		case llm.ThinkingEffortMinimal, llm.ThinkingEffortLow, llm.ThinkingEffortMedium, llm.ThinkingEffortHigh:
 			return string(effort), nil
 		}
 
@@ -270,18 +270,18 @@ func mapReasoningEffort(model string, effort llm.ReasoningEffort) (string, error
 		// Does NOT support: minimal, xhigh
 		// Map minimal -> low
 		switch effort {
-		case llm.ReasoningEffortMinimal:
+		case llm.ThinkingEffortMinimal:
 			return "low", nil // map minimal -> low
-		case llm.ReasoningEffortXHigh:
+		case llm.ThinkingEffortXHigh:
 			return "", fmt.Errorf("reasoning_effort %q not supported for model %q (use none, low, medium, or high)", effort, model)
-		case llm.ReasoningEffortNone, llm.ReasoningEffortLow, llm.ReasoningEffortMedium, llm.ReasoningEffortHigh:
+		case llm.ThinkingEffortNone, llm.ThinkingEffortLow, llm.ThinkingEffortMedium, llm.ThinkingEffortHigh:
 			return string(effort), nil
 		}
 
 	case categoryPro:
 		// Only supports: high
-		if effort != llm.ReasoningEffortHigh {
-			return "", fmt.Errorf("reasoning_effort must be %q for model %q", llm.ReasoningEffortHigh, model)
+		if effort != llm.ThinkingEffortHigh {
+			return "", fmt.Errorf("reasoning_effort must be %q for model %q", llm.ThinkingEffortHigh, model)
 		}
 		return "high", nil
 
@@ -289,9 +289,9 @@ func mapReasoningEffort(model string, effort llm.ReasoningEffort) (string, error
 		// Supports: none, low, medium, high, xhigh
 		// Map minimal -> low
 		switch effort {
-		case llm.ReasoningEffortMinimal:
+		case llm.ThinkingEffortMinimal:
 			return "low", nil // map minimal -> low
-		case llm.ReasoningEffortNone, llm.ReasoningEffortLow, llm.ReasoningEffortMedium, llm.ReasoningEffortHigh, llm.ReasoningEffortXHigh:
+		case llm.ThinkingEffortNone, llm.ThinkingEffortLow, llm.ThinkingEffortMedium, llm.ThinkingEffortHigh, llm.ThinkingEffortXHigh:
 			return string(effort), nil
 		}
 	}

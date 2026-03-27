@@ -176,7 +176,7 @@ type request struct {
 	Messages         []messagePayload `json:"messages"`
 	Tools            []toolPayload    `json:"tools,omitempty"`
 	ToolChoice       any              `json:"tool_choice,omitempty"`
-	ReasoningEffort  string           `json:"reasoning_effort,omitempty"`
+	ThinkingEffort   string           `json:"reasoning_effort,omitempty"`
 	MaxTokens        int              `json:"max_tokens,omitempty"`
 	Temperature      float64          `json:"temperature,omitempty"`
 	TopP             float64          `json:"top_p,omitempty"`
@@ -280,8 +280,8 @@ func buildRequest(opts llm.Request) ([]byte, error) {
 	}
 
 	// Set reasoning_effort if specified (OpenAI-compatible)
-	if opts.ReasoningEffort != "" {
-		r.ReasoningEffort = string(opts.ReasoningEffort)
+	if opts.ThinkingEffort != "" {
+		r.ThinkingEffort = string(opts.ThinkingEffort)
 	}
 
 	for _, msg := range opts.Messages {

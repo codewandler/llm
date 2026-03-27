@@ -7,32 +7,59 @@ import (
 	llmtool "github.com/codewandler/llm/tool"
 )
 
-// --- ReasoningEffort ---
+// --- ThinkingEffort ---
 
-// ReasoningEffort controls the amount of reasoning for reasoning models.
+// ThinkingEffort controls the amount of reasoning for reasoning models.
 // Lower values result in faster responses with fewer reasoning tokens.
-type ReasoningEffort string
+type ThinkingEffort string
 
 const (
-	// ReasoningEffortNone disables reasoning (GPT-5.1+ only).
-	ReasoningEffortNone ReasoningEffort = "none"
-	// ReasoningEffortMinimal uses minimal reasoning effort.
-	ReasoningEffortMinimal ReasoningEffort = "minimal"
-	// ReasoningEffortLow uses low reasoning effort.
-	ReasoningEffortLow ReasoningEffort = "low"
-	// ReasoningEffortMedium uses medium reasoning effort (default for most models before GPT-5.1).
-	ReasoningEffortMedium ReasoningEffort = "medium"
-	// ReasoningEffortHigh uses high reasoning effort.
-	ReasoningEffortHigh ReasoningEffort = "high"
-	// ReasoningEffortXHigh uses extra high reasoning effort (codex-max+ only).
-	ReasoningEffortXHigh ReasoningEffort = "xhigh"
+	// ThinkingEffortNone disables reasoning (GPT-5.1+ only).
+	ThinkingEffortNone ThinkingEffort = "none"
+	// ThinkingEffortMinimal uses minimal reasoning effort.
+	ThinkingEffortMinimal ThinkingEffort = "minimal"
+	// ThinkingEffortLow uses low reasoning effort.
+	ThinkingEffortLow ThinkingEffort = "low"
+	// ThinkingEffortMedium uses medium reasoning effort (default for most models before GPT-5.1).
+	ThinkingEffortMedium ThinkingEffort = "medium"
+	// ThinkingEffortHigh uses high reasoning effort.
+	ThinkingEffortHigh ThinkingEffort = "high"
+	// ThinkingEffortXHigh uses extra high reasoning effort (codex-max+ only).
+	ThinkingEffortXHigh ThinkingEffort = "xhigh"
 )
 
-// Valid returns true if the ReasoningEffort is a known valid value or empty.
-func (r ReasoningEffort) Valid() bool {
+// Valid returns true if the ThinkingEffort is a known valid value or empty.
+func (r ThinkingEffort) Valid() bool {
 	switch r {
-	case "", ReasoningEffortNone, ReasoningEffortMinimal, ReasoningEffortLow,
-		ReasoningEffortMedium, ReasoningEffortHigh, ReasoningEffortXHigh:
+	case "", ThinkingEffortNone, ThinkingEffortMinimal, ThinkingEffortLow,
+		ThinkingEffortMedium, ThinkingEffortHigh, ThinkingEffortXHigh:
+		return true
+	default:
+		return false
+	}
+}
+
+// --- OutputEffort ---
+
+// OutputEffort controls the depth/effort of the model's response (Anthropic only).
+// Higher values result in more thorough responses at the cost of latency.
+type OutputEffort string
+
+const (
+	// OutputEffortLow produces faster, less thorough responses.
+	OutputEffortLow OutputEffort = "low"
+	// OutputEffortMedium produces balanced responses (default).
+	OutputEffortMedium OutputEffort = "medium"
+	// OutputEffortHigh produces thorough, detailed responses.
+	OutputEffortHigh OutputEffort = "high"
+	// OutputEffortMax produces maximum effort responses (Opus 4.6 only).
+	OutputEffortMax OutputEffort = "max"
+)
+
+// Valid returns true if the OutputEffort is a known valid value or empty.
+func (e OutputEffort) Valid() bool {
+	switch e {
+	case "", OutputEffortLow, OutputEffortMedium, OutputEffortHigh, OutputEffortMax:
 		return true
 	default:
 		return false
@@ -88,8 +115,11 @@ type Request struct {
 	// ToolChoice controls how the model selects tools. Defaults to Auto when Tools are provided.
 	ToolChoice ToolChoice `json:"tool_choice,omitempty"`
 
-	// ReasoningEffort controls the depth of reasoning for models that support it (e.g. OpenAI o-series).
-	ReasoningEffort ReasoningEffort `json:"reasoning_effort,omitempty"`
+	// ThinkingEffort controls the depth of reasoning for models that support it (e.g. OpenAI o-series).
+	ThinkingEffort ThinkingEffort `json:"thinking_effort,omitempty"`
+
+	// OutputEffort controls the depth/effort of the model's response (Anthropic only).
+	OutputEffort OutputEffort `json:"output_effort,omitempty"`
 
 	// CacheHint is a top-level prompt caching hint. Behaviour is provider-specific:
 	// Anthropic auto mode, Bedrock trailing cachePoint, OpenAI extended retention.
@@ -103,9 +133,14 @@ func (o Request) Validate() error {
 		return errors.New("model is required")
 	}
 
-	// Validate ReasoningEffort
-	if !o.ReasoningEffort.Valid() {
-		return fmt.Errorf("invalid ReasoningEffort %q", o.ReasoningEffort)
+	// Validate ThinkingEffort
+	if !o.ThinkingEffort.Valid() {
+		return fmt.Errorf("invalid ThinkingEffort %q", o.ThinkingEffort)
+	}
+
+	// Validate OutputEffort
+	if !o.OutputEffort.Valid() {
+		return fmt.Errorf("invalid OutputEffort %q", o.OutputEffort)
 	}
 
 	// Validate Tools

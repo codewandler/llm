@@ -17,7 +17,8 @@ func NewInferCmd(root *RootFlags) *cobra.Command {
 	var model string
 	var system string
 	var verbose bool
-	var reasoning string
+	var thinkingEffort string
+	var outputEffort string
 	var demoTools bool
 
 	cmd := &cobra.Command{
@@ -29,26 +30,28 @@ Uses all stored credential accounts, trying each in alphabetical order
 until one succeeds (useful for rate limit fallback).
 
 Examples:
-  llmcli infer "Hello, how are you?"              # Uses fast model (haiku)
-  llmcli infer -m default "Explain Go channels"   # Balanced (sonnet)
-  llmcli infer -m powerful "Write a poem about Go" # Most capable (opus)
-  llmcli infer -s "You are a pirate" "Hello"      # Add system prompt
-  llmcli infer -m codex --reasoning high "Hello"  # Add reasoning`,
+  llmcli infer "Hello, how are you?"				# Uses fast model (haiku)
+  llmcli infer -m default "Explain Go channels"		# Balanced (sonnet)
+  llmcli infer -m powerful "Write a poem about Go"	# Most capable (opus)
+  llmcli infer -s "You are a pirate" "Hello"		# Add system prompt
+  llmcli infer -m codex --thinking high "Hello"		# Add thinking
+  llmcli infer --effort high "Explain this"			# High output effort response`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runInfer(cmd.Context(), args[0], model, system, reasoning, verbose, demoTools, root)
+			return runInfer(cmd.Context(), args[0], model, system, thinkingEffort, outputEffort, verbose, demoTools, root)
 		},
 	}
 
 	cmd.Flags().StringVarP(&model, "model", "m", "fast", "Model to use (fast, default, powerful, codex, or full path)")
 	cmd.Flags().StringVarP(&system, "system", "s", "", "System prompt to prepend")
-	cmd.Flags().StringVar(&reasoning, "reasoning", "", "Reasoning effort: low, medium, high (for o-series / codex models)")
+	cmd.Flags().StringVar(&thinkingEffort, "thinking", "", "Thinking effort: low, medium, high (for o-series / codex models)")
+	cmd.Flags().StringVar(&outputEffort, "effort", "", "Output effort: low, medium, high, max (Anthropic Sonnet 4.6+ / Opus 4.6+)")
 	cmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "Show usage statistics")
 	cmd.Flags().BoolVar(&demoTools, "demo-tools", false, "Enable demo tool loop (add_fact + complete_turn) and default persona")
 	return cmd
 }
 
-func runInfer(ctx context.Context, userMsg, model, system, reasoning string, verbose bool, demoTools bool, root *RootFlags) error {
+func runInfer(ctx context.Context, userMsg, model, system, thinking, effort string, verbose bool, demoTools bool, root *RootFlags) error {
 	httpClient, logHandler := root.BuildHTTPClient()
 	concreteProvider, err := createProvider(ctx, httpClient, root.BuildLLMOptions(logHandler)...)
 	if err != nil {
@@ -56,7 +59,7 @@ func runInfer(ctx context.Context, userMsg, model, system, reasoning string, ver
 	}
 	var provider llm.Provider = concreteProvider
 
-	spec := buildInferSpec(userMsg, model, system, reasoning, demoTools)
+	spec := buildInferSpec(userMsg, model, system, thinking, effort, demoTools)
 
 	// --- Token estimate (verbose only) ---
 	var tokenEstimate *llm.TokenCount
@@ -75,11 +78,12 @@ func runInfer(ctx context.Context, userMsg, model, system, reasoning string, ver
 	}
 
 	stream, err := provider.CreateStream(ctx, llm.Request{
-		Model:           spec.Model,
-		Messages:        spec.Messages,
-		ReasoningEffort: spec.ReasoningEffort,
-		ToolChoice:      spec.ToolChoice,
-		Tools:           spec.Tools,
+		Model:          spec.Model,
+		Messages:       spec.Messages,
+		ThinkingEffort: spec.ThinkingEffort,
+		OutputEffort:   spec.OutputEffort,
+		ToolChoice:     spec.ToolChoice,
+		Tools:          spec.Tools,
 	})
 	if err != nil {
 		return fmt.Errorf("create stream: %w", err)
@@ -321,12 +325,13 @@ func formatCost(cost float64) string {
 }
 
 type inferSpec struct {
-	Model           string
-	Messages        llm.Messages
-	ReasoningEffort llm.ReasoningEffort
-	ToolChoice      llm.ToolChoice
-	Tools           []tool.Definition
-	ToolHandlers    []tool.NamedHandler
+	Model          string
+	Messages       llm.Messages
+	ThinkingEffort llm.ThinkingEffort
+	OutputEffort   llm.OutputEffort
+	ToolChoice     llm.ToolChoice
+	Tools          []tool.Definition
+	ToolHandlers   []tool.NamedHandler
 }
 
 type addFactParams struct {
@@ -344,7 +349,7 @@ type defaultToolResult struct {
 
 const defaultDemoSystemPrompt = "You are Tessa. Before you do anything -> Introduce yourself! You must complete by calling `complete_turn` tool. This can happen together with adding facts"
 
-func buildInferSpec(userMsg, model, system, reasoning string, demoTools bool) inferSpec {
+func buildInferSpec(userMsg, model, system, thinking, effort string, demoTools bool) inferSpec {
 	msgs := make(llm.Messages, 0, 2)
 	cacheHint := &llm.CacheHint{Enabled: true}
 
@@ -356,9 +361,10 @@ func buildInferSpec(userMsg, model, system, reasoning string, demoTools bool) in
 	msgs = append(msgs, llm.User(userMsg))
 
 	spec := inferSpec{
-		Model:           model,
-		Messages:        msgs,
-		ReasoningEffort: llm.ReasoningEffort(reasoning),
+		Model:          model,
+		Messages:       msgs,
+		ThinkingEffort: llm.ThinkingEffort(thinking),
+		OutputEffort:   llm.OutputEffort(effort),
 	}
 
 	if !demoTools {

@@ -625,16 +625,16 @@ func TestGetModelInfo_Categories(t *testing.T) {
 	}
 }
 
-// --- Unit tests for mapReasoningEffort ---
+// --- Unit tests for mapThinkingEffort ---
 
-func TestMapReasoningEffort_NonReasoning(t *testing.T) {
+func TestMapThinkingEffort_NonReasoning(t *testing.T) {
 	models := []string{"gpt-4o", "gpt-4o-mini", "gpt-4", "gpt-3.5-turbo", "gpt-4.1"}
-	efforts := []llm.ReasoningEffort{"", llm.ReasoningEffortNone, llm.ReasoningEffortMinimal, llm.ReasoningEffortLow, llm.ReasoningEffortMedium, llm.ReasoningEffortHigh, llm.ReasoningEffortXHigh}
+	efforts := []llm.ThinkingEffort{"", llm.ThinkingEffortNone, llm.ThinkingEffortMinimal, llm.ThinkingEffortLow, llm.ThinkingEffortMedium, llm.ThinkingEffortHigh, llm.ThinkingEffortXHigh}
 
 	for _, model := range models {
 		for _, effort := range efforts {
 			t.Run(model+"_"+string(effort), func(t *testing.T) {
-				result, err := mapReasoningEffort(model, effort)
+				result, err := mapThinkingEffort(model, effort)
 				require.NoError(t, err)
 				assert.Empty(t, result, "non-reasoning models should return empty")
 			})
@@ -642,27 +642,27 @@ func TestMapReasoningEffort_NonReasoning(t *testing.T) {
 	}
 }
 
-func TestMapReasoningEffort_PreGPT51(t *testing.T) {
+func TestMapThinkingEffort_PreGPT51(t *testing.T) {
 	models := []string{"gpt-5", "gpt-5-mini", "gpt-5-nano", "o1", "o3"}
 
 	tests := []struct {
-		effort  llm.ReasoningEffort
+		effort  llm.ThinkingEffort
 		want    string
 		wantErr bool
 	}{
 		{"", "", false},
-		{llm.ReasoningEffortMinimal, "minimal", false},
-		{llm.ReasoningEffortLow, "low", false},
-		{llm.ReasoningEffortMedium, "medium", false},
-		{llm.ReasoningEffortHigh, "high", false},
-		{llm.ReasoningEffortNone, "", true},
-		{llm.ReasoningEffortXHigh, "", true},
+		{llm.ThinkingEffortMinimal, "minimal", false},
+		{llm.ThinkingEffortLow, "low", false},
+		{llm.ThinkingEffortMedium, "medium", false},
+		{llm.ThinkingEffortHigh, "high", false},
+		{llm.ThinkingEffortNone, "", true},
+		{llm.ThinkingEffortXHigh, "", true},
 	}
 
 	for _, model := range models {
 		for _, tt := range tests {
 			t.Run(model+"_"+string(tt.effort), func(t *testing.T) {
-				result, err := mapReasoningEffort(model, tt.effort)
+				result, err := mapThinkingEffort(model, tt.effort)
 				if tt.wantErr {
 					require.Error(t, err)
 				} else {
@@ -674,26 +674,26 @@ func TestMapReasoningEffort_PreGPT51(t *testing.T) {
 	}
 }
 
-func TestMapReasoningEffort_GPT51(t *testing.T) {
+func TestMapThinkingEffort_GPT51(t *testing.T) {
 	model := "gpt-5.1"
 
 	tests := []struct {
-		effort  llm.ReasoningEffort
+		effort  llm.ThinkingEffort
 		want    string
 		wantErr bool
 	}{
 		{"", "", false},
-		{llm.ReasoningEffortNone, "none", false},
-		{llm.ReasoningEffortMinimal, "low", false},
-		{llm.ReasoningEffortLow, "low", false},
-		{llm.ReasoningEffortMedium, "medium", false},
-		{llm.ReasoningEffortHigh, "high", false},
-		{llm.ReasoningEffortXHigh, "", true},
+		{llm.ThinkingEffortNone, "none", false},
+		{llm.ThinkingEffortMinimal, "low", false},
+		{llm.ThinkingEffortLow, "low", false},
+		{llm.ThinkingEffortMedium, "medium", false},
+		{llm.ThinkingEffortHigh, "high", false},
+		{llm.ThinkingEffortXHigh, "", true},
 	}
 
 	for _, tt := range tests {
 		t.Run(string(tt.effort), func(t *testing.T) {
-			result, err := mapReasoningEffort(model, tt.effort)
+			result, err := mapThinkingEffort(model, tt.effort)
 			if tt.wantErr {
 				require.Error(t, err)
 			} else {
@@ -704,25 +704,25 @@ func TestMapReasoningEffort_GPT51(t *testing.T) {
 	}
 }
 
-func TestMapReasoningEffort_Pro(t *testing.T) {
+func TestMapThinkingEffort_Pro(t *testing.T) {
 	models := []string{"gpt-5-pro", "gpt-5.2-pro", "o1-pro", "o3-pro"}
 
 	for _, model := range models {
 		t.Run(model+"_empty", func(t *testing.T) {
-			result, err := mapReasoningEffort(model, "")
+			result, err := mapThinkingEffort(model, "")
 			require.NoError(t, err)
 			assert.Empty(t, result)
 		})
 
 		t.Run(model+"_high", func(t *testing.T) {
-			result, err := mapReasoningEffort(model, llm.ReasoningEffortHigh)
+			result, err := mapThinkingEffort(model, llm.ThinkingEffortHigh)
 			require.NoError(t, err)
 			assert.Equal(t, "high", result)
 		})
 
-		for _, effort := range []llm.ReasoningEffort{llm.ReasoningEffortNone, llm.ReasoningEffortMinimal, llm.ReasoningEffortLow, llm.ReasoningEffortMedium, llm.ReasoningEffortXHigh} {
+		for _, effort := range []llm.ThinkingEffort{llm.ThinkingEffortNone, llm.ThinkingEffortMinimal, llm.ThinkingEffortLow, llm.ThinkingEffortMedium, llm.ThinkingEffortXHigh} {
 			t.Run(model+"_"+string(effort), func(t *testing.T) {
-				_, err := mapReasoningEffort(model, effort)
+				_, err := mapThinkingEffort(model, effort)
 				require.Error(t, err)
 				assert.Contains(t, err.Error(), "must be")
 			})
@@ -730,27 +730,27 @@ func TestMapReasoningEffort_Pro(t *testing.T) {
 	}
 }
 
-func TestMapReasoningEffort_CodexMax(t *testing.T) {
+func TestMapThinkingEffort_CodexMax(t *testing.T) {
 	models := []string{"gpt-5.1-codex", "gpt-5.2-codex", "gpt-5.1-codex-max"}
 
 	tests := []struct {
-		effort  llm.ReasoningEffort
+		effort  llm.ThinkingEffort
 		want    string
 		wantErr bool
 	}{
 		{"", "", false},
-		{llm.ReasoningEffortNone, "none", false},
-		{llm.ReasoningEffortMinimal, "low", false},
-		{llm.ReasoningEffortLow, "low", false},
-		{llm.ReasoningEffortMedium, "medium", false},
-		{llm.ReasoningEffortHigh, "high", false},
-		{llm.ReasoningEffortXHigh, "xhigh", false},
+		{llm.ThinkingEffortNone, "none", false},
+		{llm.ThinkingEffortMinimal, "low", false},
+		{llm.ThinkingEffortLow, "low", false},
+		{llm.ThinkingEffortMedium, "medium", false},
+		{llm.ThinkingEffortHigh, "high", false},
+		{llm.ThinkingEffortXHigh, "xhigh", false},
 	}
 
 	for _, model := range models {
 		for _, tt := range tests {
 			t.Run(model+"_"+string(tt.effort), func(t *testing.T) {
-				result, err := mapReasoningEffort(model, tt.effort)
+				result, err := mapThinkingEffort(model, tt.effort)
 				if tt.wantErr {
 					require.Error(t, err)
 				} else {
@@ -766,7 +766,7 @@ func TestMapReasoningEffort_CodexMax(t *testing.T) {
 // These test the full pipeline: enrichOpts (reasoning mapping, cache retention)
 // feeding into ccBuildRequest.
 
-func TestBuildRequest_ReasoningEffortOmitted(t *testing.T) {
+func TestBuildRequest_ThinkingEffortOmitted(t *testing.T) {
 	opts := llm.Request{
 		Model:    "gpt-4o",
 		Messages: llm.Messages{llm.User("Hello")},
@@ -781,12 +781,12 @@ func TestBuildRequest_ReasoningEffortOmitted(t *testing.T) {
 	assert.False(t, exists, "reasoning_effort should be omitted when not specified")
 }
 
-func TestBuildRequest_ReasoningEffortSet(t *testing.T) {
+func TestBuildRequest_ThinkingEffortSet(t *testing.T) {
 	// enrichOpts passes the raw effort string through for pre-GPT51 models.
 	opts, err := enrichOpts(llm.Request{
-		Model:           "gpt-5",
-		Messages:        llm.Messages{llm.User("Hello")},
-		ReasoningEffort: llm.ReasoningEffortLow,
+		Model:          "gpt-5",
+		Messages:       llm.Messages{llm.User("Hello")},
+		ThinkingEffort: llm.ThinkingEffortLow,
 	})
 	require.NoError(t, err)
 
@@ -798,12 +798,12 @@ func TestBuildRequest_ReasoningEffortSet(t *testing.T) {
 	assert.Equal(t, "low", req["reasoning_effort"])
 }
 
-func TestBuildRequest_ReasoningEffortMapped(t *testing.T) {
+func TestBuildRequest_ThinkingEffortMapped(t *testing.T) {
 	// enrichOpts maps "minimal" → "low" for gpt-5.1.
 	opts, err := enrichOpts(llm.Request{
-		Model:           "gpt-5.1",
-		Messages:        llm.Messages{llm.User("Hello")},
-		ReasoningEffort: llm.ReasoningEffortMinimal,
+		Model:          "gpt-5.1",
+		Messages:       llm.Messages{llm.User("Hello")},
+		ThinkingEffort: llm.ThinkingEffortMinimal,
 	})
 	require.NoError(t, err)
 
@@ -815,11 +815,11 @@ func TestBuildRequest_ReasoningEffortMapped(t *testing.T) {
 	assert.Equal(t, "low", req["reasoning_effort"], "minimal should be mapped to low for gpt-5.1")
 }
 
-func TestBuildRequest_ReasoningEffortError(t *testing.T) {
+func TestBuildRequest_ThinkingEffortError(t *testing.T) {
 	_, err := enrichOpts(llm.Request{
-		Model:           "gpt-5-pro",
-		Messages:        llm.Messages{llm.User("Hello")},
-		ReasoningEffort: llm.ReasoningEffortLow,
+		Model:          "gpt-5-pro",
+		Messages:       llm.Messages{llm.User("Hello")},
+		ThinkingEffort: llm.ThinkingEffortLow,
 	})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "must be")
@@ -880,29 +880,29 @@ func TestBuildRequest_PromptCacheRetention_NotSupported(t *testing.T) {
 
 // --- Unit tests for model registry ---
 
-func TestEnrichOpts_ReasoningEffortOmitted(t *testing.T) {
+func TestEnrichOpts_ThinkingEffortOmitted(t *testing.T) {
 	opts := llm.Request{Model: "gpt-4o", Messages: llm.Messages{llm.User("hi")}}
 	out, err := enrichOpts(opts)
 	require.NoError(t, err)
-	assert.Empty(t, out.ReasoningEffort)
+	assert.Empty(t, out.ThinkingEffort)
 }
 
-func TestEnrichOpts_ReasoningEffortMappedMinimalToLow(t *testing.T) {
+func TestEnrichOpts_ThinkingEffortMappedMinimalToLow(t *testing.T) {
 	opts := llm.Request{
-		Model:           "gpt-5.1",
-		ReasoningEffort: llm.ReasoningEffortMinimal,
-		Messages:        llm.Messages{llm.User("hi")},
+		Model:          "gpt-5.1",
+		ThinkingEffort: llm.ThinkingEffortMinimal,
+		Messages:       llm.Messages{llm.User("hi")},
 	}
 	out, err := enrichOpts(opts)
 	require.NoError(t, err)
-	assert.Equal(t, llm.ReasoningEffort("low"), out.ReasoningEffort)
+	assert.Equal(t, llm.ThinkingEffort("low"), out.ThinkingEffort)
 }
 
-func TestEnrichOpts_ReasoningEffortErrorProModel(t *testing.T) {
+func TestEnrichOpts_ThinkingEffortErrorProModel(t *testing.T) {
 	opts := llm.Request{
-		Model:           "gpt-5-pro",
-		ReasoningEffort: llm.ReasoningEffortLow,
-		Messages:        llm.Messages{llm.User("hi")},
+		Model:          "gpt-5-pro",
+		ThinkingEffort: llm.ThinkingEffortLow,
+		Messages:       llm.Messages{llm.User("hi")},
 	}
 	_, err := enrichOpts(opts)
 	require.Error(t, err)
@@ -934,25 +934,25 @@ func TestWantsExtendedCache_NotSet(t *testing.T) {
 	}
 }
 
-func TestMapReasoningEffort_Codex(t *testing.T) {
+func TestMapThinkingEffort_Codex(t *testing.T) {
 	tests := []struct {
-		effort  llm.ReasoningEffort
+		effort  llm.ThinkingEffort
 		want    string
 		wantErr bool
 	}{
 		{"", "", false},
-		{llm.ReasoningEffortNone, "none", false},
-		{llm.ReasoningEffortMinimal, "low", false},
-		{llm.ReasoningEffortLow, "low", false},
-		{llm.ReasoningEffortMedium, "medium", false},
-		{llm.ReasoningEffortHigh, "high", false},
-		{llm.ReasoningEffortXHigh, "xhigh", false},
+		{llm.ThinkingEffortNone, "none", false},
+		{llm.ThinkingEffortMinimal, "low", false},
+		{llm.ThinkingEffortLow, "low", false},
+		{llm.ThinkingEffortMedium, "medium", false},
+		{llm.ThinkingEffortHigh, "high", false},
+		{llm.ThinkingEffortXHigh, "xhigh", false},
 	}
 
 	for _, model := range []string{"gpt-5.1-codex", "gpt-5.2-codex", "gpt-5.1-codex-max"} {
 		for _, tt := range tests {
 			t.Run(model+"_"+string(tt.effort), func(t *testing.T) {
-				result, err := mapReasoningEffort(model, tt.effort)
+				result, err := mapThinkingEffort(model, tt.effort)
 				if tt.wantErr {
 					require.Error(t, err)
 				} else {
@@ -1174,11 +1174,11 @@ func TestRespBuildRequest_ToolCallsAndResults(t *testing.T) {
 	assert.Equal(t, "All 42 tests passed", req.Input[3].Output)
 }
 
-func TestRespBuildRequest_ReasoningEffort(t *testing.T) {
+func TestRespBuildRequest_ThinkingEffort(t *testing.T) {
 	opts := llm.Request{
-		Model:           "gpt-5.1-codex",
-		Messages:        llm.Messages{llm.User("test")},
-		ReasoningEffort: llm.ReasoningEffortHigh,
+		Model:          "gpt-5.1-codex",
+		Messages:       llm.Messages{llm.User("test")},
+		ThinkingEffort: llm.ThinkingEffortHigh,
 	}
 
 	body, err := respBuildRequest(opts)
@@ -1394,30 +1394,30 @@ func TestWantsExtendedCache_TableDriven(t *testing.T) {
 	}
 }
 
-func TestEnrichOpts_ReasoningEffortMapping(t *testing.T) {
+func TestEnrichOpts_ThinkingEffortMapping(t *testing.T) {
 	tests := []struct {
 		name       string
 		model      string
-		effort     llm.ReasoningEffort
-		wantEffort llm.ReasoningEffort
+		effort     llm.ThinkingEffort
+		wantEffort llm.ThinkingEffort
 		wantErr    bool
 	}{
-		{"non-reasoning model ignores effort", "gpt-4o", llm.ReasoningEffortHigh, "", false},
-		{"gpt-5.1 accepts high", "gpt-5.1", llm.ReasoningEffortHigh, "high", false},
-		{"gpt-5.1 maps minimal to low", "gpt-5.1", llm.ReasoningEffortMinimal, "low", false},
-		{"gpt-5.1 rejects xhigh", "gpt-5.1", llm.ReasoningEffortXHigh, "", true},
-		{"codex accepts xhigh", "gpt-5.1-codex", llm.ReasoningEffortXHigh, "xhigh", false},
-		{"codex maps minimal to low", "gpt-5.1-codex", llm.ReasoningEffortMinimal, "low", false},
-		{"pro only accepts high", "o1-pro", llm.ReasoningEffortHigh, "high", false},
-		{"pro rejects medium", "o1-pro", llm.ReasoningEffortMedium, "", true},
+		{"non-reasoning model ignores effort", "gpt-4o", llm.ThinkingEffortHigh, "", false},
+		{"gpt-5.1 accepts high", "gpt-5.1", llm.ThinkingEffortHigh, "high", false},
+		{"gpt-5.1 maps minimal to low", "gpt-5.1", llm.ThinkingEffortMinimal, "low", false},
+		{"gpt-5.1 rejects xhigh", "gpt-5.1", llm.ThinkingEffortXHigh, "", true},
+		{"codex accepts xhigh", "gpt-5.1-codex", llm.ThinkingEffortXHigh, "xhigh", false},
+		{"codex maps minimal to low", "gpt-5.1-codex", llm.ThinkingEffortMinimal, "low", false},
+		{"pro only accepts high", "o1-pro", llm.ThinkingEffortHigh, "high", false},
+		{"pro rejects medium", "o1-pro", llm.ThinkingEffortMedium, "", true},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			opts := llm.Request{
-				Model:           tt.model,
-				Messages:        llm.Messages{llm.User("test")},
-				ReasoningEffort: tt.effort,
+				Model:          tt.model,
+				Messages:       llm.Messages{llm.User("test")},
+				ThinkingEffort: tt.effort,
 			}
 
 			enriched, err := enrichOpts(opts)
@@ -1425,7 +1425,7 @@ func TestEnrichOpts_ReasoningEffortMapping(t *testing.T) {
 				require.Error(t, err)
 			} else {
 				require.NoError(t, err)
-				assert.Equal(t, tt.wantEffort, enriched.ReasoningEffort)
+				assert.Equal(t, tt.wantEffort, enriched.ThinkingEffort)
 			}
 		})
 	}

@@ -5,6 +5,7 @@ import (
 	"context"
 	"io"
 	"net/http"
+	"strings"
 
 	"github.com/codewandler/llm"
 )
@@ -92,9 +93,18 @@ func (p *Provider) CreateStream(ctx context.Context, opts llm.Request) (llm.Stre
 		return nil, llm.NewErrAPIError(llm.ProviderNameAnthropic, resp.StatusCode, string(errBody))
 	}
 
+	// Extract headers for rate-limit info (lowercase keys)
+	headers := make(map[string]string, len(resp.Header))
+	for k, v := range resp.Header {
+		if len(v) > 0 {
+			headers[strings.ToLower(k)] = v[0]
+		}
+	}
+
 	return ParseStream(ctx, resp.Body, ParseOpts{
-		RequestedModel: opts.Model,
-		ResolvedModel:  opts.Model,
+		RequestedModel:  opts.Model,
+		ResolvedModel:   opts.Model,
+		ResponseHeaders: headers,
 	}), nil
 }
 
@@ -106,6 +116,7 @@ func (p *Provider) newAPIRequest(ctx context.Context, apiKey string, body []byte
 
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Accept-Encoding", "gzip, deflate, br, zstd")
 	req.Header.Set("Anthropic-Version", anthropicVersion)
 	req.Header.Set("x-api-key", apiKey)
 	return req, nil

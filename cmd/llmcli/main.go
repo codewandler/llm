@@ -40,6 +40,7 @@ Currently supports Claude OAuth authentication.`,
 	rootCmd.PersistentFlags().BoolVar(&rootFlags.LogEvents, "log-events", false, "Log each StreamEvent as JSON to stderr as it is received")
 
 	rootCmd.AddCommand(cmds.NewAuthCmd())
+	rootCmd.AddCommand(cmds.NewClaudeCmd())
 	rootCmd.AddCommand(cmds.NewInferCmd(rootFlags))
 	rootCmd.AddCommand(cmds.NewModelsCmd(rootFlags))
 

@@ -11,7 +11,7 @@ import (
 // Request types for Anthropic API
 
 type thinking struct {
-	Type         string `json:"type"` // always "enabled"
+	Type         string `json:"type"`           // "enabled", "adaptive", or "disabled"
 	BudgetTokens int    `json:"budget_tokens,omitempty"`
 }
 
@@ -25,7 +25,7 @@ type request struct {
 	ToolChoice   any              `json:"tool_choice,omitempty"`
 	Thinking     *thinking        `json:"thinking,omitempty"`
 	Metadata     *metadata        `json:"metadata,omitempty"`
-	CacheControl *cacheControl    `json:"cache_control,omitempty"`
+	CacheControl *CacheControl    `json:"cache_control,omitempty"`
 	TopK         int              `json:"top_k,omitempty"`
 	TopP         float64          `json:"top_p,omitempty"`
 	OutputConfig *outputConfig    `json:"output_config,omitempty"`
@@ -33,6 +33,7 @@ type request struct {
 
 type outputConfig struct {
 	Format *jsonOutputFormat `json:"format,omitempty"`
+	Effort string            `json:"effort,omitempty"`
 }
 
 type jsonOutputFormat struct {
@@ -53,7 +54,7 @@ type messagePayload struct {
 type SystemBlock struct {
 	Type         string        `json:"type"`
 	Text         string        `json:"text"`
-	CacheControl *cacheControl `json:"cache_control,omitempty"`
+	CacheControl *CacheControl `json:"cache_control,omitempty"`
 }
 
 type contentBlock struct {
@@ -65,7 +66,7 @@ type contentBlock struct {
 	ToolUseID    string         `json:"tool_use_id,omitempty"`
 	Content      string         `json:"content,omitempty"`
 	IsError      bool           `json:"is_error,omitempty"`
-	CacheControl *cacheControl  `json:"cache_control,omitempty"`
+	CacheControl *CacheControl  `json:"cache_control,omitempty"`
 }
 
 // toolUseBlock is a specialized content block for tool_use that always includes the input field.
@@ -75,18 +76,18 @@ type toolUseBlock struct {
 	ID           string         `json:"id"`
 	Name         string         `json:"name"`
 	Input        map[string]any `json:"input"` // No omitempty - must always be present
-	CacheControl *cacheControl  `json:"cache_control,omitempty"`
+	CacheControl *CacheControl  `json:"cache_control,omitempty"`
 }
 
 type toolPayload struct {
 	Name         string        `json:"name"`
 	Description  string        `json:"description"`
 	InputSchema  any           `json:"input_schema"`
-	CacheControl *cacheControl `json:"cache_control,omitempty"`
+	CacheControl *CacheControl `json:"cache_control,omitempty"`
 }
 
-// cacheControl is the Anthropic API wire type for cache breakpoints.
-type cacheControl struct {
+// CacheControl is the Anthropic API wire type for cache breakpoints.
+type CacheControl struct {
 	Type string `json:"type"`          // always "ephemeral"
 	TTL  string `json:"ttl,omitempty"` // "1h" for extended TTL; omit for default 5m
 }
@@ -100,13 +101,33 @@ type RequestOptions struct {
 	StreamOptions llm.Request
 }
 
+// isAdaptiveThinkingSupported returns true if the model supports adaptive thinking (Sonnet 4.6 / Opus 4.6).
+func isAdaptiveThinkingSupported(model string) bool {
+	return strings.Contains(model, "claude-sonnet-4-6") ||
+		strings.Contains(model, "claude-opus-4-6")
+}
+
+// isMaxEffortSupported returns true if the model supports max effort (Opus 4.6 only).
+func isMaxEffortSupported(model string) bool {
+	return strings.Contains(model, "claude-opus-4-6")
+}
+
+// isEffortSupported returns true if the model supports output effort.
+// Effort is supported on Sonnet 4.6, Opus 4.5, and Opus 4.6.
+// Note: Sonnet 4.5 does NOT support effort.
+func isEffortSupported(model string) bool {
+	return strings.Contains(model, "claude-sonnet-4-6") ||
+		strings.Contains(model, "claude-opus-4-5") ||
+		strings.Contains(model, "claude-opus-4-6")
+}
+
 // buildCacheControl converts a CacheHint to the Anthropic wire type.
 // Returns nil if hint is nil or not enabled.
-func buildCacheControl(h *llm.CacheHint) *cacheControl {
+func buildCacheControl(h *llm.CacheHint) *CacheControl {
 	if h == nil || !h.Enabled {
 		return nil
 	}
-	cc := &cacheControl{Type: "ephemeral"}
+	cc := &CacheControl{Type: "ephemeral"}
 	if h.TTL == "1h" {
 		cc.TTL = "1h"
 	}
@@ -144,11 +165,13 @@ func BuildRequest(reqOpts RequestOptions) ([]byte, error) {
 	if opts.TopP > 0 {
 		r.TopP = opts.TopP
 	}
-	if opts.OutputFormat == llm.OutputFormatJSON {
-		r.OutputConfig = &outputConfig{
-			Format: &jsonOutputFormat{
-				Type: "json_schema",
-			},
+	// Output config: format and/or effort
+	if opts.OutputFormat == llm.OutputFormatJSON || opts.OutputEffort != "" {
+		if r.OutputConfig == nil {
+			r.OutputConfig = &outputConfig{}
+		}
+		if opts.OutputFormat == llm.OutputFormatJSON {
+			r.OutputConfig.Format = &jsonOutputFormat{Type: "json_schema"}
 		}
 	}
 
@@ -167,20 +190,55 @@ func BuildRequest(reqOpts RequestOptions) ([]byte, error) {
 		r.Tools = append(r.Tools, toolPayload{Name: t.Name, Description: t.Description, InputSchema: sortmap.NewSortedMap(t.Parameters)})
 	}
 
-	// Wire extended thinking. Incompatible with forced tool_choice — downgrade to auto.
-	if opts.ReasoningEffort != "" {
+	// Wire thinking. Incompatible with forced tool_choice — downgrade to auto.
+	// Sonnet 4.6 / Opus 4.6 use adaptive thinking by default (empty = let model decide).
+	// ThinkingEffort "none" explicitly disables thinking.
+	// Other ThinkingEffort values use budget_tokens.
+	if opts.ThinkingEffort == llm.ThinkingEffortNone {
+		// User explicitly disabled thinking
+		r.Thinking = &thinking{Type: "disabled"}
+	} else if isAdaptiveThinkingSupported(reqOpts.Model) {
+		// Sonnet 4.6 / Opus 4.6: use adaptive by default (let model decide when to think)
+		// Or if user set ThinkingEffort, still use adaptive (effort controls depth)
+		r.Thinking = &thinking{Type: "adaptive"}
+	} else if opts.ThinkingEffort != "" {
+		// Older models with explicit ThinkingEffort: use enabled + budget_tokens
 		budgetTokens := 5000
-		switch opts.ReasoningEffort {
-		case llm.ReasoningEffortLow:
+		switch opts.ThinkingEffort {
+		case llm.ThinkingEffortLow:
 			budgetTokens = 1024
-		case llm.ReasoningEffortMedium:
+		case llm.ThinkingEffortMedium:
 			budgetTokens = 5000
-		case llm.ReasoningEffortHigh:
+		case llm.ThinkingEffortHigh:
 			budgetTokens = 16000
 		}
 		r.Thinking = &thinking{Type: "enabled", BudgetTokens: budgetTokens}
-		if _, isForced := opts.ToolChoice.(llm.ToolChoiceTool); isForced {
-			opts.ToolChoice = llm.ToolChoiceAuto{}
+	} else {
+		// Older models with no ThinkingEffort: disabled
+		r.Thinking = &thinking{Type: "disabled"}
+	}
+	if _, isForced := opts.ToolChoice.(llm.ToolChoiceTool); isForced {
+		opts.ToolChoice = llm.ToolChoiceAuto{}
+	}
+
+	// Wire output effort (Anthropic only). Default to low to avoid Anthropic's
+	// expensive high/max default. Only set max effort on Opus 4.6.
+	// Effort is only supported on Sonnet 4.5+ and Opus 4.5+.
+	if isEffortSupported(reqOpts.Model) {
+		effort := opts.OutputEffort
+		if effort == "" {
+			effort = llm.OutputEffortLow
+		}
+		effortStr := string(effort)
+		if effort == llm.OutputEffortMax && !isMaxEffortSupported(reqOpts.Model) {
+			// Skip max effort on unsupported models; API would reject it anyway
+			effortStr = ""
+		}
+		if effortStr != "" {
+			if r.OutputConfig == nil {
+				r.OutputConfig = &outputConfig{}
+			}
+			r.OutputConfig.Effort = effortStr
 		}
 	}
 

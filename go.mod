@@ -3,10 +3,12 @@ module github.com/codewandler/llm
 go 1.25.6
 
 require (
+	github.com/andybalholm/brotli v1.2.0
 	github.com/aws/aws-sdk-go-v2 v1.41.2
 	github.com/aws/aws-sdk-go-v2/config v1.32.10
 	github.com/aws/aws-sdk-go-v2/service/bedrockruntime v1.50.0
 	github.com/invopop/jsonschema v0.13.0
+	github.com/klauspost/compress v1.18.5
 	github.com/matoous/go-nanoid/v2 v2.1.0
 	github.com/pkoukk/tiktoken-go v0.1.8
 	github.com/pkoukk/tiktoken-go-loader v0.0.2

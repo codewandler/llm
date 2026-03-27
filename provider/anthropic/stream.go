@@ -21,6 +21,10 @@ type ParseOpts struct {
 	// CostFn overrides the default Anthropic cost calculation.
 	// When nil, FillCost (Anthropic pricing) is used.
 	CostFn CostFn
+
+	// ResponseHeaders contains HTTP response headers, used to extract rate-limit info.
+	// Keys should be lowercase header names.
+	ResponseHeaders map[string]string
 }
 
 // ParseStream reads an Anthropic-format SSE response body in a background

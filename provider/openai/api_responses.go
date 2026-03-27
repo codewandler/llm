@@ -232,9 +232,9 @@ func respBuildRequest(opts llm.Request) ([]byte, error) {
 	}
 
 	// Reasoning effort
-	if opts.ReasoningEffort != "" {
+	if opts.ThinkingEffort != "" {
 		r.Reasoning = &respReason{
-			Effort: string(opts.ReasoningEffort),
+			Effort: string(opts.ThinkingEffort),
 		}
 	}
 

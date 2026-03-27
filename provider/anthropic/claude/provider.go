@@ -22,7 +22,8 @@ import (
 const (
 	providerName    = "claude"
 	defaultBaseURL  = "https://api.anthropic.com"
-	claudeUserAgent = "claude-cli/2.1.72 (external, sdk-cli)"
+	envBaseURL      = "ANTHROPIC_BASE_URL" // override for proxy/testing
+	claudeUserAgent = "claude-cli/2.1.85 (external, sdk-cli)"
 	claudeBeta      = "claude-code-20250219,oauth-2025-04-20,interleaved-thinking-2025-05-14,context-management-2025-06-27,prompt-caching-scope-2026-01-05,effort-2025-11-24"
 
 	stainlessPackageVer = "0.74.0"
@@ -143,7 +144,7 @@ func WithBaseURL(url string) Option {
 // they will be used automatically. Use WithTokenProvider() to override.
 func New(opts ...Option) *Provider {
 	p := &Provider{
-		baseURL:   defaultBaseURL,
+		baseURL:   getEnvBaseURL(),
 		client:    llm.DefaultHttpClient(),
 		sessionID: randomUUID(),
 	}
@@ -240,6 +241,7 @@ func (p *Provider) newAPIRequest(ctx context.Context, accessToken string, body [
 
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Accept-Encoding", "gzip, deflate, br, zstd")
 	req.Header.Set("Authorization", "Bearer "+accessToken)
 	req.Header.Set("Anthropic-Version", anthropic.AnthropicVersion)
 	req.Header.Set("Anthropic-Beta", claudeBeta)
@@ -254,20 +256,19 @@ func (p *Provider) newAPIRequest(ctx context.Context, accessToken string, body [
 	req.Header.Set("X-Stainless-Runtime", "node")
 	req.Header.Set("X-Stainless-Runtime-Version", stainlessNodeVer)
 	req.Header.Set("X-Stainless-Timeout", "600")
+	req.Header.Set("Connection", "keep-alive")
 	return req, nil
 }
 
 func (p *Provider) buildRequest(opts llm.Request) ([]byte, error) {
-	// Prepend Claude-specific system blocks
+	// Prepend Claude-specific system blocks with cache_control on systemCore
 	userBlocks := anthropic.CollectSystemBlocks(opts.Messages)
-	systemBlocks := anthropic.PrependSystemBlocks(
-		[]anthropic.SystemBlock{
-			{Type: "text", Text: billingHeader},
-			{Type: "text", Text: systemCore},
-			{Type: "text", Text: systemIdentity},
-		},
-		userBlocks,
-	)
+	claudeBlocks := []anthropic.SystemBlock{
+		{Type: "text", Text: billingHeader},
+		{Type: "text", Text: systemCore, CacheControl: &anthropic.CacheControl{Type: "ephemeral"}},
+		{Type: "text", Text: systemIdentity},
+	}
+	systemBlocks := anthropic.PrependSystemBlocks(claudeBlocks, userBlocks)
 
 	return anthropic.BuildRequest(anthropic.RequestOptions{
 		Model:         opts.Model,
@@ -374,4 +375,13 @@ func stainlessArch() string {
 		return "arm64"
 	}
 	return "x64"
+}
+
+// getEnvBaseURL returns the base URL for API requests.
+// Uses ANTHROPIC_BASE_URL environment variable if set, otherwise defaultBaseURL.
+func getEnvBaseURL() string {
+	if url := os.Getenv(envBaseURL); url != "" {
+		return url
+	}
+	return defaultBaseURL
 }

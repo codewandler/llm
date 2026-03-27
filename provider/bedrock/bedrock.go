@@ -524,7 +524,7 @@ func buildRequest(opts llm.Request) (*bedrockruntime.ConverseStreamInput, error)
 		// Set tool choice — force-tool is incompatible with extended thinking.
 		// Fall back to auto when reasoning is enabled.
 		effectiveToolChoice := opts.ToolChoice
-		if opts.ReasoningEffort != "" {
+		if opts.ThinkingEffort != "" {
 			if _, isForced := effectiveToolChoice.(llm.ToolChoiceTool); isForced {
 				effectiveToolChoice = llm.ToolChoiceAuto{}
 			}
@@ -577,15 +577,15 @@ func buildRequest(opts llm.Request) (*bedrockruntime.ConverseStreamInput, error)
 
 	// Wire reasoning/thinking via additionalModelRequestFields.
 	// Bedrock uses reasoning_config: {type: "enabled", budget_tokens: N}.
-	// Map ReasoningEffort to sensible token budgets.
-	if opts.ReasoningEffort != "" {
+	// Map ThinkingEffort to sensible token budgets.
+	if opts.ThinkingEffort != "" {
 		budgetTokens := 5000 // default / medium
-		switch opts.ReasoningEffort {
-		case llm.ReasoningEffortLow:
+		switch opts.ThinkingEffort {
+		case llm.ThinkingEffortLow:
 			budgetTokens = 1024
-		case llm.ReasoningEffortMedium:
+		case llm.ThinkingEffortMedium:
 			budgetTokens = 5000
-		case llm.ReasoningEffortHigh:
+		case llm.ThinkingEffortHigh:
 			budgetTokens = 16000
 		}
 		if additionalFields == nil {

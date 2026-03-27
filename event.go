@@ -72,6 +72,9 @@ type (
 		// Model is the model identifier returned by the upstream API in its response.
 		// e.g., "claude-haiku-4-5-20251001". May be empty if the API doesn't echo the model back.
 		Model string `json:"model,omitempty"`
+
+		// Extra holds provider-specific data such as rate-limit headers.
+		Extra map[string]any `json:"extra,omitempty"`
 	}
 
 	StreamClosedEvent struct{}
