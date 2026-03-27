@@ -118,7 +118,7 @@ func (p *Provider) CreateStream(ctx context.Context, opts llm.Request) (llm.Stre
 	}
 
 	pub, ch := llm.NewEventPublisher()
-	p.parseStreamWithCost(ctx, resp.Body, pub, opts.Model, startTime)
+	go p.parseStreamWithCost(ctx, resp.Body, pub, opts.Model, startTime)
 	return ch, nil
 }
 
