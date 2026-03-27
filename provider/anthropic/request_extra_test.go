@@ -31,11 +31,11 @@ func TestBuildRequest_ThinkingEffort_Defaults(t *testing.T) {
 		{"claude-opus-4-6-20251120", "", "adaptive"},
 		{"claude-sonnet-4-6-20251120", llm.ThinkingEffortNone, "disabled"},
 		{"claude-opus-4-6-20251120", llm.ThinkingEffortNone, "disabled"},
-		// Haiku / older models: default to disabled
-		{"claude-haiku-4-5-20251001", "", "disabled"},
+		// Haiku / older models: default to enabled thinking with high budget_tokens
+		{"claude-haiku-4-5-20251001", "", "enabled"},
 		{"claude-haiku-4-5-20251001", llm.ThinkingEffortNone, "disabled"},
-		// Sonnet 4.5: default to disabled (no adaptive support)
-		{"claude-sonnet-4-5-20250514", "", "disabled"},
+		// Sonnet 4.5: default to enabled thinking (like Haiku)
+		{"claude-sonnet-4-5-20250514", "", "enabled"},
 		{"claude-sonnet-4-5-20250514", llm.ThinkingEffortNone, "disabled"},
 	}
 	for _, tc := range cases {
@@ -141,12 +141,12 @@ func TestBuildRequest_MaxTokensFallback(t *testing.T) {
 		assert.InDelta(t, float64(777), m["max_tokens"], 0)
 	})
 
-	t.Run("default 16384 when both are zero", func(t *testing.T) {
+	t.Run("default 32000 when both are zero", func(t *testing.T) {
 		m := buildRequestMap(t, RequestOptions{
 			Model:         "claude-sonnet-4-5",
 			StreamOptions: baseReq,
 		})
-		assert.InDelta(t, float64(16384), m["max_tokens"], 0)
+		assert.InDelta(t, float64(32000), m["max_tokens"], 0)
 	})
 }
 

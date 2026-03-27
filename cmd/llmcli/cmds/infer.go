@@ -351,14 +351,14 @@ const defaultDemoSystemPrompt = "You are Tessa. Before you do anything -> Introd
 
 func buildInferSpec(userMsg, model, system, thinking, effort string, demoTools bool) inferSpec {
 	msgs := make(llm.Messages, 0, 2)
-	cacheHint := &llm.CacheHint{Enabled: true}
+	cacheHint := &llm.CacheHint{Enabled: true, TTL: "1h"}
 
 	if system != "" {
 		msgs = append(msgs, llm.System(system, cacheHint))
 	} else if demoTools {
 		msgs = append(msgs, llm.System(defaultDemoSystemPrompt, cacheHint))
 	}
-	msgs = append(msgs, llm.User(userMsg))
+	msgs = append(msgs, llm.User(userMsg, cacheHint))
 
 	spec := inferSpec{
 		Model:          model,

@@ -296,12 +296,18 @@ func (p *Provider) buildUserID() string {
 		return ""
 	}
 
-	id := "user_" + cfg.UserID
-	if cfg.OAuthAccount.AccountUUID != "" {
-		id += "_account_" + cfg.OAuthAccount.AccountUUID
+	// Return JSON object format matching Claude Code
+	id := map[string]string{
+		"device_id":     cfg.UserID,
+		"account_uuid":  cfg.OAuthAccount.AccountUUID,
+		"session_id":    p.sessionID,
 	}
-	id += "_session_" + p.sessionID
-	return id
+
+	data, err = json.Marshal(id)
+	if err != nil {
+		return ""
+	}
+	return string(data)
 }
 
 func modelsFromDB() []llm.Model {

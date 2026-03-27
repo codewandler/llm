@@ -147,13 +147,13 @@ func hasPerMessageCacheHints(msgs llm.Messages) bool {
 // BuildRequest builds a JSON request body for the Anthropic API.
 func BuildRequest(reqOpts RequestOptions) ([]byte, error) {
 	opts := reqOpts.StreamOptions
-	// Use MaxTokens from RequestOptions, fall back to StreamOptions, then default to 16384.
+	// Use MaxTokens from RequestOptions, fall back to StreamOptions, then default to 32000.
 	maxTokens := reqOpts.MaxTokens
 	if maxTokens == 0 {
 		maxTokens = opts.MaxTokens
 	}
 	if maxTokens == 0 {
-		maxTokens = 16384
+		maxTokens = 32000
 	}
 
 	r := request{Model: reqOpts.Model, MaxTokens: maxTokens, Stream: true}
@@ -214,8 +214,8 @@ func BuildRequest(reqOpts RequestOptions) ([]byte, error) {
 		}
 		r.Thinking = &thinking{Type: "enabled", BudgetTokens: budgetTokens}
 	} else {
-		// Older models with no ThinkingEffort: disabled
-		r.Thinking = &thinking{Type: "disabled"}
+		// Haiku / older models: default to enabled thinking with high budget_tokens (like Claude Code)
+		r.Thinking = &thinking{Type: "enabled", BudgetTokens: 31999}
 	}
 	if _, isForced := opts.ToolChoice.(llm.ToolChoiceTool); isForced {
 		opts.ToolChoice = llm.ToolChoiceAuto{}
