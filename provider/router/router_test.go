@@ -14,15 +14,14 @@ import (
 // mockProvider is a test provider that can be configured to succeed or fail.
 type mockProvider struct {
 	name       string
-	models     []llm.Model
+	models     llm.Models
 	returnErr  error
 	streamFunc func(ctx context.Context, opts llm.Request) (llm.Stream, error)
 }
 
-func (m *mockProvider) Name() string { return m.name }
-
-func (m *mockProvider) Models() []llm.Model { return m.models }
-
+func (m *mockProvider) Name() string                              { return m.name }
+func (m *mockProvider) Models() llm.Models                        { return m.models }
+func (m *mockProvider) Resolve(modelID string) (llm.Model, error) { return m.models.Resolve(modelID) }
 func (m *mockProvider) CreateStream(ctx context.Context, opts llm.Request) (llm.Stream, error) {
 	if m.returnErr != nil {
 		return nil, m.returnErr
@@ -48,7 +47,7 @@ func TestNew(t *testing.T) {
 	t.Run("valid config", func(t *testing.T) {
 		prov1 := &mockProvider{
 			name:   "prov1",
-			models: []llm.Model{{ID: "model-a", Name: "ModelA", Provider: "prov1"}},
+			models: llm.Models{{ID: "model-a", Name: "ModelA", Provider: "prov1"}},
 		}
 
 		cfg := Config{
