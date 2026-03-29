@@ -7,25 +7,26 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/codewandler/llm"
+	"github.com/codewandler/llm/msg"
+	"github.com/codewandler/llm/tokencount"
 	"github.com/codewandler/llm/tool"
 )
 
 func TestProvider_CountTokens_MissingModel(t *testing.T) {
 	p := New()
-	_, err := p.CountTokens(context.Background(), llm.TokenCountRequest{
-		Messages: llm.Messages{llm.User("hello")},
+	_, err := p.CountTokens(context.Background(), tokencount.TokenCountRequest{
+		Messages: msg.BuildTranscript(msg.User("hello")),
 	})
 	require.Error(t, err)
 }
 
 func TestProvider_CountTokens_PerMessageLen(t *testing.T) {
 	p := New()
-	msgs := llm.Messages{
-		llm.System("You are helpful."),
-		llm.User("What is 2+2?"),
-	}
-	got, err := p.CountTokens(context.Background(), llm.TokenCountRequest{
+	msgs := msg.BuildTranscript(
+		msg.System("You are helpful."),
+		msg.User("What is 2+2?"),
+	)
+	got, err := p.CountTokens(context.Background(), tokencount.TokenCountRequest{
 		Model:    "anthropic.claude-3-5-sonnet-20241022-v2:0",
 		Messages: msgs,
 	})
@@ -35,13 +36,13 @@ func TestProvider_CountTokens_PerMessageLen(t *testing.T) {
 
 func TestProvider_CountTokens_RoleBreakdown(t *testing.T) {
 	p := New()
-	msgs := llm.Messages{
-		llm.System("Be concise."),
-		llm.User("Hello"),
-		llm.Assistant("Hi there!"),
-		llm.Tool("t1", "result"),
-	}
-	got, err := p.CountTokens(context.Background(), llm.TokenCountRequest{
+	msgs := msg.BuildTranscript(
+		msg.System("Be concise."),
+		msg.User("Hello"),
+		msg.Assistant(msg.Text("Hi there!")),
+		msg.Tool().Results(msg.ToolResult{ToolCallID: "t1", ToolOutput: "result"}),
+	)
+	got, err := p.CountTokens(context.Background(), tokencount.TokenCountRequest{
 		Model:    "anthropic.claude-3-haiku-20240307-v1:0",
 		Messages: msgs,
 	})
@@ -63,9 +64,9 @@ func TestProvider_CountTokens_Tools(t *testing.T) {
 			"properties": map[string]any{"url": map[string]any{"type": "string"}},
 		}},
 	}
-	got, err := p.CountTokens(context.Background(), llm.TokenCountRequest{
+	got, err := p.CountTokens(context.Background(), tokencount.TokenCountRequest{
 		Model:    "anthropic.claude-3-5-sonnet-20241022-v2:0",
-		Messages: llm.Messages{llm.User("fetch this")},
+		Messages: msg.BuildTranscript(msg.User("fetch this")),
 		Tools:    tools,
 	})
 	require.NoError(t, err)

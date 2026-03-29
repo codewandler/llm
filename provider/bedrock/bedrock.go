@@ -17,6 +17,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime/types"
 
 	"github.com/codewandler/llm"
+	"github.com/codewandler/llm/msg"
 	"github.com/codewandler/llm/sortmap"
 	"github.com/codewandler/llm/tool"
 )
@@ -359,22 +360,10 @@ func buildBedrockCachePoint(h *llm.CacheHint, modelID string) *types.CachePointB
 
 // hasBedrockPerMessageCacheHints returns true if any message carries an enabled CacheHint.
 func hasBedrockPerMessageCacheHints(msgs llm.Messages) bool {
-	for _, msg := range msgs {
-		switch m := msg.(type) {
-		case llm.SystemMessage:
-			if m.CacheHint() != nil && m.CacheHint().Enabled {
-				return true
-			}
-		case llm.UserMessage:
-			if m.CacheHint() != nil && m.CacheHint().Enabled {
-				return true
-			}
-		case llm.AssistantMessage:
-			if m.CacheHint() != nil && m.CacheHint().Enabled {
-				return true
-			}
-		case llm.ToolMessage:
-			if m.CacheHint() != nil && m.CacheHint().Enabled {
+	for _, m := range msgs {
+		switch m.Role {
+		case msg.RoleSystem, msg.RoleUser, msg.RoleAssistant, msg.RoleTool:
+			if m.CacheHint != nil && m.CacheHint.Enabled {
 				return true
 			}
 		}
@@ -391,25 +380,23 @@ func buildRequest(opts llm.Request) (*bedrockruntime.ConverseStreamInput, error)
 	var system []types.SystemContentBlock
 	var messages []types.Message
 
-	for i := 0; i < len(opts.Messages); i++ {
-		msg := opts.Messages[i]
-
-		switch m := msg.(type) {
-		case llm.SystemMessage:
+	for idx, m := range opts.Messages {
+		switch m.Role {
+		case msg.RoleSystem:
 			system = append(system, &types.SystemContentBlockMemberText{
-				Value: m.Content(),
+				Value: m.Text(),
 			})
-			if cp := buildBedrockCachePoint(m.CacheHint(), opts.Model); cp != nil {
+			if cp := buildBedrockCachePoint(m.CacheHint, opts.Model); cp != nil {
 				system = append(system, &types.SystemContentBlockMemberCachePoint{
 					Value: *cp,
 				})
 			}
 
-		case llm.UserMessage:
+		case msg.RoleUser:
 			content := []types.ContentBlock{
-				&types.ContentBlockMemberText{Value: m.Content()},
+				&types.ContentBlockMemberText{Value: m.Text()},
 			}
-			if cp := buildBedrockCachePoint(m.CacheHint(), opts.Model); cp != nil {
+			if cp := buildBedrockCachePoint(m.CacheHint, opts.Model); cp != nil {
 				content = append(content, &types.ContentBlockMemberCachePoint{Value: *cp})
 			}
 			messages = append(messages, types.Message{
@@ -417,25 +404,25 @@ func buildRequest(opts llm.Request) (*bedrockruntime.ConverseStreamInput, error)
 				Content: content,
 			})
 
-		case llm.AssistantMessage:
+		case msg.RoleAssistant:
 			var content []types.ContentBlock
-			if llm.AssistantText(m) != "" {
-				content = append(content, &types.ContentBlockMemberText{Value: llm.AssistantText(m)})
+			if m.Text() != "" {
+				content = append(content, &types.ContentBlockMemberText{Value: m.Text()})
 			}
 			for _, tc := range m.ToolCalls() {
-				inputDoc, err := toDocument(tc.ToolArgs())
+				inputDoc, err := toDocument(tc.Args)
 				if err != nil {
 					return nil, fmt.Errorf("marshal tool arguments: %w", err)
 				}
 				content = append(content, &types.ContentBlockMemberToolUse{
 					Value: types.ToolUseBlock{
-						ToolUseId: aws.String(tc.ToolCallID()),
-						Name:      aws.String(tc.ToolName()),
+						ToolUseId: aws.String(tc.ID),
+						Name:      aws.String(tc.Name),
 						Input:     inputDoc,
 					},
 				})
 			}
-			if cp := buildBedrockCachePoint(m.CacheHint(), opts.Model); cp != nil {
+			if cp := buildBedrockCachePoint(m.CacheHint, opts.Model); cp != nil {
 				content = append(content, &types.ContentBlockMemberCachePoint{Value: *cp})
 			}
 			messages = append(messages, types.Message{
@@ -443,36 +430,33 @@ func buildRequest(opts llm.Request) (*bedrockruntime.ConverseStreamInput, error)
 				Content: content,
 			})
 
-		case llm.ToolMessage:
+		case msg.RoleTool:
 			var toolResults []types.ContentBlock
-			startI := i
-			for ; i < len(opts.Messages); i++ {
-				tr, ok := opts.Messages[i].(llm.ToolMessage)
-				if !ok {
+			// Collect consecutive tool results
+			for _, tr := range opts.Messages[idx+1:] {
+				if tr.Role != msg.RoleTool {
 					break
 				}
 				status := types.ToolResultStatusSuccess
-				if tr.IsError() {
+				if tr.ToolResults()[0].IsError {
 					status = types.ToolResultStatusError
 				}
 				toolResults = append(toolResults, &types.ContentBlockMemberToolResult{
 					Value: types.ToolResultBlock{
-						ToolUseId: aws.String(tr.ToolCallID()),
+						ToolUseId: aws.String(tr.ToolResults()[0].ToolCallID),
 						Content: []types.ToolResultContentBlock{
-							&types.ToolResultContentBlockMemberText{Value: tr.ToolOutput()},
+							&types.ToolResultContentBlockMemberText{Value: tr.ToolResults()[0].ToolOutput},
 						},
 						Status: status,
 					},
 				})
 			}
-			if i > startI {
-				if lastTR, ok := opts.Messages[i-1].(llm.ToolMessage); ok {
-					if cp := buildBedrockCachePoint(lastTR.CacheHint(), opts.Model); cp != nil {
-						toolResults = append(toolResults, &types.ContentBlockMemberCachePoint{Value: *cp})
-					}
+			// Add cache point after tool results if present
+			if m.CacheHint != nil && m.CacheHint.Enabled {
+				if cp := buildBedrockCachePoint(m.CacheHint, opts.Model); cp != nil {
+					toolResults = append(toolResults, &types.ContentBlockMemberCachePoint{Value: *cp})
 				}
 			}
-			i--
 			messages = append(messages, types.Message{
 				Role:    types.ConversationRoleUser,
 				Content: toolResults,
@@ -728,7 +712,7 @@ func parseStream(ctx context.Context, output *bedrockruntime.ConverseStreamOutpu
 				case *types.ContentBlockDeltaMemberReasoningContent:
 					switch r := delta.Value.(type) {
 					case *types.ReasoningContentBlockDeltaMemberText:
-						pub.Delta(llm.ReasoningDelta(r.Value).WithIndex(uint32(idx)))
+						pub.Delta(llm.ThinkingDelta(r.Value).WithIndex(uint32(idx)))
 					}
 				}
 			}

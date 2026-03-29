@@ -6,8 +6,10 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
 	"testing"
 
+	"github.com/codewandler/llm/msg"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -183,9 +185,9 @@ func TestProviders(t *testing.T) {
 			t.Run("streaming", func(t *testing.T) {
 				stream, err := tt.provider.CreateStream(ctx, llm.Request{
 					Model: getModelID(),
-					Messages: llm.Messages{
-						llm.User("Hello"),
-					},
+					Messages: msg.BuildTranscript(
+						msg.User("Hello"),
+					),
 				})
 				require.NoError(t, err)
 
@@ -232,9 +234,9 @@ func TestProviders(t *testing.T) {
 
 				stream, err := tt.provider.CreateStream(ctx, llm.Request{
 					Model: getModelID(),
-					Messages: llm.Messages{
-						llm.User("What's the weather?"),
-					},
+					Messages: msg.BuildTranscript(
+						msg.User("What's the weather?"),
+					),
 					Tools: tools,
 				})
 				require.NoError(t, err)
@@ -253,12 +255,12 @@ func TestProviders(t *testing.T) {
 
 			// Test 4: Multiple messages (conversation)
 			t.Run("conversation", func(t *testing.T) {
-				messages := llm.Messages{
-					llm.System("You are a helpful assistant."),
-					llm.User("Hello"),
-					llm.Assistant("Hi there!"),
-					llm.User("How are you?"),
-				}
+				messages := msg.BuildTranscript(
+					msg.System("You are a helpful assistant."),
+					msg.User("Hello"),
+					msg.Assistant(msg.Text("Hi there!")),
+					msg.User("How are you?"),
+				)
 
 				stream, err := tt.provider.CreateStream(ctx, llm.Request{
 					Model:    getModelID(),
@@ -295,9 +297,9 @@ func TestProviders(t *testing.T) {
 				// First request: try to get a tool call
 				stream, err := tt.provider.CreateStream(ctx, llm.Request{
 					Model: getModelID(),
-					Messages: llm.Messages{
-						llm.User("What's the weather in Paris? Use the get_weather tool."),
-					},
+					Messages: msg.BuildTranscript(
+						msg.User("What's the weather in Paris? Use the get_weather tool."),
+					),
 					Tools: tools,
 				})
 				require.NoError(t, err)
@@ -324,11 +326,11 @@ func TestProviders(t *testing.T) {
 				toolResult := `{"temperature": 22, "conditions": "sunny"}`
 				stream2, err := tt.provider.CreateStream(ctx, llm.Request{
 					Model: getModelID(),
-					Messages: llm.Messages{
-						llm.User("What's the weather in Paris? Use the get_weather tool."),
-						llm.Assistant("", toolCall),
-						llm.ToolResult(tool.NewResult(toolCall.ToolCallID(), toolResult, false)),
-					},
+					Messages: msg.BuildTranscript(
+						msg.User("What's the weather in Paris? Use the get_weather tool."),
+						msg.Assistant(msg.ToolCall(msg.NewToolCall(toolCall.ToolCallID(), toolCall.ToolName(), msg.ToolArgs{"location": "Paris"}))),
+						msg.Tool().Results(msg.ToolResult{ToolCallID: toolCall.ToolCallID(), ToolOutput: toolResult}),
+					),
 					Tools: tools,
 				})
 				require.NoError(t, err)
@@ -416,9 +418,9 @@ func TestOllamaModels(t *testing.T) {
 				t.Parallel()
 				stream, err := p.CreateStream(ctx, llm.Request{
 					Model: modelID,
-					Messages: llm.Messages{
-						llm.User("Say hello"),
-					},
+					Messages: msg.BuildTranscript(
+						msg.User("Say hello"),
+					),
 				})
 
 				if err != nil {
@@ -458,9 +460,9 @@ func TestOllamaModels(t *testing.T) {
 				t.Parallel()
 				stream, err := p.CreateStream(ctx, llm.Request{
 					Model: modelID,
-					Messages: llm.Messages{
-						llm.User("What's the weather in Paris? Use the get_weather tool."),
-					},
+					Messages: msg.BuildTranscript(
+						msg.User("What's the weather in Paris? Use the get_weather tool."),
+					),
 					Tools: tools,
 				})
 
@@ -500,12 +502,12 @@ func TestOllamaModels(t *testing.T) {
 			// Test 3: Conversation
 			t.Run("conversation", func(t *testing.T) {
 				t.Parallel()
-				messages := llm.Messages{
-					llm.System("You are a helpful assistant."),
-					llm.User("Hi"),
-					llm.Assistant("Hello!"),
-					llm.User("What's 2+2?"),
-				}
+				messages := msg.BuildTranscript(
+					msg.System("You are a helpful assistant."),
+					msg.User("Hi"),
+					msg.Assistant(msg.Text("Hello!")),
+					msg.User("What's 2+2?"),
+				)
 
 				stream, err := p.CreateStream(ctx, llm.Request{
 					Model:    modelID,

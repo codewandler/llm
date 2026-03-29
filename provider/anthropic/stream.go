@@ -5,7 +5,7 @@ import (
 	"io"
 
 	"github.com/codewandler/llm"
-	"github.com/codewandler/llm/provider/internal/sse"
+	"github.com/codewandler/llm/internal/sse"
 )
 
 // CostFn calculates token costs for a given model and populates the cost

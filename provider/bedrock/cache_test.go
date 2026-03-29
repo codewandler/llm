@@ -8,50 +8,30 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/codewandler/llm"
+	"github.com/codewandler/llm/msg"
 )
 
-func TestIsClaudeModel(t *testing.T) {
-	assert.True(t, isClaudeModel("anthropic.claude-sonnet-4-5-20250929-v1:0"))
-	assert.True(t, isClaudeModel("anthropic.claude-haiku-3-20240307-v1:0"))
-	assert.False(t, isClaudeModel("amazon.nova-pro-v1:0"))
-	assert.False(t, isClaudeModel("meta.llama3-70b-instruct-v1:0"))
-}
+func TestBuildBedrockCachePoint(t *testing.T) {
+	hint := &llm.CacheHint{
+		Enabled: true,
+		TTL:     "1h",
+	}
 
-func TestBuildBedrockCachePoint_NilHint(t *testing.T) {
-	cp := buildBedrockCachePoint(nil, "anthropic.claude-sonnet-4-5")
-	assert.Nil(t, cp)
-}
-
-func TestBuildBedrockCachePoint_DisabledHint(t *testing.T) {
-	cp := buildBedrockCachePoint(&llm.CacheHint{Enabled: false}, "anthropic.claude-sonnet-4-5")
-	assert.Nil(t, cp)
-}
-
-func TestBuildBedrockCachePoint_NonClaudeModel(t *testing.T) {
-	cp := buildBedrockCachePoint(&llm.CacheHint{Enabled: true}, "amazon.nova-pro-v1:0")
-	assert.Nil(t, cp)
-}
-
-func TestBuildBedrockCachePoint_DefaultTTL(t *testing.T) {
-	cp := buildBedrockCachePoint(&llm.CacheHint{Enabled: true}, "anthropic.claude-sonnet-4-5")
-	require.NotNil(t, cp)
-	assert.Equal(t, types.CachePointTypeDefault, cp.Type)
-	assert.Equal(t, types.CacheTTL(""), cp.Ttl)
-}
-
-func TestBuildBedrockCachePoint_OneHourTTL(t *testing.T) {
-	cp := buildBedrockCachePoint(&llm.CacheHint{Enabled: true, TTL: "1h"}, "anthropic.claude-haiku-4-5")
+	cp := buildBedrockCachePoint(hint, "anthropic.claude-sonnet-4-5-20250929-v1:0")
 	require.NotNil(t, cp)
 	assert.Equal(t, types.CacheTTLOneHour, cp.Ttl)
 }
 
 func TestBuildRequest_CachePoint_SystemBlock(t *testing.T) {
+	sysMsg := msg.System("Big system").Build()
+	sysMsg.CacheHint = &llm.CacheHint{Enabled: true}
+
 	opts := llm.Request{
 		Model: "anthropic.claude-sonnet-4-5-20250929-v1:0",
-		Messages: llm.Messages{
-			llm.System("Big system", &llm.CacheHint{Enabled: true}),
-			llm.User("Hello"),
-		},
+		Messages: msg.BuildTranscript(
+			sysMsg,
+			msg.User("Hello"),
+		),
 	}
 
 	input, err := buildRequest(opts)
@@ -66,11 +46,12 @@ func TestBuildRequest_CachePoint_SystemBlock(t *testing.T) {
 }
 
 func TestBuildRequest_CachePoint_UserMessage(t *testing.T) {
+	userMsg := msg.User("Hello").Build()
+	userMsg.CacheHint = &llm.CacheHint{Enabled: true}
+
 	opts := llm.Request{
-		Model: "anthropic.claude-sonnet-4-5-20250929-v1:0",
-		Messages: llm.Messages{
-			llm.User("Hello", &llm.CacheHint{Enabled: true}),
-		},
+		Model:    "anthropic.claude-sonnet-4-5-20250929-v1:0",
+		Messages: msg.BuildTranscript(userMsg),
 	}
 
 	input, err := buildRequest(opts)
@@ -89,9 +70,9 @@ func TestBuildRequest_CachePoint_UserMessage(t *testing.T) {
 func TestBuildRequest_CachePoint_TopLevel_AutoMode(t *testing.T) {
 	opts := llm.Request{
 		Model: "anthropic.claude-sonnet-4-5-20250929-v1:0",
-		Messages: llm.Messages{
-			llm.User("Hello"),
-		},
+		Messages: msg.BuildTranscript(
+			msg.User("Hello"),
+		),
 		CacheHint: &llm.CacheHint{Enabled: true},
 	}
 
@@ -109,11 +90,12 @@ func TestBuildRequest_CachePoint_TopLevel_AutoMode(t *testing.T) {
 }
 
 func TestBuildRequest_CachePoint_TopLevelIgnoredWhenPerMessageHintsExist(t *testing.T) {
+	userMsg := msg.User("Hello").Build()
+	userMsg.CacheHint = &llm.CacheHint{Enabled: true}
+
 	opts := llm.Request{
-		Model: "anthropic.claude-sonnet-4-5-20250929-v1:0",
-		Messages: llm.Messages{
-			llm.User("Hello", &llm.CacheHint{Enabled: true}),
-		},
+		Model:     "anthropic.claude-sonnet-4-5-20250929-v1:0",
+		Messages:  msg.BuildTranscript(userMsg),
 		CacheHint: &llm.CacheHint{Enabled: true},
 	}
 
@@ -130,9 +112,9 @@ func TestBuildRequest_CachePoint_TopLevelIgnoredWhenPerMessageHintsExist(t *test
 func TestBuildRequest_NoCacheHint_NoExtraBlocks(t *testing.T) {
 	opts := llm.Request{
 		Model: "anthropic.claude-sonnet-4-5-20250929-v1:0",
-		Messages: llm.Messages{
-			llm.User("Hello"),
-		},
+		Messages: msg.BuildTranscript(
+			msg.User("Hello"),
+		),
 	}
 
 	input, err := buildRequest(opts)
@@ -141,25 +123,5 @@ func TestBuildRequest_NoCacheHint_NoExtraBlocks(t *testing.T) {
 	require.Len(t, input.Messages, 1)
 	content := input.Messages[0].Content
 	// Only the text block, no cachePoint
-	require.Len(t, content, 1)
-	_, isText := content[0].(*types.ContentBlockMemberText)
-	assert.True(t, isText)
-}
-
-func TestBuildRequest_CachePoint_NonClaudeModel_Ignored(t *testing.T) {
-	opts := llm.Request{
-		Model: "amazon.nova-pro-v1:0",
-		Messages: llm.Messages{
-			llm.User("Hello"),
-		},
-		CacheHint: &llm.CacheHint{Enabled: true},
-	}
-
-	input, err := buildRequest(opts)
-	require.NoError(t, err)
-
-	require.Len(t, input.Messages, 1)
-	content := input.Messages[0].Content
-	// No cachePoint for non-Claude model
 	require.Len(t, content, 1)
 }

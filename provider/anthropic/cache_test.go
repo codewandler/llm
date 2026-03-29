@@ -4,11 +4,11 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/codewandler/llm/msg"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/codewandler/llm"
+	"github.com/codewandler/llm/msg"
 )
 
 func TestBuildCacheControl(t *testing.T) {
@@ -47,38 +47,38 @@ func TestHasPerMessageCacheHints(t *testing.T) {
 	})
 
 	t.Run("messages without hints returns false", func(t *testing.T) {
-		msgs := llm.Messages{
-			llm.System("system"),
-			llm.User("user"),
-		}
+		msgs := msg.BuildTranscript(
+			msg.System("system"),
+			msg.User("user"),
+		)
 		assert.False(t, hasPerMessageCacheHints(msgs))
 	})
 
 	t.Run("System with hint returns true", func(t *testing.T) {
-		msgs := llm.Messages{
+		msgs := msg.BuildTranscript(
 			msg.System("system").Cache().Build(),
-		}
+		)
 		assert.True(t, hasPerMessageCacheHints(msgs))
 	})
 
 	t.Run("UserMsg with hint returns true", func(t *testing.T) {
-		msgs := llm.Messages{
+		msgs := msg.BuildTranscript(
 			msg.User("user").Cache().Build(),
-		}
+		)
 		assert.True(t, hasPerMessageCacheHints(msgs))
 	})
 
 	t.Run("IsAssistantMsg with hint returns true", func(t *testing.T) {
-		msgs := llm.Messages{
+		msgs := msg.BuildTranscript(
 			msg.Assistant(msg.Text("reply")).Cache().Build(),
-		}
+		)
 		assert.True(t, hasPerMessageCacheHints(msgs))
 	})
 
 	t.Run("disabled hint does not count", func(t *testing.T) {
-		msgs := llm.Messages{
+		msgs := msg.BuildTranscript(
 			msg.User("hi").Build(),
-		}
+		)
 		assert.False(t, hasPerMessageCacheHints(msgs))
 	})
 }
@@ -88,9 +88,9 @@ func TestBuildRequest_CacheHint_TopLevel(t *testing.T) {
 		LLMRequest: llm.Request{
 			Model:     "claude-sonnet-4-6",
 			MaxTokens: 100,
-			Messages: llm.Messages{
-				llm.User("Hello"),
-			},
+			Messages: msg.BuildTranscript(
+				msg.User("Hello"),
+			),
 			CacheHint: &llm.CacheHint{Enabled: true},
 		},
 	}
@@ -109,13 +109,12 @@ func TestBuildRequest_CacheHint_TopLevel(t *testing.T) {
 
 func TestBuildRequest_CacheHint_NoTopLevelWhenPerMessageHintsExist(t *testing.T) {
 	opts := RequestOptions{
-
 		LLMRequest: llm.Request{
 			Model:     "claude-sonnet-4-6",
 			MaxTokens: 100,
-			Messages: llm.Messages{
+			Messages: msg.BuildTranscript(
 				msg.User("Hello").Cache().Build(),
-			},
+			),
 			CacheHint: &llm.CacheHint{Enabled: true}, // should be ignored
 		},
 	}
@@ -133,13 +132,12 @@ func TestBuildRequest_CacheHint_NoTopLevelWhenPerMessageHintsExist(t *testing.T)
 
 func TestBuildRequest_CacheHint_PerMessageUser(t *testing.T) {
 	opts := RequestOptions{
-
 		LLMRequest: llm.Request{
 			Model:     "claude-sonnet-4-6",
 			MaxTokens: 100,
-			Messages: llm.Messages{
+			Messages: msg.BuildTranscript(
 				msg.User("Hello").Cache().Build(),
-			},
+			),
 		},
 	}
 
@@ -163,14 +161,13 @@ func TestBuildRequest_CacheHint_PerMessageUser(t *testing.T) {
 
 func TestBuildRequest_CacheHint_SystemBlock(t *testing.T) {
 	opts := RequestOptions{
-
 		LLMRequest: llm.Request{
 			Model:     "claude-sonnet-4-6",
 			MaxTokens: 100,
-			Messages: llm.Messages{
+			Messages: msg.BuildTranscript(
 				msg.System("Big prompt").Cache().Build(),
-				llm.User("Hello"),
-			},
+				msg.User("Hello"),
+			),
 		},
 	}
 
@@ -191,13 +188,12 @@ func TestBuildRequest_CacheHint_SystemBlock(t *testing.T) {
 
 func TestBuildRequest_CacheHint_ExtendedTTL(t *testing.T) {
 	opts := RequestOptions{
-
 		LLMRequest: llm.Request{
 			Model:     "claude-sonnet-4-6",
 			MaxTokens: 100,
-			Messages: llm.Messages{
-				llm.User("Hello"),
-			},
+			Messages: msg.BuildTranscript(
+				msg.User("Hello"),
+			),
 			CacheHint: &llm.CacheHint{Enabled: true, TTL: "1h"},
 		},
 	}
@@ -215,13 +211,12 @@ func TestBuildRequest_CacheHint_ExtendedTTL(t *testing.T) {
 
 func TestBuildRequest_NoCacheHint_NoTopLevelField(t *testing.T) {
 	opts := RequestOptions{
-
 		LLMRequest: llm.Request{
 			Model:     "claude-sonnet-4-6",
 			MaxTokens: 100,
-			Messages: llm.Messages{
-				llm.User("Hello"),
-			},
+			Messages: msg.BuildTranscript(
+				msg.User("Hello"),
+			),
 		},
 	}
 
@@ -236,10 +231,10 @@ func TestBuildRequest_NoCacheHint_NoTopLevelField(t *testing.T) {
 }
 
 func TestCollectSystemBlocks_CacheHint(t *testing.T) {
-	blocks, _ := convertMessages(llm.Messages{
+	blocks, _ := convertMessages(msg.BuildTranscript(
 		msg.System("First").Cache().Build(),
-		llm.System("Second"),
-	})
+		msg.System("Second"),
+	))
 
 	require.Len(t, blocks, 2)
 
@@ -253,16 +248,15 @@ func TestCollectSystemBlocks_CacheHint(t *testing.T) {
 
 func TestBuildRequest_AssistantWithBlocksAndCacheHint_TextBlock(t *testing.T) {
 	opts := RequestOptions{
-
 		LLMRequest: llm.Request{
 			Model:     "claude-sonnet-4-6",
 			MaxTokens: 100,
-			Messages: llm.Messages{
-				llm.User("Hello"),
+			Messages: msg.BuildTranscript(
+				msg.User("Hello"),
 				msg.Assistant(
 					msg.Text("world"),
 				).Cache().Build(),
-			},
+			),
 		},
 	}
 
@@ -292,17 +286,16 @@ func TestBuildRequest_AssistantWithBlocksAndCacheHint_TextBlock(t *testing.T) {
 
 func TestBuildRequest_AssistantWithBlocksAndCacheHint_ThinkingBlock(t *testing.T) {
 	opts := RequestOptions{
-
 		LLMRequest: llm.Request{
 			Model:     "claude-sonnet-4-6",
 			MaxTokens: 100,
-			Messages: llm.Messages{
-				llm.User("Hello"),
+			Messages: msg.BuildTranscript(
+				msg.User("Hello"),
 				msg.Assistant(
-					msg.Thinking("ThinkingConfig", "sig123"),
+					msg.Thinking("Thinking text", "sig123"),
 					msg.Text("answer"),
 				).Cache().Build(),
-			},
+			),
 		},
 	}
 
@@ -331,17 +324,16 @@ func TestBuildRequest_AssistantWithBlocksAndCacheHint_ThinkingBlock(t *testing.T
 
 func TestBuildRequest_AssistantWithBlocksAndCacheHint_ThinkingBlock_LastBlock(t *testing.T) {
 	opts := RequestOptions{
-
 		LLMRequest: llm.Request{
 			Model:     "claude-sonnet-4-6",
 			MaxTokens: 100,
-			Messages: llm.Messages{
-				llm.User("Hello"),
+			Messages: msg.BuildTranscript(
+				msg.User("Hello"),
 				msg.Assistant(
-					msg.Thinking("ThinkingConfig", "sig123"),
+					msg.Thinking("Thinking text", "sig123"),
 					msg.Text("answer"),
 				).Cache().Build(),
-			},
+			),
 		},
 	}
 

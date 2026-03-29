@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/codewandler/llm"
+	"github.com/codewandler/llm/msg"
 	anthropicdirect "github.com/codewandler/llm/provider/anthropic"
 	"github.com/codewandler/llm/provider/anthropic/claude"
 	"github.com/codewandler/llm/provider/bedrock"
@@ -76,10 +77,10 @@ func TestCacheIntegration_Claude_TopLevel(t *testing.T) {
 
 	opts := llm.Request{
 		Model: model,
-		Messages: llm.Messages{
-			llm.System(largeCacheablePrompt()),
-			llm.User("Summarise your role in one sentence."),
-		},
+		Messages: msg.BuildTranscript(
+			msg.System(largeCacheablePrompt()),
+			msg.User("Summarise your role in one sentence."),
+		),
 		CacheHint: &llm.CacheHint{Enabled: true},
 	}
 
@@ -120,13 +121,14 @@ func TestCacheIntegration_Claude_PerMessageHint(t *testing.T) {
 	model := "claude-haiku-4-5-20251001"
 
 	makeOpts := func(question string) llm.Request {
+		systemMsg := msg.System(largeCacheablePrompt()).Build()
+		systemMsg.CacheHint = &llm.CacheHint{Enabled: true}
 		return llm.Request{
 			Model: model,
-			Messages: llm.Messages{
-				// Explicit breakpoint on the system message only — user question varies
-				llm.System(largeCacheablePrompt(), &llm.CacheHint{Enabled: true}),
-				llm.User(question),
-			},
+			Messages: msg.BuildTranscript(
+				systemMsg,
+				msg.User(question),
+			),
 		}
 	}
 
@@ -160,10 +162,10 @@ func TestCacheIntegration_Claude_ExtendedTTL(t *testing.T) {
 	// claude-haiku-4-5 supports 1h TTL
 	opts := llm.Request{
 		Model: "claude-haiku-4-5-20251001",
-		Messages: llm.Messages{
-			llm.System(largeCacheablePrompt()),
-			llm.User("Hello"),
-		},
+		Messages: msg.BuildTranscript(
+			msg.System(largeCacheablePrompt()),
+			msg.User("Hello"),
+		),
 		CacheHint: &llm.CacheHint{Enabled: true, TTL: "1h"},
 	}
 
@@ -192,10 +194,10 @@ func TestCacheIntegration_AnthropicDirect_TopLevel(t *testing.T) {
 
 	opts := llm.Request{
 		Model: "claude-haiku-4-5-20251001",
-		Messages: llm.Messages{
-			llm.System(largeCacheablePrompt()),
-			llm.User("Summarise your role in one sentence."),
-		},
+		Messages: msg.BuildTranscript(
+			msg.System(largeCacheablePrompt()),
+			msg.User("Summarise your role in one sentence."),
+		),
 		CacheHint: &llm.CacheHint{Enabled: true},
 	}
 
@@ -232,10 +234,10 @@ func TestCacheIntegration_Bedrock_TopLevel(t *testing.T) {
 
 	opts := llm.Request{
 		Model: model,
-		Messages: llm.Messages{
-			llm.System(largeCacheablePrompt()),
-			llm.User("Summarise your role in one sentence."),
-		},
+		Messages: msg.BuildTranscript(
+			msg.System(largeCacheablePrompt()),
+			msg.User("Summarise your role in one sentence."),
+		),
 		CacheHint: &llm.CacheHint{Enabled: true},
 	}
 
@@ -248,7 +250,7 @@ func TestCacheIntegration_Bedrock_TopLevel(t *testing.T) {
 	t.Logf("Call 1 — input: %d, write: %d, read: %d, cost: $%.6f",
 		usage1.InputTokens, usage1.CacheWriteTokens, usage1.CacheReadTokens, usage1.Cost)
 	assert.True(t, usage1.CacheWriteTokens > 0 || usage1.CacheReadTokens > 0,
-		"first call should involve cache (write on cold start, read if cache already warm)")
+		"first call should involve cache (write on cold start, read if cache is warm)")
 
 	// Call 2: same prefix, must always hit cache
 	t.Log("Call 2: expecting cache read...")
@@ -272,12 +274,14 @@ func TestCacheIntegration_Bedrock_PerMessageHint(t *testing.T) {
 	model := bedrock.ModelHaikuLatest
 
 	makeOpts := func(question string) llm.Request {
+		systemMsg := msg.System(largeCacheablePrompt()).Build()
+		systemMsg.CacheHint = &llm.CacheHint{Enabled: true}
 		return llm.Request{
 			Model: model,
-			Messages: llm.Messages{
-				llm.System(largeCacheablePrompt(), &llm.CacheHint{Enabled: true}),
-				llm.User(question),
-			},
+			Messages: msg.BuildTranscript(
+				systemMsg,
+				msg.User(question),
+			),
 		}
 	}
 
@@ -312,9 +316,9 @@ func TestCacheIntegration_Bedrock_NonClaudeModel_NoError(t *testing.T) {
 
 	opts := llm.Request{
 		Model: bedrock.ModelNovaMicro, // non-Claude model
-		Messages: llm.Messages{
-			llm.User("Hello"),
-		},
+		Messages: msg.BuildTranscript(
+			msg.User("Hello"),
+		),
 		CacheHint: &llm.CacheHint{Enabled: true},
 	}
 
