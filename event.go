@@ -3,6 +3,7 @@ package llm
 import (
 	"time"
 
+	"github.com/codewandler/llm/msg"
 	"github.com/codewandler/llm/tool"
 )
 
@@ -17,7 +18,7 @@ const (
 	StreamEventUsageUpdated EventType = "usage"
 	StreamEventDelta        EventType = "delta"
 	StreamEventToolCall     EventType = "tool_call"
-	StreamEventContentBlock EventType = "content_block"
+	StreamEventContentPart  EventType = "content_part"
 	StreamEventCompleted    EventType = "completed"
 	StreamEventError        EventType = "error"
 	StreamEventDebug        EventType = "debug"
@@ -37,7 +38,7 @@ type (
 		Routed(routed RouteInfo)
 		Delta(d *DeltaEvent)
 		ToolCall(tc tool.Call)
-		ContentBlock(evt ContentBlockEvent)
+		ContentBlock(evt ContentPartEvent)
 
 		Usage(usage Usage)
 		Completed(completed CompletedEvent)
@@ -64,41 +65,6 @@ type Envelope struct {
 	Meta EventMeta `json:"meta"`
 	Data any       `json:"data,omitempty"`
 }
-
-// ContentBlockKind identifies the kind of a completed content block.
-type ContentBlockKind string
-
-const (
-	// ContentBlockKindText is a text block.
-	ContentBlockKindText ContentBlockKind = "text"
-	// ContentBlockKindThinking is an extended-thinking block.
-	// It carries a Signature that must be re-sent verbatim to the API.
-	ContentBlockKindThinking ContentBlockKind = "thinking"
-)
-
-// ContentBlock is a completed content block from the model.
-//
-// For text blocks: Text is populated, Signature is empty.
-// For thinking blocks: Text holds the thinking content and Signature holds the
-// cryptographic verification token. The Signature must be preserved exactly and
-// re-submitted verbatim in the next assistant message content array when the
-// response includes tool calls (tool-use loop continuity).
-type ContentBlock struct {
-	Kind      ContentBlockKind `json:"kind"`
-	Text      string           `json:"text,omitempty"`
-	Signature string           `json:"signature,omitempty"` // only for thinking blocks
-}
-
-// ContentBlockEvent is emitted once per content block when the provider signals
-// block completion (content_block_stop). Index is the position of this block in
-// the model's original output array — required to preserve the exact interleaving
-// order of text and thinking blocks when re-serializing the assistant message.
-type ContentBlockEvent struct {
-	ContentBlock
-	Index int `json:"index"`
-}
-
-func (e ContentBlockEvent) Type() EventType { return StreamEventContentBlock }
 
 type (
 	StreamCreatedEvent struct{}
@@ -147,6 +113,15 @@ type (
 	ErrorEvent struct {
 		Error error `json:"error"`
 	}
+
+	// ContentPartEvent is emitted once per content block when the provider signals
+	// block completion (content_block_stop). Index is the position of this block in
+	// the model's original output array — required to preserve the exact interleaving
+	// order of text and thinking blocks when re-serializing the assistant message.
+	ContentPartEvent struct {
+		Part  msg.Part `json:"part"`
+		Index int      `json:"index"`
+	}
 )
 
 func (e DebugEvent) Type() EventType         { return StreamEventDebug }
@@ -158,3 +133,4 @@ func (e StreamStartedEvent) Type() EventType { return StreamEventStarted }
 func (e CompletedEvent) Type() EventType     { return StreamEventCompleted }
 func (e UsageUpdatedEvent) Type() EventType  { return StreamEventUsageUpdated }
 func (e ErrorEvent) Type() EventType         { return StreamEventError }
+func (e ContentPartEvent) Type() EventType   { return StreamEventContentPart }

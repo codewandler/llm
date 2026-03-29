@@ -63,4 +63,4 @@ func (s *eventPub) Usage(usage Usage)                  { s.Publish(&UsageUpdated
 func (s *eventPub) Completed(completed CompletedEvent) { s.Publish(&completed) }
 func (s *eventPub) Error(err error)                    { s.Publish(&ErrorEvent{Error: err}) }
 func (s *eventPub) ToolCall(tc tool.Call)              { s.Publish(&ToolCallEvent{ToolCall: tc}) }
-func (s *eventPub) ContentBlock(evt ContentBlockEvent) { s.Publish(&evt) }
+func (s *eventPub) ContentBlock(evt ContentPartEvent)  { s.Publish(&evt) }

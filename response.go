@@ -1,6 +1,9 @@
 package llm
 
-import "github.com/codewandler/llm/tool"
+import (
+	"github.com/codewandler/llm/msg"
+	"github.com/codewandler/llm/tool"
+)
 
 // --- StopReason ---
 
@@ -25,11 +28,12 @@ const (
 )
 
 type Response interface {
-	Message() AssistantMessage
+	Message() msg.Message
 	Text() string
-	Reasoning() string
+	Thought() string
 	StopReason() StopReason
 	Usage() *Usage
 	Error() error
 	ToolCalls() []tool.Call
+	ToolResults() []tool.Result
 }

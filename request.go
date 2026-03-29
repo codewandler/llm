@@ -151,8 +151,8 @@ func (o Request) Validate() error {
 	}
 
 	// Validate messages
-	for i, msg := range o.Messages {
-		if err := msg.Validate(); err != nil {
+	for i, m := range o.Messages {
+		if err := m.Validate(); err != nil {
 			return fmt.Errorf("messages[%d]: %w", i, err)
 		}
 	}

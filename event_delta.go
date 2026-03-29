@@ -4,16 +4,13 @@ package llm
 type DeltaKind string
 
 const (
-	DeltaKindText      DeltaKind = "text"
-	DeltaKindReasoning DeltaKind = "reasoning"
-	DeltaKindTool      DeltaKind = "tool"
-
-	// Deprecated: use DeltaKindTool.
-	DeltaTypeTool DeltaKind = "tool"
+	DeltaKindText     DeltaKind = "text"
+	DeltaKindThinking DeltaKind = "thinking"
+	DeltaKindTool     DeltaKind = "tool"
 )
 
 type ToolDeltaPart struct {
-	// ToolID, ToolName, and ToolArgs are populated for DeltaTypeTool.
+	// ToolID, ToolName, and ToolArgs are populated for DeltaKindTool.
 	// ToolArgs is a raw partial JSON fragment — not yet a complete object.
 	ToolID   string `json:"tool_id,omitempty"`
 	ToolName string `json:"tool_name,omitempty"`
@@ -48,7 +45,7 @@ type DeltaEvent struct {
 	Text string `json:"text,omitempty"`
 
 	// Reasoning is populated for DeltaKindReasoning.
-	Reasoning string `json:"reasoning,omitempty"`
+	Thinking string `json:"thinking,omitempty"`
 
 	ToolDeltaPart
 }
@@ -60,12 +57,15 @@ func (e *DeltaEvent) WithIndex(idx uint32) *DeltaEvent {
 }
 
 func TextDelta(text string) *DeltaEvent { return &DeltaEvent{Kind: DeltaKindText, Text: text} }
-func ReasoningDelta(text string) *DeltaEvent {
-	return &DeltaEvent{Kind: DeltaKindReasoning, Reasoning: text}
+func ThinkingDelta(text string) *DeltaEvent {
+	return &DeltaEvent{
+		Kind:     DeltaKindThinking,
+		Thinking: text,
+	}
 }
 func ToolDelta(id, name, argsFragment string) *DeltaEvent {
 	return &DeltaEvent{
-		Kind: DeltaTypeTool,
+		Kind: DeltaKindTool,
 		ToolDeltaPart: ToolDeltaPart{
 			ToolID:   id,
 			ToolName: name,

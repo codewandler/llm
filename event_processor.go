@@ -2,47 +2,83 @@ package llm
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
 	"sync"
 
+	"github.com/codewandler/llm/msg"
 	"github.com/codewandler/llm/tool"
 )
 
 type Result interface {
 	Response
-	Next() Messages
+	Next() msg.Messages
 }
 
 type result struct {
-	textBuf, reasoningBuf strings.Builder
-	assistantMsg          AssistantMessage
-	stopReason            StopReason
-	usage                 *Usage
-	toolCalls             []tool.Call
-	toolResults           []tool.Result
-	errors                []error
+	textBuffer        strings.Builder
+	thinkingBuffer    strings.Builder
+	thinkingSignature string
+	stopReason        StopReason
+	usage             *Usage
+	toolCalls         []tool.Call
+	toolResults       []tool.Result
+	errors            []error
 }
 
 func newResult() *result {
 	return &result{
-		assistantMsg: Assistant(""),
-		toolResults:  make([]tool.Result, 0),
-		errors:       make([]error, 0),
+		toolCalls:   make([]tool.Call, 0),
+		toolResults: make([]tool.Result, 0),
+		errors:      make([]error, 0),
 	}
 }
 
-func (r *result) Message() AssistantMessage {
-	return Assistant(r.textBuf.String(), r.toolCalls...)
+// Message returns the current assistant message.
+func (r *result) Message() msg.Message {
+	m := msg.Assistant()
+	if r.thinkingBuffer.Len() > 0 {
+		m.Part(msg.Thinking(r.thinkingBuffer.String(), r.thinkingSignature))
+	}
+	if r.textBuffer.Len() > 0 {
+		m.Part(msg.Text(r.textBuffer.String()))
+	}
+	for _, tc := range r.toolCalls {
+		m.Part(msg.ToolCall{
+			ID:   tc.ToolCallID(),
+			Name: tc.ToolName(),
+			Args: tc.ToolArgs(),
+		})
+	}
+
+	return m.Build()
 }
 
-func (r *result) Text() string           { return r.textBuf.String() }
-func (r *result) Reasoning() string      { return r.reasoningBuf.String() }
-func (r *result) StopReason() StopReason { return r.stopReason }
-func (r *result) Usage() *Usage          { return r.usage }
-func (r *result) Error() error           { return errors.Join(r.errors...) }
-func (r *result) ToolCalls() []tool.Call { return r.toolCalls }
+func (r *result) ToolMessage() msg.Message {
+	if len(r.toolResults) == 0 {
+		return msg.Message{}
+	}
+	results := make(msg.ToolResults, len(r.toolResults))
+	for _, tr := range r.toolResults {
+		data, _ := json.Marshal(tr.ToolOutput())
+		results = append(results, msg.ToolResult{
+			ToolCallID: tr.ToolCallID(),
+			IsError:    tr.IsError(),
+			ToolOutput: string(data),
+		})
+	}
+	return msg.Tool().Results(results).Build()
+}
+
+func (r *result) ToolResults() []tool.Result { return r.toolResults }
+func (r *result) Text() string               { return r.textBuffer.String() }
+func (r *result) Thought() string            { return r.thinkingBuffer.String() }
+func (r *result) StopReason() StopReason     { return r.stopReason }
+func (r *result) Usage() *Usage              { return r.usage }
+func (r *result) Error() error               { return errors.Join(r.errors...) }
+func (r *result) ToolCalls() []tool.Call     { return r.toolCalls }
 
 func (r *result) addError(err error) {
 	r.errors = append(r.errors, err)
@@ -51,10 +87,10 @@ func (r *result) addError(err error) {
 func (r *result) applyDelta(ev *DeltaEvent) {
 	switch ev.Kind {
 	case DeltaKindText:
-		r.textBuf.WriteString(ev.Text)
-	case DeltaKindReasoning:
-		r.reasoningBuf.WriteString(ev.Reasoning)
-	case DeltaTypeTool:
+		r.textBuffer.WriteString(ev.Text)
+	case DeltaKindThinking:
+		r.thinkingBuffer.WriteString(ev.Thinking)
+	case DeltaKindTool:
 		// TODO: write partial tool data
 	}
 }
@@ -71,14 +107,11 @@ func (r *result) applyToolCall(tc tool.Call) {
 
 var _ Result = (*result)(nil)
 
-func (r *result) Next() (next Messages) {
-	if r.textBuf.Len() > 0 || len(r.toolCalls) > 0 {
-		next.Add(Assistant(r.textBuf.String(), r.toolCalls...))
-	}
-	for _, tr := range r.toolResults {
-		next.Add(ToolResult(tr))
-	}
-	return next
+func (r *result) Next() msg.Messages {
+	return msg.BuildTranscript(
+		r.Message(),
+		r.ToolMessage(),
+	)
 }
 
 type StreamProcessor struct {
@@ -147,15 +180,15 @@ func (r *StreamProcessor) OnTextDelta(fn func(delta string)) *StreamProcessor {
 // OnReasoningDelta registers a callback that is called for each incremental
 // reasoning/thinking token.
 func (r *StreamProcessor) OnReasoningDelta(fn func(delta string)) *StreamProcessor {
-	return r.onDeltaKind(DeltaKindReasoning, func(d DeltaEvent) {
-		fn(d.Reasoning)
+	return r.onDeltaKind(DeltaKindThinking, func(d DeltaEvent) {
+		fn(d.Thinking)
 	})
 }
 
 // OnToolDelta registers a callback that is called for each partial tool-call
-// argument fragment (DeltaTypeTool deltas).
+// argument fragment (DeltaKindTool deltas).
 func (r *StreamProcessor) OnToolDelta(fn func(d ToolDeltaPart)) *StreamProcessor {
-	return r.onDeltaKind(DeltaTypeTool, func(d DeltaEvent) {
+	return r.onDeltaKind(DeltaKindTool, func(d DeltaEvent) {
 		fn(d.ToolDeltaPart)
 	})
 }
@@ -305,6 +338,12 @@ func (r *StreamProcessor) processEvent(e Envelope) {
 	case *ErrorEvent:
 		r.result.addError(actual.Error)
 		r.result.stopReason = StopReasonError
+	case *ContentPartEvent:
+		switch actual.Part.Type {
+		case msg.PartTypeThinking:
+			r.result.thinkingSignature = actual.Part.Thinking.Signature
+		}
+
 	}
 
 	r.dispatchEvent(e)
