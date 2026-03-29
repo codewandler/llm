@@ -30,14 +30,14 @@ const (
 	EncodingMinimax = "minimax_bpe"
 )
 
-// customEncodings holds CountText implementations registered by external
+// customEncodings holds CountTextForEncoding implementations registered by external
 // packages (e.g. provider/minimax) for encodings not handled by tiktoken.
 var (
 	customEncodingsMu sync.RWMutex
 	customEncodings   = make(map[string]func(text string) (int, error))
 )
 
-// RegisterEncoding registers a custom CountText implementation for the given
+// RegisterEncoding registers a custom CountTextForEncoding implementation for the given
 // encoding name. It is called from provider init() functions to wire in
 // tokenizers that live outside the tokencount package, avoiding import cycles.
 //
@@ -106,10 +106,10 @@ func EncodingForModel(modelID string) (encoding string, ok bool) {
 	return EncodingCL100K, false
 }
 
-// CountText returns the number of tokens in text using the named BPE encoding.
+// CountTextForEncoding returns the number of tokens in text using the named BPE encoding.
 // The encoding must be one of the constants in this package (cl100k_base,
 // o200k_base, minimax_bpe) or a name registered via RegisterEncoding.
-func CountText(encoding, text string) (int, error) {
+func CountTextForEncoding(encoding, text string) (int, error) {
 	// Check custom (registered) encodings first.
 	customEncodingsMu.RLock()
 	fn, isCustom := customEncodings[encoding]
@@ -126,10 +126,10 @@ func CountText(encoding, text string) (int, error) {
 }
 
 // CountTextForModel is a convenience wrapper that calls EncodingForModel and
-// then CountText.
+// then CountTextForEncoding.
 func CountTextForModel(modelID, text string) (int, error) {
 	enc, _ := EncodingForModel(modelID)
-	return CountText(enc, text)
+	return CountTextForEncoding(enc, text)
 }
 
 func getEncoding(encoding string) (*tiktoken.Tiktoken, error) {

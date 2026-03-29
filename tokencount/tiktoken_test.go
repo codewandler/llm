@@ -70,7 +70,7 @@ func TestCountText_CL100K(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := CountText(EncodingCL100K, tc.text)
+			got, err := CountTextForEncoding(EncodingCL100K, tc.text)
 			require.NoError(t, err)
 			assert.Equal(t, tc.wantTokens, got)
 		})
@@ -79,18 +79,18 @@ func TestCountText_CL100K(t *testing.T) {
 
 func TestCountText_O200K(t *testing.T) {
 	// o200k_base tokenises the same simple ASCII similarly to cl100k_base
-	got, err := CountText(EncodingO200K, "Hello, world!")
+	got, err := CountTextForEncoding(EncodingO200K, "Hello, world!")
 	require.NoError(t, err)
 	assert.Equal(t, 4, got)
 }
 
 func TestCountText_UnknownEncoding(t *testing.T) {
-	_, err := CountText("not_a_real_encoding", "hello")
+	_, err := CountTextForEncoding("not_a_real_encoding", "hello")
 	require.Error(t, err)
 }
 
 func TestCountTextForModel(t *testing.T) {
-	// Basic smoke test — delegates to CountText
+	// Basic smoke test — delegates to CountTextForEncoding
 	n, err := CountTextForModel("gpt-4o", "Hello")
 	require.NoError(t, err)
 	assert.Greater(t, n, 0)
