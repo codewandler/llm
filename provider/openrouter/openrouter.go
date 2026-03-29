@@ -11,7 +11,8 @@ import (
 	"strings"
 
 	"github.com/codewandler/llm"
-	"github.com/codewandler/llm/provider/internal/sse"
+	"github.com/codewandler/llm/internal/sse"
+	"github.com/codewandler/llm/msg"
 	"github.com/codewandler/llm/tool"
 )
 
@@ -284,45 +285,47 @@ func buildRequest(opts llm.Request) ([]byte, error) {
 		r.ThinkingEffort = string(opts.ThinkingEffort)
 	}
 
-	for _, msg := range opts.Messages {
-		switch m := msg.(type) {
-		case llm.SystemMessage:
+	for _, m := range opts.Messages {
+		switch m.Role {
+		case msg.RoleSystem:
 			r.Messages = append(r.Messages, messagePayload{
 				Role:    "system",
-				Content: m.Content(),
+				Content: m.Text(),
 				// TODO: cache!
 			})
 
-		case llm.UserMessage:
+		case msg.RoleUser:
 			r.Messages = append(r.Messages, messagePayload{
 				Role:    "user",
-				Content: m.Content(),
+				Content: m.Text(),
 			})
 
-		case llm.AssistantMessage:
+		case msg.RoleAssistant:
 			mp := messagePayload{
 				Role:    "assistant",
-				Content: llm.AssistantText(m),
+				Content: m.Text(),
 			}
 			for _, tc := range m.ToolCalls() {
-				argsJSON, _ := json.Marshal(tc.ToolArgs())
+				argsJSON, _ := json.Marshal(tc.Args)
 				mp.ToolCalls = append(mp.ToolCalls, toolCallItem{
-					ID:   tc.ToolCallID(),
+					ID:   tc.ID,
 					Type: "function",
 					Function: functionCall{
-						Name:      tc.ToolName(),
+						Name:      tc.Name,
 						Arguments: string(argsJSON),
 					},
 				})
 			}
 			r.Messages = append(r.Messages, mp)
 
-		case llm.ToolMessage:
-			r.Messages = append(r.Messages, messagePayload{
-				Role:       "tool",
-				Content:    m.ToolOutput(),
-				ToolCallID: m.ToolCallID(),
-			})
+		case msg.RoleTool:
+			for _, tr := range m.ToolResults() {
+				r.Messages = append(r.Messages, messagePayload{
+					Role:       "tool",
+					Content:    tr.ToolOutput,
+					ToolCallID: tr.ToolCallID,
+				})
+			}
 		}
 	}
 
@@ -438,7 +441,7 @@ func parseStream(ctx context.Context, body io.ReadCloser, pub llm.Publisher) {
 		if len(chunk.Choices) >= 1 {
 			choice := chunk.Choices[0]
 			if choice.Delta.ReasoningContent != "" {
-				pub.Delta(llm.ReasoningDelta(choice.Delta.ReasoningContent))
+				pub.Delta(llm.ThinkingDelta(choice.Delta.ReasoningContent))
 			}
 			if choice.Delta.Content != "" {
 				pub.Delta(llm.TextDelta(choice.Delta.Content))
