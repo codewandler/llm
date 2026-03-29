@@ -27,7 +27,13 @@ func (m Message) IsDeveloper() bool        { return m.Role == RoleDeveloper }
 func (m Message) IsEmptyText() bool        { return m.Text() == "" }
 func (m Message) ToolCalls() ToolCalls     { return m.Parts.ToolCalls() }
 func (m Message) ToolResults() ToolResults { return m.Parts.ToolResults() }
-func (m Message) IsEmpty() bool            { return len(m.Parts) == 0 }
+func (m Message) IsEmpty() bool {
+	if m.Role == "" && len(m.Parts) == 0 {
+		return true
+	}
+	return false
+
+}
 func (m Message) Validate() error {
 	if m.Role == "" {
 		return fmt.Errorf("message: role is required")

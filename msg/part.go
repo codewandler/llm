@@ -89,7 +89,13 @@ func (p Parts) Append(parts ...IntoPart) Parts {
 
 func Text(text string) Part { return Part{Type: PartTypeText, Text: text} }
 func Thinking(thought, signature string) Part {
-	return Part{Type: PartTypeThinking, Thinking: &ThinkingPart{Text: thought, Signature: signature}}
+	return Part{
+		Type: PartTypeThinking,
+		Thinking: &ThinkingPart{
+			Text:      thought,
+			Signature: signature,
+		},
+	}
 }
 
 type PartsBuilder struct {

@@ -2,9 +2,11 @@ package msg
 
 import "fmt"
 
-type Transcript []Message
+type Messages []Message
 
-func (t Transcript) PartsByType(partType PartType) Parts {
+func (t Messages) IntoMessages() []Message { return t }
+
+func (t Messages) PartsByType(partType PartType) Parts {
 	filtered := make(Parts, 0)
 	for _, m := range t {
 		for _, p := range m.Parts {
@@ -16,8 +18,8 @@ func (t Transcript) PartsByType(partType PartType) Parts {
 	return filtered
 }
 
-func (t Transcript) Filter(pred func(Message) bool) Transcript {
-	var filtered Transcript
+func (t Messages) Filter(pred func(Message) bool) Messages {
+	var filtered Messages
 	for _, m := range t {
 		if pred(m) {
 			filtered = append(filtered, m)
@@ -26,24 +28,27 @@ func (t Transcript) Filter(pred func(Message) bool) Transcript {
 	return filtered
 }
 
-func (t Transcript) FilterByRole(role Role) Transcript {
+func (t Messages) FilterByRole(role Role) Messages {
 	return t.Filter(func(m Message) bool { return m.Role == role })
 }
 
-func (t Transcript) System() Transcript { return t.FilterByRole(RoleSystem) }
+func (t Messages) System() Messages { return t.FilterByRole(RoleSystem) }
 
-func BuildTranscript(msg ...IntoMessage) Transcript {
-	all := make(Transcript, 0)
+func BuildTranscript(msg ...IntoMessages) Messages {
+	all := make(Messages, 0)
 	for _, im := range msg {
-		m := im.IntoMessage()
-		if !m.IsEmpty() {
-			all = append(all, m)
+		mm := im.IntoMessages()
+		for _, m := range mm {
+			if !m.IsEmpty() {
+				all = append(all, m)
+			}
 		}
+
 	}
 	return all
 }
 
-func (t Transcript) Validate() error {
+func (t Messages) Validate() error {
 
 	for i, m := range t {
 		if err := m.Validate(); err != nil {

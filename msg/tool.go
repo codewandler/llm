@@ -8,6 +8,14 @@ type ToolCall struct {
 	Args ToolArgs `json:"args"`
 }
 
+// NewToolCall creates a ToolCall with a non-nil Args map.
+func NewToolCall(id, name string, args ToolArgs) ToolCall {
+	if args == nil {
+		args = ToolArgs{}
+	}
+	return ToolCall{ID: id, Name: name, Args: args}
+}
+
 func (t ToolCall) IntoPart() Part {
 	return Part{
 		Type:     PartTypeToolCall,
@@ -21,6 +29,7 @@ type ToolResult struct {
 	IsError    bool   `json:"is_error,omitempty"`
 }
 
+func (t ToolResult) IntoMessages() []Message      { return []Message{t.IntoMessage()} }
 func (t ToolResult) IntoToolResults() ToolResults { return ToolResults{t} }
 
 type ToolResults []ToolResult
