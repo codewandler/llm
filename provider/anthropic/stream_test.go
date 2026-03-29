@@ -15,7 +15,7 @@ func TestParseStream_LargeStreamNoDeadlock(t *testing.T) {
 			ID: "msg_large", Model: "claude-sonnet-4-5",
 			Usage: MessageUsage{InputTokens: 1},
 		}},
-		ContentBlockStartEvent{Index: 0, ContentBlock: ContentBlock{Type: "thinking"}},
+		ContentBlockStartEvent{Index: 0, ContentBlock: ContentBlock{Type: "ThinkingConfig"}},
 	}
 	for i := 0; i < 70; i++ {
 		events = append(events, ContentBlockDeltaEvent{
@@ -37,8 +37,7 @@ func TestParseStream_LargeStreamNoDeadlock(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		ch := ParseStream(context.Background(), body, ParseOpts{
-			RequestedModel: "claude-sonnet-4-5",
-			ResolvedModel:  "claude-sonnet-4-5",
+			Model: "claude-sonnet-4-5",
 		})
 		for range ch {
 		}

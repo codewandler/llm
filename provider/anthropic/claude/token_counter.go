@@ -4,12 +4,11 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/codewandler/llm"
 	"github.com/codewandler/llm/tokencount"
 )
 
 // Compile-time assertion that *Provider implements llm.TokenCounter.
-var _ llm.TokenCounter = (*Provider)(nil)
+var _ tokencount.TokenCounter = (*Provider)(nil)
 
 // CountTokens estimates the number of input tokens for the given request.
 //
@@ -23,20 +22,20 @@ var _ llm.TokenCounter = (*Provider)(nil)
 //
 // The underlying tokenizer is cl100k_base — an approximation since Anthropic's
 // tokenizer is proprietary. Expect ±10-15% accuracy for English text.
-func (p *Provider) CountTokens(_ context.Context, req llm.TokenCountRequest) (*llm.TokenCount, error) {
+func (p *Provider) CountTokens(_ context.Context, req tokencount.TokenCountRequest) (*tokencount.TokenCount, error) {
 	// Count the two injected system blocks individually, mirroring the
 	// separate {EventType:"text", Content:...} entries that buildRequest prepends.
 	injectedTokens := 0
 	for _, text := range []string{billingHeader, systemCore} {
-		n, err := tokencount.CountText(tokencount.EncodingCL100K, text)
+		n, err := tokencount.CountTextForEncoding(tokencount.EncodingCL100K, text)
 		if err != nil {
 			return nil, fmt.Errorf("claude: count injected system tokens: %w", err)
 		}
 		injectedTokens += n
 	}
 
-	tc := &llm.TokenCount{}
-	if err := llm.CountMessagesAndToolsAnthropic(tc, req); err != nil {
+	tc := &tokencount.TokenCount{}
+	if err := tokencount.CountMessagesAndToolsAnthropic(tc, req); err != nil {
 		return nil, fmt.Errorf("claude: %w", err)
 	}
 

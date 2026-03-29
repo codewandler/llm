@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/codewandler/llm/msg"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -55,28 +56,28 @@ func TestHasPerMessageCacheHints(t *testing.T) {
 
 	t.Run("System with hint returns true", func(t *testing.T) {
 		msgs := llm.Messages{
-			llm.System("system", &llm.CacheHint{Enabled: true}),
+			msg.System("system").Cache().Build(),
 		}
 		assert.True(t, hasPerMessageCacheHints(msgs))
 	})
 
 	t.Run("UserMsg with hint returns true", func(t *testing.T) {
 		msgs := llm.Messages{
-			llm.User("hi", &llm.CacheHint{Enabled: true}),
+			msg.User("user").Cache().Build(),
 		}
 		assert.True(t, hasPerMessageCacheHints(msgs))
 	})
 
-	t.Run("AssistantMessage with hint returns true", func(t *testing.T) {
+	t.Run("IsAssistantMsg with hint returns true", func(t *testing.T) {
 		msgs := llm.Messages{
-			llm.AssistantWithCacheHint("reply", &llm.CacheHint{Enabled: true}),
+			msg.Assistant(msg.Text("reply")).Cache().Build(),
 		}
 		assert.True(t, hasPerMessageCacheHints(msgs))
 	})
 
 	t.Run("disabled hint does not count", func(t *testing.T) {
 		msgs := llm.Messages{
-			llm.User("hi", &llm.CacheHint{Enabled: false}),
+			msg.User("hi").Build(),
 		}
 		assert.False(t, hasPerMessageCacheHints(msgs))
 	})
@@ -84,9 +85,9 @@ func TestHasPerMessageCacheHints(t *testing.T) {
 
 func TestBuildRequest_CacheHint_TopLevel(t *testing.T) {
 	opts := RequestOptions{
-		Model:     "claude-sonnet-4-6",
-		MaxTokens: 100,
-		StreamOptions: llm.Request{
+		LLMRequest: llm.Request{
+			Model:     "claude-sonnet-4-6",
+			MaxTokens: 100,
 			Messages: llm.Messages{
 				llm.User("Hello"),
 			},
@@ -108,11 +109,12 @@ func TestBuildRequest_CacheHint_TopLevel(t *testing.T) {
 
 func TestBuildRequest_CacheHint_NoTopLevelWhenPerMessageHintsExist(t *testing.T) {
 	opts := RequestOptions{
-		Model:     "claude-sonnet-4-6",
-		MaxTokens: 100,
-		StreamOptions: llm.Request{
+
+		LLMRequest: llm.Request{
+			Model:     "claude-sonnet-4-6",
+			MaxTokens: 100,
 			Messages: llm.Messages{
-				llm.User("Hello", &llm.CacheHint{Enabled: true}),
+				msg.User("Hello").Cache().Build(),
 			},
 			CacheHint: &llm.CacheHint{Enabled: true}, // should be ignored
 		},
@@ -131,11 +133,12 @@ func TestBuildRequest_CacheHint_NoTopLevelWhenPerMessageHintsExist(t *testing.T)
 
 func TestBuildRequest_CacheHint_PerMessageUser(t *testing.T) {
 	opts := RequestOptions{
-		Model:     "claude-sonnet-4-6",
-		MaxTokens: 100,
-		StreamOptions: llm.Request{
+
+		LLMRequest: llm.Request{
+			Model:     "claude-sonnet-4-6",
+			MaxTokens: 100,
 			Messages: llm.Messages{
-				llm.User("Hello", &llm.CacheHint{Enabled: true}),
+				msg.User("Hello").Cache().Build(),
 			},
 		},
 	}
@@ -160,11 +163,12 @@ func TestBuildRequest_CacheHint_PerMessageUser(t *testing.T) {
 
 func TestBuildRequest_CacheHint_SystemBlock(t *testing.T) {
 	opts := RequestOptions{
-		Model:     "claude-sonnet-4-6",
-		MaxTokens: 100,
-		StreamOptions: llm.Request{
+
+		LLMRequest: llm.Request{
+			Model:     "claude-sonnet-4-6",
+			MaxTokens: 100,
 			Messages: llm.Messages{
-				llm.System("Big prompt", &llm.CacheHint{Enabled: true}),
+				msg.System("Big prompt").Cache().Build(),
 				llm.User("Hello"),
 			},
 		},
@@ -187,9 +191,10 @@ func TestBuildRequest_CacheHint_SystemBlock(t *testing.T) {
 
 func TestBuildRequest_CacheHint_ExtendedTTL(t *testing.T) {
 	opts := RequestOptions{
-		Model:     "claude-sonnet-4-6",
-		MaxTokens: 100,
-		StreamOptions: llm.Request{
+
+		LLMRequest: llm.Request{
+			Model:     "claude-sonnet-4-6",
+			MaxTokens: 100,
 			Messages: llm.Messages{
 				llm.User("Hello"),
 			},
@@ -210,9 +215,10 @@ func TestBuildRequest_CacheHint_ExtendedTTL(t *testing.T) {
 
 func TestBuildRequest_NoCacheHint_NoTopLevelField(t *testing.T) {
 	opts := RequestOptions{
-		Model:     "claude-sonnet-4-6",
-		MaxTokens: 100,
-		StreamOptions: llm.Request{
+
+		LLMRequest: llm.Request{
+			Model:     "claude-sonnet-4-6",
+			MaxTokens: 100,
 			Messages: llm.Messages{
 				llm.User("Hello"),
 			},
@@ -230,12 +236,11 @@ func TestBuildRequest_NoCacheHint_NoTopLevelField(t *testing.T) {
 }
 
 func TestCollectSystemBlocks_CacheHint(t *testing.T) {
-	msgs := llm.Messages{
-		llm.System("First", &llm.CacheHint{Enabled: true}),
+	blocks, _ := convertMessages(llm.Messages{
+		msg.System("First").Cache().Build(),
 		llm.System("Second"),
-	}
+	})
 
-	blocks := CollectSystemBlocks(msgs)
 	require.Len(t, blocks, 2)
 
 	// First block should have cache_control
@@ -244,4 +249,119 @@ func TestCollectSystemBlocks_CacheHint(t *testing.T) {
 
 	// Second block should not
 	assert.Nil(t, blocks[1].CacheControl)
+}
+
+func TestBuildRequest_AssistantWithBlocksAndCacheHint_TextBlock(t *testing.T) {
+	opts := RequestOptions{
+
+		LLMRequest: llm.Request{
+			Model:     "claude-sonnet-4-6",
+			MaxTokens: 100,
+			Messages: llm.Messages{
+				llm.User("Hello"),
+				msg.Assistant(
+					msg.Text("world"),
+				).Cache().Build(),
+			},
+		},
+	}
+
+	data, err := BuildRequest(opts)
+	require.NoError(t, err)
+
+	var req map[string]any
+	require.NoError(t, json.Unmarshal(data, &req))
+
+	messages := req["messages"].([]any)
+	require.Len(t, messages, 2)
+
+	// Second message is the assistant with cache hint
+	assistant := messages[1].(map[string]any)
+	content := assistant["content"].([]any)
+	require.Len(t, content, 1)
+
+	block := content[0].(map[string]any)
+	assert.Equal(t, "text", block["type"])
+	assert.Equal(t, "world", block["text"])
+
+	// Cache control should be on the text block
+	cc, ok := block["cache_control"].(map[string]any)
+	require.True(t, ok, "expected cache_control on text block")
+	require.Equal(t, "ephemeral", cc["type"])
+}
+
+func TestBuildRequest_AssistantWithBlocksAndCacheHint_ThinkingBlock(t *testing.T) {
+	opts := RequestOptions{
+
+		LLMRequest: llm.Request{
+			Model:     "claude-sonnet-4-6",
+			MaxTokens: 100,
+			Messages: llm.Messages{
+				llm.User("Hello"),
+				msg.Assistant(
+					msg.Thinking("ThinkingConfig", "sig123"),
+					msg.Text("answer"),
+				).Cache().Build(),
+			},
+		},
+	}
+
+	data, err := BuildRequest(opts)
+	require.NoError(t, err)
+
+	var req map[string]any
+	require.NoError(t, json.Unmarshal(data, &req))
+
+	messages := req["messages"].([]any)
+	require.Len(t, messages, 2)
+
+	assistant := messages[1].(map[string]any)
+	content := assistant["content"].([]any)
+	// Thought block is filtered out; only text block remains
+	require.Len(t, content, 1)
+
+	// Only text block with cache_control
+	textBlock := content[0].(map[string]any)
+	assert.Equal(t, "text", textBlock["type"])
+	assert.Equal(t, "answer", textBlock["text"])
+
+	cc := textBlock["cache_control"].(map[string]any)
+	assert.Equal(t, "ephemeral", cc["type"])
+}
+
+func TestBuildRequest_AssistantWithBlocksAndCacheHint_ThinkingBlock_LastBlock(t *testing.T) {
+	opts := RequestOptions{
+
+		LLMRequest: llm.Request{
+			Model:     "claude-sonnet-4-6",
+			MaxTokens: 100,
+			Messages: llm.Messages{
+				llm.User("Hello"),
+				msg.Assistant(
+					msg.Thinking("ThinkingConfig", "sig123"),
+					msg.Text("answer"),
+				).Cache().Build(),
+			},
+		},
+	}
+
+	data, err := BuildRequest(opts)
+	require.NoError(t, err)
+
+	var req map[string]any
+	require.NoError(t, json.Unmarshal(data, &req))
+
+	messages := req["messages"].([]any)
+	assistant := messages[1].(map[string]any)
+	content := assistant["content"].([]any)
+
+	// Only text block; ThinkingConfig is filtered out
+	require.Len(t, content, 1)
+	textBlock := content[0].(map[string]any)
+	assert.Equal(t, "text", textBlock["type"])
+	assert.Equal(t, "answer", textBlock["text"])
+
+	// Cache control on text block
+	cc := textBlock["cache_control"].(map[string]any)
+	assert.Equal(t, "ephemeral", cc["type"])
 }

@@ -15,8 +15,7 @@ type CostFn func(model string, usage *llm.Usage)
 
 // ParseOpts configures how ParseStream processes an Anthropic-format SSE body.
 type ParseOpts struct {
-	RequestedModel string
-	ResolvedModel  string
+	Model string
 
 	// CostFn overrides the default Anthropic cost calculation.
 	// When nil, FillCost (Anthropic pricing) is used.

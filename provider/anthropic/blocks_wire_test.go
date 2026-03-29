@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/codewandler/llm/msg"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -12,22 +13,24 @@ import (
 )
 
 // TestBuildRequest_AssistantWithBlocks_WireOrder verifies that when an assistant
-// message carries ContentBlocks, the Anthropic wire JSON serializes blocks in
-// their original index order: thinking → text → tool_use.
+// message carries ContentBlocks, thinking blocks are filtered out and only
+// text blocks are sent to the API. Thought is internal to model output.
 func TestBuildRequest_AssistantWithBlocks_WireOrder(t *testing.T) {
-	msg := llm.AssistantWithBlocks(
-		[]llm.ContentBlock{
-			{Kind: llm.ContentBlockKindThinking, Text: "My reasoning", Signature: "sig-xyz"},
-			{Kind: llm.ContentBlockKindText, Text: "The answer"},
+	tr := msg.Assistant(
+		msg.Thinking("My reasoning", "sig-xyz"),
+		msg.Text("The answer"),
+		msg.ToolCall{
+			ID: "tc1", Name: "bash", Args: tool.Args{"cmd": "ls"},
 		},
-		tool.NewToolCall("tc1", "bash", tool.Args{"cmd": "ls"}),
-	)
+	).Build()
 
 	m := buildRequestMap(t, RequestOptions{
-		Model: "claude-sonnet-4-5",
-		StreamOptions: llm.Request{
-			Model:    "claude-sonnet-4-5",
-			Messages: llm.Messages{llm.User("go"), msg},
+		LLMRequest: llm.Request{
+			Model: "claude-sonnet-4-5",
+			Messages: llm.Messages{
+				llm.User("go"),
+				tr,
+			},
 		},
 	})
 
@@ -40,81 +43,82 @@ func TestBuildRequest_AssistantWithBlocks_WireOrder(t *testing.T) {
 	require.True(t, ok)
 	content, ok := assistantMsg["content"].([]any)
 	require.True(t, ok, "assistant content must be an array of blocks")
-	require.Len(t, content, 3, "expecting thinking + text + tool_use blocks")
+	// Only text + tool_use; ThinkingConfig blocks are filtered out
+	require.Len(t, content, 3, "expecting text + tool_use blocks (no ThinkingConfig)")
 
 	// Block 0: thinking
 	b0, ok := content[0].(map[string]any)
 	require.True(t, ok)
-	assert.Equal(t, "thinking", b0["type"], "first block must be thinking")
+	assert.Equal(t, "thinking", b0["type"], "first block must be text")
 	assert.Equal(t, "My reasoning", b0["thinking"])
-	assert.Equal(t, "sig-xyz", b0["signature"], "signature must survive serialization intact")
 
 	// Block 1: text
 	b1, ok := content[1].(map[string]any)
 	require.True(t, ok)
-	assert.Equal(t, "text", b1["type"], "second block must be text")
+	assert.Equal(t, "text", b1["type"], "first block must be text")
 	assert.Equal(t, "The answer", b1["text"])
 
 	// Block 2: tool_use
 	b2, ok := content[2].(map[string]any)
 	require.True(t, ok)
-	assert.Equal(t, "tool_use", b2["type"], "third block must be tool_use")
+	assert.Equal(t, "tool_use", b2["type"], "second block must be tool_use")
 	assert.Equal(t, "bash", b2["name"])
 }
 
 // TestBuildRequest_AssistantWithBlocks_NoToolCalls verifies that a blocks-only
-// assistant message (no tool calls) serializes in order without appending any
-// tool_use block.
+// assistant message (no tool calls) with only ThinkingConfig blocks results in empty
+// content — ThinkingConfig blocks are filtered out.
 func TestBuildRequest_AssistantWithBlocks_NoToolCalls(t *testing.T) {
-	msg := llm.AssistantWithBlocks([]llm.ContentBlock{
-		{Kind: llm.ContentBlockKindThinking, Text: "Thinking", Signature: "sig-a"},
-		{Kind: llm.ContentBlockKindText, Text: "Answer"},
-	})
 
-	m := buildRequestMap(t, RequestOptions{
-		Model: "claude-sonnet-4-5",
-		StreamOptions: llm.Request{
+	m := msg.Assistant(
+		msg.Thinking("Thought", "sig-a"),
+		msg.Text("Answer"),
+	).Build()
+
+	req := buildRequestMap(t, RequestOptions{
+		LLMRequest: llm.Request{
 			Model:    "claude-sonnet-4-5",
-			Messages: llm.Messages{llm.User("q"), msg},
+			Messages: llm.Messages{llm.User("q"), m},
 		},
 	})
 
-	messages := m["messages"].([]any)
+	messages := req["messages"].([]any)
 	assistantMsg := messages[1].(map[string]any)
 	content := assistantMsg["content"].([]any)
-	require.Len(t, content, 2, "thinking + text, no tool_use")
+	require.Len(t, content, 2, "only text block, no thinking")
 
 	assert.Equal(t, "thinking", content[0].(map[string]any)["type"])
 	assert.Equal(t, "text", content[1].(map[string]any)["type"])
 }
 
-// TestBuildRequest_AssistantWithBlocks_SignatureRoundTrip verifies that a
-// thinking block's signature survives the full marshal → unmarshal cycle with
-// no truncation or mutation.
+// TestBuildRequest_AssistantWithBlocks_SignatureRoundTrip verifies that ThinkingConfig
+// blocks (including signatures) are NOT included in the wire Request. Thought is
+// internal to model output and should not be re-sent.
 func TestBuildRequest_AssistantWithBlocks_SignatureRoundTrip(t *testing.T) {
-	const sig = "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.very-long-opaque-signature-value"
-
-	msg := llm.AssistantWithBlocks([]llm.ContentBlock{
-		{Kind: llm.ContentBlockKindThinking, Text: "reasoning", Signature: sig},
-		{Kind: llm.ContentBlockKindText, Text: "result"},
-	})
-
+	m := msg.Assistant(
+		msg.Thinking("My reasoning", "sig-xyz"),
+		msg.Text("result"),
+	).Build()
 	raw, err := BuildRequest(RequestOptions{
-		Model: "claude-sonnet-4-5",
-		StreamOptions: llm.Request{
+		LLMRequest: llm.Request{
 			Model:    "claude-sonnet-4-5",
-			Messages: llm.Messages{llm.User("x"), msg},
+			Messages: llm.Messages{llm.User("x"), m},
 		},
 	})
 	require.NoError(t, err)
 
-	// Round-trip through raw JSON to confirm the exact byte string is preserved.
 	var outer map[string]any
 	require.NoError(t, json.Unmarshal(raw, &outer))
 
 	msgs := outer["messages"].([]any)
 	assistantContent := msgs[1].(map[string]any)["content"].([]any)
-	thinkingBlock := assistantContent[0].(map[string]any)
-	assert.Equal(t, sig, thinkingBlock["signature"],
-		"signature must survive BuildRequest marshal/unmarshal with zero mutation")
+
+	// Only text block should be present; ThinkingConfig blocks are filtered
+	require.Len(t, assistantContent, 2)
+	textBlock := assistantContent[1].(map[string]any)
+	assert.Equal(t, "text", textBlock["type"])
+	assert.Equal(t, "result", textBlock["text"])
+	// No thinking block, no signature
+	_, hasThinking := textBlock["thinking"]
+	assert.False(t, hasThinking, "Thinking blocks must not be included in requests")
 }

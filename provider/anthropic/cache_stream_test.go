@@ -36,8 +36,7 @@ func TestParseStream_CacheTokens(t *testing.T) {
 
 	body := io.NopCloser(strings.NewReader(sse))
 	ch := ParseStream(context.Background(), body, ParseOpts{
-		RequestedModel: "claude-sonnet-4-5",
-		ResolvedModel:  "claude-sonnet-4-5",
+		Model: "claude-sonnet-4-5",
 	})
 
 	var doneUsage *llm.Usage
@@ -85,7 +84,7 @@ func TestParseStream_NoCacheTokens(t *testing.T) {
 
 	body := io.NopCloser(strings.NewReader(sse))
 	ch := ParseStream(context.Background(), body, ParseOpts{
-		RequestedModel: "claude-haiku-4-5",
+		Model: "claude-haiku-4-5",
 	})
 
 	var doneUsage *llm.Usage

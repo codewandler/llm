@@ -33,8 +33,8 @@ func collectReasoning(envelopes []llm.Envelope) string {
 			continue
 		}
 		d, ok := env.Data.(*llm.DeltaEvent)
-		if ok && d.Reasoning != "" {
-			b.WriteString(d.Reasoning)
+		if ok && d.Thinking != "" {
+			b.WriteString(d.Thinking)
 		}
 	}
 	return b.String()
@@ -75,7 +75,7 @@ func findError(envelopes []llm.Envelope) error {
 }
 
 func TestProcessor_TextDeltaFlow(t *testing.T) {
-	h := newHarness(ParseOpts{ResolvedModel: "claude-sonnet-4-5"})
+	h := newHarness(ParseOpts{Model: "claude-sonnet-4-5"})
 
 	envelopes := h.Send(
 		MessageStartEvent{Message: MessageStartPayload{
@@ -102,7 +102,7 @@ func TestProcessor_TextDeltaFlow(t *testing.T) {
 }
 
 func TestProcessor_ReasoningDeltaFlow(t *testing.T) {
-	h := newHarness(ParseOpts{ResolvedModel: "claude-sonnet-4-5"})
+	h := newHarness(ParseOpts{Model: "claude-sonnet-4-5"})
 
 	envelopes := h.Send(
 		MessageStartEvent{Message: MessageStartPayload{
@@ -128,7 +128,7 @@ func TestProcessor_ReasoningDeltaFlow(t *testing.T) {
 }
 
 func TestProcessor_ToolCallAccumulation(t *testing.T) {
-	h := newHarness(ParseOpts{ResolvedModel: "claude-sonnet-4-5"})
+	h := newHarness(ParseOpts{Model: "claude-sonnet-4-5"})
 
 	envelopes := h.Send(
 		MessageStartEvent{Message: MessageStartPayload{ID: "msg_03", Model: "claude-sonnet-4-5"}},
@@ -153,7 +153,7 @@ func TestProcessor_ToolCallAccumulation(t *testing.T) {
 }
 
 func TestProcessor_CacheTokenAccounting(t *testing.T) {
-	h := newHarness(ParseOpts{ResolvedModel: "claude-sonnet-4-5"})
+	h := newHarness(ParseOpts{Model: "claude-sonnet-4-5"})
 
 	envelopes := h.Send(
 		MessageStartEvent{Message: MessageStartPayload{
@@ -184,7 +184,7 @@ func TestProcessor_CacheTokenAccounting(t *testing.T) {
 }
 
 func TestProcessor_ErrorEventTerminatesStream(t *testing.T) {
-	h := newHarness(ParseOpts{ResolvedModel: "claude-sonnet-4-5"})
+	h := newHarness(ParseOpts{Model: "claude-sonnet-4-5"})
 
 	envelopes := h.Send(
 		MessageStartEvent{Message: MessageStartPayload{ID: "msg_05", Model: "claude-sonnet-4-5"}},

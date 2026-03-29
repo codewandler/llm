@@ -69,12 +69,13 @@ func (p *Provider) CreateStream(ctx context.Context, opts llm.Request) (llm.Stre
 	}
 
 	body, err := BuildRequest(RequestOptions{
-		Model:         opts.Model,
-		StreamOptions: opts,
+		LLMRequest: opts,
 	})
 	if err != nil {
 		return nil, llm.NewErrBuildRequest(llm.ProviderNameAnthropic, err)
 	}
+
+	println(string(body))
 
 	req, err := p.newAPIRequest(ctx, apiKey, body)
 	if err != nil {
@@ -102,8 +103,7 @@ func (p *Provider) CreateStream(ctx context.Context, opts llm.Request) (llm.Stre
 	}
 
 	return ParseStream(ctx, resp.Body, ParseOpts{
-		RequestedModel:  opts.Model,
-		ResolvedModel:   opts.Model,
+		Model:           opts.Model,
 		ResponseHeaders: headers,
 	}), nil
 }

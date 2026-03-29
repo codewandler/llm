@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/codewandler/llm/msg"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -39,8 +40,7 @@ func TestBuildRequest_SystemAndTools(t *testing.T) {
 	t.Parallel()
 
 	body, err := BuildRequest(RequestOptions{
-		Model: "claude-sonnet-4-5-20250929",
-		StreamOptions: llm.Request{
+		LLMRequest: llm.Request{
 			Model: "claude-sonnet-4-5-20250929",
 			Messages: llm.Messages{
 				llm.System("system prompt"),
@@ -144,8 +144,7 @@ func TestBuildRequest_TopKAndTopP(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			body, err := BuildRequest(RequestOptions{
-				Model:         tt.opts.Model,
-				StreamOptions: tt.opts,
+				LLMRequest: tt.opts,
 			})
 			require.NoError(t, err)
 
@@ -162,8 +161,7 @@ func TestBuildRequest_MultipleSystemMessages(t *testing.T) {
 
 	t.Run("consecutive system messages are accumulated", func(t *testing.T) {
 		body, err := BuildRequest(RequestOptions{
-			Model: "claude-sonnet-4-5-20250929",
-			StreamOptions: llm.Request{
+			LLMRequest: llm.Request{
 				Model: "claude-sonnet-4-5-20250929",
 				Messages: llm.Messages{
 					llm.System("first instruction"),
@@ -187,8 +185,7 @@ func TestBuildRequest_MultipleSystemMessages(t *testing.T) {
 
 	t.Run("mid-conversation system messages are accumulated", func(t *testing.T) {
 		body, err := BuildRequest(RequestOptions{
-			Model: "claude-sonnet-4-5-20250929",
-			StreamOptions: llm.Request{
+			LLMRequest: llm.Request{
 				Model: "claude-sonnet-4-5-20250929",
 				Messages: llm.Messages{
 					llm.System("initial system"),
@@ -214,8 +211,7 @@ func TestBuildRequest_MultipleSystemMessages(t *testing.T) {
 
 	t.Run("empty system messages are filtered out", func(t *testing.T) {
 		body, err := BuildRequest(RequestOptions{
-			Model: "claude-sonnet-4-5-20250929",
-			StreamOptions: llm.Request{
+			LLMRequest: llm.Request{
 				Model: "claude-sonnet-4-5-20250929",
 				Messages: llm.Messages{
 					llm.System("keep this"),
@@ -238,8 +234,7 @@ func TestBuildRequest_MultipleSystemMessages(t *testing.T) {
 
 	t.Run("no system messages results in nil system field", func(t *testing.T) {
 		body, err := BuildRequest(RequestOptions{
-			Model: "claude-sonnet-4-5-20250929",
-			StreamOptions: llm.Request{
+			LLMRequest: llm.Request{
 				Model: "claude-sonnet-4-5-20250929",
 				Messages: llm.Messages{
 					llm.User("hello"),
@@ -263,14 +258,18 @@ func TestBuildRequest_ToolCallWithNilArguments(t *testing.T) {
 	// When a tool call has nil ToolArgs, the serialized JSON must still include
 	// the "input" field (as an empty object) because Anthropic API requires it.
 	body, err := BuildRequest(RequestOptions{
-		Model: "claude-sonnet-4-5-20250929",
-		StreamOptions: llm.Request{
+		LLMRequest: llm.Request{
 			Model: "claude-sonnet-4-5-20250929",
-			Messages: llm.Messages{
+			Messages: msg.BuildTranscript(
 				llm.User("hello"),
-				llm.Assistant("", tool.NewToolCall("call_123", "get_time", nil)),
-				llm.Tool("call_123", "12:00"),
-			},
+				msg.Assistant(
+					msg.ToolCall{ID: "call_123", Name: "get_time"},
+				),
+				msg.ToolResult{
+					ToolCallID: "call_123",
+					ToolOutput: "12:00",
+				},
+			),
 		},
 	})
 	require.NoError(t, err)
@@ -301,20 +300,4 @@ func TestBuildRequest_ToolCallWithNilArguments(t *testing.T) {
 	inputMap, ok := input.(map[string]any)
 	require.True(t, ok, "input must be an object")
 	assert.Empty(t, inputMap, "input should be an empty object for nil arguments")
-}
-
-func TestEnsureInputMap(t *testing.T) {
-	t.Parallel()
-
-	t.Run("nil input returns empty map", func(t *testing.T) {
-		result := ensureInputMap(nil)
-		require.NotNil(t, result)
-		assert.Empty(t, result)
-	})
-
-	t.Run("non-nil input returned as-is", func(t *testing.T) {
-		input := map[string]any{"key": "value"}
-		result := ensureInputMap(input)
-		assert.Equal(t, input, result)
-	})
 }

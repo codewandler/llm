@@ -38,7 +38,7 @@ type OutputUsage struct {
 // MessageStopEvent signals that the message stream is complete. It carries no payload.
 type MessageStopEvent struct{}
 
-// ContentBlockStartEvent marks the beginning of a content block (text, tool_use, thinking).
+// ContentBlockStartEvent marks the beginning of a content block (text, tool_use, ThinkingConfig).
 type ContentBlockStartEvent struct {
 	Index        int          `json:"index"`
 	ContentBlock ContentBlock `json:"content_block"`
@@ -65,7 +65,7 @@ type ContentBlockDelta struct {
 	PartialJSON string `json:"partial_json,omitempty"`
 	Thinking    string `json:"thinking,omitempty"`
 	// Signature is the cryptographic verification token emitted by a
-	// signature_delta event at the end of a thinking block. It must be
+	// signature_delta event at the end of a ThinkingConfig block. It must be
 	// passed back verbatim to the API in subsequent requests.
 	Signature string `json:"signature,omitempty"`
 }

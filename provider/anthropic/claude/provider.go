@@ -34,7 +34,7 @@ const (
 	defaultModelHaiku  = "claude-haiku-4-5-20251001"
 
 	billingHeader = "x-anthropic-billing-header: cc_version=2.1.85.613; cc_entrypoint=sdk-cli; cch=1757e;"
-	systemCore = "You are a Claude agent, built on Anthropic's Claude Agent SDK."
+	systemCore    = "You are a Claude agent, built on Anthropic's Claude Agent SDK."
 )
 
 // supportedModels is the allowlist of model IDs that work with Claude OAuth API.
@@ -182,14 +182,12 @@ func (p *Provider) Models() []llm.Model {
 }
 
 // CreateStream implements llm.Provider.
-func (p *Provider) CreateStream(ctx context.Context, opts llm.Request) (llm.Stream, error) {
+func (p *Provider) CreateStream(ctx context.Context, req llm.Request) (llm.Stream, error) {
 	if p.initErr != nil {
 		return nil, llm.NewErrProviderMsg(llm.ProviderNameClaude, p.initErr.Error())
 	}
 
-	requestedModel := opts.Model
-
-	if err := opts.Validate(); err != nil {
+	if err := req.Validate(); err != nil {
 		return nil, llm.NewErrBuildRequest(llm.ProviderNameClaude, err)
 	}
 
@@ -202,18 +200,20 @@ func (p *Provider) CreateStream(ctx context.Context, opts llm.Request) (llm.Stre
 		return nil, llm.NewErrRequestFailed(llm.ProviderNameClaude, err)
 	}
 
-	opts.Model = normalizeModel(opts.Model)
-	body, err := p.buildRequest(opts)
+	req.Model = normalizeModel(req.Model)
+	body, err := p.buildRequest(req)
 	if err != nil {
 		return nil, llm.NewErrBuildRequest(llm.ProviderNameClaude, err)
 	}
 
-	req, err := p.newAPIRequest(ctx, token.AccessToken, body)
+	println("REQ", string(body))
+
+	httpReq, err := p.newAPIRequest(ctx, token.AccessToken, body)
 	if err != nil {
 		return nil, llm.NewErrBuildRequest(llm.ProviderNameClaude, err)
 	}
 
-	resp, err := p.client.Do(req)
+	resp, err := p.client.Do(httpReq)
 	if err != nil {
 		return nil, llm.NewErrRequestFailed(llm.ProviderNameClaude, err)
 	}
@@ -226,8 +226,7 @@ func (p *Provider) CreateStream(ctx context.Context, opts llm.Request) (llm.Stre
 	}
 
 	return anthropic.ParseStream(ctx, resp.Body, anthropic.ParseOpts{
-		RequestedModel: requestedModel,
-		ResolvedModel:  opts.Model,
+		Model: req.Model,
 	}), nil
 }
 
@@ -259,20 +258,14 @@ func (p *Provider) newAPIRequest(ctx context.Context, accessToken string, body [
 	return req, nil
 }
 
-func (p *Provider) buildRequest(opts llm.Request) ([]byte, error) {
-	// Prepend Claude-specific system blocks with cache_control on systemCore
-	userBlocks := anthropic.CollectSystemBlocks(opts.Messages)
-	claudeBlocks := []anthropic.SystemBlock{
-		{Type: "text", Text: billingHeader},
-		{Type: "text", Text: systemCore, CacheControl: &anthropic.CacheControl{Type: "ephemeral", TTL: "1h"}},
-	}
-	systemBlocks := anthropic.PrependSystemBlocks(claudeBlocks, userBlocks)
-
+func (p *Provider) buildRequest(llmRequest llm.Request) ([]byte, error) {
 	return anthropic.BuildRequest(anthropic.RequestOptions{
-		Model:         opts.Model,
-		SystemBlocks:  systemBlocks,
-		UserID:        p.userID,
-		StreamOptions: opts,
+		SystemBlocks: anthropic.SystemBlocks{
+			anthropic.Text(billingHeader),
+			anthropic.Text(systemCore).WithCacheControl(&anthropic.CacheControl{Type: "ephemeral", TTL: "1h"}),
+		},
+		UserID:     p.userID,
+		LLMRequest: llmRequest,
 	})
 }
 
@@ -298,9 +291,9 @@ func (p *Provider) buildUserID() string {
 
 	// Return JSON object format matching Claude Code
 	id := map[string]string{
-		"device_id":     cfg.UserID,
-		"account_uuid":  cfg.OAuthAccount.AccountUUID,
-		"session_id":    p.sessionID,
+		"device_id":    cfg.UserID,
+		"account_uuid": cfg.OAuthAccount.AccountUUID,
+		"session_id":   p.sessionID,
 	}
 
 	data, err = json.Marshal(id)

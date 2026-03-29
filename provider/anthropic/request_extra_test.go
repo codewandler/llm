@@ -22,7 +22,7 @@ func buildRequestMap(t *testing.T, opts RequestOptions) map[string]any {
 
 func TestBuildRequest_ThinkingEffort_Defaults(t *testing.T) {
 	cases := []struct {
-		model           string
+		model          string
 		thinkingEffort llm.ThinkingEffort
 		expectedType   string
 	}{
@@ -31,26 +31,25 @@ func TestBuildRequest_ThinkingEffort_Defaults(t *testing.T) {
 		{"claude-opus-4-6-20251120", "", "adaptive"},
 		{"claude-sonnet-4-6-20251120", llm.ThinkingEffortNone, "disabled"},
 		{"claude-opus-4-6-20251120", llm.ThinkingEffortNone, "disabled"},
-		// Haiku / older models: default to enabled thinking with high budget_tokens
+		// Haiku / older models: default to enabled ThinkingConfig with high budget_tokens
 		{"claude-haiku-4-5-20251001", "", "enabled"},
 		{"claude-haiku-4-5-20251001", llm.ThinkingEffortNone, "disabled"},
-		// Sonnet 4.5: default to enabled thinking (like Haiku)
+		// Sonnet 4.5: default to enabled ThinkingConfig (like Haiku)
 		{"claude-sonnet-4-5-20250514", "", "enabled"},
 		{"claude-sonnet-4-5-20250514", llm.ThinkingEffortNone, "disabled"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.model+"_"+string(tc.thinkingEffort), func(t *testing.T) {
 			m := buildRequestMap(t, RequestOptions{
-				Model: tc.model,
-				StreamOptions: llm.Request{
+				LLMRequest: llm.Request{
 					Model:          tc.model,
 					Messages:       llm.Messages{llm.User("hi")},
 					ThinkingEffort: tc.thinkingEffort,
 				},
 			})
-			thinking, ok := m["thinking"].(map[string]any)
-			require.True(t, ok, "thinking block should be present")
-			assert.Equal(t, tc.expectedType, thinking["type"], "thinking.type")
+			thinking, ok := m["ThinkingConfig"].(map[string]any)
+			require.True(t, ok, "ThinkingConfig block should be present")
+			assert.Equal(t, tc.expectedType, thinking["type"], "ThinkingConfig.type")
 		})
 	}
 }
@@ -67,15 +66,14 @@ func TestBuildRequest_ThinkingEffort(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(string(tc.effort), func(t *testing.T) {
 			m := buildRequestMap(t, RequestOptions{
-				Model: "claude-sonnet-4-5",
-				StreamOptions: llm.Request{
+				LLMRequest: llm.Request{
 					Model:          "claude-sonnet-4-5",
 					Messages:       llm.Messages{llm.User("hi")},
 					ThinkingEffort: tc.effort,
 				},
 			})
-			thinking, ok := m["thinking"].(map[string]any)
-			require.True(t, ok, "thinking block should be present")
+			thinking, ok := m["ThinkingConfig"].(map[string]any)
+			require.True(t, ok, "ThinkingConfig block should be present")
 			assert.Equal(t, "enabled", thinking["type"])
 			assert.InDelta(t, float64(tc.budget), thinking["budget_tokens"], 0)
 		})
@@ -84,8 +82,7 @@ func TestBuildRequest_ThinkingEffort(t *testing.T) {
 
 func TestBuildRequest_ThinkingEffort_ForcedToolChoiceDowngrade(t *testing.T) {
 	m := buildRequestMap(t, RequestOptions{
-		Model: "claude-sonnet-4-5",
-		StreamOptions: llm.Request{
+		LLMRequest: llm.Request{
 			Model:          "claude-sonnet-4-5",
 			Messages:       llm.Messages{llm.User("hi")},
 			ThinkingEffort: llm.ThinkingEffortHigh,
@@ -102,8 +99,7 @@ func TestBuildRequest_ThinkingEffort_ForcedToolChoiceDowngrade(t *testing.T) {
 
 func TestBuildRequest_OutputFormatJSON(t *testing.T) {
 	m := buildRequestMap(t, RequestOptions{
-		Model: "claude-sonnet-4-5",
-		StreamOptions: llm.Request{
+		LLMRequest: llm.Request{
 			Model:        "claude-sonnet-4-5",
 			Messages:     llm.Messages{llm.User("hi")},
 			OutputFormat: llm.OutputFormatJSON,
@@ -118,15 +114,14 @@ func TestBuildRequest_OutputFormatJSON(t *testing.T) {
 
 func TestBuildRequest_MaxTokensFallback(t *testing.T) {
 	baseReq := llm.Request{
-		Model:    "claude-sonnet-4-5",
-		Messages: llm.Messages{llm.User("hi")},
+		Model:     "claude-sonnet-4-5",
+		MaxTokens: 1000,
+		Messages:  llm.Messages{llm.User("hi")},
 	}
 
 	t.Run("RequestOptions.MaxTokens used", func(t *testing.T) {
 		m := buildRequestMap(t, RequestOptions{
-			Model:         "claude-sonnet-4-5",
-			MaxTokens:     999,
-			StreamOptions: baseReq,
+			LLMRequest: baseReq,
 		})
 		assert.InDelta(t, float64(999), m["max_tokens"], 0)
 	})
@@ -135,63 +130,17 @@ func TestBuildRequest_MaxTokensFallback(t *testing.T) {
 		r := baseReq
 		r.MaxTokens = 777
 		m := buildRequestMap(t, RequestOptions{
-			Model:         "claude-sonnet-4-5",
-			StreamOptions: r,
+			LLMRequest: r,
 		})
 		assert.InDelta(t, float64(777), m["max_tokens"], 0)
 	})
 
 	t.Run("default 32000 when both are zero", func(t *testing.T) {
 		m := buildRequestMap(t, RequestOptions{
-			Model:         "claude-sonnet-4-5",
-			StreamOptions: baseReq,
+			LLMRequest: baseReq,
 		})
 		assert.InDelta(t, float64(32000), m["max_tokens"], 0)
 	})
-}
-
-func TestPrependSystemBlocks(t *testing.T) {
-	prefix := []SystemBlock{{Type: "text", Text: "prefix"}}
-	user := []SystemBlock{{Type: "text", Text: "user"}}
-	result := PrependSystemBlocks(prefix, user)
-	require.Len(t, result, 2)
-	assert.Equal(t, "prefix", result[0].Text)
-	assert.Equal(t, "user", result[1].Text)
-}
-
-func TestPrependSystemBlocks_EmptyPrefix(t *testing.T) {
-	user := []SystemBlock{{Type: "text", Text: "only"}}
-	result := PrependSystemBlocks(nil, user)
-	require.Len(t, result, 1)
-	assert.Equal(t, "only", result[0].Text)
-}
-
-func TestNewSystemBlock(t *testing.T) {
-	sb := NewSystemBlock("hello world")
-	assert.Equal(t, "text", sb.Type)
-	assert.Equal(t, "hello world", sb.Text)
-	assert.Nil(t, sb.CacheControl)
-}
-
-func TestFindPrecedingAssistant_NoPreceding(t *testing.T) {
-	msgs := llm.Messages{
-		llm.User("hi"),
-		llm.User("bye"),
-	}
-	result := FindPrecedingAssistant(msgs, 1)
-	assert.Nil(t, result)
-}
-
-func TestFindPrecedingAssistant_WithPreceding(t *testing.T) {
-	am := llm.Assistant("I am the assistant")
-	msgs := llm.Messages{
-		llm.User("hi"),
-		am,
-		llm.User("bye"),
-	}
-	result := FindPrecedingAssistant(msgs, 2)
-	require.NotNil(t, result)
-	assert.Equal(t, "I am the assistant", llm.AssistantText(result))
 }
 
 func TestIsEffortSupported(t *testing.T) {
@@ -216,8 +165,8 @@ func TestIsEffortSupported(t *testing.T) {
 
 func TestIsMaxEffortSupported(t *testing.T) {
 	cases := []struct {
-		model    string
-		maxOK    bool
+		model string
+		maxOK bool
 	}{
 		{"claude-haiku-4-5-20251001", false},
 		{"claude-sonnet-4-5-20250514", false},
@@ -235,8 +184,8 @@ func TestIsMaxEffortSupported(t *testing.T) {
 
 func TestIsAdaptiveThinkingSupported(t *testing.T) {
 	cases := []struct {
-		model     string
-		adaptive  bool
+		model    string
+		adaptive bool
 	}{
 		{"claude-haiku-4-5-20251001", false},
 		{"claude-haiku-4-6-20251120", false},
@@ -255,9 +204,9 @@ func TestIsAdaptiveThinkingSupported(t *testing.T) {
 
 func TestBuildRequest_OutputEffort(t *testing.T) {
 	cases := []struct {
-		model             string
-		outputEffort       llm.OutputEffort
-		expectEffortVal    string // expected value if present, empty if not
+		model           string
+		outputEffort    llm.OutputEffort
+		expectEffortVal string // expected value if present, empty if not
 	}{
 		// Unsupported models: Haiku
 		{"claude-haiku-4-5-20251001", llm.OutputEffortLow, ""},
@@ -283,8 +232,7 @@ func TestBuildRequest_OutputEffort(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.model+"_"+string(tc.outputEffort), func(t *testing.T) {
 			m := buildRequestMap(t, RequestOptions{
-				Model: tc.model,
-				StreamOptions: llm.Request{
+				LLMRequest: llm.Request{
 					Model:        tc.model,
 					Messages:     llm.Messages{llm.User("hi")},
 					OutputEffort: tc.outputEffort,
@@ -308,8 +256,7 @@ func TestBuildRequest_OutputEffort(t *testing.T) {
 func TestBuildRequest_OutputEffort_DefaultMedium(t *testing.T) {
 	// When OutputEffort is not set, it should default to "medium" on supported models
 	m := buildRequestMap(t, RequestOptions{
-		Model: "claude-sonnet-4-6-20251120",
-		StreamOptions: llm.Request{
+		LLMRequest: llm.Request{
 			Model:    "claude-sonnet-4-6-20251120",
 			Messages: llm.Messages{llm.User("hi")},
 			// OutputEffort not set
@@ -323,8 +270,7 @@ func TestBuildRequest_OutputEffort_DefaultMedium(t *testing.T) {
 func TestBuildRequest_OutputEffortAndFormat(t *testing.T) {
 	// Both OutputEffort and OutputFormat should coexist in output_config
 	m := buildRequestMap(t, RequestOptions{
-		Model: "claude-sonnet-4-6-20251120",
-		StreamOptions: llm.Request{
+		LLMRequest: llm.Request{
 			Model:        "claude-sonnet-4-6-20251120",
 			Messages:     llm.Messages{llm.User("hi")},
 			OutputEffort: llm.OutputEffortHigh,

@@ -8,12 +8,13 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/codewandler/llm"
+	"github.com/codewandler/llm/tokencount"
 	"github.com/codewandler/llm/tool"
 )
 
 func TestProvider_CountTokens_MissingModel(t *testing.T) {
 	p := New()
-	_, err := p.CountTokens(context.Background(), llm.TokenCountRequest{
+	_, err := p.CountTokens(context.Background(), tokencount.TokenCountRequest{
 		Messages: llm.Messages{llm.User("hello")},
 	})
 	require.Error(t, err)
@@ -22,13 +23,13 @@ func TestProvider_CountTokens_MissingModel(t *testing.T) {
 func TestProvider_CountTokens_IncludesInjectedSystemBlocks(t *testing.T) {
 	p := New()
 
-	onlyInjected, err := p.CountTokens(context.Background(), llm.TokenCountRequest{
+	onlyInjected, err := p.CountTokens(context.Background(), tokencount.TokenCountRequest{
 		Model:    "claude-haiku-4-5",
 		Messages: llm.Messages{llm.User("hi")},
 	})
 	require.NoError(t, err)
 
-	withUserSystem, err := p.CountTokens(context.Background(), llm.TokenCountRequest{
+	withUserSystem, err := p.CountTokens(context.Background(), tokencount.TokenCountRequest{
 		Model: "claude-haiku-4-5",
 		Messages: llm.Messages{
 			llm.System("You are helpful."),
@@ -53,7 +54,7 @@ func TestProvider_CountTokens_PerMessageLen(t *testing.T) {
 		llm.User("What is 2+2?"),
 		llm.Assistant("It is 4."),
 	}
-	got, err := p.CountTokens(context.Background(), llm.TokenCountRequest{
+	got, err := p.CountTokens(context.Background(), tokencount.TokenCountRequest{
 		Model:    "claude-haiku-4-5",
 		Messages: msgs,
 	})
@@ -68,7 +69,7 @@ func TestProvider_CountTokens_RoleBreakdown(t *testing.T) {
 		llm.User("Hello"),
 		llm.Assistant("Hi there!"),
 	}
-	got, err := p.CountTokens(context.Background(), llm.TokenCountRequest{
+	got, err := p.CountTokens(context.Background(), tokencount.TokenCountRequest{
 		Model:    "claude-haiku-4-5",
 		Messages: msgs,
 	})
@@ -94,7 +95,7 @@ func TestProvider_CountTokens_Tools(t *testing.T) {
 			"properties": map[string]any{"q": map[string]any{"type": "string"}},
 		}},
 	}
-	got, err := p.CountTokens(context.Background(), llm.TokenCountRequest{
+	got, err := p.CountTokens(context.Background(), tokencount.TokenCountRequest{
 		Model:    "claude-haiku-4-5",
 		Messages: llm.Messages{llm.User("hi")},
 		Tools:    tools,

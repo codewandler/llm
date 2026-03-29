@@ -20,8 +20,7 @@ func TestParseStream_ContextCancellation(t *testing.T) {
 	t.Cleanup(func() { _ = pw.Close() }) // nolint:errcheck // prevent goroutine leak if test fails
 
 	ch := ParseStream(ctx, io.NopCloser(pr), ParseOpts{
-		RequestedModel: "claude-sonnet-4-5",
-		ResolvedModel:  "claude-sonnet-4-5",
+		Model: "claude-sonnet-4-5",
 	})
 
 	var errEnv *llm.Envelope
@@ -45,8 +44,7 @@ func TestParseStream_ContextCancellation(t *testing.T) {
 
 func TestParseStream_ReadError(t *testing.T) {
 	ch := ParseStream(context.Background(), io.NopCloser(failReader{}), ParseOpts{
-		RequestedModel: "claude-sonnet-4-5",
-		ResolvedModel:  "claude-sonnet-4-5",
+		Model: "claude-sonnet-4-5",
 	})
 
 	var errEnv *llm.Envelope
