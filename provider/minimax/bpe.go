@@ -16,7 +16,7 @@ import (
 
 func init() {
 	// Register the MiniMax BPE tokenizer with the tokencount package so that
-	// CountText(tokencount.EncodingMinimax, text) dispatches here without an
+	// CountTextForEncoding(tokencount.EncodingMinimax, text) dispatches here without an
 	// import cycle (tokencount cannot import provider/minimax).
 	tokencount.RegisterEncoding(tokencount.EncodingMinimax, countTextMinimax)
 }
@@ -357,7 +357,7 @@ func (m *minimaxBPE) mergeCount() int { return len(m.mergeRanks) }
 
 // countTextMinimax returns the number of tokens in text using MiniMax BPE.
 // It is registered with tokencount.RegisterEncoding so that
-// tokencount.CountText(tokencount.EncodingMinimax, text) dispatches here.
+// tokencount.CountTextForEncoding(tokencount.EncodingMinimax, text) dispatches here.
 func countTextMinimax(text string) (int, error) {
 	bpe, err := newMinimaxBPE()
 	if err != nil {

@@ -9,7 +9,7 @@ import (
 )
 
 // Compile-time assertion that *Provider implements llm.TokenCounter.
-var _ llm.TokenCounter = (*Provider)(nil)
+var _ tokencount.TokenCounter = (*Provider)(nil)
 
 // Token overhead constants measured empirically against MiniMax-M2.7 API.
 //
@@ -53,7 +53,7 @@ const (
 // hasSystemMessage reports whether msgs contains at least one System.
 func hasSystemMessage(msgs llm.Messages) bool {
 	for _, m := range msgs {
-		if _, ok := m.(llm.SystemMessage); ok {
+		if m.IsSystem() {
 			return true
 		}
 	}
@@ -70,9 +70,9 @@ func hasSystemMessage(msgs llm.Messages) bool {
 //   - Tool schema framing (116 tokens once + 20 tokens per additional tool)
 //
 // All constants are empirically calibrated against the MiniMax-M2.7 API.
-func (p *Provider) CountTokens(_ context.Context, req llm.TokenCountRequest) (*llm.TokenCount, error) {
-	tc := &llm.TokenCount{}
-	if err := llm.CountMessagesAndTools(tc, req, llm.CountOpts{
+func (p *Provider) CountTokens(_ context.Context, req tokencount.TokenCountRequest) (*tokencount.TokenCount, error) {
+	tc := &tokencount.TokenCount{}
+	if err := tokencount.CountMessagesAndTools(tc, req, tokencount.CountOpts{
 		Encoding:       tokencount.EncodingMinimax,
 		PerMsgOverhead: perMsgOverhead,
 	}); err != nil {

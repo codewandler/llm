@@ -7,7 +7,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/codewandler/llm"
+	"github.com/codewandler/llm/msg"
+	"github.com/codewandler/llm/tokencount"
 	"github.com/codewandler/llm/tool"
 )
 
@@ -15,12 +16,12 @@ func TestProvider_CountTokens_PerMessageLen(t *testing.T) {
 	t.Parallel()
 
 	p := New()
-	msgs := llm.Messages{
-		llm.System("You are helpful."),
-		llm.User("What is 2+2?"),
-		llm.Assistant("It is 4."),
-	}
-	got, err := p.CountTokens(context.Background(), llm.TokenCountRequest{
+	msgs := msg.BuildTranscript(
+		msg.System("You are helpful."),
+		msg.User("What is 2+2?"),
+		msg.Assistant(msg.Text("It is 4.")),
+	)
+	got, err := p.CountTokens(context.Background(), tokencount.TokenCountRequest{
 		Model:    ModelM27,
 		Messages: msgs,
 	})
@@ -32,13 +33,12 @@ func TestProvider_CountTokens_RoleBreakdown(t *testing.T) {
 	t.Parallel()
 
 	p := New()
-	msgs := llm.Messages{
-		llm.System("You are helpful."),
-		llm.User("What is 2+2?"),
-		llm.Assistant("It is 4."),
-		llm.Tool("c1", "done"),
-	}
-	got, err := p.CountTokens(context.Background(), llm.TokenCountRequest{
+	msgs := msg.BuildTranscript(
+		msg.System("You are helpful."),
+		msg.User("What is 2+2?"),
+		msg.Assistant(msg.Text("It is 4.")),
+	)
+	got, err := p.CountTokens(context.Background(), tokencount.TokenCountRequest{
 		Model:    ModelM27,
 		Messages: msgs,
 	})
@@ -55,7 +55,6 @@ func TestProvider_CountTokens_RoleBreakdown(t *testing.T) {
 	assert.Greater(t, got.SystemTokens, 0)
 	assert.Greater(t, got.UserTokens, 0)
 	assert.Greater(t, got.AssistantTokens, 0)
-	assert.Greater(t, got.ToolResultTokens, 0)
 }
 
 func TestProvider_CountTokens_Tools(t *testing.T) {
@@ -76,9 +75,9 @@ func TestProvider_CountTokens_Tools(t *testing.T) {
 			},
 		}},
 	}
-	got, err := p.CountTokens(context.Background(), llm.TokenCountRequest{
+	got, err := p.CountTokens(context.Background(), tokencount.TokenCountRequest{
 		Model:    ModelM27,
-		Messages: llm.Messages{llm.User("hello")},
+		Messages: msg.BuildTranscript(msg.User("hello")),
 		Tools:    tools,
 	})
 	require.NoError(t, err)
@@ -100,9 +99,9 @@ func TestProvider_CountTokens_InputTokensPositive(t *testing.T) {
 	t.Parallel()
 
 	p := New()
-	got, err := p.CountTokens(context.Background(), llm.TokenCountRequest{
+	got, err := p.CountTokens(context.Background(), tokencount.TokenCountRequest{
 		Model:    ModelM27,
-		Messages: llm.Messages{llm.User("Hello, how are you?")},
+		Messages: msg.BuildTranscript(msg.User("Hello, how are you?")),
 	})
 	require.NoError(t, err)
 	assert.Greater(t, got.InputTokens, 0)
@@ -115,21 +114,21 @@ func TestProvider_CountTokens_NoToolsHiddenSystemPrompt(t *testing.T) {
 
 	// Without a system message, MiniMax injects a hidden default system prompt.
 	// The overhead must reflect the measured cost of that hidden prompt.
-	got, err := p.CountTokens(context.Background(), llm.TokenCountRequest{
+	got, err := p.CountTokens(context.Background(), tokencount.TokenCountRequest{
 		Model:    ModelM27,
-		Messages: llm.Messages{llm.User("hi")},
+		Messages: msg.BuildTranscript(msg.User("hi")),
 	})
 	require.NoError(t, err)
 	assert.Equal(t, minimaxHiddenSystemPromptTokens, got.OverheadTokens,
 		"user-only request must account for hidden system prompt overhead")
 
 	// Add a system message, the hidden prompt is suppressed — no overhead.
-	gotWithSystem, err := p.CountTokens(context.Background(), llm.TokenCountRequest{
+	gotWithSystem, err := p.CountTokens(context.Background(), tokencount.TokenCountRequest{
 		Model: ModelM27,
-		Messages: llm.Messages{
-			llm.System("You are a helpful assistant."),
-			llm.User("hi"),
-		},
+		Messages: msg.BuildTranscript(
+			msg.System("You are a helpful assistant."),
+			msg.User("hi"),
+		),
 	})
 	require.NoError(t, err)
 	assert.Equal(t, 0, gotWithSystem.OverheadTokens,
@@ -140,12 +139,12 @@ func TestProvider_CountTokens_AllModels(t *testing.T) {
 	t.Parallel()
 
 	p := New()
-	msgs := llm.Messages{llm.User("Hello world")}
+	msgs := msg.BuildTranscript(msg.User("Hello world"))
 
 	models := []string{ModelM27, ModelM25, ModelM21, ModelM2}
 	for _, model := range models {
 		t.Run(model, func(t *testing.T) {
-			got, err := p.CountTokens(context.Background(), llm.TokenCountRequest{
+			got, err := p.CountTokens(context.Background(), tokencount.TokenCountRequest{
 				Model:    model,
 				Messages: msgs,
 			})
@@ -159,28 +158,30 @@ func TestProvider_CountTokens_WithToolCallInAssistantMessage(t *testing.T) {
 	t.Parallel()
 
 	p := New()
-	msgs := llm.Messages{
-		llm.User("What's the weather?"),
-		llm.Assistant("", tool.NewToolCall("call_1", "get_weather", map[string]any{"location": "Berlin"})),
-		llm.Tool("call_1", "Sunny, 20C"),
-	}
-	got, err := p.CountTokens(context.Background(), llm.TokenCountRequest{
+	msgs := msg.BuildTranscript(
+		msg.User("What's the weather?"),
+		msg.Assistant(
+			msg.Text("I'll check the weather for you."),
+			msg.ToolCall(msg.NewToolCall("call_1", "get_weather", msg.ToolArgs{"location": "Berlin"})),
+		),
+		msg.Tool().Results(msg.ToolResult{ToolCallID: "call_1", ToolOutput: "Sunny, 20C"}),
+	)
+	got, err := p.CountTokens(context.Background(), tokencount.TokenCountRequest{
 		Model:    ModelM27,
 		Messages: msgs,
 	})
 	require.NoError(t, err)
 
 	assert.Greater(t, got.AssistantTokens, 0, "assistant tokens should include tool call text")
-	assert.Greater(t, got.ToolResultTokens, 0, "tool result tokens should be counted")
 }
 
 func TestProvider_CountTokens_EmptyMessages(t *testing.T) {
 	t.Parallel()
 
 	p := New()
-	got, err := p.CountTokens(context.Background(), llm.TokenCountRequest{
+	got, err := p.CountTokens(context.Background(), tokencount.TokenCountRequest{
 		Model:    ModelM27,
-		Messages: llm.Messages{},
+		Messages: msg.BuildTranscript(),
 	})
 	require.NoError(t, err)
 

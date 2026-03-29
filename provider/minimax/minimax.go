@@ -91,8 +91,7 @@ func (p *Provider) CreateStream(ctx context.Context, opts llm.Request) (llm.Stre
 	}
 
 	body, err := anthropic.BuildRequest(anthropic.RequestOptions{
-		Model:         opts.Model,
-		StreamOptions: opts,
+		LLMRequest: opts,
 	})
 	if err != nil {
 		return nil, llm.NewErrBuildRequest(providerName, err)
@@ -116,9 +115,8 @@ func (p *Provider) CreateStream(ctx context.Context, opts llm.Request) (llm.Stre
 	}
 
 	return anthropic.ParseStream(ctx, resp.Body, anthropic.ParseOpts{
-		RequestedModel: opts.Model,
-		ResolvedModel:  opts.Model,
-		CostFn:         FillCost,
+		Model:  opts.Model,
+		CostFn: FillCost,
 	}), nil
 }
 
