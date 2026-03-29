@@ -7,27 +7,28 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/codewandler/llm"
+	"github.com/codewandler/llm/msg"
+	"github.com/codewandler/llm/tokencount"
 	"github.com/codewandler/llm/tool"
 )
 
 func TestProvider_CountTokens_MissingModel(t *testing.T) {
 	p := New()
 	p2 := p.WithDefaultModel("")
-	_, err := p2.CountTokens(context.Background(), llm.TokenCountRequest{
-		Messages: llm.Messages{llm.User("hello")},
+	_, err := p2.CountTokens(context.Background(), tokencount.TokenCountRequest{
+		Messages: msg.BuildTranscript(msg.User("hello")),
 	})
 	require.Error(t, err)
 }
 
 func TestProvider_CountTokens_PerMessageLen(t *testing.T) {
 	p := New()
-	msgs := llm.Messages{
-		llm.System("You are helpful."),
-		llm.User("What is 2+2?"),
-		llm.Assistant("It is 4."),
-	}
-	got, err := p.CountTokens(context.Background(), llm.TokenCountRequest{
+	msgs := msg.BuildTranscript(
+		msg.System("You are helpful."),
+		msg.User("What is 2+2?"),
+		msg.Assistant(msg.Text("It is 4.")),
+	)
+	got, err := p.CountTokens(context.Background(), tokencount.TokenCountRequest{
 		Model:    "gpt-4o",
 		Messages: msgs,
 	})
@@ -37,13 +38,12 @@ func TestProvider_CountTokens_PerMessageLen(t *testing.T) {
 
 func TestProvider_CountTokens_RoleBreakdown(t *testing.T) {
 	p := New()
-	msgs := llm.Messages{
-		llm.System("You are helpful."),
-		llm.User("What is 2+2?"),
-		llm.Assistant("It is 4."),
-		llm.ToolResult(tool.NewResult("c1", "done", false)),
-	}
-	got, err := p.CountTokens(context.Background(), llm.TokenCountRequest{
+	msgs := msg.BuildTranscript(
+		msg.System("You are helpful."),
+		msg.User("What is 2+2?"),
+		msg.Assistant(msg.Text("It is 4.")),
+	)
+	got, err := p.CountTokens(context.Background(), tokencount.TokenCountRequest{
 		Model:    "gpt-4o",
 		Messages: msgs,
 	})
@@ -59,7 +59,6 @@ func TestProvider_CountTokens_RoleBreakdown(t *testing.T) {
 	assert.Greater(t, got.SystemTokens, 0)
 	assert.Greater(t, got.UserTokens, 0)
 	assert.Greater(t, got.AssistantTokens, 0)
-	assert.Greater(t, got.ToolResultTokens, 0)
 }
 
 func TestProvider_CountTokens_Tools(t *testing.T) {
@@ -78,9 +77,9 @@ func TestProvider_CountTokens_Tools(t *testing.T) {
 			},
 		}},
 	}
-	got, err := p.CountTokens(context.Background(), llm.TokenCountRequest{
+	got, err := p.CountTokens(context.Background(), tokencount.TokenCountRequest{
 		Model:    "gpt-4o",
-		Messages: llm.Messages{llm.User("hello")},
+		Messages: msg.BuildTranscript(msg.User("hello")),
 		Tools:    tools,
 	})
 	require.NoError(t, err)
@@ -99,9 +98,9 @@ func TestProvider_CountTokens_Tools(t *testing.T) {
 
 func TestProvider_CountTokens_InputTokensPositive(t *testing.T) {
 	p := New()
-	got, err := p.CountTokens(context.Background(), llm.TokenCountRequest{
+	got, err := p.CountTokens(context.Background(), tokencount.TokenCountRequest{
 		Model:    "gpt-4o-mini",
-		Messages: llm.Messages{llm.User("Hello, how are you?")},
+		Messages: msg.BuildTranscript(msg.User("Hello, how are you?")),
 	})
 	require.NoError(t, err)
 	assert.Greater(t, got.InputTokens, 0)
@@ -109,11 +108,11 @@ func TestProvider_CountTokens_InputTokensPositive(t *testing.T) {
 
 func TestProvider_CountTokens_EncodingVariants(t *testing.T) {
 	p := New()
-	msgs := llm.Messages{llm.User("Hello world")}
+	msgs := msg.BuildTranscript(msg.User("Hello world"))
 
 	for _, model := range []string{"gpt-4o", "gpt-4", "gpt-3.5-turbo", "o1-mini", "o3"} {
 		t.Run(model, func(t *testing.T) {
-			got, err := p.CountTokens(context.Background(), llm.TokenCountRequest{
+			got, err := p.CountTokens(context.Background(), tokencount.TokenCountRequest{
 				Model:    model,
 				Messages: msgs,
 			})

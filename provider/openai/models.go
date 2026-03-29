@@ -71,7 +71,7 @@ var ModelAliases = map[string]string{
 	// Coding models
 	"codex": ModelGPT53Codex,
 
-	// Reasoning models
+	// Thought models
 	"o4": ModelO4Mini,
 	"o3": ModelO3,
 }
@@ -94,7 +94,7 @@ type modelInfo struct {
 	InputPrice            float64       // USD per 1M input tokens
 	OutputPrice           float64       // USD per 1M output tokens
 	CachedInputPrice      float64       // USD per 1M cached input tokens (0 if not supported)
-	Category              modelCategory // Reasoning support category
+	Category              modelCategory // Thought support category
 	SupportsExtendedCache bool          // True if model supports 24h prompt cache retention
 }
 

@@ -131,7 +131,7 @@ func (p *Provider) FetchModels(ctx context.Context) ([]llm.Model, error) {
 // Stream dispatches to the Responses API for Codex models, and to Chat
 // Completions for everything else.
 //
-// Reasoning effort is validated and mapped before the request is forwarded.
+// Thought effort is validated and mapped before the request is forwarded.
 // Unknown models (not in the registry) default to Chat Completions so that
 // newly released non-Codex models work without a registry update.
 func (p *Provider) CreateStream(ctx context.Context, opts llm.Request) (llm.Stream, error) {

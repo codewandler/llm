@@ -24,7 +24,8 @@ import (
 	"time"
 
 	"github.com/codewandler/llm"
-	"github.com/codewandler/llm/provider/internal/sse"
+	"github.com/codewandler/llm/internal/sse"
+	"github.com/codewandler/llm/msg"
 	"github.com/codewandler/llm/sortmap"
 	"github.com/codewandler/llm/tool"
 )
@@ -156,51 +157,53 @@ func respBuildRequest(opts llm.Request) ([]byte, error) {
 	// The first SystemMsg becomes the top-level "instructions" field.
 	// Subsequent SystemMsg entries become "developer" role items.
 	instructionsSet := false
-	for _, msg := range opts.Messages {
-		switch m := msg.(type) {
-		case llm.SystemMessage:
+	for _, m := range opts.Messages {
+		switch m.Role {
+		case msg.RoleSystem:
 			if !instructionsSet {
-				r.Instructions = m.Content()
+				r.Instructions = m.Text()
 				instructionsSet = true
 			} else {
 				r.Input = append(r.Input, respInput{
 					Role:    "developer",
-					Content: m.Content(),
+					Content: m.Text(),
 				})
 			}
 
-		case llm.UserMessage:
+		case msg.RoleUser:
 			r.Input = append(r.Input, respInput{
 				Role:    "user",
-				Content: m.Content(),
+				Content: m.Text(),
 			})
 
-		case llm.AssistantMessage:
-			if llm.AssistantText(m) != "" {
+		case msg.RoleAssistant:
+			if m.Text() != "" {
 				r.Input = append(r.Input, respInput{
 					Role:    "assistant",
-					Content: llm.AssistantText(m),
+					Content: m.Text(),
 				})
 			}
 			for _, tc := range m.ToolCalls() {
-				argsJSON, err := json.Marshal(tc.ToolArgs())
+				argsJSON, err := json.Marshal(tc.Args)
 				if err != nil {
 					return nil, fmt.Errorf("marshal tool call arguments: %w", err)
 				}
 				r.Input = append(r.Input, respInput{
 					Type:      "function_call",
-					CallID:    tc.ToolCallID(),
-					Name:      tc.ToolName(),
+					CallID:    tc.ID,
+					Name:      tc.Name,
 					Arguments: string(argsJSON),
 				})
 			}
 
-		case llm.ToolMessage:
-			r.Input = append(r.Input, respInput{
-				Type:   "function_call_output",
-				CallID: m.ToolCallID(),
-				Output: m.ToolOutput(),
-			})
+		case msg.RoleTool:
+			for _, tr := range m.ToolResults() {
+				r.Input = append(r.Input, respInput{
+					Type:   "function_call_output",
+					CallID: tr.ToolCallID,
+					Output: tr.ToolOutput,
+				})
+			}
 		}
 	}
 
@@ -231,7 +234,7 @@ func respBuildRequest(opts llm.Request) ([]byte, error) {
 		}
 	}
 
-	// Reasoning effort
+	// Thought effort
 	if opts.ThinkingEffort != "" {
 		r.Reasoning = &respReason{
 			Effort: string(opts.ThinkingEffort),
@@ -376,7 +379,7 @@ func respHandleEvent(
 					RequestID: meta.responseID,
 				})
 			}
-			pub.Delta(llm.ReasoningDelta(ev.Delta).WithIndex(uint32(ev.OutputIndex)))
+			pub.Delta(llm.ThinkingDelta(ev.Delta).WithIndex(uint32(ev.OutputIndex)))
 		}
 
 	case "response.output_text.delta":

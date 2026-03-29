@@ -17,7 +17,8 @@ import (
 	"time"
 
 	"github.com/codewandler/llm"
-	"github.com/codewandler/llm/provider/internal/sse"
+	"github.com/codewandler/llm/internal/sse"
+	"github.com/codewandler/llm/msg"
 	"github.com/codewandler/llm/sortmap"
 	"github.com/codewandler/llm/tool"
 )
@@ -172,7 +173,7 @@ func ccBuildRequest(opts llm.Request) ([]byte, error) {
 		}
 	}
 
-	// Reasoning effort (already mapped/validated by Provider.Publisher).
+	// Thought effort (already mapped/validated by Provider.Publisher).
 	if opts.ThinkingEffort != "" {
 		r.ThinkingEffort = string(opts.ThinkingEffort)
 	}
@@ -184,44 +185,46 @@ func ccBuildRequest(opts llm.Request) ([]byte, error) {
 	}
 
 	// Messages
-	for _, msg := range opts.Messages {
-		switch m := msg.(type) {
-		case llm.SystemMessage:
+	for _, m := range opts.Messages {
+		switch m.Role {
+		case msg.RoleSystem:
 			r.Messages = append(r.Messages, ccMessagePayload{
 				Role:    "system",
-				Content: m.Content(),
+				Content: m.Text(),
 			})
 
-		case llm.UserMessage:
+		case msg.RoleUser:
 			r.Messages = append(r.Messages, ccMessagePayload{
 				Role:    "user",
-				Content: m.Content(),
+				Content: m.Text(),
 			})
 
-		case llm.AssistantMessage:
+		case msg.RoleAssistant:
 			mp := ccMessagePayload{
 				Role:    "assistant",
-				Content: llm.AssistantText(m),
+				Content: m.Text(),
 			}
 			for _, tc := range m.ToolCalls() {
-				argsJSON, _ := json.Marshal(tc.ToolArgs())
+				argsJSON, _ := json.Marshal(tc.Args)
 				mp.ToolCalls = append(mp.ToolCalls, ccToolCall{
-					ID:   tc.ToolCallID(),
+					ID:   tc.ID,
 					Type: "function",
 					Function: ccFunctionCall{
-						Name:      tc.ToolName(),
+						Name:      tc.Name,
 						Arguments: string(argsJSON),
 					},
 				})
 			}
 			r.Messages = append(r.Messages, mp)
 
-		case llm.ToolMessage:
-			r.Messages = append(r.Messages, ccMessagePayload{
-				Role:       "tool",
-				Content:    m.ToolOutput(),
-				ToolCallID: m.ToolCallID(),
-			})
+		case msg.RoleTool:
+			for _, tr := range m.ToolResults() {
+				r.Messages = append(r.Messages, ccMessagePayload{
+					Role:       "tool",
+					Content:    tr.ToolOutput,
+					ToolCallID: tr.ToolCallID,
+				})
+			}
 		}
 	}
 

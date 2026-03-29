@@ -4,12 +4,11 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/codewandler/llm"
 	"github.com/codewandler/llm/tokencount"
 )
 
 // Compile-time assertion that *Provider implements llm.TokenCounter.
-var _ llm.TokenCounter = (*Provider)(nil)
+var _ tokencount.TokenCounter = (*Provider)(nil)
 
 // CountTokens estimates the number of input tokens for the given request using
 // the tiktoken tokenizer. The encoding is selected per-model (o200k_base for
@@ -21,7 +20,7 @@ var _ llm.TokenCounter = (*Provider)(nil)
 //
 // Counts are exact for text-only conversations. Tool-heavy requests may vary
 // by a small margin due to serialisation format differences.
-func (p *Provider) CountTokens(_ context.Context, req llm.TokenCountRequest) (*llm.TokenCount, error) {
+func (p *Provider) CountTokens(_ context.Context, req tokencount.TokenCountRequest) (*tokencount.TokenCount, error) {
 	model := req.Model
 	if model == "" {
 		model = p.defaultModel
@@ -32,12 +31,12 @@ func (p *Provider) CountTokens(_ context.Context, req llm.TokenCountRequest) (*l
 		enc = tokencount.EncodingCL100K
 	}
 
-	tc := &llm.TokenCount{}
+	tc := &tokencount.TokenCount{}
 	// OpenAI overhead: 4 tokens per message + 3 tokens reply priming
 	const perMsgOverhead = 4
 	const replyPriming = 3
 
-	if err := llm.CountMessagesAndTools(tc, req, llm.CountOpts{
+	if err := tokencount.CountMessagesAndTools(tc, req, tokencount.CountOpts{
 		Encoding:       enc,
 		PerMsgOverhead: perMsgOverhead,
 		ReplyPriming:   replyPriming,

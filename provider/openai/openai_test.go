@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/codewandler/llm"
+	"github.com/codewandler/llm/msg"
 	"github.com/codewandler/llm/tool"
 )
 
@@ -266,10 +267,10 @@ func TestBuildRequest_WithTools(t *testing.T) {
 func TestBuildRequest_AssistantWithToolCalls(t *testing.T) {
 	opts := llm.Request{
 		Model: "gpt-4o",
-		Messages: llm.Messages{
-			llm.User("What's the weather?"),
-			llm.Assistant("", tool.NewToolCall("call_123", "get_weather", map[string]any{"location": "Paris"})),
-		},
+		Messages: msg.BuildTranscript(
+			msg.User("What's the weather?"),
+			msg.Assistant(msg.ToolCall(msg.NewToolCall("call_123", "get_weather", msg.ToolArgs{"location": "Paris"}))),
+		),
 	}
 
 	body, err := ccBuildRequest(opts)
@@ -293,11 +294,11 @@ func TestBuildRequest_AssistantWithToolCalls(t *testing.T) {
 func TestBuildRequest_ToolResults(t *testing.T) {
 	opts := llm.Request{
 		Model: "gpt-4o",
-		Messages: llm.Messages{
-			llm.User("What's the weather?"),
-			llm.Assistant("", tool.NewToolCall("call_123", "get_weather", map[string]any{"location": "Paris"})),
-			llm.Tool("call_123", `{"temp": 72, "conditions": "sunny"}`),
-		},
+		Messages: msg.BuildTranscript(
+			msg.User("What's the weather?"),
+			msg.Assistant(msg.ToolCall(msg.NewToolCall("call_123", "get_weather", msg.ToolArgs{"location": "Paris"}))),
+			msg.Tool().Results(msg.ToolResult{ToolCallID: "call_123", ToolOutput: `{"temp": 72, "conditions": "sunny"}`}),
+		),
 	}
 
 	body, err := ccBuildRequest(opts)
@@ -1139,11 +1140,14 @@ func TestRespBuildRequest_WithTools(t *testing.T) {
 func TestRespBuildRequest_ToolCallsAndResults(t *testing.T) {
 	opts := llm.Request{
 		Model: "gpt-5.1-codex",
-		Messages: llm.Messages{
-			llm.User("Run tests"),
-			llm.Assistant("I'll run the tests.", tool.NewToolCall("call_abc", "run_tests", tool.Args{"verbose": true})),
-			llm.ToolResult(tool.NewResult("call_abc", "All 42 tests passed", false)),
-		},
+		Messages: msg.BuildTranscript(
+			msg.User("Run tests"),
+			msg.Assistant(
+				msg.Text("I'll run the tests."),
+				msg.ToolCall(msg.NewToolCall("call_abc", "run_tests", msg.ToolArgs{"verbose": true})),
+			),
+			msg.Tool().Results(msg.ToolResult{ToolCallID: "call_abc", ToolOutput: "All 42 tests passed"}),
+		),
 	}
 
 	body, err := respBuildRequest(opts)
