@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/codewandler/llm"
+	"github.com/codewandler/llm/tokencount"
 )
 
 // CountTokens implements llm.TokenCounter by delegating to the first resolved
@@ -13,7 +13,7 @@ import (
 // The model alias is resolved using the same alias map as CreateStream, and the
 // underlying provider's native model ToolCallID is used for encoding selection. If the
 // resolved provider does not implement llm.TokenCounter, an error is returned.
-func (p *Provider) CountTokens(ctx context.Context, req llm.TokenCountRequest) (*llm.TokenCount, error) {
+func (p *Provider) CountTokens(ctx context.Context, req tokencount.TokenCountRequest) (*tokencount.TokenCount, error) {
 	if req.Model == "" {
 		return nil, fmt.Errorf("router: CountTokens: model is required")
 	}
@@ -24,7 +24,7 @@ func (p *Provider) CountTokens(ctx context.Context, req llm.TokenCountRequest) (
 	}
 
 	target := targets[0]
-	tc, ok := target.provider.(llm.TokenCounter)
+	tc, ok := target.provider.(tokencount.TokenCounter)
 	if !ok {
 		return nil, fmt.Errorf("router: CountTokens: provider %q does not implement TokenCounter", target.providerName)
 	}
