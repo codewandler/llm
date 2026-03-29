@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/codewandler/llm"
+	"github.com/codewandler/llm/msg"
 	"github.com/codewandler/llm/sortmap"
 	"github.com/codewandler/llm/tool"
 )
@@ -360,41 +361,45 @@ func buildRequest(opts llm.Request) ([]byte, error) {
 		})
 	}
 
-	for _, msg := range opts.Messages {
+	for _, m := range opts.Messages {
 		var mp messagePayload
 
-		switch m := msg.(type) {
-		case llm.SystemMessage:
+		switch m.Role {
+		case msg.RoleSystem:
 			mp = messagePayload{
 				Role:    "system",
-				Content: m.Content(),
+				Content: m.Text(),
 			}
 
-		case llm.UserMessage:
+		case msg.RoleUser:
 			mp = messagePayload{
 				Role:    "user",
-				Content: m.Content(),
+				Content: m.Text(),
 			}
 
-		case llm.AssistantMessage:
+		case msg.RoleAssistant:
 			mp = messagePayload{
 				Role:    "assistant",
-				Content: llm.AssistantText(m),
+				Content: m.Text(),
 			}
 			for _, tc := range m.ToolCalls() {
 				mp.ToolCalls = append(mp.ToolCalls, toolCallItem{
 					Function: functionCall{
-						Name:      tc.ToolName(),
-						Arguments: tc.ToolArgs(),
+						Name:      tc.Name,
+						Arguments: tc.Args,
 					},
 				})
 			}
 
-		case llm.ToolMessage:
-			mp = messagePayload{
-				Role:    "tool",
-				Content: m.ToolOutput(),
+		case msg.RoleTool:
+			for _, tr := range m.ToolResults() {
+				mp = messagePayload{
+					Role:    "tool",
+					Content: tr.ToolOutput,
+				}
+				r.Messages = append(r.Messages, mp)
 			}
+			continue // avoid appending twice
 		}
 
 		r.Messages = append(r.Messages, mp)
