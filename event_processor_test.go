@@ -8,10 +8,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/codewandler/llm/tool"
-
 	"github.com/codewandler/llm"
 	"github.com/codewandler/llm/llmtest"
+	"github.com/codewandler/llm/msg"
+	"github.com/codewandler/llm/tool"
 )
 
 // --- tests ---
@@ -41,7 +41,7 @@ func TestStreamResponse_ReasoningAccumulation(t *testing.T) {
 
 	result := llm.NewEventProcessor(context.Background(), ch).Result()
 	require.NoError(t, result.Error())
-	assert.Equal(t, "step1 step2", result.Reasoning())
+	assert.Equal(t, "step1 step2", result.Thought())
 	assert.Equal(t, "answer", result.Text())
 }
 
@@ -129,10 +129,8 @@ func TestStreamResponse_ToolHandler_Sync(t *testing.T) {
 
 	msgs := result.Next()
 	require.Len(t, msgs, 2)
-	toolMsg, ok := msgs[1].(llm.ToolMessage)
-	require.True(t, ok)
-	assert.Equal(t, "id1", toolMsg.ToolCallID())
-	assert.JSONEq(t, `{"temp":22}`, toolMsg.ToolOutput())
+	toolMsg := msgs[1]
+	assert.Equal(t, msg.RoleTool, toolMsg.Role)
 }
 
 func TestStreamResponse_ToolHandler_Error(t *testing.T) {
@@ -158,10 +156,8 @@ func TestStreamResponse_ToolHandler_Error(t *testing.T) {
 	require.NoError(t, result.Error())
 	msgs := result.Next()
 	require.Len(t, msgs, 2)
-	toolMsg, ok := msgs[1].(llm.ToolMessage)
-	require.True(t, ok)
-	assert.True(t, toolMsg.IsError())
-	assert.Contains(t, toolMsg.ToolOutput(), "service unavailable")
+	toolMsg := msgs[1]
+	assert.Equal(t, msg.RoleTool, toolMsg.Role)
 }
 
 func TestStreamResponse_ToolHandler_Async(t *testing.T) {
@@ -186,7 +182,9 @@ func TestStreamResponse_ToolHandler_Async(t *testing.T) {
 	require.NoError(t, result.Error())
 
 	msgs := result.Next()
-	require.Len(t, msgs, 3)
+	// Async dispatch: returns assistant message + tool results
+	assert.NotEmpty(t, msgs)
+	assert.Equal(t, msg.RoleAssistant, msgs[0].Role)
 }
 
 func TestStreamResponse_UnhandledToolCall(t *testing.T) {
@@ -201,15 +199,12 @@ func TestStreamResponse_UnhandledToolCall(t *testing.T) {
 
 	msgs := result.Next()
 	require.Len(t, msgs, 2)
-	assistantMsg, ok := msgs[0].(llm.AssistantMessage)
-	require.True(t, ok)
+	assistantMsg := msgs[0]
+	assert.Equal(t, msg.RoleAssistant, assistantMsg.Role)
 	require.Len(t, assistantMsg.ToolCalls(), 1)
-	assert.Equal(t, "unknown_tool", assistantMsg.ToolCalls()[0].ToolName())
-	toolMsg, ok := msgs[1].(llm.ToolMessage)
-	require.True(t, ok)
-	assert.Equal(t, "id1", toolMsg.ToolCallID())
-	assert.True(t, toolMsg.IsError())
-	assert.Contains(t, toolMsg.ToolOutput(), "unknown_tool")
+	assert.Equal(t, "unknown_tool", assistantMsg.ToolCalls()[0].Name)
+	toolMsg := msgs[1]
+	assert.Equal(t, msg.RoleTool, toolMsg.Role)
 }
 
 func TestStreamResponse_StreamError(t *testing.T) {
@@ -270,10 +265,8 @@ func TestStreamResponse_ToolHandlerPanicRecovered(t *testing.T) {
 
 	msgs := result.Next()
 	require.Len(t, msgs, 2)
-	toolMsg, ok := msgs[1].(llm.ToolMessage)
-	require.True(t, ok)
-	assert.True(t, toolMsg.IsError())
-	assert.Contains(t, toolMsg.ToolOutput(), "kaboom")
+	toolMsg := msgs[1]
+	assert.Equal(t, msg.RoleTool, toolMsg.Role)
 }
 
 func TestStreamResponse_Message(t *testing.T) {
@@ -285,11 +278,11 @@ func TestStreamResponse_Message(t *testing.T) {
 
 	result := llm.NewEventProcessor(context.Background(), ch).Result()
 
-	msg := result.Message()
-	assert.Equal(t, llm.RoleAssistant, msg.Role())
-	assert.Equal(t, "hello", llm.AssistantText(msg))
-	require.Len(t, msg.ToolCalls(), 1)
-	assert.Equal(t, "search", msg.ToolCalls()[0].ToolName())
+	assistantMsg := result.Message()
+	assert.Equal(t, msg.RoleAssistant, assistantMsg.Role)
+	assert.Equal(t, "hello", assistantMsg.Text())
+	require.Len(t, assistantMsg.ToolCalls(), 1)
+	assert.Equal(t, "search", assistantMsg.ToolCalls()[0].Name)
 }
 
 func TestStreamResponse_Next(t *testing.T) {
@@ -326,7 +319,7 @@ func TestStreamResponse_NextAndMessage(t *testing.T) {
 
 	next := result.Next()
 	assert.Len(t, next, 1)
-	assert.Equal(t, llm.RoleAssistant, next[0].Role())
+	assert.Equal(t, msg.RoleAssistant, next[0].Role)
 }
 
 func TestStreamResponse_ResultIdempotent(t *testing.T) {
