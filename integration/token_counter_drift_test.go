@@ -13,6 +13,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/codewandler/llm/tokencount"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -43,10 +44,10 @@ func testTokenCounterDrift(t *testing.T, provider llm.Provider, model string, ms
 	ctx := context.Background()
 
 	// Step 1 — estimate
-	tc, ok := provider.(llm.TokenCounter)
+	tc, ok := provider.(tokencount.TokenCounter)
 	require.True(t, ok, "provider %q does not implement llm.TokenCounter", provider.Name())
 
-	est, err := tc.CountTokens(ctx, llm.TokenCountRequest{
+	est, err := tc.CountTokens(ctx, tokencount.TokenCountRequest{
 		Model:    model,
 		Messages: msgs,
 		Tools:    tools,

@@ -24,7 +24,7 @@ func SendEvents(evs ...llm.Event) <-chan llm.Envelope {
 	return ch
 }
 func TextEvent(s string) llm.Event                   { return llm.TextDelta(s) }
-func ReasoningEvent(s string) llm.Event              { return llm.ReasoningDelta(s) }
+func ReasoningEvent(s string) llm.Event              { return llm.ThinkingDelta(s) }
 func CompletedEvent(reason llm.StopReason) llm.Event { return &llm.CompletedEvent{StopReason: reason} }
 func ErrorEvent(err *llm.ProviderError) llm.Event    { return &llm.ErrorEvent{Error: err} }
 func UsageEvent(u llm.Usage) llm.Event               { return &llm.UsageUpdatedEvent{Usage: u} }
