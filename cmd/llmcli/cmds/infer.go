@@ -6,10 +6,11 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/spf13/cobra"
-
 	"github.com/codewandler/llm"
+	"github.com/codewandler/llm/msg"
+	"github.com/codewandler/llm/tokencount"
 	"github.com/codewandler/llm/tool"
+	"github.com/spf13/cobra"
 )
 
 // NewInferCmd returns the infer command.
@@ -44,7 +45,7 @@ Examples:
 
 	cmd.Flags().StringVarP(&model, "model", "m", "fast", "Model to use (fast, default, powerful, codex, or full path)")
 	cmd.Flags().StringVarP(&system, "system", "s", "", "System prompt to prepend")
-	cmd.Flags().StringVar(&thinkingEffort, "thinking", "", "Thinking effort: low, medium, high (for o-series / codex models)")
+	cmd.Flags().StringVar(&thinkingEffort, "thinking", "", "Thought effort: low, medium, high (for o-series / codex models)")
 	cmd.Flags().StringVar(&outputEffort, "effort", "", "Output effort: low, medium, high, max (Anthropic Sonnet 4.6+ / Opus 4.6+)")
 	cmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "Show usage statistics")
 	cmd.Flags().BoolVar(&demoTools, "demo-tools", false, "Enable demo tool loop (add_fact + complete_turn) and default persona")
@@ -62,10 +63,10 @@ func runInfer(ctx context.Context, userMsg, model, system, thinking, effort stri
 	spec := buildInferSpec(userMsg, model, system, thinking, effort, demoTools)
 
 	// --- Token estimate (verbose only) ---
-	var tokenEstimate *llm.TokenCount
+	var tokenEstimate *tokencount.TokenCount
 	if verbose {
-		if tc, ok := provider.(llm.TokenCounter); ok {
-			est, err := tc.CountTokens(ctx, llm.TokenCountRequest{
+		if tc, ok := provider.(tokencount.TokenCounter); ok {
+			est, err := tc.CountTokens(ctx, tokencount.TokenCountRequest{
 				Model:    spec.Model,
 				Messages: spec.Messages,
 				Tools:    spec.Tools,
@@ -149,7 +150,7 @@ func runInfer(ctx context.Context, userMsg, model, system, thinking, effort stri
 
 // printTokenEstimate prints the pre-request token estimate section when running
 // in verbose mode. Called before CreateStream.
-func printTokenEstimate(est *llm.TokenCount) {
+func printTokenEstimate(est *tokencount.TokenCount) {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintf(os.Stderr, "%s── token estimate ──%s\n", ansiDim, ansiReset)
 
@@ -194,7 +195,7 @@ func printTokenEstimate(est *llm.TokenCount) {
 }
 
 // printVerboseInfo prints multi-line verbose metadata with right-aligned labels.
-func printVerboseInfo(result llm.Result, est *llm.TokenCount) {
+func printVerboseInfo(result llm.Result, est *tokencount.TokenCount) {
 	type field struct {
 		label string
 		value string
@@ -208,9 +209,9 @@ func printVerboseInfo(result llm.Result, est *llm.TokenCount) {
 		fields = append(fields, field{"stop_reason", string(result.StopReason())})
 	}
 
-	// Reasoning summary (character count — full text already streamed live)
-	if result.Reasoning() != "" {
-		fields = append(fields, field{"reasoning", fmt.Sprintf("%d chars", len(result.Reasoning()))})
+	// Thought summary (character count — full text already streamed live)
+	if result.Thought() != "" {
+		fields = append(fields, field{"reasoning", fmt.Sprintf("%d chars", len(result.Thought()))})
 	}
 
 	// Tool calls
@@ -224,11 +225,11 @@ func printVerboseInfo(result llm.Result, est *llm.TokenCount) {
 
 	// Tool results
 	msgs := result.Next()
-	for i, msg := range msgs {
-		if tm, ok := msg.(llm.ToolMessage); ok {
+	for i, m := range msgs {
+		if m.Role == msg.RoleTool {
 			label := fmt.Sprintf("result[%d]", i)
-			value := tm.ToolOutput()
-			if tm.IsError() {
+			value := m.ToolResults()[0].ToolOutput
+			if m.ToolResults()[0].IsError {
 				value = "(error) " + value
 			}
 			if len(value) > 120 {
@@ -354,11 +355,17 @@ func buildInferSpec(userMsg, model, system, thinking, effort string, demoTools b
 	cacheHint := &llm.CacheHint{Enabled: true, TTL: "1h"}
 
 	if system != "" {
-		msgs = append(msgs, llm.System(system, cacheHint))
+		sysMsg := msg.System(system).Build()
+		sysMsg.CacheHint = cacheHint
+		msgs = append(msgs, sysMsg)
 	} else if demoTools {
-		msgs = append(msgs, llm.System(defaultDemoSystemPrompt, cacheHint))
+		sysMsg := msg.System(defaultDemoSystemPrompt).Build()
+		sysMsg.CacheHint = cacheHint
+		msgs = append(msgs, sysMsg)
 	}
-	msgs = append(msgs, llm.User(userMsg, cacheHint))
+	userMsg2 := msg.User(userMsg).Build()
+	userMsg2.CacheHint = cacheHint
+	msgs = append(msgs, userMsg2)
 
 	spec := inferSpec{
 		Model:          model,

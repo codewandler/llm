@@ -13,7 +13,7 @@ func TestBuildInferSpec_Default_NoDemoTools(t *testing.T) {
 
 	require.Len(t, spec.Messages, 1)
 	require.Equal(t, llm.RoleUser, spec.Messages[0].Role())
-	require.Equal(t, "hi", spec.Messages[0].(llm.UserMessage).Content())
+	require.Equal(t, "hi", spec.Messages[0].(llm.IsUserMsg).Content())
 	require.Nil(t, spec.ToolChoice)
 	require.Empty(t, spec.Tools)
 	require.Empty(t, spec.ToolHandlers)
@@ -24,7 +24,7 @@ func TestBuildInferSpec_WithSystem_NoDemoTools(t *testing.T) {
 
 	require.Len(t, spec.Messages, 2)
 	require.Equal(t, llm.RoleSystem, spec.Messages[0].Role())
-	require.Equal(t, "you are concise", spec.Messages[0].(llm.SystemMessage).Content())
+	require.Equal(t, "you are concise", spec.Messages[0].(llm.IsSystemMsg).Content())
 	require.Equal(t, llm.RoleUser, spec.Messages[1].Role())
 	require.Nil(t, spec.ToolChoice)
 	require.Empty(t, spec.Tools)
