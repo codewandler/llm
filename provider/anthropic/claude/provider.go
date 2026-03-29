@@ -11,11 +11,8 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"sort"
-	"strings"
 
 	"github.com/codewandler/llm"
-	"github.com/codewandler/llm/modeldb"
 	"github.com/codewandler/llm/provider/anthropic"
 )
 
@@ -28,10 +25,6 @@ const (
 
 	stainlessPackageVer = "0.74.0"
 	stainlessNodeVer    = "v24.3.0"
-
-	defaultModelSonnet = "claude-sonnet-4-6"
-	defaultModelOpus   = "claude-opus-4-6"
-	defaultModelHaiku  = "claude-haiku-4-5-20251001"
 
 	billingHeader = "x-anthropic-billing-header: cc_version=2.1.85.613; cc_entrypoint=sdk-cli; cch=1757e;"
 	systemCore    = "You are a Claude agent, built on Anthropic's Claude Agent SDK."
@@ -70,72 +63,8 @@ type Provider struct {
 	userID        string
 	sessionID     string
 	initErr       error // set when a With* option fails to initialise its token provider
-}
 
-// Option configures the Claude provider.
-type Option func(*Provider)
-
-// WithLLMOptions applies one or more llm.Option values to the Claude provider.
-// This allows using shared llm options (e.g. llm.WithHTTPClient) with this provider.
-//
-// Example:
-//
-//	claude.New(claude.WithLLMOptions(llm.WithHTTPClient(myClient)))
-func WithLLMOptions(opts ...llm.Option) Option {
-	return func(p *Provider) {
-		cfg := llm.Apply(opts...)
-		if cfg.HTTPClient != nil {
-			p.client = cfg.HTTPClient
-		}
-	}
-}
-
-// WithTokenProvider sets a custom token provider.
-func WithTokenProvider(tp TokenProvider) Option {
-	return func(p *Provider) {
-		p.tokenProvider = tp
-	}
-}
-
-// WithManagedTokenProvider creates and sets a managed token provider.
-func WithManagedTokenProvider(key string, store TokenStore, onRefreshed OnTokenRefreshed) Option {
-	return func(p *Provider) {
-		p.tokenProvider = NewManagedTokenProvider(key, store, onRefreshed)
-	}
-}
-
-// WithLocalTokenProvider sets the local Claude Code token provider.
-// This reads tokens from ~/.claude/.credentials.json (or CLAUDE_CONFIG_DIR)
-// and automatically refreshes expired tokens, writing them back to the file.
-func WithLocalTokenProvider() Option {
-	return func(p *Provider) {
-		tp, err := NewLocalTokenProvider()
-		if err != nil {
-			p.initErr = fmt.Errorf("WithLocalTokenProvider: %w", err)
-			return
-		}
-		p.tokenProvider = tp
-	}
-}
-
-// WithClaudeDir sets a custom Claude config directory for local credentials.
-// The directory should contain .credentials.json file.
-func WithClaudeDir(dir string) Option {
-	return func(p *Provider) {
-		tp, err := NewLocalTokenProviderWithDir(dir)
-		if err != nil {
-			p.initErr = fmt.Errorf("WithClaudeDir(%q): %w", dir, err)
-			return
-		}
-		p.tokenProvider = tp
-	}
-}
-
-// WithBaseURL sets a custom base URL for the API.
-func WithBaseURL(url string) Option {
-	return func(p *Provider) {
-		p.baseURL = url
-	}
+	*claudeModels
 }
 
 // New creates a new Claude OAuth provider.
@@ -143,9 +72,10 @@ func WithBaseURL(url string) Option {
 // they will be used automatically. Use WithTokenProvider() to override.
 func New(opts ...Option) *Provider {
 	p := &Provider{
-		baseURL:   getEnvBaseURL(),
-		client:    llm.DefaultHttpClient(),
-		sessionID: randomUUID(),
+		baseURL:      getEnvBaseURL(),
+		client:       llm.DefaultHttpClient(),
+		sessionID:    randomUUID(),
+		claudeModels: newClaudeModels(),
 	}
 
 	// Default to local token provider if available
@@ -161,31 +91,28 @@ func New(opts ...Option) *Provider {
 	}
 
 	p.userID = p.buildUserID()
+
 	return p
 }
 
 // Name returns the provider name.
 func (p *Provider) Name() string { return providerName }
 
-// Models returns available models.
-func (p *Provider) Models() []llm.Model {
-	models := modelsFromDB()
-	if len(models) > 0 {
-		return models
-	}
-
-	return []llm.Model{
-		{ID: defaultModelSonnet, Name: "Claude Sonnet 4.6", Provider: providerName},
-		{ID: defaultModelOpus, Name: "Claude Opus 4.6", Provider: providerName},
-		{ID: defaultModelHaiku, Name: "Claude Haiku 4.5", Provider: providerName},
-	}
-}
-
 // CreateStream implements llm.Provider.
 func (p *Provider) CreateStream(ctx context.Context, req llm.Request) (llm.Stream, error) {
 	if p.initErr != nil {
 		return nil, llm.NewErrProviderMsg(llm.ProviderNameClaude, p.initErr.Error())
 	}
+
+	// Resolve model to include inference profile prefix.
+	if req.Model == "" {
+		req.Model = ModelDefault
+	}
+	resolvedModel, err := p.Resolve(req.Model)
+	if err != nil {
+		return nil, llm.NewErrBuildRequest(llm.ProviderNameClaude, err)
+	}
+	req.Model = resolvedModel.ID
 
 	if err := req.Validate(); err != nil {
 		return nil, llm.NewErrBuildRequest(llm.ProviderNameClaude, err)
@@ -200,13 +127,11 @@ func (p *Provider) CreateStream(ctx context.Context, req llm.Request) (llm.Strea
 		return nil, llm.NewErrRequestFailed(llm.ProviderNameClaude, err)
 	}
 
-	req.Model = normalizeModel(req.Model)
+	// Build request
 	body, err := p.buildRequest(req)
 	if err != nil {
 		return nil, llm.NewErrBuildRequest(llm.ProviderNameClaude, err)
 	}
-
-	println("REQ", string(body))
 
 	httpReq, err := p.newAPIRequest(ctx, token.AccessToken, body)
 	if err != nil {
@@ -301,49 +226,6 @@ func (p *Provider) buildUserID() string {
 		return ""
 	}
 	return string(data)
-}
-
-func modelsFromDB() []llm.Model {
-	provider, ok := modeldb.GetProvider("anthropic")
-	if !ok || len(provider.Models) == 0 {
-		return nil
-	}
-
-	ids := make([]string, 0, len(supportedModels))
-	for id := range provider.Models {
-		if supportedModels[id] {
-			ids = append(ids, id)
-		}
-	}
-	if len(ids) == 0 {
-		return nil
-	}
-
-	sort.Strings(ids)
-	out := make([]llm.Model, 0, len(ids))
-	for _, id := range ids {
-		m := provider.Models[id]
-		name := m.Name
-		if name == "" {
-			name = id
-		}
-		out = append(out, llm.Model{ID: id, Name: name, Provider: providerName})
-	}
-
-	return out
-}
-
-func normalizeModel(model string) string {
-	switch strings.ToLower(strings.TrimSpace(model)) {
-	case "sonnet":
-		return defaultModelSonnet
-	case "opus":
-		return defaultModelOpus
-	case "haiku":
-		return defaultModelHaiku
-	default:
-		return model
-	}
 }
 
 func randomUUID() string {

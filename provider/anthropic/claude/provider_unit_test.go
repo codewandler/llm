@@ -11,26 +11,26 @@ import (
 )
 
 func TestNormalizeModel_Aliases(t *testing.T) {
+	p := newClaudeModels()
 	cases := []struct{ in, want string }{
-		{"sonnet", defaultModelSonnet},
-		{"Sonnet", defaultModelSonnet},
-		{"SONNET", defaultModelSonnet},
-		{"opus", defaultModelOpus},
-		{"Opus", defaultModelOpus},
-		{"haiku", defaultModelHaiku},
-		{"Haiku", defaultModelHaiku},
+		{"sonnet", ModelSonnet},
+		{"Sonnet", ModelSonnet},
+		{"SONNET", ModelSonnet},
+		{"opus", ModelOpus},
+		{"Opus", ModelOpus},
+		{"haiku", ModelHaiku},
+		{"Haiku", ModelHaiku},
+		{"claude-sonnet-4-6", "claude-sonnet-4-6"},
+		{"", ModelDefault},
+		{llm.ModelDefault, ModelDefault},
 	}
 	for _, tc := range cases {
 		t.Run(tc.in, func(t *testing.T) {
-			assert.Equal(t, tc.want, normalizeModel(tc.in))
+			resolved, err := p.Resolve(tc.in)
+			require.NoError(t, err)
+			assert.Equal(t, tc.want, resolved.ID)
 		})
 	}
-}
-
-func TestNormalizeModel_PassThrough(t *testing.T) {
-	assert.Equal(t, "claude-sonnet-4-6", normalizeModel("claude-sonnet-4-6"))
-	assert.Equal(t, "", normalizeModel(""))
-	assert.Equal(t, "default", normalizeModel("default"))
 }
 
 func TestStainlessOS(t *testing.T) {

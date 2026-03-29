@@ -1,10 +1,8 @@
-package integration_test
+package integration
 
 import (
 	"context"
-	"net/http"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"testing"
@@ -24,62 +22,12 @@ import (
 	"github.com/codewandler/llm/tool"
 )
 
-// isClaudeAvailable checks if Claude Code credentials are available.
-func isClaudeAvailable() bool {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return false
-	}
-	_, err = os.Stat(filepath.Join(home, ".claude", ".credentials.json"))
-	return err == nil
-}
-
-// isOllamaAvailable checks if Ollama is running locally.
-func isOllamaAvailable() bool {
-	resp, err := http.Get("http://localhost:11434/api/tags")
-	if err != nil {
-		return false
-	}
-	defer resp.Body.Close() // nolint:errcheck
-	return resp.StatusCode == http.StatusOK
-}
-
-// isBedrockAvailable checks if AWS credentials are configured for Bedrock.
-func isBedrockAvailable() bool {
-	if os.Getenv("LLM_TEST_BEDROCK_ENABLED") != "1" {
-		return false
-	}
-	// Check environment variables
-	if os.Getenv(bedrock.EnvAWSAccessKeyID) != "" {
-		return true
-	}
-	// Check for AWS config/credentials files (including SSO)
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return false
-	}
-	// Check credentials file
-	credPath := filepath.Join(home, ".aws", "credentials")
-	if _, err := os.Stat(credPath); err == nil {
-		return true
-	}
-	// Check config file (may have SSO profiles)
-	configPath := filepath.Join(home, ".aws", "config")
-	if _, err := os.Stat(configPath); err == nil {
-		return true
-	}
-	return false
-}
-
-// getAWSRegion returns the configured AWS region or default.
-func getAWSRegion() string {
-	if region := os.Getenv(bedrock.EnvAWSRegion); region != "" {
-		return region
-	}
-	if region := os.Getenv(bedrock.EnvAWSDefaultRegion); region != "" {
-		return region
-	}
-	return bedrock.DefaultRegion
+type ProviderTestCase struct {
+	name     string
+	provider llm.Named
+	model    string // explicit model; empty = use provider.Models()[0].ID
+	skip     bool   // Set to true for providers requiring external setup
+	skipMsg  string // Reason for skipping
 }
 
 // TestProviders is a comprehensive integration test that verifies all providers
@@ -88,13 +36,7 @@ func getAWSRegion() string {
 func TestProviders(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
-		name     string
-		provider llm.Provider
-		model    string // explicit model; empty = use provider.Models()[0].ID
-		skip     bool   // Set to true for providers requiring external setup
-		skipMsg  string // Reason for skipping
-	}{
+	tests := []ProviderTestCase{
 		{
 			name:     "fake",
 			provider: fake.NewProvider(),
@@ -110,7 +52,7 @@ func TestProviders(t *testing.T) {
 			name:     "openai/completions",
 			provider: openai.New(llm.APIKeyFromEnv("OPENAI_KEY")),
 			model:    openai.ModelGPT4oMini,
-			skip:     os.Getenv("OPENAI_KEY") == "",
+			skip:     !isOpenAiAvailable(),
 			skipMsg:  "requires OPENAI_KEY",
 		},
 		{
@@ -118,7 +60,7 @@ func TestProviders(t *testing.T) {
 			name:     "openai/responses",
 			provider: openai.New(llm.APIKeyFromEnv("OPENAI_KEY")),
 			model:    openai.ModelGPT51CodexMini,
-			skip:     os.Getenv("OPENAI_KEY") == "",
+			skip:     !isOpenAiAvailable(),
 			skipMsg:  "requires OPENAI_KEY",
 		},
 		{
@@ -144,46 +86,48 @@ func TestProviders(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
+		testProvider(t, tt)
+	}
+}
 
-			if tt.skip {
-				t.Skip(tt.skipMsg)
+func testProvider(t *testing.T, tt ProviderTestCase) {
+	t.Run(tt.name, func(t *testing.T) {
+		if tt.skip {
+			t.Skip(tt.skipMsg)
+		}
+
+		t.Parallel()
+
+		ctx := t.Context()
+
+		getModelID := func() string {
+			if tt.model != "" {
+				return tt.model
+			}
+			return ""
+		}
+
+		t.Run("resolver", func(t *testing.T) {
+			resolver, ok := tt.provider.(llm.ModelResolver)
+			if !ok {
+				t.Skip("Provider does not implement ModelResolver")
 			}
 
-			ctx := context.Background()
-
-			// Resolve model: explicit override > provider default
-			getModelID := func() string {
-				if tt.model != "" {
-					return tt.model
-				}
-				if tt.name == "ollama" {
-					return ollama.ModelDefault
-				}
-				return tt.provider.Models()[0].ID
-			}
-
-			// Test 1: Provider interface methods
-			t.Run("interface", func(t *testing.T) {
-				// Verify Name() returns non-empty string
-				assert.NotEmpty(t, tt.provider.Name(), "Name() returned empty string")
-
-				// Verify Models() returns at least one model
-				models := tt.provider.Models()
-				require.NotEmpty(t, models, "Models() returned empty slice")
-
-				// Verify each model has required fields
-				for i, model := range models {
-					assert.NotEmptyf(t, model.ID, "models[%d].ID is empty", i)
-					assert.NotEmptyf(t, model.Name, "models[%d].Name is empty", i)
-					assert.NotEmptyf(t, model.Provider, "models[%d].Provider is empty", i)
-				}
+			t.Run("default model available", func(t *testing.T) {
+				_, err := resolver.Resolve(llm.ModelDefault)
+				require.NoError(t, err, "Failed to resolve default model")
 			})
+		})
+
+		t.Run("streaming", func(t *testing.T) {
+			streamer, ok := tt.provider.(llm.Streamer)
+			if !ok {
+				t.Skip("Provider does not implement Streamer")
+			}
 
 			// Test 2: Basic streaming
 			t.Run("streaming", func(t *testing.T) {
-				stream, err := tt.provider.CreateStream(ctx, llm.Request{
+				stream, err := streamer.CreateStream(ctx, llm.Request{
 					Model: getModelID(),
 					Messages: msg.BuildTranscript(
 						msg.User("Hello"),
@@ -232,7 +176,7 @@ func TestProviders(t *testing.T) {
 					tool.DefinitionFor[GetWeatherParams]("get_weather", "Get the weather for a location"),
 				}
 
-				stream, err := tt.provider.CreateStream(ctx, llm.Request{
+				stream, err := streamer.CreateStream(ctx, llm.Request{
 					Model: getModelID(),
 					Messages: msg.BuildTranscript(
 						msg.User("What's the weather?"),
@@ -262,7 +206,7 @@ func TestProviders(t *testing.T) {
 					msg.User("How are you?"),
 				)
 
-				stream, err := tt.provider.CreateStream(ctx, llm.Request{
+				stream, err := streamer.CreateStream(ctx, llm.Request{
 					Model:    getModelID(),
 					Messages: messages,
 				})
@@ -295,7 +239,7 @@ func TestProviders(t *testing.T) {
 				}
 
 				// First request: try to get a tool call
-				stream, err := tt.provider.CreateStream(ctx, llm.Request{
+				stream, err := streamer.CreateStream(ctx, llm.Request{
 					Model: getModelID(),
 					Messages: msg.BuildTranscript(
 						msg.User("What's the weather in Paris? Use the get_weather tool."),
@@ -324,7 +268,7 @@ func TestProviders(t *testing.T) {
 
 				// Second request: send tool result back
 				toolResult := `{"temperature": 22, "conditions": "sunny"}`
-				stream2, err := tt.provider.CreateStream(ctx, llm.Request{
+				stream2, err := streamer.CreateStream(ctx, llm.Request{
 					Model: getModelID(),
 					Messages: msg.BuildTranscript(
 						msg.User("What's the weather in Paris? Use the get_weather tool."),
@@ -347,8 +291,10 @@ func TestProviders(t *testing.T) {
 
 				assert.True(t, gotResponse, "Should get a response after tool result")
 			})
+
 		})
-	}
+
+	})
 }
 
 // TestOllamaModels tests the curated list of Ollama models to verify they

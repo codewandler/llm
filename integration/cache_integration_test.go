@@ -1,4 +1,4 @@
-package integration_test
+package integration
 
 import (
 	"context"
@@ -73,10 +73,8 @@ func TestCacheIntegration_Claude_TopLevel(t *testing.T) {
 
 	ctx := context.Background()
 	p := claude.New()
-	model := "claude-haiku-4-5-20251001" // cheapest model that supports caching
 
 	opts := llm.Request{
-		Model: model,
 		Messages: msg.BuildTranscript(
 			msg.System(largeCacheablePrompt()),
 			msg.User("Summarise your role in one sentence."),
@@ -118,13 +116,11 @@ func TestCacheIntegration_Claude_PerMessageHint(t *testing.T) {
 
 	ctx := context.Background()
 	p := claude.New()
-	model := "claude-haiku-4-5-20251001"
 
 	makeOpts := func(question string) llm.Request {
 		systemMsg := msg.System(largeCacheablePrompt()).Build()
 		systemMsg.CacheHint = &llm.CacheHint{Enabled: true}
 		return llm.Request{
-			Model: model,
 			Messages: msg.BuildTranscript(
 				systemMsg,
 				msg.User(question),
@@ -161,7 +157,6 @@ func TestCacheIntegration_Claude_ExtendedTTL(t *testing.T) {
 
 	// claude-haiku-4-5 supports 1h TTL
 	opts := llm.Request{
-		Model: "claude-haiku-4-5-20251001",
 		Messages: msg.BuildTranscript(
 			msg.System(largeCacheablePrompt()),
 			msg.User("Hello"),
@@ -193,7 +188,6 @@ func TestCacheIntegration_AnthropicDirect_TopLevel(t *testing.T) {
 	p := anthropicdirect.New()
 
 	opts := llm.Request{
-		Model: "claude-haiku-4-5-20251001",
 		Messages: msg.BuildTranscript(
 			msg.System(largeCacheablePrompt()),
 			msg.User("Summarise your role in one sentence."),

@@ -71,13 +71,17 @@ func WithLLMOpts(llmOpts ...llm.Option) Option {
 
 func (p *Provider) Name() string { return providerName }
 
-func (p *Provider) Models() []llm.Model {
+func (p *Provider) Models() llm.Models {
 	return []llm.Model{
 		{ID: ModelM27, Name: "MiniMax M2.7", Provider: providerName},
 		{ID: ModelM25, Name: "MiniMax M2.5", Provider: providerName},
 		{ID: ModelM21, Name: "MiniMax M2.1", Provider: providerName},
 		{ID: ModelM2, Name: "MiniMax M2", Provider: providerName},
 	}
+}
+
+func (p *Provider) Resolve(model string) (llm.Model, error) {
+	return p.Models().Resolve(model)
 }
 
 func (p *Provider) CreateStream(ctx context.Context, opts llm.Request) (llm.Stream, error) {
@@ -132,5 +136,3 @@ func (p *Provider) newAPIRequest(ctx context.Context, apiKey string, body []byte
 	req.Header.Set("x-api-key", apiKey)
 	return req, nil
 }
-
-var _ llm.Provider = (*Provider)(nil)

@@ -60,15 +60,12 @@ func (p *Provider) WithDefaultModel(modelID string) *Provider {
 }
 
 // GetDefaultModel returns the configured default model ID.
-func (p *Provider) GetDefaultModel() string {
-	return p.defaultModel
-}
-
-// Name returns the provider identifier.
-func (p *Provider) Name() string { return providerName }
+func (p *Provider) GetDefaultModel() string                   { return p.defaultModel }
+func (p *Provider) Name() string                              { return providerName }
+func (p *Provider) Resolve(modelID string) (llm.Model, error) { return p.Models().Resolve(modelID) }
 
 // Models returns a curated list of well-known OpenAI models.
-func (p *Provider) Models() []llm.Model {
+func (p *Provider) Models() llm.Models {
 	models := make([]llm.Model, 0, len(modelOrder))
 	for _, id := range modelOrder {
 		if info, ok := modelRegistry[id]; ok {

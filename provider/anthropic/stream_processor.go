@@ -185,14 +185,11 @@ func (p *streamProcessor) onContentBlockDelta(evt ContentBlockDeltaEvent) {
 		d.Index = &idx
 		p.pub.Delta(d)
 	case "signature_delta":
-		println("!)))))", evt.Delta.Signature)
 		// Capture the cryptographic signature for the ThinkingConfig block.
 		// It arrives as a single event (not streamed char-by-char).
 		if tb, ok := p.activeThinking[evt.Index]; ok {
 			tb.signature.WriteString(evt.Delta.Signature)
-			println("GOOD")
 		}
-		println("!", evt.Delta.Signature)
 	case "input_json_delta":
 		if tb, ok := p.activeTools[evt.Index]; ok {
 			tb.jsonBuf.WriteString(evt.Delta.PartialJSON)

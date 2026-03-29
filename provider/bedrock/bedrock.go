@@ -216,9 +216,8 @@ func (p *Provider) DefaultModel() string {
 }
 
 // Models returns a curated list of popular Bedrock models.
-func (p *Provider) Models() []llm.Model {
-	return models()
-}
+func (p *Provider) Models() llm.Models                      { return models() }
+func (p *Provider) Resolve(model string) (llm.Model, error) { return p.Models().Resolve(model) }
 
 // initClient creates the AWS client lazily if not already initialized.
 // Thread-safe: uses mutex to ensure only one goroutine creates the client.

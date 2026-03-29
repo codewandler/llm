@@ -1,4 +1,4 @@
-package claude_test
+package integration
 
 import (
 	"context"
@@ -32,7 +32,6 @@ func TestSmartCacheIntegration_Claude(t *testing.T) {
 	// ---------------------------------------------------------------------------
 	t.Run("SimpleRequest", func(t *testing.T) {
 		req := llm.Request{
-			Model:     "claude-sonnet-4-20250514",
 			MaxTokens: 100,
 			Messages: []llm.Message{
 				llm.User("say 'ok' in exactly one word"),
@@ -65,7 +64,6 @@ func TestSmartCacheIntegration_Claude(t *testing.T) {
 	// ---------------------------------------------------------------------------
 	t.Run("AssistantLast", func(t *testing.T) {
 		req := llm.Request{
-			Model:     "claude-sonnet-4-20250514",
 			MaxTokens: 100,
 			Messages: []llm.Message{
 				llm.User("list markdown files"),
@@ -98,7 +96,6 @@ func TestSmartCacheIntegration_Claude(t *testing.T) {
 	// ---------------------------------------------------------------------------
 	t.Run("AssistantWithThinkingBlocks", func(t *testing.T) {
 		req := llm.Request{
-			Model:     "claude-sonnet-4-20250514",
 			MaxTokens: 200,
 			Messages: msg.BuildTranscript(
 				llm.User("list *.md files"),
@@ -135,13 +132,12 @@ func TestSmartCacheIntegration_Claude(t *testing.T) {
 	// ---------------------------------------------------------------------------
 	t.Run("AssistantWithToolCallsAndCacheHint", func(t *testing.T) {
 		req := llm.Request{
-			Model:     "claude-sonnet-4-20250514",
 			MaxTokens: 200,
 			Messages: msg.BuildTranscript(
 				llm.User("list all markdown files"),
 				msg.Assistant(
 					msg.Text("I'll run ls for you."),
-					msg.ToolCall(msg.ToolCall{ID: "tc1", Name: "bash", Args: msg.ToolArgs{"cmd": "ls *.md"}}),
+					msg.ToolCall{ID: "tc1", Name: "bash", Args: msg.ToolArgs{"cmd": "ls *.md"}},
 				).Cache(),
 				msg.Tool().Results(msg.ToolResult{ToolCallID: "tc1", ToolOutput: "file1.md\nfile2.md"}),
 			),
@@ -173,13 +169,12 @@ func TestSmartCacheIntegration_Claude(t *testing.T) {
 	// ---------------------------------------------------------------------------
 	t.Run("ToolCallSequenceWithCacheHint", func(t *testing.T) {
 		req := llm.Request{
-			Model:     "claude-sonnet-4-20250514",
 			MaxTokens: 200,
 			Messages: msg.BuildTranscript(
 				llm.User("list markdown files"),
 				msg.Assistant(
 					msg.Text("I'll run ls for you."),
-					msg.ToolCall(msg.ToolCall{ID: "tc1", Name: "bash", Args: msg.ToolArgs{"cmd": "ls *.md"}}),
+					msg.ToolCall{ID: "tc1", Name: "bash", Args: msg.ToolArgs{"cmd": "ls *.md"}},
 				).Cache(),
 				msg.Tool().Results(msg.ToolResult{ToolCallID: "tc1", ToolOutput: "file1.md\nfile2.md"}),
 				llm.User("now count them"),
@@ -189,7 +184,8 @@ func TestSmartCacheIntegration_Claude(t *testing.T) {
 
 		stream, err := provider.CreateStream(ctx, req)
 		if err != nil {
-			if perr, ok := err.(*llm.ProviderError); ok {
+			var perr *llm.ProviderError
+			if errors.As(err, &perr) {
 				t.Logf("API Error Body: %s", perr.Body)
 			}
 			require.NoError(t, err, "CreateStream() should not error with tool call sequence + cache hint")
@@ -212,7 +208,6 @@ func TestSmartCacheIntegration_Claude(t *testing.T) {
 	// ---------------------------------------------------------------------------
 	t.Run("MultipleToolCallsWithCacheHint", func(t *testing.T) {
 		req := llm.Request{
-			Model:     "claude-sonnet-4-20250514",
 			MaxTokens: 200,
 			Messages: msg.BuildTranscript(
 				llm.User("list markdown files and count them"),
@@ -254,7 +249,6 @@ func TestSmartCacheIntegration_Claude(t *testing.T) {
 	// ---------------------------------------------------------------------------
 	t.Run("ThinkingPlusToolCalls_NoText", func(t *testing.T) {
 		req := llm.Request{
-			Model:     "claude-sonnet-4-20250514",
 			MaxTokens: 200,
 			Messages: msg.BuildTranscript(
 				llm.User("list markdown files"),
@@ -269,7 +263,8 @@ func TestSmartCacheIntegration_Claude(t *testing.T) {
 
 		stream, err := provider.CreateStream(ctx, req)
 		if err != nil {
-			if perr, ok := err.(*llm.ProviderError); ok {
+			var perr *llm.ProviderError
+			if errors.As(err, &perr) {
 				t.Logf("API Error Body: %s", perr.Body)
 			}
 			require.NoError(t, err, "CreateStream() should not error with thinking+tool_calls (no text)")
@@ -293,7 +288,7 @@ func TestSmartCacheIntegration_Claude(t *testing.T) {
 	// ---------------------------------------------------------------------------
 	t.Run("Assistant_NoCacheHint", func(t *testing.T) {
 		req := llm.Request{
-			Model:          "sonnet",
+			Model:          claude.ModelSonnet,
 			MaxTokens:      200,
 			ThinkingEffort: llm.ThinkingEffortHigh,
 			OutputEffort:   llm.OutputEffortHigh,
@@ -375,7 +370,6 @@ func TestSmartCacheIntegration_Claude(t *testing.T) {
 	// ---------------------------------------------------------------------------
 	t.Run("EmptyContentBlocks_WithCacheHint_ValidationError", func(t *testing.T) {
 		req := llm.Request{
-			Model:     "claude-sonnet-4-20250514",
 			MaxTokens: 200,
 			Messages: msg.BuildTranscript(
 				llm.User("list markdown files"),

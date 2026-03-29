@@ -38,7 +38,7 @@ type Provider struct {
 	providerTypes map[string]string            // instance name -> provider type
 	localAliases  map[string]map[string]string // instance name -> local alias -> modelID
 	aliasMap      map[string][]resolvedTarget  // all aliases/IDs -> ordered targets
-	models        []llm.Model                  // cached for Models()
+	models        llm.Models                   // cached for Models()
 	modelIndex    map[string]int               // fullID -> index in models
 }
 
@@ -265,15 +265,8 @@ func mergeAliases(a, b []string) []string {
 	return result
 }
 
-// Name returns the aggregate provider name.
-func (p *Provider) Name() string {
-	return p.name
-}
-
-// Models returns all models with their aliases.
-func (p *Provider) Models() []llm.Model {
-	return p.models
-}
+func (p *Provider) Name() string       { return p.name }
+func (p *Provider) Models() llm.Models { return p.models }
 
 // Resolve implements llm.Resolver.
 func (p *Provider) Resolve(modelID string) (llm.Model, error) {

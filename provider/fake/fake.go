@@ -7,15 +7,42 @@ import (
 	"github.com/codewandler/llm/tool"
 )
 
+const (
+	ProviderName      = "fake"
+	Model1ID          = "fake/model-1"
+	Model1DisplayName = "Fake Model 1"
+)
+
+var (
+	defaultModel = llm.Model{
+		ID:       Model1ID,
+		Name:     Model1DisplayName,
+		Provider: ProviderName,
+		Aliases:  []string{llm.ModelDefault},
+	}
+	fakeModelList = []llm.Model{
+		defaultModel,
+	}
+)
+
 // Provider is a test-only provider that returns a single tool call
 // on the first request and a text-only response on subsequent requests.
 type Provider struct {
 	called bool
 }
 
-func (f *Provider) Name() string { return "fake" }
+// NewProvider returns a test-only provider.
+func NewProvider(opts ...llm.ProviderOpt) llm.Provider {
+	p := &Provider{}
+	return llm.NewProvider(
+		ProviderName,
+		llm.WithStreamer(p),
+		llm.WithModels(fakeModelList),
+		llm.WithProviderOpts(opts...),
+	)
+}
 
-func (f *Provider) CreateStream(_ context.Context, opts llm.Request) (llm.Stream, error) {
+func (f *Provider) CreateStream(_ context.Context, _ llm.Request) (llm.Stream, error) {
 	pub, ch := llm.NewEventPublisher()
 	go func() {
 		defer pub.Close()
@@ -37,15 +64,4 @@ func (f *Provider) CreateStream(_ context.Context, opts llm.Request) (llm.Stream
 		}
 	}()
 	return ch, nil
-}
-
-// NewProvider returns a test-only provider.
-func NewProvider() llm.Provider {
-	return &Provider{}
-}
-
-func (f *Provider) Models() []llm.Model {
-	return []llm.Model{
-		{ID: "fake-model", Name: "Fake Model", Provider: "fake"},
-	}
 }

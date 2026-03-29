@@ -29,6 +29,7 @@ type Provider struct {
 	opts         *llm.Options
 	defaultModel string
 	client       *http.Client
+	models       llm.Models
 }
 
 // DefaultOptions returns the default options for OpenRouter.
@@ -66,6 +67,7 @@ func New(opts ...llm.Option) *Provider {
 		opts:         cfg,
 		defaultModel: DefaultModel,
 		client:       client,
+		models:       loadEmbeddedModels(),
 	}
 }
 
@@ -76,18 +78,10 @@ func (p *Provider) WithDefaultModel(modelID string) *Provider {
 }
 
 // DefaultModel returns the configured default model ToolCallID.
-func (p *Provider) DefaultModel() string {
-	return p.defaultModel
-}
-
-func (p *Provider) Name() string { return providerName }
-
-// Models returns the curated list of tool-enabled models from the embedded models.json file.
-// This includes 229 models from various providers that support tool calling.
-func (p *Provider) Models() []llm.Model {
-	return loadEmbeddedModels()
-}
-
+func (p *Provider) DefaultModel() string                    { return p.defaultModel }
+func (p *Provider) Name() string                            { return providerName }
+func (p *Provider) Models() llm.Models                      { return p.models }
+func (p *Provider) Resolve(model string) (llm.Model, error) { return p.models.Resolve(model) }
 func (p *Provider) FetchModels(ctx context.Context) ([]llm.Model, error) {
 	req, err := http.NewRequestWithContext(ctx, "GET", p.opts.BaseURL+"/v1/models", nil)
 	if err != nil {

@@ -23,6 +23,7 @@ const (
 
 // Provider implements the direct Anthropic API backend.
 type Provider struct {
+	models llm.Models
 	opts   *llm.Options
 	client *http.Client
 }
@@ -46,15 +47,11 @@ func New(opts ...llm.Option) *Provider {
 	return &Provider{opts: cfg, client: client}
 }
 
-func (p *Provider) Name() string { return providerName }
-
-func (p *Provider) Models() []llm.Model {
-	return []llm.Model{
-		{ID: "claude-sonnet-4-5-20250929", Name: "Claude Sonnet 4.5", Provider: providerName},
-		{ID: "claude-haiku-4-5-20251001", Name: "Claude Haiku 4.5", Provider: providerName},
-	}
+func (p *Provider) Name() string       { return providerName }
+func (p *Provider) Models() llm.Models { return allModels }
+func (p *Provider) Resolve(modelID string) (llm.Model, error) {
+	return p.models.Resolve(modelID)
 }
-
 func (p *Provider) CreateStream(ctx context.Context, opts llm.Request) (llm.Stream, error) {
 	if err := opts.Validate(); err != nil {
 		return nil, llm.NewErrBuildRequest(llm.ProviderNameAnthropic, err)
@@ -121,5 +118,3 @@ func (p *Provider) newAPIRequest(ctx context.Context, apiKey string, body []byte
 	req.Header.Set("x-api-key", apiKey)
 	return req, nil
 }
-
-var _ llm.Provider = (*Provider)(nil)

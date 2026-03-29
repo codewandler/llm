@@ -149,12 +149,12 @@ func (t *loggingTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 // bodies are tee-logged as they eventPub — no buffering, no broken SSE.
 func NewHttpClient(opts HttpClientOpts) *http.Client {
 	var transport http.RoundTripper = &http.Transport{
-		TLSHandshakeTimeout:    10 * time.Second,
-		ResponseHeaderTimeout:  30 * time.Second,
-		MaxIdleConns:           100,
-		MaxIdleConnsPerHost:    10,
-		MaxConnsPerHost:        0,
-		IdleConnTimeout:        90 * time.Second,
+		TLSHandshakeTimeout:   10 * time.Second,
+		ResponseHeaderTimeout: 30 * time.Second,
+		MaxIdleConns:          100,
+		MaxIdleConnsPerHost:   10,
+		MaxConnsPerHost:       0,
+		IdleConnTimeout:       90 * time.Second,
 		// Disable automatic decompression — we handle gzip, deflate, br, and
 		// zstd ourselves in decompressingTransport so we can support brotli
 		// and zstd which the standard Transport doesn't handle.
@@ -238,7 +238,7 @@ func (b *brotliReadCloser) Close() error {
 
 // zstdReadCloser wraps zstd decompression around a ReadCloser.
 type zstdReadCloser struct {
-	decoder   *zstd.Decoder
+	decoder    *zstd.Decoder
 	underlying io.ReadCloser
 }
 

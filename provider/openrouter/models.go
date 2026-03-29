@@ -43,7 +43,7 @@ type ModelData struct {
 
 // loadEmbeddedModels loads the curated list of tool-enabled models
 // from the embedded models.json file.
-func loadEmbeddedModels() []llm.Model {
+func loadEmbeddedModels() llm.Models {
 	var models []ModelData
 
 	if err := json.Unmarshal(modelsJSON, &models); err != nil {

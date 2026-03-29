@@ -12,6 +12,13 @@ import (
 	"github.com/codewandler/llm/tool"
 )
 
+func TestProvider_ResolveDefaultModel(t *testing.T) {
+	p := NewProvider()
+	m, err := p.Resolve(llm.ModelDefault)
+	require.NoError(t, err)
+	assert.Equal(t, Model1ID, m.ID)
+}
+
 func TestProviderBasicStreaming(t *testing.T) {
 	ctx := context.Background()
 	p := NewProvider()
@@ -211,8 +218,8 @@ func TestProviderModels(t *testing.T) {
 	require.Len(t, models, 1, "Expected exactly one model")
 
 	model := models[0]
-	assert.Equal(t, "fake-model", model.ID)
-	assert.Equal(t, "Fake Model", model.Name)
+	assert.Equal(t, "fake/model-1", model.ID)
+	assert.Equal(t, "Fake Model 1", model.Name)
 	assert.Equal(t, "fake", model.Provider)
 }
 
@@ -289,5 +296,3 @@ func Example() {
 		}
 	}
 }
-
-var _ llm.Provider = (*Provider)(nil)

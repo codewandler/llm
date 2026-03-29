@@ -1,4 +1,4 @@
-package integration_test
+package integration
 
 // token_counter_drift_test.go — integration tests that verify the token count
 // estimates produced by TokenCounter are close to the actual input_tokens
@@ -139,7 +139,7 @@ func TestTokenCounterDrift_Anthropic(t *testing.T) {
 // --- OpenAI ---
 
 func TestTokenCounterDrift_OpenAI(t *testing.T) {
-	if testing.Short() {
+	if testing.Short() || !isOpenAiAvailable() {
 		t.Skip("skipping in short mode")
 	}
 	key := requireEnv(t, "OPENAI_KEY")

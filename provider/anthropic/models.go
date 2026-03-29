@@ -25,6 +25,11 @@ var ModelAliases = map[string]string{
 	"haiku":  ModelHaiku,
 }
 
+var allModels = llm.Models{
+	{ID: "claude-sonnet-4-5-20250929", Name: "Claude Sonnet 4.5", Provider: providerName},
+	{ID: "claude-haiku-4-5-20251001", Name: "Claude Haiku 4.5", Provider: providerName},
+}
+
 // Model pricing in USD per million tokens.
 // Source: https://www.anthropic.com/pricing (as of 2025).
 type modelPricing struct {
