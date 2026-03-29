@@ -43,6 +43,27 @@ func (m Message) Validate() error {
 		return fmt.Errorf("message: parts is required")
 	}
 
+	// Validate content-specific rules
+	switch m.Role {
+	case RoleSystem, RoleUser:
+		if m.Text() == "" {
+			return fmt.Errorf("message: text content is required for %s role", m.Role)
+		}
+	case RoleTool:
+		results := m.ToolResults()
+		if len(results) == 0 {
+			return fmt.Errorf("message: tool result is required for tool role")
+		}
+		for _, r := range results {
+			if r.ToolCallID == "" {
+				return fmt.Errorf("message: tool_call_id is required")
+			}
+			if r.ToolOutput == "" {
+				return fmt.Errorf("message: output is required")
+			}
+		}
+	}
+
 	return nil
 }
 

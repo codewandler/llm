@@ -49,6 +49,9 @@ type ToolMsgBuilder struct {
 }
 
 func Tool() *ToolMsgBuilder { return &ToolMsgBuilder{b: buildMsg(RoleTool)} }
+func (b *ToolMsgBuilder) Empty() *Builder {
+	return b.b
+}
 func (b *ToolMsgBuilder) Results(src IntoToolResults) *Builder {
 	m := buildMsg(RoleTool)
 	for _, result := range src.IntoToolResults() {
