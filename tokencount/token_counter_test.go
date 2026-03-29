@@ -3,7 +3,7 @@ package tokencount
 import (
 	"testing"
 
-	"github.com/codewandler/llm"
+	"github.com/codewandler/llm/msg"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -50,13 +50,13 @@ func TestCountMessage_AllRoles(t *testing.T) {
 
 	tests := []struct {
 		name string
-		msg  llm.Message
+		msg  msg.Message
 	}{
-		{"system", System("You are helpful.")},
-		{"user", User("Hello there!")},
-		{"assistant", Assistant("Hi back!")},
-		{"tool_result", ToolOK("c1", "42")},
-		{"assistant_with_tool_calls", Assistant("Let me check.", tool.NewToolCall("c1", "get_weather", map[string]any{"location": "Berlin"}))},
+		{"system", msg.System("You are helpful.").Build()},
+		{"user", msg.User("Hello there!").Build()},
+		{"assistant", msg.Assistant(msg.Text("Hi back!")).Build()},
+		{"tool_result", msg.Tool().Results(msg.ToolResult{ToolCallID: "c1", ToolOutput: "42"}).Build()},
+		{"assistant_with_tool_calls", msg.Assistant(msg.Text("Let me check."), msg.ToolCall(msg.NewToolCall("c1", "get_weather", msg.ToolArgs{"location": "Berlin"}))).Build()},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -71,11 +71,11 @@ func TestCountMessage_AllRoles(t *testing.T) {
 // the same per-message values as CountTokens for the same messages.
 func TestCountMessage_ConsistentWithCountTokens(t *testing.T) {
 	model := "gpt-4o"
-	msgs := llm.Messages{
-		System("You are helpful."),
-		User("What is 2+2?"),
-		Assistant("It is 4."),
-	}
+	msgs := msg.BuildTranscript(
+		msg.System("You are helpful.").Build(),
+		msg.User("What is 2+2?").Build(),
+		msg.Assistant(msg.Text("It is 4.")).Build(),
+	)
 
 	// Get per-message counts from the batch API
 	tc := &TokenCount{}
@@ -95,12 +95,12 @@ func TestCountMessage_ConsistentWithCountTokens(t *testing.T) {
 }
 
 func TestApplyRoleBreakdown_Invariant(t *testing.T) {
-	msgs := llm.Messages{
-		System("be helpful"),
-		User("hello"),
-		Assistant("hi"),
-		ToolOK("c1", "done"),
-	}
+	msgs := msg.BuildTranscript(
+		msg.System("be helpful").Build(),
+		msg.User("hello").Build(),
+		msg.Assistant(msg.Text("hi")).Build(),
+		msg.Tool().Results(msg.ToolResult{ToolCallID: "c1", ToolOutput: "done"}).Build(),
+	)
 	tc := &TokenCount{
 		PerMessage: []int{3, 2, 1, 4},
 	}
@@ -121,7 +121,7 @@ func TestApplyRoleBreakdown_Invariant(t *testing.T) {
 
 // TestApplyRoleBreakdown_PanicOnMismatch confirms the invariant is enforced.
 func TestApplyRoleBreakdown_PanicOnMismatch(t *testing.T) {
-	msgs := llm.Messages{User("hi")}
+	msgs := msg.BuildTranscript(msg.User("hi").Build())
 	tc := &TokenCount{PerMessage: []int{1, 2}} // wrong length
 
 	assert.Panics(t, func() {
@@ -133,7 +133,7 @@ func TestApplyRoleBreakdown_PanicOnMismatch(t *testing.T) {
 func TestCountMessagesAndTools_EmptyModel(t *testing.T) {
 	tc := &TokenCount{}
 	err := CountMessagesAndTools(tc, TokenCountRequest{
-		Messages: llm.Messages{User("hello")},
+		Messages: msg.BuildTranscript(msg.User("hello").Build()),
 	}, CountOpts{Encoding: "cl100k_base"})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "model is required")
@@ -141,11 +141,11 @@ func TestCountMessagesAndTools_EmptyModel(t *testing.T) {
 
 // TestCountMessagesAndTools_PerMessageLen verifies len(PerMessage)==len(Messages).
 func TestCountMessagesAndTools_PerMessageLen(t *testing.T) {
-	msgs := llm.Messages{
-		System("sys"),
-		User("user"),
-		Assistant("asst"),
-	}
+	msgs := msg.BuildTranscript(
+		msg.System("sys").Build(),
+		msg.User("user").Build(),
+		msg.Assistant(msg.Text("asst")).Build(),
+	)
 	tc := &TokenCount{}
 	err := CountMessagesAndTools(tc, TokenCountRequest{
 		Model:    "gpt-4o",
@@ -165,7 +165,7 @@ func TestCountMessagesAndToolsAnthropic_OverheadApplied(t *testing.T) {
 	tc := &TokenCount{}
 	err := CountMessagesAndToolsAnthropic(tc, TokenCountRequest{
 		Model:    "claude-sonnet-4-5",
-		Messages: llm.Messages{User("hi")},
+		Messages: msg.BuildTranscript(msg.User("hi").Build()),
 		Tools:    tools,
 	})
 	require.NoError(t, err)
@@ -193,7 +193,7 @@ func TestCountMessagesAndToolsAnthropic_NoTools(t *testing.T) {
 	tc := &TokenCount{}
 	err := CountMessagesAndToolsAnthropic(tc, TokenCountRequest{
 		Model:    "claude-sonnet-4-5",
-		Messages: llm.Messages{User("hi")},
+		Messages: msg.BuildTranscript(msg.User("hi").Build()),
 	})
 	require.NoError(t, err)
 	assert.Equal(t, 0, tc.ToolsTokens)
