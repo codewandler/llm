@@ -1,6 +1,9 @@
 package msg
 
-import "strings"
+import (
+	"errors"
+	"strings"
+)
 
 type PartType string
 
@@ -26,7 +29,49 @@ type Part struct {
 
 func (p Part) IntoPart() Part { return p }
 
+func (p Part) Validate() error {
+	if p.Type == "" {
+		return errors.New("part: type is required")
+	}
+	switch p.Type {
+	case PartTypeText:
+		if p.Text == "" {
+			return errors.New("part: text is required")
+		}
+	case PartTypeThinking:
+		if p.Thinking == nil {
+			return errors.New("part: thinking is required")
+		}
+		return p.Thinking.Validate()
+	case PartTypeToolCall:
+		if p.ToolCall == nil {
+			return errors.New("part: tool call is required")
+		}
+		return p.ToolCall.Validate()
+	case PartTypeToolResult:
+		if p.ToolResult == nil {
+			return errors.New("part: tool result is required")
+		}
+		return p.ToolResult.Validate()
+	}
+	return nil
+}
+
 type Parts []Part
+
+func (p Parts) Validate() error {
+	if len(p) == 0 {
+		return nil
+	}
+
+	for _, part := range p {
+		if err := part.Validate(); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
 
 func (p Parts) ByType(t PartType) Parts {
 	var parts Parts

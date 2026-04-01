@@ -4,6 +4,10 @@ import "fmt"
 
 type Messages []Message
 
+func (t Messages) Append(m IntoMessages) Messages {
+	return append(t, m.IntoMessages()...)
+}
+
 func (t Messages) IntoMessages() []Message { return t }
 
 func (t Messages) PartsByType(partType PartType) Parts {
@@ -37,6 +41,9 @@ func (t Messages) System() Messages { return t.FilterByRole(RoleSystem) }
 func BuildTranscript(msg ...IntoMessages) Messages {
 	all := make(Messages, 0)
 	for _, im := range msg {
+		if im == nil {
+			continue
+		}
 		mm := im.IntoMessages()
 		for _, m := range mm {
 			if !m.IsEmpty() {

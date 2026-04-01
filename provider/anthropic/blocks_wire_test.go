@@ -99,7 +99,7 @@ func TestBuildRequest_AssistantWithBlocks_SignatureRoundTrip(t *testing.T) {
 		msg.Thinking("My reasoning", "sig-xyz"),
 		msg.Text("result"),
 	).Build()
-	raw, err := BuildRequest(RequestOptions{
+	raw, err := BuildRequestBytes(RequestOptions{
 		LLMRequest: llm.Request{
 			Model:    "claude-sonnet-4-5",
 			Messages: llm.Messages{llm.User("x"), m},

@@ -1,5 +1,7 @@
 package msg
 
+import "errors"
+
 type ToolArgs map[string]any
 
 type ToolCall struct {
@@ -16,6 +18,16 @@ func NewToolCall(id, name string, args ToolArgs) ToolCall {
 	return ToolCall{ID: id, Name: name, Args: args}
 }
 
+func (t ToolCall) Validate() error {
+	if t.ID == "" {
+		return errors.New("tool call: id is required")
+	}
+	if t.Name == "" {
+		return errors.New("tool call: name is required")
+	}
+	return nil
+}
+
 func (t ToolCall) IntoPart() Part {
 	return Part{
 		Type:     PartTypeToolCall,
@@ -29,6 +41,14 @@ type ToolResult struct {
 	IsError    bool   `json:"is_error,omitempty"`
 }
 
+func (t ToolResult) Validate() error {
+	if t.ToolCallID == "" {
+		return errors.New("tool result: tool call id is required")
+	}
+	return nil
+}
+
+func (t ToolResult) IntoParts() []Part            { return []Part{t.IntoPart()} }
 func (t ToolResult) IntoMessages() []Message      { return []Message{t.IntoMessage()} }
 func (t ToolResult) IntoToolResults() ToolResults { return ToolResults{t} }
 

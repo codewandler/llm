@@ -13,7 +13,7 @@ import (
 
 func buildRequestMap(t *testing.T, opts RequestOptions) map[string]any {
 	t.Helper()
-	b, err := BuildRequest(opts)
+	b, err := BuildRequestBytes(opts)
 	require.NoError(t, err)
 	var m map[string]any
 	require.NoError(t, json.Unmarshal(b, &m))

@@ -43,6 +43,10 @@ func (m Message) Validate() error {
 		return fmt.Errorf("message: parts is required")
 	}
 
+	if err := m.Parts.Validate(); err != nil {
+		return fmt.Errorf("invalid message parts: %w", err)
+	}
+
 	// Validate content-specific rules
 	switch m.Role {
 	case RoleSystem, RoleUser:

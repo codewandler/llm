@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -59,6 +60,7 @@ var supportedModels = map[string]bool{
 type Provider struct {
 	baseURL       string
 	client        *http.Client
+	log           *slog.Logger
 	tokenProvider TokenProvider
 	userID        string
 	sessionID     string
@@ -76,6 +78,7 @@ func New(opts ...Option) *Provider {
 		client:       llm.DefaultHttpClient(),
 		sessionID:    randomUUID(),
 		claudeModels: newClaudeModels(),
+		log:          slog.New(slog.DiscardHandler),
 	}
 
 	// Default to local token provider if available
@@ -104,10 +107,10 @@ func (p *Provider) CreateStream(ctx context.Context, req llm.Request) (llm.Strea
 		return nil, llm.NewErrProviderMsg(llm.ProviderNameClaude, p.initErr.Error())
 	}
 
+	normalizeRequest(&req)
+
 	// Resolve model to include inference profile prefix.
-	if req.Model == "" {
-		req.Model = ModelDefault
-	}
+
 	resolvedModel, err := p.Resolve(req.Model)
 	if err != nil {
 		return nil, llm.NewErrBuildRequest(llm.ProviderNameClaude, err)
@@ -128,12 +131,18 @@ func (p *Provider) CreateStream(ctx context.Context, req llm.Request) (llm.Strea
 	}
 
 	// Build request
-	body, err := p.buildRequest(req)
+	requestBody, err := p.buildRequest(req)
 	if err != nil {
 		return nil, llm.NewErrBuildRequest(llm.ProviderNameClaude, err)
 	}
 
-	httpReq, err := p.newAPIRequest(ctx, token.AccessToken, body)
+	requestBodyBytes, err := json.MarshalIndent(requestBody, "", "  ")
+	if err != nil {
+		return nil, llm.NewErrBuildRequest(llm.ProviderNameClaude, err)
+	}
+	p.log.Debug("request body", "body", string(requestBodyBytes))
+
+	httpReq, err := p.newAPIRequest(ctx, token.AccessToken, requestBodyBytes)
 	if err != nil {
 		return nil, llm.NewErrBuildRequest(llm.ProviderNameClaude, err)
 	}
@@ -147,7 +156,7 @@ func (p *Provider) CreateStream(ctx context.Context, req llm.Request) (llm.Strea
 		//nolint:errcheck // intentional: defer Close is only for cleanup, failure after response reading is non-fatal
 		defer resp.Body.Close()
 		errBody, _ := io.ReadAll(resp.Body)
-		return nil, llm.NewErrAPIError(llm.ProviderNameClaude, resp.StatusCode, string(errBody))
+		return nil, llm.NewErrAPIErrorWithRequest(llm.ProviderNameClaude, string(requestBodyBytes), resp.StatusCode, string(errBody))
 	}
 
 	return anthropic.ParseStream(ctx, resp.Body, anthropic.ParseOpts{
@@ -183,7 +192,7 @@ func (p *Provider) newAPIRequest(ctx context.Context, accessToken string, body [
 	return req, nil
 }
 
-func (p *Provider) buildRequest(llmRequest llm.Request) ([]byte, error) {
+func (p *Provider) buildRequest(llmRequest llm.Request) (anthropic.Request, error) {
 	return anthropic.BuildRequest(anthropic.RequestOptions{
 		SystemBlocks: anthropic.SystemBlocks{
 			anthropic.Text(billingHeader),

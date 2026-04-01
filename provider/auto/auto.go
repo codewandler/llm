@@ -36,7 +36,6 @@ func New(ctx context.Context, opts ...Option) (*router.Provider, error) {
 		name:       defaultName,
 		autoDetect: true,
 	}
-
 	for _, opt := range opts {
 		opt(cfg)
 	}
@@ -104,6 +103,7 @@ func New(ctx context.Context, opts ...Option) (*router.Provider, error) {
 			Name:         instanceName,
 			Type:         factoryKey, // Used for factory lookup and in model paths
 			ModelAliases: entry.modelAliases,
+			Options:      cfg.llmOpts,
 		})
 
 		factories[factoryKey] = entry.factory

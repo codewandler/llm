@@ -82,11 +82,19 @@ type ProviderError struct {
 	// Cause is the underlying error that triggered this one, if any.
 	Cause error `json:"-"`
 
+	// RequestBody is the raw HTTP request body. Only set for ErrBuildRequest.
+	RequestBody string `json:"request_body,omitempty"`
+
 	// StatusCode is the HTTP response status code. Only set for ErrAPIError.
 	StatusCode int `json:"status_code,omitempty"`
 
 	// Body is the raw HTTP response body. Only set for ErrAPIError.
-	Body string `json:"body,omitempty"`
+	ResponseBody string `json:"response_body,omitempty"`
+}
+
+func (e *ProviderError) WithRequestBody(body string) *ProviderError {
+	e.RequestBody = body
+	return e
 }
 
 // Error returns a human-readable error string in the form:
@@ -130,7 +138,7 @@ func (e *ProviderError) MarshalJSON() ([]byte, error) {
 		Provider:   e.Provider,
 		Message:    e.Message,
 		StatusCode: e.StatusCode,
-		Body:       e.Body,
+		Body:       e.ResponseBody,
 	}
 	if e.Sentinel != nil {
 		w.Sentinel = e.Sentinel.Error()
@@ -163,14 +171,26 @@ func NewErrRequestFailed(provider string, cause error) *ProviderError {
 	}
 }
 
-// NewErrAPIError wraps a non-2xx HTTP response from a provider API.
-func NewErrAPIError(provider string, statusCode int, body string) *ProviderError {
+// NewErrAPIErrorWithRequest wraps a non-2xx HTTP response from a provider API.
+func NewErrAPIErrorWithRequest(provider string, requestBody string, statusCode int, responseBody string) *ProviderError {
 	return &ProviderError{
-		Sentinel:   ErrAPIError,
-		Provider:   provider,
-		Message:    fmt.Sprintf("HTTP %d", statusCode),
-		StatusCode: statusCode,
-		Body:       body,
+		Sentinel:     ErrAPIError,
+		Provider:     provider,
+		Message:      fmt.Sprintf("HTTP %d response %s", statusCode, responseBody),
+		StatusCode:   statusCode,
+		RequestBody:  requestBody,
+		ResponseBody: responseBody,
+	}
+}
+
+// NewErrAPIError wraps a non-2xx HTTP response from a provider API.
+func NewErrAPIError(provider string, statusCode int, responseBody string) *ProviderError {
+	return &ProviderError{
+		Sentinel:     ErrAPIError,
+		Provider:     provider,
+		Message:      fmt.Sprintf("HTTP %d\nRESPONSE: %s", statusCode, responseBody),
+		StatusCode:   statusCode,
+		ResponseBody: responseBody,
 	}
 }
 

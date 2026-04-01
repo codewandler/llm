@@ -21,6 +21,9 @@ func WithLLMOptions(opts ...llm.Option) Option {
 		if cfg.HTTPClient != nil {
 			p.client = cfg.HTTPClient
 		}
+		if cfg.Logger != nil {
+			p.log = cfg.Logger
+		}
 	}
 }
 

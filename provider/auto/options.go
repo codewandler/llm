@@ -151,7 +151,7 @@ func WithBedrock() Option {
 			name:         ProviderBedrock,
 			providerType: ProviderBedrock,
 			factory: func(opts ...llm.Option) llm.Provider {
-				bedrockOpts := []bedrock.Option{}
+				var bedrockOpts []bedrock.Option
 				if httpClient != nil {
 					bedrockOpts = append(bedrockOpts, bedrock.WithLLMOptions(llm.WithHTTPClient(httpClient)))
 				}

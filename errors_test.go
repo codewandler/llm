@@ -84,6 +84,6 @@ func TestProviderError_APIErrorFields(t *testing.T) {
 	var pe *llm.ProviderError
 	require.True(t, errors.As(err, &pe))
 	assert.Equal(t, 503, pe.StatusCode)
-	assert.True(t, strings.Contains(pe.Body, "service unavailable"))
+	assert.True(t, strings.Contains(pe.ResponseBody, "service unavailable"))
 	assert.Equal(t, llm.ProviderNameOpenAI, pe.Provider)
 }

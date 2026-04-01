@@ -65,7 +65,7 @@ func (p *Provider) CreateStream(ctx context.Context, opts llm.Request) (llm.Stre
 		return nil, llm.NewErrMissingAPIKey(llm.ProviderNameAnthropic)
 	}
 
-	body, err := BuildRequest(RequestOptions{
+	body, err := BuildRequestBytes(RequestOptions{
 		LLMRequest: opts,
 	})
 	if err != nil {

@@ -72,12 +72,15 @@ type MessageContentBlockX struct {
 	CacheControl *CacheControl `json:"cache_control,omitempty"`
 }
 
-func (b baseContentBlock) setCacheControl(cc *CacheControl) {
+func (b *baseContentBlock) setCacheControl(cc *CacheControl) {
 	b.CacheControl = cc
 }
 
-func (b ToolUseBlock) isMessageContentBlock()    {}
-func (b ToolResultBlock) isMessageContentBlock() {}
+func (b ToolUseBlock) isMessageContentBlock()            {}
+func (b *ToolUseBlock) setCacheControl(cc *CacheControl) { b.baseContentBlock.setCacheControl(cc) }
+
+func (b ToolResultBlock) isMessageContentBlock()            {}
+func (b *ToolResultBlock) setCacheControl(cc *CacheControl) { b.baseContentBlock.setCacheControl(cc) }
 
 // === Constructors ===
 
@@ -161,7 +164,8 @@ func convertMessages(messages msg.Messages) (systemBlocks []*TextBlock, out []Me
 			// 3. Tool calls
 			for _, p := range m.Parts.ByType(msg.PartTypeToolCall) {
 				tc := p.ToolCall
-				blocks = append(blocks, ToolUse(tc.ID, tc.Name, tc.Args))
+				tub := ToolUse(tc.ID, tc.Name, tc.Args)
+				blocks = append(blocks, &tub)
 			}
 			mm := Message{Role: "assistant", Content: blocks}
 			mm.setCacheControl(m.CacheHint)
@@ -172,7 +176,8 @@ func convertMessages(messages msg.Messages) (systemBlocks []*TextBlock, out []Me
 				switch p.Type {
 				case msg.PartTypeToolResult:
 					tr := p.ToolResult
-					blocks = append(blocks, ToolResult(tr.ToolCallID, tr.ToolOutput, tr.IsError))
+					trb := ToolResult(tr.ToolCallID, tr.ToolOutput, tr.IsError)
+					blocks = append(blocks, &trb)
 				}
 			}
 			// TODO: add additional user messages if present

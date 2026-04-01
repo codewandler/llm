@@ -28,6 +28,30 @@ type result struct {
 	errors            []error
 }
 
+func (r *result) MarshalJSON() ([]byte, error) {
+	type resultJSON struct {
+		StopReason  StopReason    `json:"stop_reason"`
+		Messages    []msg.Message `json:"messages"`
+		ToolCalls   []tool.Call   `json:"tool_calls"`
+		ToolResults []tool.Result `json:"tool_results"`
+		Usage       *Usage        `json:"usage"`
+		Error       string        `json:"error,omitempty"`
+	}
+	var err = r.Error()
+	var errMsg string
+	if err != nil {
+		errMsg = err.Error()
+	}
+	return json.Marshal(resultJSON{
+		Messages:    r.Next(),
+		ToolCalls:   r.ToolCalls(),
+		Usage:       r.Usage(),
+		StopReason:  r.StopReason(),
+		ToolResults: r.ToolResults(),
+		Error:       errMsg,
+	})
+}
+
 func newResult() *result {
 	return &result{
 		toolCalls:   make([]tool.Call, 0),
@@ -56,11 +80,11 @@ func (r *result) Message() msg.Message {
 	return m.Build()
 }
 
-func (r *result) ToolMessage() msg.Message {
+func (r *result) ToolMessage() (msg.Message, bool) {
 	if len(r.toolResults) == 0 {
-		return msg.Message{}
+		return msg.Message{}, false
 	}
-	results := make(msg.ToolResults, len(r.toolResults))
+	results := make(msg.ToolResults, 0)
 	for _, tr := range r.toolResults {
 		data, _ := json.Marshal(tr.ToolOutput())
 		results = append(results, msg.ToolResult{
@@ -69,7 +93,7 @@ func (r *result) ToolMessage() msg.Message {
 			ToolOutput: string(data),
 		})
 	}
-	return msg.Tool().Results(results).Build()
+	return msg.Tool().Results(results).Build(), true
 }
 
 func (r *result) ToolResults() []tool.Result { return r.toolResults }
@@ -108,10 +132,12 @@ func (r *result) applyToolCall(tc tool.Call) {
 var _ Result = (*result)(nil)
 
 func (r *result) Next() msg.Messages {
-	return msg.BuildTranscript(
-		r.Message(),
-		r.ToolMessage(),
-	)
+	next := make(msg.Messages, 0, 2)
+	next = next.Append(r.Message())
+	if toolMsg, ok := r.ToolMessage(); ok {
+		next = next.Append(toolMsg)
+	}
+	return next
 }
 
 type StreamProcessor struct {

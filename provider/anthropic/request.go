@@ -91,8 +91,18 @@ func hasPerMessageCacheHints(msgs llm.Messages) bool {
 	return false
 }
 
+// BuildRequestBytes builds a JSON Request body for the Anthropic API.
+func BuildRequestBytes(reqOpts RequestOptions) ([]byte, error) {
+	req, err := BuildRequest(reqOpts)
+	if err != nil {
+		return nil, err
+	}
+
+	return json.MarshalIndent(req, "", "  ")
+}
+
 // BuildRequest builds a JSON Request body for the Anthropic API.
-func BuildRequest(reqOpts RequestOptions) ([]byte, error) {
+func BuildRequest(reqOpts RequestOptions) (Request, error) {
 	llmRequest := reqOpts.LLMRequest
 	maxTokens := llmRequest.MaxTokens
 	if maxTokens == 0 {
@@ -104,6 +114,7 @@ func BuildRequest(reqOpts RequestOptions) ([]byte, error) {
 		MaxTokens: maxTokens,
 		Stream:    true,
 		System:    reqOpts.SystemBlocks,
+		Messages:  []Message{},
 	}
 
 	// Generation parameters
@@ -128,6 +139,9 @@ func BuildRequest(reqOpts RequestOptions) ([]byte, error) {
 		req.System = append(req.System, userSystemBlocks...)
 	}
 	req.Messages = messages
+	if req.Messages == nil {
+		req.Messages = make([]Message, 0)
+	}
 
 	if reqOpts.UserID != "" {
 		req.Metadata = &metadata{UserID: reqOpts.UserID}
@@ -212,5 +226,5 @@ func BuildRequest(reqOpts RequestOptions) ([]byte, error) {
 		req.CacheControl = buildCacheControl(llmRequest.CacheHint)
 	}
 
-	return json.MarshalIndent(req, "", "  ")
+	return req, nil
 }

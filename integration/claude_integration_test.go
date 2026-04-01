@@ -43,7 +43,7 @@ func TestSmartCacheIntegration_Claude(t *testing.T) {
 			// Print the error body for debugging
 			var perr *llm.ProviderError
 			if errors.As(err, &perr) {
-				t.Logf("API Error Body: %s", perr.Body)
+				t.Logf("API Error Body: %s", perr.ResponseBody)
 			}
 			require.NoError(t, err, "CreateStream() should not error")
 		}
@@ -75,7 +75,7 @@ func TestSmartCacheIntegration_Claude(t *testing.T) {
 		if err != nil {
 			// Print the error body for debugging
 			if perr, ok := err.(*llm.ProviderError); ok {
-				t.Logf("API Error Body: %s", perr.Body)
+				t.Logf("API Error Body: %s", perr.ResponseBody)
 			}
 			require.NoError(t, err, "CreateStream() should not error")
 		}
@@ -110,7 +110,7 @@ func TestSmartCacheIntegration_Claude(t *testing.T) {
 		if err != nil {
 			// Print the error body for debugging
 			if perr, ok := err.(*llm.ProviderError); ok {
-				t.Logf("API Error Body: %s", perr.Body)
+				t.Logf("API Error Body: %s", perr.ResponseBody)
 			}
 			require.NoError(t, err, "CreateStream() should not error")
 		}
@@ -146,7 +146,7 @@ func TestSmartCacheIntegration_Claude(t *testing.T) {
 		stream, err := provider.CreateStream(ctx, req)
 		if err != nil {
 			if perr, ok := err.(*llm.ProviderError); ok {
-				t.Logf("API Error Body: %s", perr.Body)
+				t.Logf("API Error Body: %s", perr.ResponseBody)
 			}
 			require.NoError(t, err, "CreateStream() should not error with tool calls + cache hint")
 		}
@@ -186,7 +186,7 @@ func TestSmartCacheIntegration_Claude(t *testing.T) {
 		if err != nil {
 			var perr *llm.ProviderError
 			if errors.As(err, &perr) {
-				t.Logf("API Error Body: %s", perr.Body)
+				t.Logf("API Error Body: %s", perr.ResponseBody)
 			}
 			require.NoError(t, err, "CreateStream() should not error with tool call sequence + cache hint")
 		}
@@ -224,7 +224,7 @@ func TestSmartCacheIntegration_Claude(t *testing.T) {
 		stream, err := provider.CreateStream(ctx, req)
 		if err != nil {
 			if perr, ok := err.(*llm.ProviderError); ok {
-				t.Logf("API Error Body: %s", perr.Body)
+				t.Logf("API Error Body: %s", perr.ResponseBody)
 			}
 			require.NoError(t, err, "CreateStream() should not error with multiple tool calls + cache hint")
 		}
@@ -265,7 +265,7 @@ func TestSmartCacheIntegration_Claude(t *testing.T) {
 		if err != nil {
 			var perr *llm.ProviderError
 			if errors.As(err, &perr) {
-				t.Logf("API Error Body: %s", perr.Body)
+				t.Logf("API Error Body: %s", perr.ResponseBody)
 			}
 			require.NoError(t, err, "CreateStream() should not error with thinking+tool_calls (no text)")
 		}
@@ -301,7 +301,7 @@ func TestSmartCacheIntegration_Claude(t *testing.T) {
 		if err != nil {
 			var perr *llm.ProviderError
 			if errors.As(err, &perr) {
-				t.Logf("API Error Body: %s", perr.Body)
+				t.Logf("API Error Body: %s", perr.ResponseBody)
 			}
 			require.NoError(t, err, "CreateStream() should not error with assistant (no cache hint)")
 		}
@@ -348,7 +348,7 @@ func TestSmartCacheIntegration_Claude(t *testing.T) {
 		if err != nil {
 			var perr *llm.ProviderError
 			if errors.As(err, &perr) {
-				t.Logf("API Error Body: %s", perr.Body)
+				t.Logf("API Error Body: %s", perr.ResponseBody)
 			}
 			require.NoError(t, err, "CreateStream() should not error with assistant (no cache hint)")
 		}

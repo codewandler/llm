@@ -39,7 +39,7 @@ func TestNewAPIRequestHeaders(t *testing.T) {
 func TestBuildRequest_SystemAndTools(t *testing.T) {
 	t.Parallel()
 
-	body, err := BuildRequest(RequestOptions{
+	body, err := BuildRequestBytes(RequestOptions{
 		LLMRequest: llm.Request{
 			Model: "claude-sonnet-4-5-20250929",
 			Messages: llm.Messages{
@@ -143,7 +143,7 @@ func TestBuildRequest_TopKAndTopP(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			body, err := BuildRequest(RequestOptions{
+			body, err := BuildRequestBytes(RequestOptions{
 				LLMRequest: tt.opts,
 			})
 			require.NoError(t, err)
@@ -160,7 +160,7 @@ func TestBuildRequest_MultipleSystemMessages(t *testing.T) {
 	t.Parallel()
 
 	t.Run("consecutive system messages are accumulated", func(t *testing.T) {
-		body, err := BuildRequest(RequestOptions{
+		body, err := BuildRequestBytes(RequestOptions{
 			LLMRequest: llm.Request{
 				Model: "claude-sonnet-4-5-20250929",
 				Messages: llm.Messages{
@@ -184,7 +184,7 @@ func TestBuildRequest_MultipleSystemMessages(t *testing.T) {
 	})
 
 	t.Run("mid-conversation system messages are accumulated", func(t *testing.T) {
-		body, err := BuildRequest(RequestOptions{
+		body, err := BuildRequestBytes(RequestOptions{
 			LLMRequest: llm.Request{
 				Model: "claude-sonnet-4-5-20250929",
 				Messages: llm.Messages{
@@ -210,7 +210,7 @@ func TestBuildRequest_MultipleSystemMessages(t *testing.T) {
 	})
 
 	t.Run("empty system messages are filtered out", func(t *testing.T) {
-		body, err := BuildRequest(RequestOptions{
+		body, err := BuildRequestBytes(RequestOptions{
 			LLMRequest: llm.Request{
 				Model: "claude-sonnet-4-5-20250929",
 				Messages: llm.Messages{
@@ -233,7 +233,7 @@ func TestBuildRequest_MultipleSystemMessages(t *testing.T) {
 	})
 
 	t.Run("no system messages results in nil system field", func(t *testing.T) {
-		body, err := BuildRequest(RequestOptions{
+		body, err := BuildRequestBytes(RequestOptions{
 			LLMRequest: llm.Request{
 				Model: "claude-sonnet-4-5-20250929",
 				Messages: llm.Messages{
@@ -257,7 +257,7 @@ func TestBuildRequest_ToolCallWithNilArguments(t *testing.T) {
 	// This tests the fix for: "messages.N.content.0.tool_use.input: Field required"
 	// When a tool call has nil ToolArgs, the serialized JSON must still include
 	// the "input" field (as an empty object) because Anthropic API requires it.
-	body, err := BuildRequest(RequestOptions{
+	body, err := BuildRequestBytes(RequestOptions{
 		LLMRequest: llm.Request{
 			Model: "claude-sonnet-4-5-20250929",
 			Messages: msg.BuildTranscript(

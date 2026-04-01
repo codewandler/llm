@@ -95,7 +95,7 @@ func TestBuildRequest_CacheHint_TopLevel(t *testing.T) {
 		},
 	}
 
-	data, err := BuildRequest(opts)
+	data, err := BuildRequestBytes(opts)
 	require.NoError(t, err)
 
 	var req map[string]any
@@ -119,7 +119,7 @@ func TestBuildRequest_CacheHint_NoTopLevelWhenPerMessageHintsExist(t *testing.T)
 		},
 	}
 
-	data, err := BuildRequest(opts)
+	data, err := BuildRequestBytes(opts)
 	require.NoError(t, err)
 
 	var req map[string]any
@@ -141,7 +141,7 @@ func TestBuildRequest_CacheHint_PerMessageUser(t *testing.T) {
 		},
 	}
 
-	data, err := BuildRequest(opts)
+	data, err := BuildRequestBytes(opts)
 	require.NoError(t, err)
 
 	var req map[string]any
@@ -171,7 +171,7 @@ func TestBuildRequest_CacheHint_SystemBlock(t *testing.T) {
 		},
 	}
 
-	data, err := BuildRequest(opts)
+	data, err := BuildRequestBytes(opts)
 	require.NoError(t, err)
 
 	var req map[string]any
@@ -198,7 +198,7 @@ func TestBuildRequest_CacheHint_ExtendedTTL(t *testing.T) {
 		},
 	}
 
-	data, err := BuildRequest(opts)
+	data, err := BuildRequestBytes(opts)
 	require.NoError(t, err)
 
 	var req map[string]any
@@ -220,7 +220,7 @@ func TestBuildRequest_NoCacheHint_NoTopLevelField(t *testing.T) {
 		},
 	}
 
-	data, err := BuildRequest(opts)
+	data, err := BuildRequestBytes(opts)
 	require.NoError(t, err)
 
 	var req map[string]any
@@ -260,7 +260,7 @@ func TestBuildRequest_AssistantWithBlocksAndCacheHint_TextBlock(t *testing.T) {
 		},
 	}
 
-	data, err := BuildRequest(opts)
+	data, err := BuildRequestBytes(opts)
 	require.NoError(t, err)
 
 	var req map[string]any
@@ -299,7 +299,7 @@ func TestBuildRequest_AssistantWithBlocksAndCacheHint_ThinkingBlock(t *testing.T
 		},
 	}
 
-	data, err := BuildRequest(opts)
+	data, err := BuildRequestBytes(opts)
 	require.NoError(t, err)
 
 	var req map[string]any
@@ -337,7 +337,7 @@ func TestBuildRequest_AssistantWithBlocksAndCacheHint_ThinkingBlock_LastBlock(t 
 		},
 	}
 
-	data, err := BuildRequest(opts)
+	data, err := BuildRequestBytes(opts)
 	require.NoError(t, err)
 
 	var req map[string]any
