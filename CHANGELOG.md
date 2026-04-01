@@ -2,25 +2,92 @@
 
 ## v0.28.0
 
-### Bug Fixes
+### Breaking Changes
 
-#### Haiku thinking defaults
-- Haiku now defaults to `thinking: {type: "enabled", budget_tokens: 31999}` instead of `disabled`
-- This matches Claude Code's default behavior for agentic use cases
+#### `msg` package extraction — message types moved out of root package
 
-#### Max tokens default
-- Default `max_tokens` changed from 16384 to 32000 across all Anthropic providers
-- Matches Claude Code's default for better response capacity
+All message-building types have been relocated to `github.com/codewandler/llm/msg`:
 
-#### Metadata user_id format
-- `metadata.user_id` now uses JSON object format `{"device_id": "...", "account_uuid": "...", "session_id": "..."}`
-- Previously used a flattened string format that didn't match Claude Code
+| Before | After |
+|---|---|
+| `llm.Message` | `msg.Message` |
+| `llm.SystemMsg`, `llm.UserMsg`, `llm.AssistantMsg`, `llm.ToolMsg`, `llm.Msg` | `msg.System`, `msg.User`, `msg.Assistant`, `msg.Tool` |
+| `llm.ToolCall` | `msg.ToolCall` |
+| `llm.ContentBlock` / `llm.TextBlock` / `llm.ToolUseBlock` / `llm.ToolResultBlock` | `msg.ContentBlock`, `msg.Text`, `msg.ToolUse`, `msg.ToolResult` |
+| `llm.CacheControl` | `msg.CacheControl` |
+| `llm.ThinkingBlock` | `msg.Thinking` |
+| Inline message constructors | `msg.MessageBuilder`, `msg.ToolMsgBuilder`, `msg.Transcript` |
 
-#### Output effort only on supported models
-- `output_config.effort` is now only sent for Sonnet 4.6, Opus 4.5, and Opus 4.6
-- Sonnet 4.5 does not support effort and would return HTTP 400 if sent
+The root package retains `ToolCall` and `ToolCallResult` for backward compatibility.
+
+#### `tokencount` package extraction — token counting moved out of root package
+
+Token counting types have been relocated to `github.com/codewandler/llm/tokencount`:
+
+| Before | After |
+|---|---|
+| `llm.TokenCounter` | `tokencount.TokenCounter` |
+| `llm.TokenCountRequest` / `TokenCount` | `tokencount.Request` / `tokencount.Count` |
+| `llm.CountText` / `llm.CountMessage` | `tokencount.CountText` / `tokencount.CountMessage` |
+| `llm.EncodingForModel` | `tokencount.EncodingForModel` |
+
+---
 
 ### New Features
+
+#### `msg` package — type-safe message construction and validation
+
+New `msg` package provides structured, validated message building:
+
+- **`msg.MessageBuilder`** — fluent API for assembling multi-turn conversations with tool calls
+- **`msg.ToolMsgBuilder`** — helper for building tool result messages (with `Empty()` for no-result tools)
+- **`msg.Transcript`** — assembles a `msg.Message` from a sequence of `msg.Part` values with validation
+- **`msg.CacheControl`** — `type: "ephemeral"` with `ttl: "1h"` convenience helper
+- **`msg.Thinking`** — structured thinking block with budget tokens
+- **`msg.TranscriptBuilder`** — builds a full `msg.Message` from role/content or role/parts pairs
+
+#### `tokencount` package — offline per-provider token estimation
+
+The existing token counter logic has been extracted and refactored:
+
+- **`tokencount.TokenCounter`** interface with `Count(ctx, Request) (Count, error)`
+- `Count` struct with full breakdown: `PerMessage`, `PerTool`, `SystemTokens`, `UserTokens`, `AssistantTokens`, `ToolResultTokens`, `ToolsTokens`, `OverheadTokens`
+- All providers (Anthropic, Bedrock, OpenAI, OpenRouter, Ollama, MiniMax) migrated to the new framework
+- `tokencount.EncodingForModel` and `tokencount.CountText` for low-level encoding access
+
+#### Smart cache — automatic cache boundary placement
+
+`llm.SmartCache` tracks token distance from the last cache boundary and determines when to mark a new message with `cache_control: {type: "ephemeral"}`:
+
+```go
+sc := llm.NewSmartCache(1024) // mark every ~1k tokens
+// After each LLM response:
+sc.UpdateTokenCount(usage.InputTokens)
+if sc.ShouldMarkForCache() {
+    msg := msg.User("new input").WithCacheControl(msg.CacheControlEphemeral)
+    sc.MarkCachePoint()
+}
+```
+
+#### Rate limit headers — parsed `Anthropic-Ratelimit-*` headers
+
+`llm.RateLimits` parses the `Anthropic-Ratelimit-*` response headers and is emitted in `StreamStartedEvent.Meta.RateLimits`:
+
+```go
+type RateLimits struct {
+    Unified        *UnifiedRateLimit // unified endpoint limits
+    OrganizationID string
+    RequestID      string
+}
+
+type UnifiedRateLimit struct {
+    Status             RateLimitStatus
+    ResetAt            time.Time
+    FiveHour, SevenDay *WindowLimit // rolling window budgets
+    Overage            *OverageLimit
+    FallbackPercentage float64       // pay-as-you-go pool usage
+}
+```
 
 #### Adaptive thinking support
 - Sonnet 4.6 and Opus 4.6 now default to `thinking: {type: "adaptive"}`
@@ -42,6 +109,70 @@
 - HTTP transport now handles `gzip`, `deflate`, `br` (brotli), and `zstd` compression
 - Added `github.com/andybalholm/brotli` and `github.com/klauspost/compress/zstd` dependencies
 
+---
+
+### Refactoring
+
+#### Router — `llm.Models` interface with dynamic `Resolve` support
+
+The router now uses a `llm.Models` interface for model registry instead of a static map.
+Providers can implement `Resolve(model string) (llm.Model, bool)` for dynamic model resolution:
+
+```go
+type Models interface {
+    Name() string
+    Models() []Model
+    Resolve(model string) (Model, bool) // optional, for dynamic lookup
+}
+```
+
+Static aliases (`"fast"`, `"smart"`, `"default"`) still work as before.
+
+#### Provider migrations to `msg` and `tokencount` frameworks
+
+All providers have been migrated to use the new `msg` and `tokencount` packages:
+
+- **OpenAI** — `api_completions.go` refactored to use `msg.Message`, `msg.ContentBlock`, `tokencount.TokenCounter`
+- **OpenRouter** — migrated to `msg` and `tokencount` frameworks
+- **Ollama** — migrated to `msg` and `tokencount` frameworks
+- **MiniMax** — migrated to `msg` and `tokencount` frameworks
+
+#### SSE lines moved to `internal/sse`
+
+The `sse.Lines` helper has been moved from `provider/internal/sse/lines.go` to
+`internal/sse/lines.go`, making it available to any provider package.
+
+#### Anthropic provider — stream processor and SSE event extraction
+
+- New `stream_processor.go` — typed SSE event handling separate from stream lifecycle
+- New `event.go` — `AnthropicEvent` type hierarchy mirrors `llm.Event`
+- `ParseStream` now takes `ParseOpts` with automatic stream lifecycle management
+
+---
+
+### Bug Fixes
+
+#### Haiku thinking defaults
+- Haiku now defaults to `thinking: {type: "enabled", budget_tokens: 31999}` instead of `disabled`
+- This matches Claude Code's default behavior for agentic use cases
+
+#### Max tokens default
+- Default `max_tokens` changed from 16384 to 32000 across all Anthropic providers
+- Matches Claude Code's default for better response capacity
+
+#### Metadata user_id format
+- `metadata.user_id` now uses JSON object format `{"device_id": "...", "account_uuid": "...", "session_id": "..."}`
+- Previously used a flattened string format that didn't match Claude Code
+
+#### Output effort only on supported models
+- `output_config.effort` is now only sent for Sonnet 4.6, Opus 4.5, and Opus 4.6
+- Sonnet 4.5 does not support effort and would return HTTP 400 if sent
+
+#### MiniMax stream goroutine fix
+- MiniMax stream parsing is now run in a separate goroutine, fixing a goroutine leak that occurred when the MiniMax server closed the connection unexpectedly
+
+---
+
 ### Alignment with Claude Code
 
 #### Request headers
@@ -53,14 +184,41 @@
 - System blocks reduced to 2: billing header + systemCore (removed extra identity block)
 - Billing header version updated to `2.1.85.613`
 
+---
+
 ### Tests
 
-#### Comprehensive thinking and effort tests
-- Added `TestIsEffortSupported`, `TestIsMaxEffortSupported`, `TestIsAdaptiveThinkingSupported`
-- Added `TestBuildRequest_OutputEffort` with 16 model/effort combinations
-- Added `TestBuildRequest_ThinkingEffort_Defaults` for all model variants
+#### Anthropic coverage — core package to 91.7%
+
+Added comprehensive test coverage:
+- `TestBuildRequest_ThinkingEffort_Defaults` — all model variants (haiku, sonnet, opus × 4.5/4.6)
+- `TestBuildRequest_OutputEffort` — 16 model/effort combinations
+- `TestIsEffortSupported`, `TestIsMaxEffortSupported`, `TestIsAdaptiveThinkingSupported`
+- `TestBuildRequest_CacheControl`, `TestBuildRequest_MetadataUserID`
+- `blocks_wire_test.go` — content block wire format parsing
+- `content_block_event_test.go` — SSE content block → typed event mapping
+- `create_stream_test.go` — HTTP client wiring and response handling
+- `dispatch_test.go` — event dispatch routing
+
+#### llmcli command tests
+
+Added `auth_test.go`, `infer_test.go`, and `models_test.go`. CLI code refactored to be more testable.
 
 ---
+
+### Chores
+
+#### golangci-lint configuration (`.golangci.yml`)
+
+Added strict linting configuration with enabled linters:
+`errcheck`, `gocritic`, `gofmt`, `goimports`, `misspell`, `revive`, `staticcheck`, `unused`
+
+#### `.gitignore` updates
+
+Excluded `.agents/logs/` patterns and ClaudeForge HTTP proxy artifacts.
+
+---
+
 
 ## v0.27.0
 
