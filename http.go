@@ -150,7 +150,7 @@ func (t *loggingTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 func NewHttpClient(opts HttpClientOpts) *http.Client {
 	var transport http.RoundTripper = &http.Transport{
 		TLSHandshakeTimeout:   10 * time.Second,
-		ResponseHeaderTimeout: 30 * time.Second,
+		ResponseHeaderTimeout: 45 * time.Second,
 		MaxIdleConns:          100,
 		MaxIdleConnsPerHost:   10,
 		MaxConnsPerHost:       0,
