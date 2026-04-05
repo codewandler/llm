@@ -57,7 +57,7 @@ func DefinitionFor[T any](name, description string) Definition {
 	r := jsonschema.Reflector{
 		DoNotReference:             true, // Inline all types, no $defs
 		Anonymous:                  true, // No $id field
-		AllowAdditionalProperties:  true, // Remove additionalProperties: false
+		AllowAdditionalProperties:  false, // Require strict schema: additionalProperties: false
 		RequiredFromJSONSchemaTags: true, // Use jsonschema:"required" instead of all fields
 	}
 	schema := r.Reflect(new(T))
