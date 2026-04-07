@@ -14,22 +14,24 @@ import (
 	"github.com/codewandler/llm/provider/anthropic/claude"
 )
 
-// TestSmartCacheIntegration_Claude reproduces the HTTP 400 error when assistant messages
-// with content blocks are incorrectly reconstructed for the Anthropic API.
+// TestPromptCaching_Claude verifies that cache hints on messages and the
+// Anthropic API's prompt-caching feature work correctly end-to-end.
+// It covers a range of message layouts that have historically caused
+// serialization bugs (e.g. assistant messages with tool calls and cache hints).
 //
 // Run with:
 //
-//	go test -v -run TestSmartCacheIntegration ./provider/anthropic/claude/...
-func TestSmartCacheIntegration_Claude(t *testing.T) {
+//	go test -v -tags=integration -run TestPromptCaching_Claude ./integration/...
+func TestPromptCaching_Claude(t *testing.T) {
 	// Create Claude provider — uses local token provider by default (Claude Code CLI)
 	provider := claude.New()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
-	// ---------------------------------------------------------------------------
-	// Test 1: Simple request — baseline without smart cache
-	// ---------------------------------------------------------------------------
+	// -------------------------------------------------------------------------
+	// Test 1: Simple request — baseline, no cache hint
+	// -------------------------------------------------------------------------
 	t.Run("SimpleRequest", func(t *testing.T) {
 		req := llm.Request{
 			MaxTokens: 100,
@@ -59,9 +61,9 @@ func TestSmartCacheIntegration_Claude(t *testing.T) {
 		t.Logf("Response: %s", text)
 	})
 
-	// ---------------------------------------------------------------------------
-	// Test 2: Multi-message with assistant last — exercises assistant reconstruction
-	// ---------------------------------------------------------------------------
+	// -------------------------------------------------------------------------
+	// Test 2: Multi-message with assistant last
+	// -------------------------------------------------------------------------
 	t.Run("AssistantLast", func(t *testing.T) {
 		req := llm.Request{
 			MaxTokens: 100,
@@ -91,10 +93,10 @@ func TestSmartCacheIntegration_Claude(t *testing.T) {
 		t.Logf("Response: %s", text)
 	})
 
-	// ---------------------------------------------------------------------------
-	// Test 3: Assistant message with blocks (thinking) — tests cache hint on thinking block
-	// ---------------------------------------------------------------------------
-	t.Run("AssistantWithThinkingBlocks", func(t *testing.T) {
+	// -------------------------------------------------------------------------
+	// Test 3: Cache hint on an assistant message with text — basic cache hint path
+	// -------------------------------------------------------------------------
+	t.Run("CacheHint_AssistantText", func(t *testing.T) {
 		req := llm.Request{
 			MaxTokens: 200,
 			Messages: msg.BuildTranscript(
@@ -127,10 +129,10 @@ func TestSmartCacheIntegration_Claude(t *testing.T) {
 		t.Logf("Response: %s", text)
 	})
 
-	// ---------------------------------------------------------------------------
-	// Test 4: Assistant with tool calls + cache hint — THIS IS THE BUG
-	// ---------------------------------------------------------------------------
-	t.Run("AssistantWithToolCallsAndCacheHint", func(t *testing.T) {
+	// -------------------------------------------------------------------------
+	// Test 4: Cache hint on assistant message that also contains a tool call
+	// -------------------------------------------------------------------------
+	t.Run("CacheHint_AssistantWithToolCall", func(t *testing.T) {
 		req := llm.Request{
 			MaxTokens: 200,
 			Messages: msg.BuildTranscript(
@@ -163,11 +165,10 @@ func TestSmartCacheIntegration_Claude(t *testing.T) {
 		t.Logf("Response: %s", text)
 	})
 
-	// ---------------------------------------------------------------------------
-	// Test 5: Tool call sequence with cache hint on intermediate assistant
-	// Simulates: User asks → Assistant uses tools → Tools execute → User asks again → Assistant responds (cached)
-	// ---------------------------------------------------------------------------
-	t.Run("ToolCallSequenceWithCacheHint", func(t *testing.T) {
+	// -------------------------------------------------------------------------
+	// Test 5: Cache hints on multiple assistant turns in a tool-call sequence
+	// -------------------------------------------------------------------------
+	t.Run("CacheHint_MultiTurnToolSequence", func(t *testing.T) {
 		req := llm.Request{
 			MaxTokens: 200,
 			Messages: msg.BuildTranscript(
@@ -203,10 +204,10 @@ func TestSmartCacheIntegration_Claude(t *testing.T) {
 		t.Logf("Response: %s", text)
 	})
 
-	// ---------------------------------------------------------------------------
-	// Test 6: Multiple tool calls with cache hint
-	// ---------------------------------------------------------------------------
-	t.Run("MultipleToolCallsWithCacheHint", func(t *testing.T) {
+	// -------------------------------------------------------------------------
+	// Test 6: Cache hint on assistant message with multiple parallel tool calls
+	// -------------------------------------------------------------------------
+	t.Run("CacheHint_MultipleToolCalls", func(t *testing.T) {
 		req := llm.Request{
 			MaxTokens: 200,
 			Messages: msg.BuildTranscript(
@@ -241,13 +242,11 @@ func TestSmartCacheIntegration_Claude(t *testing.T) {
 		t.Logf("Response: %s", text)
 	})
 
-	// ---------------------------------------------------------------------------
-	// Test 7: Thought + Tool calls (no text) — THE BUG
-	// When the last assistant message has thinking + tool_calls (no text), filtering
-	// thinking leaves only tool_calls. Then we try to apply cache hint to the last
-	// block (tool_calls) which is invalid → HTTP 400.
-	// ---------------------------------------------------------------------------
-	t.Run("ThinkingPlusToolCalls_NoText", func(t *testing.T) {
+	// -------------------------------------------------------------------------
+	// Test 7: Cache hint on assistant message with only tool calls (no text)
+	// Previously caused HTTP 400 due to incorrect block filtering.
+	// -------------------------------------------------------------------------
+	t.Run("CacheHint_ToolCallOnly_NoText", func(t *testing.T) {
 		req := llm.Request{
 			MaxTokens: 200,
 			Messages: msg.BuildTranscript(
@@ -282,11 +281,10 @@ func TestSmartCacheIntegration_Claude(t *testing.T) {
 		t.Logf("Response: %s", text)
 	})
 
-	// ---------------------------------------------------------------------------
-	// Test 8: Assistant (no cache hint) with thinking + tool_calls
-	// This simulates re-sending an assistant message from conversation history.
-	// ---------------------------------------------------------------------------
-	t.Run("Assistant_NoCacheHint", func(t *testing.T) {
+	// -------------------------------------------------------------------------
+	// Test 8: Multi-turn conversation with thinking blocks, no cache hint
+	// -------------------------------------------------------------------------
+	t.Run("Thinking_MultiTurn_NoCacheHint", func(t *testing.T) {
 		req := llm.Request{
 			Model:          claude.ModelSonnet,
 			MaxTokens:      200,
@@ -364,11 +362,10 @@ func TestSmartCacheIntegration_Claude(t *testing.T) {
 		t.Logf("Response 2: %s", r)
 	})
 
-	// ---------------------------------------------------------------------------
-	// Test 10: Empty content blocks array with cache hint — expected to fail validation
-	// An assistant message with empty contentBlocks AND no toolCalls is invalid.
-	// ---------------------------------------------------------------------------
-	t.Run("EmptyContentBlocks_WithCacheHint_ValidationError", func(t *testing.T) {
+	// -------------------------------------------------------------------------
+	// Test 9: Empty assistant content with cache hint — expects validation error
+	// -------------------------------------------------------------------------
+	t.Run("CacheHint_EmptyAssistant_ValidationError", func(t *testing.T) {
 		req := llm.Request{
 			MaxTokens: 200,
 			Messages: msg.BuildTranscript(
