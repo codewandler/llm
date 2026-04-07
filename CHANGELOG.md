@@ -1,5 +1,38 @@
 # Changelog
 
+## v0.31.0
+
+### Removed
+
+#### SmartCache deleted
+
+`SmartCache`, `NewSmartCache`, and the associated `smart_cache_test.go` have been
+removed from the library.
+
+`SmartCache` was application-layer policy — a token-distance threshold that gated
+whether a cache breakpoint should be written — with no business in a
+provider-agnostic LLM client library. Its only known caller (the flai adapter)
+has replaced it with unconditional per-turn caching, which is always cheaper from
+turn 2 onward (cache reads cost 0.10× vs 1.00× for uncached re-processing).
+
+The library's responsibility is the `CacheHint` primitive: `msg.CacheHint`,
+`Message.CacheHint`, and `Request.CacheHint`. Deciding *when* to set a cache
+breakpoint is caller policy.
+
+**Migration:** remove any usage of `llm.NewSmartCache`, `SmartCache.ShouldMarkForCache`,
+`SmartCache.MarkCachePoint`, `SmartCache.UpdateTokenCount`, and `SmartCache.Reset`.
+Set `Message.CacheHint` or `Request.CacheHint` directly in your application loop.
+
+### Chores
+
+#### Integration test renamed
+
+`TestSmartCacheIntegration_Claude` renamed to `TestPromptCaching_Claude`.
+Subtests renamed to describe the message layout being tested rather than
+referencing the removed SmartCache mechanism.
+
+---
+
 ## v0.30.0
 
 ### New Features
