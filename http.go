@@ -24,6 +24,16 @@ type HttpClientOpts struct {
 	// Debug extends logging to include request/response headers and bodies.
 	// Has no effect when Logger is nil.
 	Debug bool
+
+	// TLSHandshakeTimeout is the maximum time allowed for a TLS handshake.
+	// Defaults to 30 seconds if not set.
+	TLSHandshakeTimeout time.Duration
+
+	// ResponseHeaderTimeout is the maximum time to wait for response headers
+	// after the request is sent. LLM APIs can be slow to respond (model loading,
+	// queueing, cold starts), so this defaults to 120 seconds rather than the
+	// typical HTTP client default.
+	ResponseHeaderTimeout time.Duration
 }
 
 // loggingTransport is an http.RoundTripper that logs every request and response.
@@ -148,13 +158,26 @@ func (t *loggingTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 // level. Set opts.Debug = true to also include headers and bodies. Response
 // bodies are tee-logged as they eventPub — no buffering, no broken SSE.
 func NewHttpClient(opts HttpClientOpts) *http.Client {
+	// Apply sensible defaults tuned for LLM API calls.
+	// These are higher than typical HTTP client defaults because LLM providers
+	// can have significant cold-start latency (model loading, GPU allocation,
+	// regional routing).
+	tlsTimeout := 30 * time.Second
+	if opts.TLSHandshakeTimeout > 0 {
+		tlsTimeout = opts.TLSHandshakeTimeout
+	}
+	headTimeout := 120 * time.Second
+	if opts.ResponseHeaderTimeout > 0 {
+		headTimeout = opts.ResponseHeaderTimeout
+	}
+
 	var transport http.RoundTripper = &http.Transport{
-		TLSHandshakeTimeout:   10 * time.Second,
-		ResponseHeaderTimeout: 45 * time.Second,
+		TLSHandshakeTimeout:   tlsTimeout,
+		ResponseHeaderTimeout: headTimeout,
 		MaxIdleConns:          100,
-		MaxIdleConnsPerHost:   10,
-		MaxConnsPerHost:       0,
-		IdleConnTimeout:       90 * time.Second,
+		MaxIdleConnsPerHost:    10,
+		MaxConnsPerHost:        0,
+		IdleConnTimeout:        90 * time.Second,
 		// Disable automatic decompression — we handle gzip, deflate, br, and
 		// zstd ourselves in decompressingTransport so we can support brotli
 		// and zstd which the standard Transport doesn't handle.

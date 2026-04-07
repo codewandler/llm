@@ -3,3 +3,4 @@
 logs/
 *.log
 coverage.out
+.flai

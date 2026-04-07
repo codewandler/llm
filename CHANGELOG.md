@@ -1,5 +1,66 @@
 # Changelog
 
+## v0.30.0
+
+### New Features
+
+#### Configurable HTTP client timeouts
+
+HTTP client timeouts tuned for LLM provider characteristics:
+
+- `TLSHandshakeTimeout` — configurable, defaults to 30 seconds
+- `ResponseHeaderTimeout` — increased to 120 seconds (was 45s)
+
+LLM APIs can have significant cold-start latency (model loading, GPU allocation,
+queueing). The previous 45s default was too aggressive for providers that
+can take 90+ seconds to respond.
+
+---
+
+## v0.29.0
+
+### Bug Fixes
+
+#### HTTP response header timeout increased
+
+Raised `ResponseHeaderTimeout` on the default HTTP transport from 30s to 45s
+to reduce 'timeout awaiting response headers' errors from the Anthropic API under load.
+
+#### OpenRouter stream termination
+
+Emit `CompletedEvent` after scanner loop ends. Previously the stream could end
+without proper completion signal when the server closes the connection.
+
+#### ProviderError enriched with request body
+
+`ProviderError` now includes the request body for better debugging of API failures.
+
+### Refactoring
+
+#### Anthropic stream processor
+
+- New `stream_processor.go` — typed SSE event handling separate from stream lifecycle
+- New `event.go` — `AnthropicEvent` type hierarchy mirrors `llm.Event`
+- `ParseStream` now takes `ParseOpts` with automatic stream lifecycle management
+
+#### MiniMax stream parsing fix
+
+MiniMax stream parsing now runs in a separate goroutine, fixing a goroutine leak
+that occurred when the MiniMax server closed the connection unexpectedly.
+
+### Chores
+
+#### golangci-lint strict mode enabled
+
+Fix linting issues and enable strict linting gate in CI.
+
+#### ClaudeForge HTTP proxy tool
+
+HTTP proxy tool for capturing Claude Code CLI traffic in `.agents/logs/claudeforge/`.
+See `.agents/skills/claudeforge/SKILL.md` for usage.
+
+---
+
 ## v0.28.0
 
 ### Breaking Changes
