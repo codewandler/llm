@@ -80,7 +80,7 @@ type respRequest struct {
 	Tools          []respTool          `json:"tools,omitempty"`
 	ToolChoice     any                 `json:"tool_choice,omitempty"`
 	Reasoning      *respReason         `json:"reasoning,omitempty"`
-	MaxTokens      int                 `json:"max_tokens,omitempty"`
+	MaxOutputTokens int                 `json:"max_output_tokens,omitempty"`
 	Temperature    float64             `json:"temperature,omitempty"`
 	TopP           float64             `json:"top_p,omitempty"`
 	TopK           int                 `json:"top_k,omitempty"`
@@ -138,7 +138,7 @@ func respBuildRequest(opts llm.Request) ([]byte, error) {
 
 	// Generation parameters
 	if opts.MaxTokens > 0 {
-		r.MaxTokens = opts.MaxTokens
+		r.MaxOutputTokens = opts.MaxTokens
 	}
 	if opts.Temperature > 0 {
 		r.Temperature = opts.Temperature

@@ -75,7 +75,29 @@ func detectProviders(httpClient *http.Client, llmOpts []llm.Option, disabled map
 		})
 	}
 
-	// 4. OpenAI
+	// 4. OpenAI — Codex local credentials (~/.codex/auth.json).
+	// Checked before the env-var path because it carries a refresh token and
+	// therefore degrades more gracefully than a static API key.
+	if !disabled[ProviderOpenAI] && openai.CodexLocalAvailable() {
+		codexAuth, _ := openai.LoadCodexAuth() // safe: CodexLocalAvailable already verified
+		providers = append(providers, providerEntry{
+			name:         "codex-local",
+			providerType: ProviderOpenAI,
+			factory: func(opts ...llm.Option) llm.Provider {
+				// Route through the Codex backend transport (chatgpt.com/backend-api).
+				// Preserve any custom httpClient transport for proxy/timeout settings.
+				var base http.RoundTripper
+				if httpClient != nil {
+					base = httpClient.Transport
+				}
+				return codexAuth.NewProvider(base)
+			},
+			modelAliases: openai.ModelAliases,
+			hasAliases:   true,
+		})
+	}
+
+	// 5. OpenAI via environment variable.
 	if !disabled[ProviderOpenAI] && (os.Getenv(EnvOpenAIKey) != "" || os.Getenv(EnvOpenAIKeyAlt) != "") {
 		providers = append(providers, providerEntry{
 			name:         ProviderOpenAI,
@@ -91,7 +113,7 @@ func detectProviders(httpClient *http.Client, llmOpts []llm.Option, disabled map
 		})
 	}
 
-	// 5. OpenRouter
+	// 6. OpenRouter
 	if !disabled[ProviderOpenRouter] && os.Getenv(EnvOpenRouterKey) != "" {
 		providers = append(providers, providerEntry{
 			name:         ProviderOpenRouter,
@@ -108,7 +130,7 @@ func detectProviders(httpClient *http.Client, llmOpts []llm.Option, disabled map
 		})
 	}
 
-	// 6. MiniMax
+	// 7. MiniMax
 	if !disabled[ProviderMiniMax] && os.Getenv(EnvMiniMaxKey) != "" {
 		providers = append(providers, providerEntry{
 			name:         ProviderMiniMax,

@@ -1,5 +1,57 @@
 # Changelog
 
+## v0.32.0
+
+### New Features
+
+#### Codex CLI credential support (`provider/openai`)
+
+The Codex CLI (`~/.codex/auth.json`) stores ChatGPT Plus OAuth tokens that can
+drive Codex models without an OpenAI API key. Three new public symbols expose this:
+
+- **`CodexAuth`** — thread-safe struct that loads and auto-refreshes `~/.codex/auth.json`
+  tokens. Parses the JWT `exp` claim to refresh proactively (5 min before expiry).
+- **`LoadCodexAuth() (*CodexAuth, error)`** — reads from the default path.
+- **`CodexLocalAvailable() bool`** — cheap availability check (no network call).
+- **`(*CodexAuth).NewProvider(...http.RoundTripper) *Provider`** — returns a
+  `*Provider` pre-configured for the ChatGPT Codex backend
+  (`https://chatgpt.com/backend-api`). An optional base transport can be passed
+  to layer proxy or timeout settings beneath the Codex transport.
+
+The underlying `codexTransport` handles all backend differences transparently:
+- Rewrites `/v1/responses` → `/codex/responses`
+- Injects `Authorization`, `chatgpt-account-id`, `OpenAI-Beta`, and `originator` headers
+- Injects `"store": false` into request bodies (required by the backend)
+- Strips `max_output_tokens` / `max_tokens` (both rejected by the Codex backend)
+
+Usage:
+```go
+auth, err := openai.LoadCodexAuth()
+if err != nil { ... }
+p := auth.NewProvider() // routes to chatgpt.com/backend-api
+stream, err := p.CreateStream(ctx, llm.Request{
+    Model:    openai.ModelGPT53Codex,
+    Messages: llm.Messages{llm.User("hello")},
+})
+```
+
+#### Codex auto-detection (`provider/auto`)
+
+- **`WithCodexLocal()`** — explicit option to add the Codex provider.
+- **`Detect()`** — now automatically includes a `codex-local` provider entry when
+  `~/.codex/auth.json` is present. Checked before the `OPENAI_API_KEY` env-var path
+  since the OAuth token carries a refresh token and degrades more gracefully.
+
+### Bug Fixes
+
+#### Responses API field name corrected (`provider/openai`)
+
+The `respRequest` struct was sending `max_tokens` (Chat Completions field name)
+instead of `max_output_tokens` (Responses API field name). Fixed. Existing callers
+are unaffected — `llm.Request.MaxTokens` maps to `max_output_tokens` on the wire.
+
+---
+
 ## v0.31.0
 
 ### Removed

@@ -143,6 +143,41 @@ func WithClaudeLocal() Option {
 	}
 }
 
+// WithCodexLocal adds the OpenAI provider using local Codex CLI credentials
+// (~/.codex/auth.json). The OAuth access token is refreshed automatically
+// when it approaches expiry, so no OPENAI_API_KEY is needed.
+//
+// Requests are routed to https://chatgpt.com/backend-api (not api.openai.com)
+// because the ChatGPT Plus OAuth token lacks the api.responses.write scope
+// required by the standard developer API.
+//
+// Returns a no-op option if the credentials file is absent or unreadable.
+func WithCodexLocal() Option {
+	return func(c *config) {
+		auth, err := openai.LoadCodexAuth()
+		if err != nil {
+			// Credentials not available — silently skip.
+			return
+		}
+		httpClient := c.httpClient
+		c.providers = append(c.providers, providerEntry{
+			name:         ProviderOpenAI,
+			providerType: ProviderOpenAI,
+			factory: func(opts ...llm.Option) llm.Provider {
+				// Route through the Codex backend transport.
+				// Preserve any custom httpClient transport for proxy/timeout settings.
+				var base http.RoundTripper
+				if httpClient != nil {
+					base = httpClient.Transport
+				}
+				return auth.NewProvider(base)
+			},
+			modelAliases: openai.ModelAliases,
+			hasAliases:   true,
+		})
+	}
+}
+
 // WithBedrock adds AWS Bedrock provider.
 func WithBedrock() Option {
 	return func(c *config) {
