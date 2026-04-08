@@ -1435,21 +1435,27 @@ func TestEnrichOpts_ThinkingEffortMapping(t *testing.T) {
 	}
 }
 
-// --- Unit tests for isCodexModel ---
+// --- Unit tests for useResponsesAPI ---
 
-func TestIsCodexModel(t *testing.T) {
+func TestUseResponsesAPI(t *testing.T) {
 	tests := []struct {
-		model   string
-		isCodex bool
+		model string
+		want  bool
 	}{
+		// Codex models (categoryCodex) — always via Responses API
 		{"gpt-5.1-codex", true},
 		{"gpt-5.1-codex-mini", true},
 		{"gpt-5.1-codex-max", true},
 		{"gpt-5.2-codex", true},
 		{"gpt-5.3-codex", true},
 		{"gpt-5-codex", true},
+		// GPT-5.4 series — UseResponsesAPI: true
+		{"gpt-5.4", true},
+		{"gpt-5.4-mini", true},
+		{"gpt-5.4-nano", true},
+		{"gpt-5.4-pro", true},
+		// Chat Completions models
 		{"gpt-5.1", false},
-		{"gpt-5.4", false},
 		{"gpt-4o", false},
 		{"gpt-4o-mini", false},
 		{"o3", false},
@@ -1459,7 +1465,7 @@ func TestIsCodexModel(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.model, func(t *testing.T) {
-			assert.Equal(t, tt.isCodex, isCodexModel(tt.model))
+			assert.Equal(t, tt.want, useResponsesAPI(tt.model))
 		})
 	}
 }

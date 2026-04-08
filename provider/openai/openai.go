@@ -125,19 +125,19 @@ func (p *Provider) FetchModels(ctx context.Context) ([]llm.Model, error) {
 	return models, nil
 }
 
-// Stream dispatches to the Responses API for Codex models, and to Chat
-// Completions for everything else.
+// Stream dispatches to the Responses API for Codex models and gpt-5.4-series
+// models, and to Chat Completions for everything else.
 //
 // Thought effort is validated and mapped before the request is forwarded.
 // Unknown models (not in the registry) default to Chat Completions so that
-// newly released non-Codex models work without a registry update.
+// newly released models work without a registry update.
 func (p *Provider) CreateStream(ctx context.Context, opts llm.Request) (llm.Stream, error) {
 	enriched, err := enrichOpts(opts)
 	if err != nil {
 		return nil, err
 	}
 
-	if isCodexModel(opts.Model) {
+	if useResponsesAPI(opts.Model) {
 		return p.streamResponses(ctx, enriched)
 	}
 	return p.streamCompletions(ctx, enriched)

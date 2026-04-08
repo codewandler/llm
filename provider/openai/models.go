@@ -96,16 +96,17 @@ type modelInfo struct {
 	CachedInputPrice      float64       // USD per 1M cached input tokens (0 if not supported)
 	Category              modelCategory // Thought support category
 	SupportsExtendedCache bool          // True if model supports 24h prompt cache retention
+	UseResponsesAPI       bool          // True if the model must be called via /v1/responses instead of /v1/chat/completions
 }
 
 // modelRegistry maps model IDs to their info.
 // Pricing data sourced from OpenAI API pricing: https://developers.openai.com/api/docs/pricing
 var modelRegistry = map[string]modelInfo{
-	// GPT-5.4 series (flagship, latest)
-	"gpt-5.4":      {ID: "gpt-5.4", Name: "GPT-5.4", InputPrice: 2.50, OutputPrice: 15.00, CachedInputPrice: 0.25, Category: categoryPreGPT51, SupportsExtendedCache: true},
-	"gpt-5.4-mini": {ID: "gpt-5.4-mini", Name: "GPT-5.4 Mini", InputPrice: 0.75, OutputPrice: 4.50, CachedInputPrice: 0.075, Category: categoryPreGPT51, SupportsExtendedCache: true},
-	"gpt-5.4-nano": {ID: "gpt-5.4-nano", Name: "GPT-5.4 Nano", InputPrice: 0.20, OutputPrice: 1.25, CachedInputPrice: 0.02, Category: categoryPreGPT51, SupportsExtendedCache: true},
-	"gpt-5.4-pro":  {ID: "gpt-5.4-pro", Name: "GPT-5.4 Pro", InputPrice: 30.00, OutputPrice: 180.00, CachedInputPrice: 0, Category: categoryPro},
+	// GPT-5.4 series (flagship, latest) — requires Responses API (/v1/responses)
+	"gpt-5.4":      {ID: "gpt-5.4", Name: "GPT-5.4", InputPrice: 2.50, OutputPrice: 15.00, CachedInputPrice: 0.25, Category: categoryPreGPT51, SupportsExtendedCache: true, UseResponsesAPI: true},
+	"gpt-5.4-mini": {ID: "gpt-5.4-mini", Name: "GPT-5.4 Mini", InputPrice: 0.75, OutputPrice: 4.50, CachedInputPrice: 0.075, Category: categoryPreGPT51, SupportsExtendedCache: true, UseResponsesAPI: true},
+	"gpt-5.4-nano": {ID: "gpt-5.4-nano", Name: "GPT-5.4 Nano", InputPrice: 0.20, OutputPrice: 1.25, CachedInputPrice: 0.02, Category: categoryPreGPT51, SupportsExtendedCache: true, UseResponsesAPI: true},
+	"gpt-5.4-pro":  {ID: "gpt-5.4-pro", Name: "GPT-5.4 Pro", InputPrice: 30.00, OutputPrice: 180.00, CachedInputPrice: 0, Category: categoryPro, UseResponsesAPI: true},
 
 	// GPT-5.3 series
 	"gpt-5.3-codex": {ID: "gpt-5.3-codex", Name: "GPT-5.3 Codex", InputPrice: 1.75, OutputPrice: 14.00, CachedInputPrice: 0.175, Category: categoryCodex, SupportsExtendedCache: true},
@@ -217,13 +218,20 @@ var modelOrder = []string{
 	"o1-pro",
 }
 
-// isCodexModel reports whether the given model ID should be routed to the
-// Responses API instead of Chat Completions.
-// Codex models (categoryCodex) require /v1/responses.
+// useResponsesAPI reports whether the given model ID should be routed to the
+// Responses API (/v1/responses) instead of Chat Completions (/v1/chat/completions).
+// Two model classes require /v1/responses:
+//   - Codex models (categoryCodex) — always routed via Responses API.
+//   - Models with UseResponsesAPI: true — newer non-Codex models (e.g. gpt-5.4 series)
+//     that are only available on the Responses API endpoint.
+//
 // Unknown models default to false so they are routed to Chat Completions.
-func isCodexModel(model string) bool {
+func useResponsesAPI(model string) bool {
 	info, ok := modelRegistry[model]
-	return ok && info.Category == categoryCodex
+	if !ok {
+		return false
+	}
+	return info.Category == categoryCodex || info.UseResponsesAPI
 }
 
 // getModelInfo returns the model info for the given model ID.
