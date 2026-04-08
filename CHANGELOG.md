@@ -1,5 +1,27 @@
 # Changelog
 
+## v0.33.0
+
+### Bug Fixes
+
+#### gpt-5.4 series routed to Responses API (`provider/openai`)
+
+gpt-5.4, gpt-5.4-mini, gpt-5.4-nano, and gpt-5.4-pro are only available via
+`/v1/responses` — they are not served by `/v1/chat/completions`, which caused
+a `HTTP 400` error on every request.
+
+- Added `UseResponsesAPI bool` field to the internal `modelInfo` struct.
+  Set to `true` for all four gpt-5.4 variants.
+- Renamed `isCodexModel` → `useResponsesAPI`. The function now returns `true`
+  for **either** `categoryCodex` (existing Codex models) or `UseResponsesAPI: true`
+  (gpt-5.4 series), keeping backwards compatibility for all existing model routing.
+- `CreateStream` dispatch updated accordingly.
+
+No API changes — callers using `llm.Request{Model: "gpt-5.4", ...}` now work
+without any changes on their end.
+
+---
+
 ## v0.32.0
 
 ### New Features
