@@ -168,6 +168,20 @@ func wantsExtendedCache(opts llm.Request) bool {
 	return err == nil && info.SupportsExtendedCache
 }
 
+// wantsExtendedCacheInResponsesAPI reports whether the request should include
+// prompt_cache_retention: "24h" in a /v1/responses body.
+//
+// Codex-category models also route through streamResponses but are dispatched
+// to the ChatGPT Codex backend, which does not support prompt_cache_retention.
+// Only models with UseResponsesAPI: true (e.g. gpt-5.4 series) support it.
+func wantsExtendedCacheInResponsesAPI(opts llm.Request) bool {
+	if opts.CacheHint != nil && opts.CacheHint.Enabled && opts.CacheHint.TTL == "1h" {
+		return true
+	}
+	info, err := getModelInfo(opts.Model)
+	return err == nil && info.UseResponsesAPI && info.SupportsExtendedCache
+}
+
 // mapOpenAIFinishReason converts an OpenAI/OpenRouter finish_reason string to
 // a typed StopReason.
 func mapOpenAIFinishReason(s string) llm.StopReason {

@@ -74,18 +74,19 @@ func (p *Provider) streamResponses(ctx context.Context, opts llm.Request) (llm.S
 
 // respRequest is the top-level JSON body sent to /v1/responses.
 type respRequest struct {
-	Model          string              `json:"model"`
-	Input          []respInput         `json:"input"`
-	Instructions   string              `json:"instructions,omitempty"`
-	Tools          []respTool          `json:"tools,omitempty"`
-	ToolChoice     any                 `json:"tool_choice,omitempty"`
-	Reasoning      *respReason         `json:"reasoning,omitempty"`
-	MaxOutputTokens int                 `json:"max_output_tokens,omitempty"`
-	Temperature    float64             `json:"temperature,omitempty"`
-	TopP           float64             `json:"top_p,omitempty"`
-	TopK           int                 `json:"top_k,omitempty"`
-	ResponseFormat *respResponseFormat `json:"response_format,omitempty"`
-	Stream         bool                `json:"stream"`
+	Model                string              `json:"model"`
+	Input                []respInput         `json:"input"`
+	Instructions         string              `json:"instructions,omitempty"`
+	Tools                []respTool          `json:"tools,omitempty"`
+	ToolChoice           any                 `json:"tool_choice,omitempty"`
+	Reasoning            *respReason         `json:"reasoning,omitempty"`
+	MaxOutputTokens      int                 `json:"max_output_tokens,omitempty"`
+	Temperature          float64             `json:"temperature,omitempty"`
+	TopP                 float64             `json:"top_p,omitempty"`
+	TopK                 int                 `json:"top_k,omitempty"`
+	ResponseFormat       *respResponseFormat `json:"response_format,omitempty"`
+	PromptCacheRetention string              `json:"prompt_cache_retention,omitempty"`
+	Stream               bool                `json:"stream"`
 }
 
 type respResponseFormat struct {
@@ -134,6 +135,17 @@ func respBuildRequest(opts llm.Request) ([]byte, error) {
 	r := respRequest{
 		Model:  opts.Model,
 		Stream: true,
+	}
+
+	// Extended prompt cache retention (24h) for supported models.
+	// Without this the Responses API defaults to ~5 minutes, which is too
+	// short for multi-turn agent sessions and produces near-zero cache hits.
+	// Note: Codex-category models also use streamResponses but route to a
+	// different backend that does not support this parameter — use
+	// wantsExtendedCacheInResponsesAPI (checks UseResponsesAPI flag) rather
+	// than wantsExtendedCache (checks SupportsExtendedCache only).
+	if wantsExtendedCacheInResponsesAPI(opts) {
+		r.PromptCacheRetention = "24h"
 	}
 
 	// Generation parameters

@@ -1036,6 +1036,60 @@ data: [DONE]
 
 // --- Unit tests for Responses API request building ---
 
+func TestRespBuildRequest_PromptCacheRetention_ExtendedSupported(t *testing.T) {
+	// gpt-5.4 series uses the Responses API and has SupportsExtendedCache=true.
+	// Verify that prompt_cache_retention: "24h" is included in the request body.
+	models := []string{
+		"gpt-5.4", "gpt-5.4-mini", "gpt-5.4-nano",
+	}
+
+	for _, model := range models {
+		t.Run(model, func(t *testing.T) {
+			opts := llm.Request{
+				Model:    model,
+				Messages: llm.Messages{llm.User("Hello")},
+			}
+
+			body, err := respBuildRequest(opts)
+			require.NoError(t, err)
+
+			var req map[string]any
+			require.NoError(t, json.Unmarshal(body, &req))
+			assert.Equal(t, "24h", req["prompt_cache_retention"],
+				"model %s should have prompt_cache_retention: 24h", model)
+		})
+	}
+}
+
+func TestRespBuildRequest_PromptCacheRetention_NotSupported(t *testing.T) {
+	// gpt-5.4-pro has CachedInputPrice=0 (SupportsExtendedCache=false).
+	// Codex-category models (gpt-5.3-codex etc.) use a different backend that
+	// rejects prompt_cache_retention — they must never get the field.
+	models := []string{
+		"gpt-5.4-pro",
+		"gpt-5.3-codex",  // Codex-category: uses streamResponses but rejects the field
+		"gpt-5.1-codex",  // Codex-category: same
+	}
+
+	for _, model := range models {
+		t.Run(model, func(t *testing.T) {
+			opts := llm.Request{
+				Model:    model,
+				Messages: llm.Messages{llm.User("Hello")},
+			}
+
+			body, err := respBuildRequest(opts)
+			require.NoError(t, err)
+
+			var req map[string]any
+			require.NoError(t, json.Unmarshal(body, &req))
+			_, exists := req["prompt_cache_retention"]
+			assert.False(t, exists,
+				"model %s should not have prompt_cache_retention set", model)
+		})
+	}
+}
+
 func TestRespBuildRequest_Basic(t *testing.T) {
 	opts := llm.Request{
 		Model: "gpt-5.1-codex",
