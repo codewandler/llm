@@ -50,10 +50,12 @@ func messageText(m llm.Message) string {
 		return sb.String()
 	case llm.RoleTool:
 		var sb strings.Builder
-		for _, tc := range m.Parts.ToolCalls() {
-			sb.WriteString(tc.Name)
+		for _, tr := range m.Parts.ToolResults() {
+			if sb.Len() > 0 {
+				sb.WriteString(" ")
+			}
+			sb.WriteString(tr.ToolOutput)
 		}
-
 		return sb.String()
 	case llm.RoleUser, llm.RoleSystem, llm.RoleDeveloper:
 		return m.Parts.Text()

@@ -1,6 +1,7 @@
 package tokencount
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/codewandler/llm/msg"
@@ -31,7 +32,7 @@ func TestCountText_ModelRouting(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.model, func(t *testing.T) {
-			n, err := CountTextForEncoding(tc.model, tc.text)
+			n, err := CountText(tc.model, tc.text)
 			require.NoError(t, err)
 			assert.Greater(t, n, 0)
 		})
@@ -39,7 +40,7 @@ func TestCountText_ModelRouting(t *testing.T) {
 }
 
 func TestCountText_EmptyText(t *testing.T) {
-	n, err := CountTextForEncoding("gpt-4o", "")
+	n, err := CountText("gpt-4o", "")
 	require.NoError(t, err)
 	assert.Equal(t, 0, n)
 }
@@ -66,6 +67,38 @@ func TestCountMessage_AllRoles(t *testing.T) {
 		})
 	}
 }
+func TestCountMessage_ToolResult_UsesToolOutput(t *testing.T) {
+	model := "gpt-4o"
+	short := msg.Tool().Results(msg.ToolResult{ToolCallID: "c1", ToolOutput: "ok"}).Build()
+	longOutput := "The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog."
+	long := msg.Tool().Results(msg.ToolResult{ToolCallID: "c1", ToolOutput: longOutput}).Build()
+
+	shortN, err := CountMessage(model, short)
+	require.NoError(t, err)
+	longN, err := CountMessage(model, long)
+	require.NoError(t, err)
+
+	assert.Greater(t, longN, shortN,
+		"tool result token count must grow with ToolOutput length")
+}
+
+func TestCountMessagesAndTools_ToolResult_PerMessageUsesToolOutput(t *testing.T) {
+	msgs := msg.BuildTranscript(
+		msg.Tool().Results(msg.ToolResult{ToolCallID: "c1", ToolOutput: "ok"}).Build(),
+		msg.Tool().Results(msg.ToolResult{ToolCallID: "c2", ToolOutput: strings.Repeat("very long tool output ", 50)}).Build(),
+	)
+
+	tc := &TokenCount{}
+	err := CountMessagesAndTools(tc, TokenCountRequest{
+		Model:    "gpt-4o",
+		Messages: msgs,
+	}, CountOpts{Encoding: "o200k_base"})
+	require.NoError(t, err)
+	require.Len(t, tc.PerMessage, 2)
+	assert.Greater(t, tc.PerMessage[1], tc.PerMessage[0],
+		"per-message token count must include tool result output content")
+}
+
 
 // TestCountMessage_ConsistentWithCountTokens verifies CountMessage produces
 // the same per-message values as CountTokens for the same messages.

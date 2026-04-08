@@ -125,8 +125,6 @@ func CountTextForEncoding(encoding, text string) (int, error) {
 	return len(tk.Encode(text, nil, nil)), nil
 }
 
-// CountTextForModel is a convenience wrapper that calls EncodingForModel and
-// then CountTextForEncoding.
 func CountTextForModel(modelID, text string) (int, error) {
 	enc, _ := EncodingForModel(modelID)
 	return CountTextForEncoding(enc, text)

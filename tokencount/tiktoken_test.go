@@ -89,9 +89,9 @@ func TestCountText_UnknownEncoding(t *testing.T) {
 	require.Error(t, err)
 }
 
-func TestCountTextForModel(t *testing.T) {
-	// Basic smoke test — delegates to CountTextForEncoding
-	n, err := CountTextForModel("gpt-4o", "Hello")
+func TestCountText_ModelHelper(t *testing.T) {
+	// Basic smoke test — resolves the model to an encoding internally.
+	n, err := CountText("gpt-4o", "Hello")
 	require.NoError(t, err)
 	assert.Greater(t, n, 0)
 }

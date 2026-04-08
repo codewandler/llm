@@ -1,5 +1,34 @@
 # Changelog
 
+## v0.33.1
+
+### Bug Fixes
+
+#### Tool result token counting now includes tool output (`tokencount`)
+
+`tokencount` was undercounting `RoleTool` history messages because it ignored
+`ToolResult.ToolOutput` and only looked for tool calls on tool-role messages.
+That caused severe drift in tool-heavy conversations where large tool outputs
+were present in history.
+
+- `messageText(...)` now serialises `ToolResult.ToolOutput` for `RoleTool`
+  messages, so `CountMessage(...)` and `CountMessagesAndTools(...)` reflect the
+  actual tool-result content sent back to the model.
+- Added regression tests covering both single-message counting and per-message
+  batch counting for tool results with different output lengths.
+
+### Chores
+
+#### Removed redundant model helper from the public API (`tokencount`)
+
+The package previously exposed both `CountText(model, text)` and
+`CountTextForModel(model, text)`, which did the same thing.
+
+- Removed `CountTextForModel(...)` to keep the public API smaller and clearer.
+- Updated tests to use `CountText(...)` for model-based counting.
+
+---
+
 ## v0.33.0
 
 ### Bug Fixes
