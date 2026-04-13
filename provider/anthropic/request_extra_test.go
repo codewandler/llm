@@ -83,43 +83,69 @@ func TestBuildRequest_ThinkingEffort(t *testing.T) {
 	}
 }
 
-func TestBuildRequest_ThinkingEffort_AdaptiveModelRespectsEffort(t *testing.T) {
-	// When a user explicitly sets ThinkingEffort on an adaptive-capable model
-	// (Sonnet 4.6, Opus 4.6), the effort must be mapped to budget_tokens
-	// on the adaptive config — not silently dropped.
+func TestBuildRequest_ThinkingEffort_AdaptiveModelPromotesToOutputEffort(t *testing.T) {
+	// On adaptive models, ThinkingEffort should NOT set budget_tokens (deprecated/rejected).
+	// Instead, when OutputEffort is unset, ThinkingEffort is promoted to output_config.effort.
 	cases := []struct {
-		model  string
-		effort llm.ThinkingEffort
+		thinking   llm.ThinkingEffort
+		wantEffort string
 	}{
-		{"claude-sonnet-4-6-20251120", llm.ThinkingEffortMinimal},
-		{"claude-sonnet-4-6-20251120", llm.ThinkingEffortLow},
-		{"claude-sonnet-4-6-20251120", llm.ThinkingEffortMedium},
-		{"claude-sonnet-4-6-20251120", llm.ThinkingEffortHigh},
-		{"claude-sonnet-4-6-20251120", llm.ThinkingEffortXHigh},
-		{"claude-opus-4-6-20251120", llm.ThinkingEffortMinimal},
-		{"claude-opus-4-6-20251120", llm.ThinkingEffortLow},
-		{"claude-opus-4-6-20251120", llm.ThinkingEffortMedium},
-		{"claude-opus-4-6-20251120", llm.ThinkingEffortHigh},
-		{"claude-opus-4-6-20251120", llm.ThinkingEffortXHigh},
+		{llm.ThinkingEffortMinimal, "low"},
+		{llm.ThinkingEffortLow, "low"},
+		{llm.ThinkingEffortMedium, "medium"},
+		{llm.ThinkingEffortHigh, "high"},
+		{llm.ThinkingEffortXHigh, "max"},
 	}
 	for _, tc := range cases {
-		t.Run(tc.model+"_"+string(tc.effort), func(t *testing.T) {
-			wantBudget, _ := tc.effort.ToBudget(thinkingBudgetLow, thinkingBudgetHigh)
+		for _, model := range []string{"claude-sonnet-4-6-20251120", "claude-opus-4-6-20251120"} {
+			t.Run(model+"_"+string(tc.thinking), func(t *testing.T) {
+				m := buildRequestMap(t, RequestOptions{
+					LLMRequest: llm.Request{
+						Model:          model,
+						Messages:       llm.Messages{llm.User("hi")},
+						ThinkingEffort: tc.thinking,
+					},
+				})
 
-			m := buildRequestMap(t, RequestOptions{
-				LLMRequest: llm.Request{
-					Model:          tc.model,
-					Messages:       llm.Messages{llm.User("hi")},
-					ThinkingEffort: tc.effort,
-				},
+				// Thinking must be bare adaptive — no budget_tokens
+				thinking, ok := m["thinking"].(map[string]any)
+				require.True(t, ok)
+				assert.Equal(t, "adaptive", thinking["type"])
+				_, hasBudget := thinking["budget_tokens"]
+				assert.False(t, hasBudget, "adaptive thinking must NOT use budget_tokens")
+
+				// ThinkingEffort must be promoted to output_config.effort
+				oc, ok := m["output_config"].(map[string]any)
+				require.True(t, ok, "output_config should be present")
+				assert.Equal(t, tc.wantEffort, oc["effort"], "ThinkingEffort should be promoted to output_config.effort")
 			})
-			thinking, ok := m["thinking"].(map[string]any)
-			require.True(t, ok, "thinking block should be present")
-			assert.Equal(t, "adaptive", thinking["type"], "adaptive models should use adaptive thinking")
-			assert.InDelta(t, float64(wantBudget), thinking["budget_tokens"], 0,
-				"adaptive thinking should carry budget_tokens when ThinkingEffort is set")
-		})
+		}
 	}
+}
+
+func TestBuildRequest_ThinkingEffort_AdaptiveModelOutputEffortTakesPrecedence(t *testing.T) {
+	// When both ThinkingEffort and OutputEffort are set on adaptive models,
+	// OutputEffort wins for output_config.effort.
+	m := buildRequestMap(t, RequestOptions{
+		LLMRequest: llm.Request{
+			Model:          "claude-sonnet-4-6-20251120",
+			Messages:       llm.Messages{llm.User("hi")},
+			ThinkingEffort: llm.ThinkingEffortXHigh,
+			OutputEffort:   llm.OutputEffortLow,
+		},
+	})
+
+	// Thinking must be bare adaptive
+	thinking, ok := m["thinking"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "adaptive", thinking["type"])
+	_, hasBudget := thinking["budget_tokens"]
+	assert.False(t, hasBudget)
+
+	// OutputEffort wins
+	oc, ok := m["output_config"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "low", oc["effort"], "explicit OutputEffort should take precedence")
 }
 
 func TestBuildRequest_ThinkingEffort_AdaptiveModelNoBudgetWhenNoEffort(t *testing.T) {
@@ -234,7 +260,7 @@ func TestIsMaxEffortSupported(t *testing.T) {
 	}{
 		{"claude-haiku-4-5-20251001", false},
 		{"claude-sonnet-4-5-20250514", false},
-		{"claude-sonnet-4-6-20251120", false},
+		{"claude-sonnet-4-6-20251120", true},
 		{"claude-opus-4-5-20250514", false},
 		{"claude-opus-4-6-20251120", true},
 	}
@@ -283,11 +309,11 @@ func TestBuildRequest_OutputEffort(t *testing.T) {
 		{"claude-sonnet-4-6-20251120", llm.OutputEffortLow, "low"},
 		{"claude-sonnet-4-6-20251120", llm.OutputEffortMedium, "medium"},
 		{"claude-sonnet-4-6-20251120", llm.OutputEffortHigh, "high"},
-		{"claude-sonnet-4-6-20251120", llm.OutputEffortMax, ""}, // max only on Opus 4.6
+		{"claude-sonnet-4-6-20251120", llm.OutputEffortMax, "max"}, // max supported on Sonnet 4.6
 		// Supported: Opus 4.5
 		{"claude-opus-4-5-20250514", llm.OutputEffortLow, "low"},
 		{"claude-opus-4-5-20250514", llm.OutputEffortHigh, "high"},
-		{"claude-opus-4-5-20250514", llm.OutputEffortMax, ""}, // max only on Opus 4.6
+		{"claude-opus-4-5-20250514", llm.OutputEffortMax, ""}, // max only on 4.6 models
 		// Supported: Opus 4.6 (all effort levels including max)
 		{"claude-opus-4-6-20251120", llm.OutputEffortLow, "low"},
 		{"claude-opus-4-6-20251120", llm.OutputEffortHigh, "high"},
@@ -416,7 +442,7 @@ func TestRequest_ControlParams(t *testing.T) {
 		assert.False(t, hasBudget, "no budget_tokens for bare adaptive")
 	})
 
-	t.Run("sonnet 4.6 with high effort", func(t *testing.T) {
+	t.Run("sonnet 4.6 with ThinkingEffort promotes to output_config", func(t *testing.T) {
 		req, err := BuildRequest(RequestOptions{
 			LLMRequest: llm.Request{
 				Model:          "claude-sonnet-4-6-20251120",
@@ -430,8 +456,12 @@ func TestRequest_ControlParams(t *testing.T) {
 		thinking, ok := p["thinking"].(map[string]any)
 		require.True(t, ok)
 		assert.Equal(t, "adaptive", thinking["type"])
-		wantBudget, _ := llm.ThinkingEffortHigh.ToBudget(thinkingBudgetLow, thinkingBudgetHigh)
-		assert.Equal(t, float64(wantBudget), thinking["budget_tokens"])
+		_, hasBudget := thinking["budget_tokens"]
+		assert.False(t, hasBudget, "no budget_tokens on adaptive")
+
+		oc, ok := p["output_config"].(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, "high", oc["effort"])
 	})
 
 	t.Run("output_config with effort", func(t *testing.T) {

@@ -87,15 +87,34 @@ const (
 	thinkingBudgetHigh = 31999
 )
 
+// thinkingToOutputEffort maps a ThinkingEffort to an OutputEffort for adaptive
+// models where budget_tokens is deprecated and depth is controlled via
+// output_config.effort instead.
+func thinkingToOutputEffort(t llm.ThinkingEffort) (llm.OutputEffort, bool) {
+	switch t {
+	case llm.ThinkingEffortMinimal, llm.ThinkingEffortLow:
+		return llm.OutputEffortLow, true
+	case llm.ThinkingEffortMedium:
+		return llm.OutputEffortMedium, true
+	case llm.ThinkingEffortHigh:
+		return llm.OutputEffortHigh, true
+	case llm.ThinkingEffortXHigh:
+		return llm.OutputEffortMax, true
+	default:
+		return llm.OutputEffortUnspecified, false
+	}
+}
+
 // isAdaptiveThinkingSupported returns true if the model supports adaptive ThinkingConfig (Sonnet 4.6 / Opus 4.6).
 func isAdaptiveThinkingSupported(model string) bool {
 	return strings.Contains(model, "claude-sonnet-4-6") ||
 		strings.Contains(model, "claude-opus-4-6")
 }
 
-// isMaxEffortSupported returns true if the model supports max effort (Opus 4.6 only).
+// isMaxEffortSupported returns true if the model supports max effort (Sonnet 4.6, Opus 4.6).
 func isMaxEffortSupported(model string) bool {
-	return strings.Contains(model, "claude-opus-4-6")
+	return strings.Contains(model, "claude-sonnet-4-6") ||
+		strings.Contains(model, "claude-opus-4-6")
 }
 
 // isEffortSupported returns true if the model supports output effort.
@@ -183,22 +202,17 @@ func BuildRequest(reqOpts RequestOptions) (Request, error) {
 	}
 
 	// Wire ThinkingConfig. Incompatible with forced tool_choice — downgrade to auto.
-	// Sonnet 4.6 / Opus 4.6 use adaptive ThinkingConfig by default (empty = let model decide).
+	// Sonnet 4.6 / Opus 4.6 use adaptive ThinkingConfig (budget_tokens is rejected).
 	// ThinkingEffort "none" explicitly disables ThinkingConfig.
-	// Other ThinkingEffort values use budget_tokens.
+	// On adaptive models, ThinkingEffort is promoted to output_config.effort.
+	// On older models, ThinkingEffort maps to budget_tokens.
 	if llmRequest.ThinkingEffort == llm.ThinkingEffortNone {
 		// User explicitly disabled ThinkingConfig
 		req.Thinking = &ThinkingConfig{Type: "disabled"}
 	} else if isAdaptiveThinkingSupported(req.Model) {
-		// Sonnet 4.6 / Opus 4.6: use adaptive thinking.
-		// When the user sets ThinkingEffort, map it to budget_tokens so the
-		// model's thinking depth is bounded. Without an explicit effort the
-		// model decides freely (no budget_tokens).
-		cfg := &ThinkingConfig{Type: "adaptive"}
-		if budget, ok := llmRequest.ThinkingEffort.ToBudget(thinkingBudgetLow, thinkingBudgetHigh); ok {
-			cfg.BudgetTokens = budget
-		}
-		req.Thinking = cfg
+		// Sonnet 4.6 / Opus 4.6: always bare adaptive (no budget_tokens).
+		// Depth is controlled via output_config.effort, wired below.
+		req.Thinking = &ThinkingConfig{Type: "adaptive"}
 	} else if !llmRequest.ThinkingEffort.IsEmpty() {
 		// Older models with explicit ThinkingEffort: use enabled + budget_tokens
 		budget, ok := llmRequest.ThinkingEffort.ToBudget(thinkingBudgetLow, thinkingBudgetHigh)
@@ -215,9 +229,16 @@ func BuildRequest(reqOpts RequestOptions) (Request, error) {
 	}
 
 	// Wire output effort (Anthropic only). Default to medium effort.
-	// Only set max effort on Opus 4.6. Effort is only supported on Sonnet 4.6, Opus 4.5, Opus 4.6.
+	// On adaptive models, ThinkingEffort is promoted to output_config.effort
+	// when OutputEffort is not explicitly set.
 	if isEffortSupported(req.Model) {
 		effort := llmRequest.OutputEffort
+		// Promote ThinkingEffort → OutputEffort on adaptive models when OutputEffort is unset.
+		if effort.IsEmpty() && isAdaptiveThinkingSupported(req.Model) {
+			if promoted, ok := thinkingToOutputEffort(llmRequest.ThinkingEffort); ok {
+				effort = promoted
+			}
+		}
 		if effort.IsEmpty() {
 			effort = llm.OutputEffortMedium
 		}
