@@ -99,7 +99,6 @@ func TestCountMessagesAndTools_ToolResult_PerMessageUsesToolOutput(t *testing.T)
 		"per-message token count must include tool result output content")
 }
 
-
 // TestCountMessage_ConsistentWithCountTokens verifies CountMessage produces
 // the same per-message values as CountTokens for the same messages.
 func TestCountMessage_ConsistentWithCountTokens(t *testing.T) {

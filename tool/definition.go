@@ -55,10 +55,10 @@ func (t Definition) Validate() error {
 //	tool := DefinitionFor[GetWeatherParams]("get_weather", "Get current weather")
 func DefinitionFor[T any](name, description string) Definition {
 	r := jsonschema.Reflector{
-		DoNotReference:             true, // Inline all types, no $defs
-		Anonymous:                  true, // No $id field
+		DoNotReference:             true,  // Inline all types, no $defs
+		Anonymous:                  true,  // No $id field
 		AllowAdditionalProperties:  false, // Require strict schema: additionalProperties: false
-		RequiredFromJSONSchemaTags: true, // Use jsonschema:"required" instead of all fields
+		RequiredFromJSONSchemaTags: true,  // Use jsonschema:"required" instead of all fields
 	}
 	schema := r.Reflect(new(T))
 	schema.Version = "" // Strip $schema URI

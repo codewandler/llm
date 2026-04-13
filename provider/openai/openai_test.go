@@ -630,7 +630,7 @@ func TestGetModelInfo_Categories(t *testing.T) {
 
 func TestMapThinkingEffort_NonReasoning(t *testing.T) {
 	models := []string{"gpt-4o", "gpt-4o-mini", "gpt-4", "gpt-3.5-turbo", "gpt-4.1"}
-	efforts := []llm.ThinkingEffort{"", llm.ThinkingEffortNone, llm.ThinkingEffortMinimal, llm.ThinkingEffortLow, llm.ThinkingEffortMedium, llm.ThinkingEffortHigh, llm.ThinkingEffortXHigh}
+	efforts := []llm.ThinkingEffort{llm.ThinkingEffortUnspecified, llm.ThinkingEffortNone, llm.ThinkingEffortMinimal, llm.ThinkingEffortLow, llm.ThinkingEffortMedium, llm.ThinkingEffortHigh, llm.ThinkingEffortXHigh}
 
 	for _, model := range models {
 		for _, effort := range efforts {
@@ -1067,8 +1067,8 @@ func TestRespBuildRequest_PromptCacheRetention_NotSupported(t *testing.T) {
 	// rejects prompt_cache_retention — they must never get the field.
 	models := []string{
 		"gpt-5.4-pro",
-		"gpt-5.3-codex",  // Codex-category: uses streamResponses but rejects the field
-		"gpt-5.1-codex",  // Codex-category: same
+		"gpt-5.3-codex", // Codex-category: uses streamResponses but rejects the field
+		"gpt-5.1-codex", // Codex-category: same
 	}
 
 	for _, model := range models {

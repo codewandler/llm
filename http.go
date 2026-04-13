@@ -175,9 +175,9 @@ func NewHttpClient(opts HttpClientOpts) *http.Client {
 		TLSHandshakeTimeout:   tlsTimeout,
 		ResponseHeaderTimeout: headTimeout,
 		MaxIdleConns:          100,
-		MaxIdleConnsPerHost:    10,
-		MaxConnsPerHost:        0,
-		IdleConnTimeout:        90 * time.Second,
+		MaxIdleConnsPerHost:   10,
+		MaxConnsPerHost:       0,
+		IdleConnTimeout:       90 * time.Second,
 		// Disable automatic decompression — we handle gzip, deflate, br, and
 		// zstd ourselves in decompressingTransport so we can support brotli
 		// and zstd which the standard Transport doesn't handle.
