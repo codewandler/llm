@@ -1,7 +1,11 @@
 package openrouter
 
 import (
+	"context"
 	"encoding/json"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -10,6 +14,7 @@ import (
 
 	"github.com/codewandler/llm"
 	"github.com/codewandler/llm/msg"
+	"github.com/codewandler/llm/tokencount"
 	"github.com/codewandler/llm/tool"
 )
 
@@ -323,4 +328,306 @@ func TestBuildRequest_Temperature(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, 0.7, req.Temperature)
+}
+
+func TestProvider_ResolveDefaultModel(t *testing.T) {
+	p := New()
+
+	m, err := p.Resolve(llm.ModelDefault)
+	require.NoError(t, err)
+	assert.Equal(t, "openrouter/auto", m.ID)
+}
+
+func TestProvider_ResolveAutoAlias(t *testing.T) {
+	p := New()
+
+	m, err := p.Resolve("auto")
+	require.NoError(t, err)
+	assert.Equal(t, "openrouter/auto", m.ID)
+}
+
+func TestProvider_CreateStream_DefaultModelApplied(t *testing.T) {
+	var gotModel string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer r.Body.Close()
+
+		var body map[string]any
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
+		gotModel, _ = body["model"].(string)
+
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, err := io.WriteString(w, "data: {\"id\":\"req_1\",\"model\":\"openai/gpt-4o\",\"choices\":[{\"delta\":{\"content\":\"ok\"}}]}\n\n")
+		require.NoError(t, err)
+		_, err = io.WriteString(w, "data: [DONE]\n\n")
+		require.NoError(t, err)
+	}))
+	defer server.Close()
+
+	p := New(
+		llm.WithBaseURL(server.URL),
+		llm.WithAPIKey("test-key"),
+	).WithDefaultModel("openai/gpt-4o")
+
+	stream, err := p.CreateStream(t.Context(), llm.Request{
+		Messages: msg.BuildTranscript(msg.User("Hello")),
+	})
+	require.NoError(t, err)
+
+	for range stream {
+	}
+
+	assert.Equal(t, "openai/gpt-4o", gotModel)
+}
+
+func TestProvider_CreateStream_ExplicitAutoModelPreservedWithCustomDefault(t *testing.T) {
+	var gotModel string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer r.Body.Close()
+
+		var body map[string]any
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
+		gotModel, _ = body["model"].(string)
+
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, err := io.WriteString(w, "data: {\"id\":\"req_1\",\"model\":\"openrouter/auto\",\"choices\":[{\"delta\":{\"content\":\"ok\"}}]}\n\n")
+		require.NoError(t, err)
+		_, err = io.WriteString(w, "data: [DONE]\n\n")
+		require.NoError(t, err)
+	}))
+	defer server.Close()
+
+	p := New(
+		llm.WithBaseURL(server.URL),
+		llm.WithAPIKey("test-key"),
+	).WithDefaultModel("openai/gpt-4o")
+
+	stream, err := p.CreateStream(t.Context(), llm.Request{
+		Model:    "auto",
+		Messages: msg.BuildTranscript(msg.User("Hello")),
+	})
+	require.NoError(t, err)
+
+	for range stream {
+	}
+
+	assert.Equal(t, "auto", gotModel)
+}
+
+func TestBuildRequest_DoesNotEnableReasoningByDefault(t *testing.T) {
+	body, err := buildRequest(llm.Request{
+		Model: "test/model",
+		Messages: msg.BuildTranscript(
+			msg.User("Hello"),
+		),
+	})
+	require.NoError(t, err)
+
+	var req map[string]any
+	require.NoError(t, json.Unmarshal(body, &req))
+
+	assert.NotContains(t, req, "include_reasoning")
+	assert.NotContains(t, req, "reasoning_effort")
+	assert.NotContains(t, req, "reasoning")
+}
+
+func TestBuildRequest_ThinkingEffortUsesReasoningObject(t *testing.T) {
+	body, err := buildRequest(llm.Request{
+		Model:          "test/model",
+		ThinkingEffort: llm.ThinkingEffortHigh,
+		Messages: msg.BuildTranscript(
+			msg.User("Hello"),
+		),
+	})
+	require.NoError(t, err)
+
+	var req map[string]any
+	require.NoError(t, json.Unmarshal(body, &req))
+
+	reasoning, ok := req["reasoning"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, string(llm.ThinkingEffortHigh), reasoning["effort"])
+}
+
+func TestBuildRequest_AssistantThinkingIncluded(t *testing.T) {
+	body, err := buildRequest(llm.Request{
+		Model: "test/model",
+		Messages: msg.BuildTranscript(
+			msg.User("Hello"),
+			msg.Assistant(
+				msg.Thinking("Let me think", "sig-1"),
+				msg.Text("Hi there!"),
+			),
+		),
+	})
+	require.NoError(t, err)
+
+	var req map[string]any
+	require.NoError(t, json.Unmarshal(body, &req))
+
+	messages, ok := req["messages"].([]any)
+	require.True(t, ok)
+	require.Len(t, messages, 2)
+
+	assistantMsg, ok := messages[1].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "Hi there!", assistantMsg["content"])
+	assert.Equal(t, "Let me think", assistantMsg["reasoning"])
+}
+
+func TestParseStream_ToolCallAccumulation(t *testing.T) {
+	events := collectStreamEvents(t, `data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_123","type":"function","function":{"name":"get_weather"}}]}}]}
+
+data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{\"location\""}}]}}]}
+
+data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":":\"Paris\"}"}}]}}]}
+
+data: {"choices":[{"finish_reason":"tool_calls"}]}
+
+data: [DONE]
+
+`)
+
+	var toolCalls []tool.Call
+	for _, event := range events {
+		if event.Type == llm.StreamEventToolCall {
+			toolCalls = append(toolCalls, event.Data.(*llm.ToolCallEvent).ToolCall)
+		}
+	}
+
+	require.Len(t, toolCalls, 1)
+	assert.Equal(t, "call_123", toolCalls[0].ToolCallID())
+	assert.Equal(t, "get_weather", toolCalls[0].ToolName())
+	assert.Equal(t, "Paris", toolCalls[0].ToolArgs()["location"])
+}
+
+func TestParseStream_DoesNotEmitToolCallsOnStopFinishReason(t *testing.T) {
+	events := collectStreamEvents(t, `data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_123","type":"function","function":{"name":"get_weather"}}]}}]}
+
+data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{\"location\":\"Paris\"}"}}]}}]}
+
+data: {"choices":[{"finish_reason":"stop"}]}
+
+data: [DONE]
+
+`)
+
+	for _, event := range events {
+		if event.Type == llm.StreamEventCreated {
+			continue
+		}
+		assert.NotEqual(t, llm.StreamEventToolCall, event.Type)
+	}
+}
+
+func TestParseStream_UsageWithDetails(t *testing.T) {
+	events := collectStreamEvents(t, `data: {"choices":[{"delta":{"content":"test"}}]}
+
+data: {"choices":[],"usage":{"prompt_tokens":100,"completion_tokens":50,"total_tokens":150,"cost":0.123,"prompt_tokens_details":{"cached_tokens":80},"completion_tokens_details":{"reasoning_tokens":30}}}
+
+data: [DONE]
+
+`)
+
+	var usage *llm.Usage
+	for _, event := range events {
+		if event.Type == llm.StreamEventUsageUpdated {
+			u := event.Data.(*llm.UsageUpdatedEvent)
+			usage = &u.Usage
+		}
+	}
+
+	require.NotNil(t, usage)
+	assert.Equal(t, 100, usage.InputTokens)
+	assert.Equal(t, 50, usage.OutputTokens)
+	assert.Equal(t, 150, usage.TotalTokens)
+	assert.Equal(t, 80, usage.CacheReadTokens)
+	assert.Equal(t, 30, usage.ReasoningTokens)
+	assert.Equal(t, 0.123, usage.Cost)
+}
+
+func TestParseStream_ReasoningDetails(t *testing.T) {
+	events := collectStreamEvents(t, `data: {"choices":[{"delta":{"reasoning_details":[{"type":"reasoning.text","text":"step 1","index":0}]}}]}
+
+data: [DONE]
+
+`)
+
+	var thoughts []string
+	for _, event := range events {
+		if event.Type == llm.StreamEventDelta {
+			delta := event.Data.(*llm.DeltaEvent)
+			if delta.Kind == llm.DeltaKindThinking {
+				thoughts = append(thoughts, delta.Thinking)
+			}
+		}
+	}
+
+	assert.Equal(t, []string{"step 1"}, thoughts)
+}
+
+func TestParseStream_ErrorBeforeStart(t *testing.T) {
+	events := collectStreamEvents(t, `data: {"error":{"message":"boom"}}
+
+`)
+
+	require.Len(t, events, 2)
+	assert.Equal(t, llm.StreamEventCreated, events[0].Type)
+	assert.Equal(t, llm.StreamEventError, events[1].Type)
+	for _, event := range events {
+		if event.Type == llm.StreamEventStarted {
+			assert.Fail(t, "unexpected started event before error")
+		}
+	}
+}
+
+func TestProvider_CountTokens_NormalizesProviderPrefix(t *testing.T) {
+	p := New()
+	req := tokencount.TokenCountRequest{
+		Model:    "openai/gpt-4o",
+		Messages: msg.BuildTranscript(msg.User("Count these tokens carefully.")),
+		Tools: []tool.Definition{
+			tool.DefinitionFor[struct {
+				Location string `json:"location" jsonschema:"required"`
+			}]("get_weather", "Get weather"),
+		},
+	}
+
+	got, err := p.CountTokens(context.Background(), req)
+	require.NoError(t, err)
+
+	expected := &tokencount.TokenCount{}
+	err = tokencount.CountMessagesAndTools(expected, tokencount.TokenCountRequest{
+		Model:    "gpt-4o",
+		Messages: req.Messages,
+		Tools:    req.Tools,
+	}, tokencount.CountOpts{Encoding: tokencount.EncodingO200K})
+	require.NoError(t, err)
+
+	assert.Equal(t, expected.InputTokens, got.InputTokens)
+	assert.Equal(t, expected.PerMessage, got.PerMessage)
+	assert.Equal(t, expected.ToolsTokens, got.ToolsTokens)
+	assert.Equal(t, expected.PerTool, got.PerTool)
+}
+
+func TestProvider_CountTokens_UsesDefaultModelWhenEmpty(t *testing.T) {
+	p := New().WithDefaultModel("openai/gpt-4o")
+
+	got, err := p.CountTokens(context.Background(), tokencount.TokenCountRequest{
+		Messages: msg.BuildTranscript(msg.User("Hello")),
+	})
+	require.NoError(t, err)
+	assert.Positive(t, got.InputTokens)
+}
+
+func collectStreamEvents(t *testing.T, sseData string) []llm.Envelope {
+	t.Helper()
+
+	pub, ch := llm.NewEventPublisher()
+	go parseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), pub)
+
+	var events []llm.Envelope
+	for event := range ch {
+		events = append(events, event)
+	}
+	return events
 }

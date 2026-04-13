@@ -53,11 +53,15 @@ func loadEmbeddedModels() llm.Models {
 
 	result := make([]llm.Model, len(models))
 	for i, m := range models {
-		result[i] = llm.Model{
+		model := llm.Model{
 			ID:       m.ID,
 			Name:     m.Name,
 			Provider: providerName,
 		}
+		if m.ID == "openrouter/auto" {
+			model.Aliases = []string{llm.ModelDefault, "auto", llm.ModelFast}
+		}
+		result[i] = model
 	}
 
 	return result

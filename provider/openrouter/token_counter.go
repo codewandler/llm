@@ -3,6 +3,7 @@ package openrouter
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/codewandler/llm/tokencount"
 )
@@ -17,11 +18,20 @@ var _ tokencount.TokenCounter = (*Provider)(nil)
 // No per-message overhead is applied — OpenRouter routes to many providers and
 // the overhead constants are model-family-specific.
 func (p *Provider) CountTokens(_ context.Context, req tokencount.TokenCountRequest) (*tokencount.TokenCount, error) {
-	enc, _ := tokencount.EncodingForModel(req.Model)
+	req.Model = p.normalizeRequestModel(req.Model)
+	normalizedModel := normalizeTokenizerModel(req.Model)
+	enc, _ := tokencount.EncodingForModel(normalizedModel)
 
 	tc := &tokencount.TokenCount{}
 	if err := tokencount.CountMessagesAndTools(tc, req, tokencount.CountOpts{Encoding: enc}); err != nil {
 		return nil, fmt.Errorf("openrouter: %w", err)
 	}
 	return tc, nil
+}
+
+func normalizeTokenizerModel(model string) string {
+	if slash := strings.IndexByte(model, '/'); slash >= 0 && slash < len(model)-1 {
+		return model[slash+1:]
+	}
+	return model
 }

@@ -78,10 +78,13 @@ func (p *Provider) WithDefaultModel(modelID string) *Provider {
 }
 
 // DefaultModel returns the configured default model ToolCallID.
-func (p *Provider) DefaultModel() string                    { return p.defaultModel }
-func (p *Provider) Name() string                            { return providerName }
-func (p *Provider) Models() llm.Models                      { return p.models }
-func (p *Provider) Resolve(model string) (llm.Model, error) { return p.models.Resolve(model) }
+func (p *Provider) DefaultModel() string { return p.defaultModel }
+func (p *Provider) Name() string         { return providerName }
+func (p *Provider) Models() llm.Models   { return p.models }
+func (p *Provider) Resolve(model string) (llm.Model, error) {
+	return p.models.Resolve(p.normalizeRequestModel(model))
+}
+
 func (p *Provider) FetchModels(ctx context.Context) ([]llm.Model, error) {
 	req, err := http.NewRequestWithContext(ctx, "GET", p.opts.BaseURL+"/v1/models", nil)
 	if err != nil {
@@ -122,11 +125,11 @@ func (p *Provider) FetchModels(ctx context.Context) ([]llm.Model, error) {
 }
 
 func (p *Provider) CreateStream(ctx context.Context, opts llm.Request) (llm.Stream, error) {
+	opts.Model = p.normalizeRequestModel(opts.Model)
 	if err := opts.Validate(); err != nil {
 		return nil, llm.NewErrBuildRequest(llm.ProviderNameOpenRouter, err)
 	}
 
-	// Resolve API key at stream creation time
 	apiKey, err := p.opts.ResolveAPIKey(ctx)
 	if err != nil {
 		return nil, llm.NewErrMissingAPIKey(llm.ProviderNameOpenRouter)
@@ -154,32 +157,44 @@ func (p *Provider) CreateStream(ctx context.Context, opts llm.Request) (llm.Stre
 
 	if resp.StatusCode != http.StatusOK {
 		//nolint:errcheck // intentional: defer Close is only for cleanup, failure after response reading is non-fatal
-		//nolint:errcheck // intentional: defer Close is only for cleanup, failure after response reading is non-fatal
 		defer resp.Body.Close()
 		errBody, _ := io.ReadAll(resp.Body)
 		return nil, llm.NewErrAPIError(llm.ProviderNameOpenRouter, resp.StatusCode, string(errBody))
 	}
+
 	stream, ch := llm.NewEventPublisher()
 	go parseStream(ctx, resp.Body, stream)
 	return ch, nil
 }
 
+func (p *Provider) normalizeRequestModel(model string) string {
+	switch model {
+	case "", llm.ModelDefault:
+		return p.defaultModel
+	default:
+		return model
+	}
+}
+
 // --- Request building ---
 
 type request struct {
-	Model            string           `json:"model"`
-	Messages         []messagePayload `json:"messages"`
-	Tools            []toolPayload    `json:"tools,omitempty"`
-	ToolChoice       any              `json:"tool_choice,omitempty"`
-	ThinkingEffort   string           `json:"reasoning_effort,omitempty"`
-	MaxTokens        int              `json:"max_tokens,omitempty"`
-	Temperature      float64          `json:"temperature,omitempty"`
-	TopP             float64          `json:"top_p,omitempty"`
-	TopK             int              `json:"top_k,omitempty"`
-	ResponseFormat   *respFormat      `json:"response_format,omitempty"`
-	Stream           bool             `json:"stream"`
-	StreamOptions    *streamOptions   `json:"stream_options,omitempty"`
-	IncludeReasoning bool             `json:"include_reasoning,omitempty"`
+	Model          string           `json:"model"`
+	Messages       []messagePayload `json:"messages"`
+	Tools          []toolPayload    `json:"tools,omitempty"`
+	ToolChoice     any              `json:"tool_choice,omitempty"`
+	Reasoning      *reasoningConfig `json:"reasoning,omitempty"`
+	MaxTokens      int              `json:"max_tokens,omitempty"`
+	Temperature    float64          `json:"temperature,omitempty"`
+	TopP           float64          `json:"top_p,omitempty"`
+	TopK           int              `json:"top_k,omitempty"`
+	ResponseFormat *respFormat      `json:"response_format,omitempty"`
+	Stream         bool             `json:"stream"`
+	StreamOptions  *streamOptions   `json:"stream_options,omitempty"`
+}
+
+type reasoningConfig struct {
+	Effort string `json:"effort,omitempty"`
 }
 
 type respFormat struct {
@@ -190,11 +205,19 @@ type streamOptions struct {
 	IncludeUsage bool `json:"include_usage"`
 }
 
+type reasoningDetailInput struct {
+	Type      string `json:"type"`
+	Text      string `json:"text,omitempty"`
+	Signature string `json:"signature,omitempty"`
+}
+
 type messagePayload struct {
-	Role       string         `json:"role"`
-	Content    string         `json:"content,omitempty"`
-	ToolCalls  []toolCallItem `json:"tool_calls,omitempty"`
-	ToolCallID string         `json:"tool_call_id,omitempty"`
+	Role             string                 `json:"role"`
+	Content          string                 `json:"content,omitempty"`
+	Reasoning        string                 `json:"reasoning,omitempty"`
+	ReasoningDetails []reasoningDetailInput `json:"reasoning_details,omitempty"`
+	ToolCalls        []toolCallItem         `json:"tool_calls,omitempty"`
+	ToolCallID       string                 `json:"tool_call_id,omitempty"`
 }
 
 type toolCallItem struct {
@@ -221,13 +244,11 @@ type functionPayload struct {
 
 func buildRequest(opts llm.Request) ([]byte, error) {
 	r := request{
-		Model:            opts.Model,
-		Stream:           true,
-		StreamOptions:    &streamOptions{IncludeUsage: true},
-		IncludeReasoning: true,
+		Model:         opts.Model,
+		Stream:        true,
+		StreamOptions: &streamOptions{IncludeUsage: true},
 	}
 
-	// Generation parameters
 	if opts.MaxTokens > 0 {
 		r.MaxTokens = opts.MaxTokens
 	}
@@ -243,6 +264,9 @@ func buildRequest(opts llm.Request) ([]byte, error) {
 	if opts.OutputFormat == llm.OutputFormatJSON {
 		r.ResponseFormat = &respFormat{Type: "json_object"}
 	}
+	if opts.ThinkingEffort != "" {
+		r.Reasoning = &reasoningConfig{Effort: string(opts.ThinkingEffort)}
+	}
 
 	for _, t := range opts.Tools {
 		r.Tools = append(r.Tools, toolPayload{
@@ -255,7 +279,6 @@ func buildRequest(opts llm.Request) ([]byte, error) {
 		})
 	}
 
-	// Set tool_choice based on opts.ToolChoice (OpenAI-compatible format)
 	if len(opts.Tools) > 0 {
 		switch tc := opts.ToolChoice.(type) {
 		case nil, llm.ToolChoiceAuto:
@@ -274,30 +297,38 @@ func buildRequest(opts llm.Request) ([]byte, error) {
 		}
 	}
 
-	// Set reasoning_effort if specified (OpenAI-compatible)
-	if opts.ThinkingEffort != "" {
-		r.ThinkingEffort = string(opts.ThinkingEffort)
-	}
-
 	for _, m := range opts.Messages {
 		switch m.Role {
 		case msg.RoleSystem:
 			r.Messages = append(r.Messages, messagePayload{
 				Role:    "system",
 				Content: m.Text(),
-				// TODO: cache!
 			})
-
 		case msg.RoleUser:
 			r.Messages = append(r.Messages, messagePayload{
 				Role:    "user",
 				Content: m.Text(),
 			})
-
 		case msg.RoleAssistant:
 			mp := messagePayload{
 				Role:    "assistant",
 				Content: m.Text(),
+			}
+			thinkingParts := m.Parts.ByType(msg.PartTypeThinking)
+			if len(thinkingParts) > 0 {
+				var reasoningText strings.Builder
+				for _, part := range thinkingParts {
+					if part.Thinking == nil {
+						continue
+					}
+					reasoningText.WriteString(part.Thinking.Text)
+					mp.ReasoningDetails = append(mp.ReasoningDetails, reasoningDetailInput{
+						Type:      "reasoning.text",
+						Text:      part.Thinking.Text,
+						Signature: part.Thinking.Signature,
+					})
+				}
+				mp.Reasoning = reasoningText.String()
 			}
 			for _, tc := range m.ToolCalls() {
 				argsJSON, _ := json.Marshal(tc.Args)
@@ -311,7 +342,6 @@ func buildRequest(opts llm.Request) ([]byte, error) {
 				})
 			}
 			r.Messages = append(r.Messages, mp)
-
 		case msg.RoleTool:
 			for _, tr := range m.ToolResults() {
 				r.Messages = append(r.Messages, messagePayload{
@@ -328,15 +358,23 @@ func buildRequest(opts llm.Request) ([]byte, error) {
 
 // --- SSE stream parsing ---
 
+type streamReasoningDetail struct {
+	Type      string  `json:"type"`
+	Text      string  `json:"text,omitempty"`
+	Signature string  `json:"signature,omitempty"`
+	Index     *uint32 `json:"index,omitempty"`
+}
+
 type streamChunk struct {
 	ID      string `json:"id"`
 	Object  string `json:"object"`
 	Model   string `json:"model"`
 	Choices []struct {
 		Delta struct {
-			Content          string            `json:"content,omitempty"`
-			ReasoningContent string            `json:"reasoning_content,omitempty"`
-			ToolCalls        []streamToolDelta `json:"tool_calls,omitempty"`
+			Content          string                  `json:"content,omitempty"`
+			ReasoningContent string                  `json:"reasoning_content,omitempty"`
+			ReasoningDetails []streamReasoningDetail `json:"reasoning_details,omitempty"`
+			ToolCalls        []streamToolDelta       `json:"tool_calls,omitempty"`
 		} `json:"delta"`
 		FinishReason *string `json:"finish_reason,omitempty"`
 	} `json:"choices"`
@@ -404,17 +442,17 @@ func parseStream(ctx context.Context, body io.ReadCloser, pub llm.Publisher) {
 			return true
 		}
 
+		if chunk.Error != nil {
+			pub.Error(llm.NewErrProviderMsg(llm.ProviderNameOpenRouter, chunk.Error.Message))
+			return false
+		}
+
 		if !startEmitted {
 			startEmitted = true
 			pub.Started(llm.StreamStartedEvent{
 				Model:     chunk.Model,
 				RequestID: chunk.ID,
 			})
-		}
-
-		if chunk.Error != nil {
-			pub.Error(llm.NewErrProviderMsg(llm.ProviderNameOpenRouter, chunk.Error.Message))
-			return false
 		}
 
 		if chunk.Usage != nil {
@@ -437,12 +475,19 @@ func parseStream(ctx context.Context, body io.ReadCloser, pub llm.Publisher) {
 			if choice.Delta.ReasoningContent != "" {
 				pub.Delta(llm.ThinkingDelta(choice.Delta.ReasoningContent))
 			}
+			for _, detail := range choice.Delta.ReasoningDetails {
+				if detail.Text == "" {
+					continue
+				}
+				delta := llm.ThinkingDelta(detail.Text)
+				delta.Index = detail.Index
+				pub.Delta(delta)
+			}
 			if choice.Delta.Content != "" {
 				pub.Delta(llm.TextDelta(choice.Delta.Content))
 			}
 			for _, tc := range choice.Delta.ToolCalls {
 				accum, ok := activeTools[tc.Index]
-
 				if !ok {
 					accum = &toolAccum{}
 					activeTools[tc.Index] = accum
@@ -462,7 +507,9 @@ func parseStream(ctx context.Context, body io.ReadCloser, pub llm.Publisher) {
 			}
 			if choice.FinishReason != nil {
 				stopReason = finishReasonToStopReason(*choice.FinishReason)
-				emitToolCalls(activeTools, pub)
+				if *choice.FinishReason == "tool_calls" {
+					emitToolCalls(activeTools, pub)
+				}
 			}
 		}
 

@@ -292,6 +292,121 @@ func testProvider(t *testing.T, tt ProviderTestCase) {
 				assert.True(t, gotResponse, "Should get a response after tool result")
 			})
 
+			if tt.name == "openrouter" {
+				t.Run("reasoning_effort", func(t *testing.T) {
+					stream, err := streamer.CreateStream(ctx, llm.Request{
+						Model: getModelID(),
+						Messages: msg.BuildTranscript(
+							msg.User("Answer briefly: what is 2+2?"),
+						),
+						ThinkingEffort: llm.ThinkingEffortLow,
+					})
+					require.NoError(t, err)
+
+					var (
+						gotCompleted bool
+						gotNonError  bool
+					)
+					for event := range stream {
+						switch event.Type {
+						case llm.StreamEventError:
+							t.Fatalf("Unexpected error event: %v", event.Data.(*llm.ErrorEvent).Error)
+						case llm.StreamEventDelta, llm.StreamEventStarted, llm.StreamEventUsageUpdated:
+							gotNonError = true
+						case llm.StreamEventCompleted:
+							gotCompleted = true
+						}
+					}
+
+					assert.True(t, gotNonError, "expected non-error events when reasoning effort is enabled")
+					assert.True(t, gotCompleted, "stream should complete when reasoning effort is enabled")
+				})
+
+				t.Run("explicit_auto_model_with_custom_default", func(t *testing.T) {
+					openrouterProvider, ok := tt.provider.(*openrouter.Provider)
+					require.True(t, ok)
+
+					originalDefault := openrouterProvider.DefaultModel()
+					openrouterProvider.WithDefaultModel("openai/gpt-4o")
+					defer openrouterProvider.WithDefaultModel(originalDefault)
+
+					stream, err := streamer.CreateStream(ctx, llm.Request{
+						Model: "auto",
+						Messages: msg.BuildTranscript(
+							msg.User("Say hello in one word."),
+						),
+					})
+					require.NoError(t, err)
+
+					var start *llm.StreamStartedEvent
+					for event := range stream {
+						switch event.Type {
+						case llm.StreamEventError:
+							t.Fatalf("Unexpected error event: %v", event.Data.(*llm.ErrorEvent).Error)
+						case llm.StreamEventStarted:
+							start = event.Data.(*llm.StreamStartedEvent)
+						}
+					}
+
+					require.NotNil(t, start)
+					assert.NotEmpty(t, start.Model)
+				})
+
+				t.Run("reasoning_deltas_and_usage", func(t *testing.T) {
+					model := os.Getenv("OPENROUTER_REASONING_MODEL")
+					if model == "" {
+						model = "anthropic/claude-sonnet-4.5"
+					}
+
+					stream, err := streamer.CreateStream(ctx, llm.Request{
+						Model: model,
+						Messages: msg.BuildTranscript(
+							msg.System("Use reasoning if available, but keep the final answer short."),
+							msg.User("What is 17 times 19?"),
+						),
+						ThinkingEffort: llm.ThinkingEffortLow,
+					})
+					require.NoError(t, err)
+
+					var (
+						gotCompleted     bool
+						gotThinkingDelta bool
+						usage            *llm.Usage
+					)
+					for event := range stream {
+						switch event.Type {
+						case llm.StreamEventError:
+							t.Fatalf("Unexpected error event: %v", event.Data.(*llm.ErrorEvent).Error)
+						case llm.StreamEventDelta:
+							delta := event.Data.(*llm.DeltaEvent)
+							if delta.Kind == llm.DeltaKindThinking {
+								gotThinkingDelta = true
+							}
+						case llm.StreamEventUsageUpdated:
+							u := event.Data.(*llm.UsageUpdatedEvent)
+							usage = &u.Usage
+						case llm.StreamEventCompleted:
+							gotCompleted = true
+						}
+					}
+
+					assert.True(t, gotCompleted, "stream should complete")
+					if gotThinkingDelta {
+						t.Log("received thinking deltas from OpenRouter reasoning model")
+					} else {
+						t.Skip("model did not emit reasoning deltas; OpenRouter/provider behavior is model-dependent")
+					}
+					if usage != nil {
+						assert.GreaterOrEqual(t, usage.InputTokens, 0)
+						assert.GreaterOrEqual(t, usage.OutputTokens, 0)
+						assert.GreaterOrEqual(t, usage.TotalTokens, 0)
+						t.Logf("usage: input=%d output=%d total=%d cached=%d reasoning=%d cost=%f", usage.InputTokens, usage.OutputTokens, usage.TotalTokens, usage.CacheReadTokens, usage.ReasoningTokens, usage.Cost)
+					} else {
+						t.Skip("stream completed without usage update; provider/model did not return usage details")
+					}
+				})
+			}
+
 		})
 
 	})

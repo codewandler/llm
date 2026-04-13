@@ -1,5 +1,33 @@
 # Changelog
 
+## v0.34.1
+
+### Bug Fixes
+
+#### OpenRouter default model, reasoning, and usage handling (`provider/openrouter`)
+
+The OpenRouter provider had several correctness gaps around model resolution,
+reasoning support, stream parsing, and token counting.
+
+- Apply the configured default model before request validation so empty-model
+  requests no longer fail with `model is required`.
+- Add `openrouter/auto` aliases for `default`, `auto`, and `fast`, while keeping
+  explicit `Model: "auto"` requests distinct from a custom configured default.
+- Stop enabling reasoning on every request by default; only send the OpenRouter
+  `reasoning` object when `ThinkingEffort` is explicitly requested.
+- Preserve assistant thinking blocks in request history via `reasoning` /
+  `reasoning_details` fields for OpenRouter-compatible reasoning models.
+- Parse structured `reasoning_details` deltas, keep legacy
+  `reasoning_content` support, emit provider errors before `Started`, and only
+  flush accumulated tool calls when `finish_reason == "tool_calls"`.
+- Normalize provider-prefixed OpenRouter model IDs for token counting (for
+  example `openai/gpt-4o`) and fall back to the provider default model when the
+  request leaves `Model` empty.
+- Add focused unit coverage plus live OpenRouter integration coverage for
+  reasoning effort, explicit `auto` routing, reasoning deltas, and usage details.
+
+---
+
 ## v0.33.1
 
 ### Bug Fixes
