@@ -320,6 +320,8 @@ func (t *codexTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 //  2. Deletes "max_tokens" and "max_output_tokens" — neither field is
 //     supported by chatgpt.com/backend-api/codex/responses. The backend
 //     controls output length itself; supplying these fields returns HTTP 400.
+//  3. Deletes "prompt_cache_retention" — the Codex backend does not support
+//     this Responses API field and returns HTTP 400 if it is present.
 func codexInjectStore(b io.ReadCloser) (io.ReadCloser, int64, error) {
 	//nolint:errcheck // intentional: caller replaces body only on success
 	defer b.Close()
@@ -328,9 +330,10 @@ func codexInjectStore(b io.ReadCloser) (io.ReadCloser, int64, error) {
 		return nil, 0, fmt.Errorf("decode body: %w", err)
 	}
 	m["store"] = false
-	// The Codex backend does not accept token-limit parameters.
+	// The Codex backend does not accept these parameters.
 	delete(m, "max_tokens")
 	delete(m, "max_output_tokens")
+	delete(m, "prompt_cache_retention")
 	out, err := json.Marshal(m)
 	if err != nil {
 		return nil, 0, fmt.Errorf("re-encode body: %w", err)

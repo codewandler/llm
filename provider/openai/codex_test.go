@@ -5,8 +5,12 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -17,6 +21,41 @@ import (
 )
 
 // ── unit tests ────────────────────────────────────────────────────────────────
+
+func TestCodexInjectStore_SetsStoreFlag(t *testing.T) {
+	input := `{"model":"gpt-5.3-codex","stream":true}`
+	rc, _, err := codexInjectStore(io.NopCloser(strings.NewReader(input)))
+	require.NoError(t, err)
+	var m map[string]any
+	require.NoError(t, json.NewDecoder(rc).Decode(&m))
+	assert.Equal(t, false, m["store"], "store must be set to false")
+}
+
+func TestCodexInjectStore_StripsUnsupportedFields(t *testing.T) {
+	// max_tokens, max_output_tokens, and prompt_cache_retention are all
+	// rejected by the Codex backend with HTTP 400.
+	input := `{"model":"gpt-5.3-codex","max_tokens":1000,"max_output_tokens":1000,"prompt_cache_retention":"24h","stream":true}`
+	rc, _, err := codexInjectStore(io.NopCloser(strings.NewReader(input)))
+	require.NoError(t, err)
+	var m map[string]any
+	require.NoError(t, json.NewDecoder(rc).Decode(&m))
+	_, hasMaxTokens := m["max_tokens"]
+	_, hasMaxOutputTokens := m["max_output_tokens"]
+	_, hasCacheRetention := m["prompt_cache_retention"]
+	assert.False(t, hasMaxTokens, "max_tokens must be stripped")
+	assert.False(t, hasMaxOutputTokens, "max_output_tokens must be stripped")
+	assert.False(t, hasCacheRetention, "prompt_cache_retention must be stripped")
+}
+
+func TestCodexInjectStore_PreservesOtherFields(t *testing.T) {
+	input := `{"model":"gpt-5.3-codex","stream":true,"instructions":"be brief"}`
+	rc, _, err := codexInjectStore(io.NopCloser(strings.NewReader(input)))
+	require.NoError(t, err)
+	var m map[string]any
+	require.NoError(t, json.NewDecoder(rc).Decode(&m))
+	assert.Equal(t, "gpt-5.3-codex", m["model"])
+	assert.Equal(t, "be brief", m["instructions"])
+}
 
 func TestCodexJWTExpiry_ValidToken(t *testing.T) {
 	exp := time.Now().Add(10 * time.Minute).Unix()
@@ -188,6 +227,70 @@ func TestCodexAuth_ListModels_WithLocalCredentials(t *testing.T) {
 	assert.Contains(t, apiErr.Error(), "403",
 		"expected HTTP 403 (missing scope), got: %v", apiErr)
 	t.Logf("confirmed expected scope rejection: %v", apiErr)
+}
+
+// TestCodexTransport_StripsPromptCacheRetention verifies that codexTransport
+// removes prompt_cache_retention from the request body before it reaches the
+// Codex backend. The Codex backend returns HTTP 400 for this field, so it
+// must be stripped regardless of how the request was built.
+func TestCodexTransport_StripsPromptCacheRetention(t *testing.T) {
+	var capturedBody []byte
+
+	// httptest server that records the raw body and returns a minimal
+	// streaming response so the provider doesn't error out.
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var err error
+		capturedBody, err = io.ReadAll(r.Body)
+		require.NoError(t, err)
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		// Minimal valid response.completed event.
+		_, _ = fmt.Fprintln(w, `event: response.completed`)
+		_, _ = fmt.Fprintln(w, `data: {"type":"response.completed","response":{"status":"completed","output":[],"usage":{"input_tokens":5,"output_tokens":2,"total_tokens":7}}}`)
+		_, _ = fmt.Fprintln(w, ``)
+	}))
+	defer server.Close()
+
+	// Build a CodexAuth with a fake long-lived JWT so Token() does not refresh.
+	exp := time.Now().Add(1 * time.Hour).Unix()
+	accessToken := makeJWT(t, map[string]any{"exp": exp, "sub": "test-user"})
+	auth := codexAuthFile{
+		AuthMode: "chatgpt",
+		Tokens: codexTokenStore{
+			AccessToken: accessToken,
+			AccountID:   "test-account",
+		},
+	}
+	path := writeAuthFile(t, auth)
+	c, err := loadCodexAuthFrom(path)
+	require.NoError(t, err)
+
+	// Build the transport, pointing it at the test server.
+	base := &http.Transport{} // plain transport, no TLS needed for httptest
+	transport := &codexTransport{base: base, auth: c}
+
+	// Build a body that contains prompt_cache_retention (as respBuildRequest
+	// would for a gpt-5.4 model) and send it through the transport.
+	reqBody := `{"model":"gpt-5.4","stream":true,"prompt_cache_retention":"24h","input":[{"role":"user","content":"hi"}]}`
+	httpReq, err := http.NewRequest(http.MethodPost, server.URL+"/v1/responses", strings.NewReader(reqBody))
+	require.NoError(t, err)
+	httpReq.Header.Set("Content-Type", "application/json")
+
+	//nolint:errcheck // response body not needed for this test
+	resp, _ := transport.RoundTrip(httpReq)
+	if resp != nil {
+		_ = resp.Body.Close()
+	}
+
+	require.NotEmpty(t, capturedBody, "test server must have received a request body")
+	var received map[string]any
+	require.NoError(t, json.Unmarshal(capturedBody, &received))
+
+	_, hasCacheRetention := received["prompt_cache_retention"]
+	assert.False(t, hasCacheRetention,
+		"prompt_cache_retention must be stripped by codexTransport before reaching the backend")
+	assert.Equal(t, false, received["store"],
+		"store:false must be injected by codexTransport")
 }
 
 // TestCodexAuth_Stream_ChatCompletions verifies that calling /v1/chat/completions
