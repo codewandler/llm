@@ -31,8 +31,8 @@ func (m modelMap) Models() llm.Models {
 }
 
 var modelPreferences = modelMap{
-	ModelHaiku:  {ID: ModelHaiku, Name: "Claude Haiku 4.5", Provider: providerName, Aliases: []string{modelNameHaiku, llm.ModelDefault, llm.ModelFast}},
-	ModelSonnet: {ID: ModelSonnet, Name: "Claude Sonnet 4.6", Provider: providerName, Aliases: []string{modelNameSonnet}},
+	ModelHaiku:  {ID: ModelHaiku, Name: "Claude Haiku 4.5", Provider: providerName, Aliases: []string{modelNameHaiku, llm.ModelFast}},
+	ModelSonnet: {ID: ModelSonnet, Name: "Claude Sonnet 4.6", Provider: providerName, Aliases: []string{modelNameSonnet, llm.ModelDefault}},
 	ModelOpus:   {ID: ModelOpus, Name: "Claude Opus 4.6", Provider: providerName, Aliases: []string{modelNameOpus, llm.ModelPowerful}},
 }
 

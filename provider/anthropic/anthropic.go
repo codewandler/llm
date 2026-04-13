@@ -3,6 +3,7 @@ package anthropic
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"io"
 	"net/http"
 	"strings"
@@ -74,9 +75,14 @@ func (p *Provider) CreateStream(ctx context.Context, opts llm.Request) (llm.Stre
 		return nil, llm.NewErrMissingAPIKey(llm.ProviderNameAnthropic)
 	}
 
-	body, err := BuildRequestBytes(RequestOptions{
+	apiReq, err := BuildRequest(RequestOptions{
 		LLMRequest: opts,
 	})
+	if err != nil {
+		return nil, llm.NewErrBuildRequest(llm.ProviderNameAnthropic, err)
+	}
+
+	body, err := json.MarshalIndent(apiReq, "", "  ")
 	if err != nil {
 		return nil, llm.NewErrBuildRequest(llm.ProviderNameAnthropic, err)
 	}
@@ -109,6 +115,8 @@ func (p *Provider) CreateStream(ctx context.Context, opts llm.Request) (llm.Stre
 	return ParseStream(ctx, resp.Body, ParseOpts{
 		Model:           opts.Model,
 		ResponseHeaders: headers,
+		LLMRequest:      &opts,
+		RequestParams:   apiReq.ControlParams(),
 	}), nil
 }
 

@@ -33,6 +33,25 @@ type Request struct {
 	OutputConfig *outputConfig    `json:"output_config,omitempty"`
 }
 
+// ControlParams returns the request as a map[string]any with verbose fields
+// (system, messages, full tool definitions) stripped out. What remains are the
+// control knobs actually sent to the Anthropic API — useful for observability.
+func (r Request) ControlParams() map[string]any {
+	b, err := json.Marshal(r)
+	if err != nil {
+		return nil
+	}
+	var m map[string]any
+	if err := json.Unmarshal(b, &m); err != nil {
+		return nil
+	}
+	delete(m, "system")
+	delete(m, "messages")
+	delete(m, "tools")
+	delete(m, "metadata")
+	return m
+}
+
 type outputConfig struct {
 	Format *jsonOutputFormat `json:"format,omitempty"`
 	Effort string            `json:"effort,omitempty"`
@@ -60,6 +79,13 @@ type RequestOptions struct {
 	UserID       string
 	LLMRequest   llm.Request
 }
+
+const (
+	// thinkingBudgetLow is the minimum thinking budget (tokens).
+	thinkingBudgetLow = 1024
+	// thinkingBudgetHigh is the maximum thinking budget — must be < max_tokens (32000).
+	thinkingBudgetHigh = 31999
+)
 
 // isAdaptiveThinkingSupported returns true if the model supports adaptive ThinkingConfig (Sonnet 4.6 / Opus 4.6).
 func isAdaptiveThinkingSupported(model string) bool {
@@ -125,7 +151,7 @@ func BuildRequest(reqOpts RequestOptions) (Request, error) {
 		req.TopP = llmRequest.TopP
 	}
 	// Output config: format and/or effort
-	if llmRequest.OutputFormat == llm.OutputFormatJSON || llmRequest.OutputEffort != "" {
+	if llmRequest.OutputFormat == llm.OutputFormatJSON || !llmRequest.OutputEffort.IsEmpty() {
 		if req.OutputConfig == nil {
 			req.OutputConfig = &outputConfig{}
 		}
@@ -164,24 +190,25 @@ func BuildRequest(reqOpts RequestOptions) (Request, error) {
 		// User explicitly disabled ThinkingConfig
 		req.Thinking = &ThinkingConfig{Type: "disabled"}
 	} else if isAdaptiveThinkingSupported(req.Model) {
-		// Sonnet 4.6 / Opus 4.6: use adaptive by default (let model decide when to think)
-		// Or if user set ThinkingEffort, still use adaptive (effort controls depth)
-		req.Thinking = &ThinkingConfig{Type: "adaptive"}
-	} else if llmRequest.ThinkingEffort != "" {
-		// Older models with explicit ThinkingEffort: use enabled + budget_tokens
-		budgetTokens := 5000
-		switch llmRequest.ThinkingEffort {
-		case llm.ThinkingEffortLow:
-			budgetTokens = 1024
-		case llm.ThinkingEffortMedium:
-			budgetTokens = 5000
-		case llm.ThinkingEffortHigh:
-			budgetTokens = 16000
+		// Sonnet 4.6 / Opus 4.6: use adaptive thinking.
+		// When the user sets ThinkingEffort, map it to budget_tokens so the
+		// model's thinking depth is bounded. Without an explicit effort the
+		// model decides freely (no budget_tokens).
+		cfg := &ThinkingConfig{Type: "adaptive"}
+		if budget, ok := llmRequest.ThinkingEffort.ToBudget(thinkingBudgetLow, thinkingBudgetHigh); ok {
+			cfg.BudgetTokens = budget
 		}
-		req.Thinking = &ThinkingConfig{Type: "enabled", BudgetTokens: budgetTokens}
+		req.Thinking = cfg
+	} else if !llmRequest.ThinkingEffort.IsEmpty() {
+		// Older models with explicit ThinkingEffort: use enabled + budget_tokens
+		budget, ok := llmRequest.ThinkingEffort.ToBudget(thinkingBudgetLow, thinkingBudgetHigh)
+		if !ok {
+			budget = thinkingBudgetLow + 2*(thinkingBudgetHigh-thinkingBudgetLow)/4 // medium fallback
+		}
+		req.Thinking = &ThinkingConfig{Type: "enabled", BudgetTokens: budget}
 	} else {
 		// Haiku / older models: default to enabled ThinkingConfig with high budget_tokens (like Claude Code)
-		req.Thinking = &ThinkingConfig{Type: "enabled", BudgetTokens: 31999}
+		req.Thinking = &ThinkingConfig{Type: "enabled", BudgetTokens: thinkingBudgetHigh}
 	}
 	if _, isForced := llmRequest.ToolChoice.(llm.ToolChoiceTool); isForced {
 		llmRequest.ToolChoice = llm.ToolChoiceAuto{}
@@ -191,7 +218,7 @@ func BuildRequest(reqOpts RequestOptions) (Request, error) {
 	// Only set max effort on Opus 4.6. Effort is only supported on Sonnet 4.6, Opus 4.5, Opus 4.6.
 	if isEffortSupported(req.Model) {
 		effort := llmRequest.OutputEffort
-		if effort == "" {
+		if effort.IsEmpty() {
 			effort = llm.OutputEffortMedium
 		}
 		effortStr := string(effort)

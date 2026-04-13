@@ -22,7 +22,7 @@ func TestNormalizeModel_Aliases(t *testing.T) {
 		{"Haiku", ModelHaiku},
 		{"claude-sonnet-4-6", "claude-sonnet-4-6"},
 		{"", ModelDefault},
-		{llm.ModelDefault, ModelDefault},
+		{llm.ModelDefault, ModelSonnet},
 	}
 	for _, tc := range cases {
 		t.Run(tc.in, func(t *testing.T) {

@@ -174,7 +174,7 @@ func ccBuildRequest(opts llm.Request) ([]byte, error) {
 	}
 
 	// Thought effort (already mapped/validated by Provider.Publisher).
-	if opts.ThinkingEffort != "" {
+	if !opts.ThinkingEffort.IsEmpty() {
 		r.ThinkingEffort = string(opts.ThinkingEffort)
 	}
 

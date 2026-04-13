@@ -24,6 +24,14 @@ type ParseOpts struct {
 	// ResponseHeaders contains HTTP response headers, used to extract rate-limit info.
 	// Keys should be lowercase header names.
 	ResponseHeaders map[string]string
+
+	// RequestParams, when non-nil, is published as a RequestParamsEvent at
+	// the beginning of the stream. Use Request.ControlParams() to build it.
+	RequestParams map[string]any
+
+	// LLMRequest is the final llm.Request used to build the provider request.
+	// Included in the RequestParamsEvent for observability.
+	LLMRequest *llm.Request
 }
 
 // ParseStream reads an Anthropic-format SSE response body in a background
@@ -43,6 +51,13 @@ func ParseStream(ctx context.Context, body io.ReadCloser, opts ParseOpts) llm.St
 // publishes events to pub. It closes pub when done.
 func parseStream(ctx context.Context, body io.ReadCloser, pub llm.Publisher, opts ParseOpts) {
 	defer pub.Close()
+
+	if opts.RequestParams != nil || opts.LLMRequest != nil {
+		pub.Publish(&llm.RequestParamsEvent{
+			LLMRequest:            opts.LLMRequest,
+			ProviderRequestParams: opts.RequestParams,
+		})
+	}
 
 	proc := newStreamProcessor(opts, pub)
 	err := sse.ForEachDataLine(ctx, body, func(ev sse.Event) bool {

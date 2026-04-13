@@ -57,14 +57,17 @@ func TestBuildRequest_ThinkingEffort_Defaults(t *testing.T) {
 func TestBuildRequest_ThinkingEffort(t *testing.T) {
 	cases := []struct {
 		effort llm.ThinkingEffort
-		budget int
 	}{
-		{llm.ThinkingEffortLow, 1024},
-		{llm.ThinkingEffortMedium, 5000},
-		{llm.ThinkingEffortHigh, 16000},
+		{llm.ThinkingEffortMinimal},
+		{llm.ThinkingEffortLow},
+		{llm.ThinkingEffortMedium},
+		{llm.ThinkingEffortHigh},
+		{llm.ThinkingEffortXHigh},
 	}
 	for _, tc := range cases {
 		t.Run(string(tc.effort), func(t *testing.T) {
+			wantBudget, _ := tc.effort.ToBudget(thinkingBudgetLow, thinkingBudgetHigh)
+
 			m := buildRequestMap(t, RequestOptions{
 				LLMRequest: llm.Request{
 					Model:          "claude-sonnet-4-5",
@@ -75,7 +78,66 @@ func TestBuildRequest_ThinkingEffort(t *testing.T) {
 			thinking, ok := m["thinking"].(map[string]any)
 			require.True(t, ok, "thinking block should be present")
 			assert.Equal(t, "enabled", thinking["type"])
-			assert.InDelta(t, float64(tc.budget), thinking["budget_tokens"], 0)
+			assert.InDelta(t, float64(wantBudget), thinking["budget_tokens"], 0)
+		})
+	}
+}
+
+func TestBuildRequest_ThinkingEffort_AdaptiveModelRespectsEffort(t *testing.T) {
+	// When a user explicitly sets ThinkingEffort on an adaptive-capable model
+	// (Sonnet 4.6, Opus 4.6), the effort must be mapped to budget_tokens
+	// on the adaptive config — not silently dropped.
+	cases := []struct {
+		model  string
+		effort llm.ThinkingEffort
+	}{
+		{"claude-sonnet-4-6-20251120", llm.ThinkingEffortMinimal},
+		{"claude-sonnet-4-6-20251120", llm.ThinkingEffortLow},
+		{"claude-sonnet-4-6-20251120", llm.ThinkingEffortMedium},
+		{"claude-sonnet-4-6-20251120", llm.ThinkingEffortHigh},
+		{"claude-sonnet-4-6-20251120", llm.ThinkingEffortXHigh},
+		{"claude-opus-4-6-20251120", llm.ThinkingEffortMinimal},
+		{"claude-opus-4-6-20251120", llm.ThinkingEffortLow},
+		{"claude-opus-4-6-20251120", llm.ThinkingEffortMedium},
+		{"claude-opus-4-6-20251120", llm.ThinkingEffortHigh},
+		{"claude-opus-4-6-20251120", llm.ThinkingEffortXHigh},
+	}
+	for _, tc := range cases {
+		t.Run(tc.model+"_"+string(tc.effort), func(t *testing.T) {
+			wantBudget, _ := tc.effort.ToBudget(thinkingBudgetLow, thinkingBudgetHigh)
+
+			m := buildRequestMap(t, RequestOptions{
+				LLMRequest: llm.Request{
+					Model:          tc.model,
+					Messages:       llm.Messages{llm.User("hi")},
+					ThinkingEffort: tc.effort,
+				},
+			})
+			thinking, ok := m["thinking"].(map[string]any)
+			require.True(t, ok, "thinking block should be present")
+			assert.Equal(t, "adaptive", thinking["type"], "adaptive models should use adaptive thinking")
+			assert.InDelta(t, float64(wantBudget), thinking["budget_tokens"], 0,
+				"adaptive thinking should carry budget_tokens when ThinkingEffort is set")
+		})
+	}
+}
+
+func TestBuildRequest_ThinkingEffort_AdaptiveModelNoBudgetWhenNoEffort(t *testing.T) {
+	// When no ThinkingEffort is set on adaptive models, budget_tokens should
+	// NOT be present — let the model decide freely.
+	for _, model := range []string{"claude-sonnet-4-6-20251120", "claude-opus-4-6-20251120"} {
+		t.Run(model, func(t *testing.T) {
+			m := buildRequestMap(t, RequestOptions{
+				LLMRequest: llm.Request{
+					Model:    model,
+					Messages: llm.Messages{llm.User("hi")},
+				},
+			})
+			thinking, ok := m["thinking"].(map[string]any)
+			require.True(t, ok, "thinking block should be present")
+			assert.Equal(t, "adaptive", thinking["type"])
+			_, hasBudget := thinking["budget_tokens"]
+			assert.False(t, hasBudget, "adaptive thinking without effort should NOT set budget_tokens")
 		})
 	}
 }
@@ -285,4 +347,124 @@ func TestBuildRequest_OutputEffortAndFormat(t *testing.T) {
 	format, ok := oc["format"].(map[string]any)
 	require.True(t, ok, "output_config.format should be present")
 	assert.Equal(t, "json_schema", format["type"], "output_config.format.type")
+}
+
+func TestRequest_ControlParams(t *testing.T) {
+	t.Run("haiku default (enabled with high budget)", func(t *testing.T) {
+		req, err := BuildRequest(RequestOptions{
+			LLMRequest: llm.Request{
+				Model:    "claude-haiku-4-5-20251001",
+				Messages: llm.Messages{llm.User("hi")},
+			},
+		})
+		require.NoError(t, err)
+		p := req.ControlParams()
+
+		assert.Equal(t, "claude-haiku-4-5-20251001", p["model"])
+		assert.Equal(t, float64(32000), p["max_tokens"])
+		assert.Equal(t, true, p["stream"])
+
+		thinking, ok := p["thinking"].(map[string]any)
+		require.True(t, ok, "thinking should be a map")
+		assert.Equal(t, "enabled", thinking["type"])
+		assert.Equal(t, float64(thinkingBudgetHigh), thinking["budget_tokens"])
+	})
+
+	t.Run("excludes messages, system, tools, metadata, cache_control", func(t *testing.T) {
+		req, err := BuildRequest(RequestOptions{
+			LLMRequest: llm.Request{
+				Model:    "claude-sonnet-4-5",
+				Messages: llm.Messages{llm.User("hi")},
+				Tools: []tool.Definition{
+					{Name: "search", Description: "search", Parameters: map[string]any{"type": "object"}},
+				},
+			},
+			SystemBlocks: SystemBlocks{Text("you are helpful")},
+		})
+		require.NoError(t, err)
+		p := req.ControlParams()
+
+		_, hasMessages := p["messages"]
+		_, hasSystem := p["system"]
+		_, hasTools := p["tools"]
+		_, hasMeta := p["metadata"]
+		assert.False(t, hasMessages, "messages excluded")
+		assert.False(t, hasSystem, "system excluded")
+		assert.False(t, hasTools, "tools excluded")
+		assert.False(t, hasMeta, "metadata excluded")
+
+		// model and thinking should still be there
+		assert.Equal(t, "claude-sonnet-4-5", p["model"])
+		_, hasThinking := p["thinking"]
+		assert.True(t, hasThinking)
+	})
+
+	t.Run("sonnet 4.6 default (adaptive, no budget)", func(t *testing.T) {
+		req, err := BuildRequest(RequestOptions{
+			LLMRequest: llm.Request{
+				Model:    "claude-sonnet-4-6-20251120",
+				Messages: llm.Messages{llm.User("hi")},
+			},
+		})
+		require.NoError(t, err)
+		p := req.ControlParams()
+
+		thinking, ok := p["thinking"].(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, "adaptive", thinking["type"])
+		_, hasBudget := thinking["budget_tokens"]
+		assert.False(t, hasBudget, "no budget_tokens for bare adaptive")
+	})
+
+	t.Run("sonnet 4.6 with high effort", func(t *testing.T) {
+		req, err := BuildRequest(RequestOptions{
+			LLMRequest: llm.Request{
+				Model:          "claude-sonnet-4-6-20251120",
+				Messages:       llm.Messages{llm.User("hi")},
+				ThinkingEffort: llm.ThinkingEffortHigh,
+			},
+		})
+		require.NoError(t, err)
+		p := req.ControlParams()
+
+		thinking, ok := p["thinking"].(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, "adaptive", thinking["type"])
+		wantBudget, _ := llm.ThinkingEffortHigh.ToBudget(thinkingBudgetLow, thinkingBudgetHigh)
+		assert.Equal(t, float64(wantBudget), thinking["budget_tokens"])
+	})
+
+	t.Run("output_config with effort", func(t *testing.T) {
+		req, err := BuildRequest(RequestOptions{
+			LLMRequest: llm.Request{
+				Model:        "claude-sonnet-4-6-20251120",
+				Messages:     llm.Messages{llm.User("hi")},
+				OutputEffort: llm.OutputEffortHigh,
+			},
+		})
+		require.NoError(t, err)
+		p := req.ControlParams()
+
+		oc, ok := p["output_config"].(map[string]any)
+		require.True(t, ok, "output_config should be present")
+		assert.Equal(t, "high", oc["effort"])
+	})
+
+	t.Run("tool_choice included when set", func(t *testing.T) {
+		req, err := BuildRequest(RequestOptions{
+			LLMRequest: llm.Request{
+				Model:    "claude-sonnet-4-5",
+				Messages: llm.Messages{llm.User("hi")},
+				Tools: []tool.Definition{
+					{Name: "search", Description: "search", Parameters: map[string]any{"type": "object"}},
+				},
+				ToolChoice: llm.ToolChoiceAuto{},
+			},
+		})
+		require.NoError(t, err)
+		p := req.ControlParams()
+
+		_, hasToolChoice := p["tool_choice"]
+		assert.True(t, hasToolChoice, "tool_choice should be present")
+	})
 }

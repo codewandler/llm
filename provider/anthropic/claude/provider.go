@@ -160,7 +160,9 @@ func (p *Provider) CreateStream(ctx context.Context, req llm.Request) (llm.Strea
 	}
 
 	return anthropic.ParseStream(ctx, resp.Body, anthropic.ParseOpts{
-		Model: req.Model,
+		Model:         req.Model,
+		LLMRequest:    &req,
+		RequestParams: requestBody.ControlParams(),
 	}), nil
 }
 

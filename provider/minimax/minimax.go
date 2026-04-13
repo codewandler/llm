@@ -6,6 +6,7 @@ package minimax
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"io"
 	"net/http"
 
@@ -104,9 +105,14 @@ func (p *Provider) CreateStream(ctx context.Context, opts llm.Request) (llm.Stre
 		return nil, llm.NewErrMissingAPIKey(providerName)
 	}
 
-	body, err := anthropic.BuildRequestBytes(anthropic.RequestOptions{
+	apiReq, err := anthropic.BuildRequest(anthropic.RequestOptions{
 		LLMRequest: opts,
 	})
+	if err != nil {
+		return nil, llm.NewErrBuildRequest(providerName, err)
+	}
+
+	body, err := json.Marshal(apiReq)
 	if err != nil {
 		return nil, llm.NewErrBuildRequest(providerName, err)
 	}
@@ -129,8 +135,10 @@ func (p *Provider) CreateStream(ctx context.Context, opts llm.Request) (llm.Stre
 	}
 
 	return anthropic.ParseStream(ctx, resp.Body, anthropic.ParseOpts{
-		Model:  opts.Model,
-		CostFn: FillCost,
+		Model:         opts.Model,
+		CostFn:        FillCost,
+		LLMRequest:    &opts,
+		RequestParams: apiReq.ControlParams(),
 	}), nil
 }
 

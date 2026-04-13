@@ -14,6 +14,8 @@ import (
 type ThinkingEffort string
 
 const (
+	// ThinkingEffortUnspecified is the zero value — no thinking effort was set.
+	ThinkingEffortUnspecified ThinkingEffort = ""
 	// ThinkingEffortNone disables reasoning (GPT-5.1+ only).
 	ThinkingEffortNone ThinkingEffort = "none"
 	// ThinkingEffortMinimal uses minimal reasoning effort.
@@ -31,12 +33,47 @@ const (
 // Valid returns true if the ThinkingEffort is a known valid value or empty.
 func (r ThinkingEffort) Valid() bool {
 	switch r {
-	case "", ThinkingEffortNone, ThinkingEffortMinimal, ThinkingEffortLow,
+	case ThinkingEffortUnspecified, ThinkingEffortNone, ThinkingEffortMinimal, ThinkingEffortLow,
 		ThinkingEffortMedium, ThinkingEffortHigh, ThinkingEffortXHigh:
 		return true
 	default:
 		return false
 	}
+}
+
+// IsEmpty returns true when no thinking effort has been specified.
+func (r ThinkingEffort) IsEmpty() bool { return r == ThinkingEffortUnspecified }
+
+// thinkingIndex returns the zero-based ordinal of an effort level
+// (minimal=0 … xhigh=4) and true, or (-1, false) for none/empty/unknown.
+func (r ThinkingEffort) thinkingIndex() (int, bool) {
+	switch r {
+	case ThinkingEffortMinimal:
+		return 0, true
+	case ThinkingEffortLow:
+		return 1, true
+	case ThinkingEffortMedium:
+		return 2, true
+	case ThinkingEffortHigh:
+		return 3, true
+	case ThinkingEffortXHigh:
+		return 4, true
+	default:
+		return -1, false
+	}
+}
+
+// ToBudget maps this effort to a token budget in the continuous range
+// [low, high]. The five graduated levels (minimal … xhigh) are spaced
+// evenly across the range. Returns (0, false) for none, empty, or
+// unknown effort values.
+func (r ThinkingEffort) ToBudget(low, high int) (int, bool) {
+	idx, ok := r.thinkingIndex()
+	if !ok {
+		return 0, false
+	}
+	const steps = 4 // intervals between 5 levels
+	return low + idx*(high-low)/steps, true
 }
 
 // --- OutputEffort ---
@@ -46,6 +83,8 @@ func (r ThinkingEffort) Valid() bool {
 type OutputEffort string
 
 const (
+	// OutputEffortUnspecified is the zero value — no output effort was set.
+	OutputEffortUnspecified OutputEffort = ""
 	// OutputEffortLow produces faster, less thorough responses.
 	OutputEffortLow OutputEffort = "low"
 	// OutputEffortMedium produces balanced responses (default).
@@ -59,12 +98,15 @@ const (
 // Valid returns true if the OutputEffort is a known valid value or empty.
 func (e OutputEffort) Valid() bool {
 	switch e {
-	case "", OutputEffortLow, OutputEffortMedium, OutputEffortHigh, OutputEffortMax:
+	case OutputEffortUnspecified, OutputEffortLow, OutputEffortMedium, OutputEffortHigh, OutputEffortMax:
 		return true
 	default:
 		return false
 	}
 }
+
+// IsEmpty returns true when no output effort has been specified.
+func (e OutputEffort) IsEmpty() bool { return e == OutputEffortUnspecified }
 
 // OutputFormat specifies the desired output format for the model response.
 type OutputFormat string

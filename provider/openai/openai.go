@@ -147,7 +147,7 @@ func (p *Provider) CreateStream(ctx context.Context, opts llm.Request) (llm.Stre
 // Currently handles reasoning effort mapping only; cache retention is
 // determined at request-build time by wantsExtendedCache.
 func enrichOpts(opts llm.Request) (llm.Request, error) {
-	if opts.ThinkingEffort != "" {
+	if !opts.ThinkingEffort.IsEmpty() {
 		mapped, err := mapThinkingEffort(opts.Model, opts.ThinkingEffort)
 		if err != nil {
 			return opts, err

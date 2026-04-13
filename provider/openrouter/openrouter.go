@@ -264,7 +264,7 @@ func buildRequest(opts llm.Request) ([]byte, error) {
 	if opts.OutputFormat == llm.OutputFormatJSON {
 		r.ResponseFormat = &respFormat{Type: "json_object"}
 	}
-	if opts.ThinkingEffort != "" {
+	if !opts.ThinkingEffort.IsEmpty() {
 		r.Reasoning = &reasoningConfig{Effort: string(opts.ThinkingEffort)}
 	}
 

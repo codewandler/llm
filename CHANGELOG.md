@@ -1,5 +1,26 @@
 # Changelog
 
+## Unreleased
+
+### Bug Fixes
+
+- Fix ThinkingEffort silently ignored for adaptive models (Sonnet 4.6 / Opus 4.6) — budget_tokens is now mapped via `ToBudget()` instead of being dropped.
+- Fix unrecognised ThinkingEffort values (minimal, xhigh) producing `budget_tokens: 0` on non-adaptive models.
+
+### Added
+
+- `ThinkingEffort.ToBudget(low, high)` maps effort levels to a continuous token budget range, replacing hardcoded per-level switches.
+- `ThinkingEffort.IsEmpty()`, `OutputEffort.IsEmpty()` and `ThinkingEffortUnspecified` / `OutputEffortUnspecified` constants for type-safe zero-value checks.
+- New `request_params` stream event (`RequestParamsEvent`) emitted by Anthropic, Claude, and MiniMax providers carrying the final `llm.Request` and resolved provider params.
+- `llmcli infer -v` now prints request params and provider params sections showing thinking config, output effort, and other control knobs.
+- `Request.ControlParams()` on the Anthropic request struct for observability (marshal → strip verbose fields).
+
+### Changed
+
+- Claude provider default model alias (`"default"`) now resolves to Sonnet 4.6 instead of Haiku 4.5. Haiku remains the provider fallback when no model is specified.
+
+---
+
 ## v0.34.3
 
 ### Bug Fixes

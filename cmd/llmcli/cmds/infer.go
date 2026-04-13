@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"sort"
 
 	"github.com/codewandler/llm"
 	"github.com/codewandler/llm/msg"
@@ -98,6 +99,11 @@ func runInfer(ctx context.Context, userMsg, model, system, thinking, effort stri
 			if root.LogEvents {
 				d, _ := json.MarshalIndent(ev, "  ", "  ")
 				fmt.Printf("\n[EVT :: %s]\n%s\n", ev.Type(), string(d))
+			}
+		})).
+		OnEvent(llm.TypedEventHandler[*llm.RequestParamsEvent](func(ev *llm.RequestParamsEvent) {
+			if verbose {
+				printRequestParamsEvent(ev)
 			}
 		}))
 
@@ -322,6 +328,84 @@ func formatCost(cost float64) string {
 		return fmt.Sprintf("$%.4f", cost)
 	default:
 		return fmt.Sprintf("$%.2f", cost)
+	}
+}
+
+type kvField struct {
+	label string
+	value string
+}
+
+// printRequestParamsEvent prints both the llm.Request-level params and the
+// provider-resolved params from a single RequestParamsEvent.
+func printRequestParamsEvent(ev *llm.RequestParamsEvent) {
+	// --- llm.Request params (what the caller asked for) ---
+	if req := ev.LLMRequest; req != nil {
+		fmt.Fprintln(os.Stderr)
+		fmt.Fprintf(os.Stderr, "%s── request params ──%s\n", ansiDim, ansiReset)
+		printParamMap(mapFromStruct(req, "messages", "tools"))
+	}
+
+	// --- Provider-resolved params (what was actually sent) ---
+	if params := ev.ProviderRequestParams; len(params) > 0 {
+		fmt.Fprintln(os.Stderr)
+		fmt.Fprintf(os.Stderr, "%s── provider params ──%s\n", ansiDim, ansiReset)
+		printParamMap(params)
+	}
+}
+
+// mapFromStruct marshals v to JSON, unmarshals into map[string]any, and
+// deletes the listed keys. Returns nil on error.
+func mapFromStruct(v any, exclude ...string) map[string]any {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return nil
+	}
+	var m map[string]any
+	if err := json.Unmarshal(b, &m); err != nil {
+		return nil
+	}
+	for _, k := range exclude {
+		delete(m, k)
+	}
+	return m
+}
+
+// printParamMap prints a map as sorted key: value lines. Nested objects
+// are rendered as compact JSON.
+func printParamMap(m map[string]any) {
+	if len(m) == 0 {
+		return
+	}
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	var fields []kvField
+	for _, k := range keys {
+		v := m[k]
+		switch val := v.(type) {
+		case map[string]any:
+			b, _ := json.Marshal(val)
+			fields = append(fields, kvField{k, string(b)})
+		default:
+			fields = append(fields, kvField{k, fmt.Sprint(v)})
+		}
+	}
+	printFields(fields)
+}
+
+func printFields(fields []kvField) {
+	maxWidth := 0
+	for _, f := range fields {
+		if len(f.label) > maxWidth {
+			maxWidth = len(f.label)
+		}
+	}
+	for _, f := range fields {
+		fmt.Fprintf(os.Stderr, "%*s: %s\n", maxWidth, f.label, f.value)
 	}
 }
 

@@ -11,17 +11,18 @@ import (
 type EventType string
 
 const (
-	StreamEventCreated      EventType = "created"
-	StreamEventClosed       EventType = "closed"
-	StreamEventRouted       EventType = "routed"
-	StreamEventStarted      EventType = "started"
-	StreamEventUsageUpdated EventType = "usage"
-	StreamEventDelta        EventType = "delta"
-	StreamEventToolCall     EventType = "tool_call"
-	StreamEventContentPart  EventType = "content_part"
-	StreamEventCompleted    EventType = "completed"
-	StreamEventError        EventType = "error"
-	StreamEventDebug        EventType = "debug"
+	StreamEventCreated       EventType = "created"
+	StreamEventClosed        EventType = "closed"
+	StreamEventRouted        EventType = "routed"
+	StreamEventStarted       EventType = "started"
+	StreamEventUsageUpdated  EventType = "usage"
+	StreamEventDelta         EventType = "delta"
+	StreamEventToolCall      EventType = "tool_call"
+	StreamEventContentPart   EventType = "content_part"
+	StreamEventCompleted     EventType = "completed"
+	StreamEventError         EventType = "error"
+	StreamEventDebug         EventType = "debug"
+	StreamEventRequestParams EventType = "request_params"
 )
 
 type (
@@ -122,9 +123,19 @@ type (
 		Part  msg.Part `json:"part"`
 		Index int      `json:"index"`
 	}
+
+	// RequestParamsEvent is emitted by a provider once per stream, carrying the
+	// final resolved request parameters (after alias resolution, default
+	// application, thinking-budget mapping, etc.). Consumers can use this
+	// for observability / debugging without inspecting the raw HTTP body.
+	RequestParamsEvent struct {
+		LLMRequest            *Request       `json:"llm_request"`
+		ProviderRequestParams map[string]any `json:"provider_request_params,omitempty"`
+	}
 )
 
 func (e DebugEvent) Type() EventType         { return StreamEventDebug }
+func (e RequestParamsEvent) Type() EventType { return StreamEventRequestParams }
 func (e RouteInfoEvent) Type() EventType     { return StreamEventRouted }
 func (e StreamCreatedEvent) Type() EventType { return StreamEventCreated }
 func (e StreamClosedEvent) Type() EventType  { return StreamEventClosed }

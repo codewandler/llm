@@ -50,7 +50,7 @@ func TestStreamOptions_Validate(t *testing.T) {
 			opts: Request{
 				Model:          "gpt-4",
 				Messages:       Messages{User("Hello")},
-				ThinkingEffort: "",
+				ThinkingEffort: ThinkingEffortUnspecified,
 			},
 			wantErr: "",
 		},
@@ -235,6 +235,51 @@ func TestThinkingEffort_Valid(t *testing.T) {
 		t.Run(string(tt.effort), func(t *testing.T) {
 			assert.Equal(t, tt.want, tt.effort.Valid())
 		})
+	}
+}
+
+func TestThinkingEffort_ToBudget(t *testing.T) {
+	low, high := 1024, 32000
+
+	tests := []struct {
+		effort ThinkingEffort
+		want   int
+		ok     bool
+	}{
+		{ThinkingEffortMinimal, low, true},
+		{ThinkingEffortLow, low + (high-low)/4, true},
+		{ThinkingEffortMedium, low + 2*(high-low)/4, true},
+		{ThinkingEffortHigh, low + 3*(high-low)/4, true},
+		{ThinkingEffortXHigh, high, true},
+		// none / empty → no budget
+		{ThinkingEffortNone, 0, false},
+		{"", 0, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(string(tt.effort), func(t *testing.T) {
+			got, ok := tt.effort.ToBudget(low, high)
+			assert.Equal(t, tt.ok, ok)
+			if ok {
+				assert.Equal(t, tt.want, got)
+			}
+		})
+	}
+}
+
+func TestThinkingEffort_ToBudget_BoundaryRange(t *testing.T) {
+	// With a small range, levels should still be ordered
+	low, high := 100, 200
+
+	prev := 0
+	for _, e := range []ThinkingEffort{
+		ThinkingEffortMinimal, ThinkingEffortLow,
+		ThinkingEffortMedium, ThinkingEffortHigh, ThinkingEffortXHigh,
+	} {
+		v, ok := e.ToBudget(low, high)
+		require.True(t, ok, "effort %q should map to a budget", e)
+		assert.GreaterOrEqual(t, v, prev, "effort %q (%d) should be >= previous (%d)", e, v, prev)
+		prev = v
 	}
 }
 
