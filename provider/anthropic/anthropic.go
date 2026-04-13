@@ -87,22 +87,23 @@ func (p *Provider) CreateStream(ctx context.Context, opts llm.Request) (llm.Stre
 		return nil, llm.NewErrBuildRequest(llm.ProviderNameAnthropic, err)
 	}
 
-	parseOpts := ParseOpts{
-		Model:         opts.Model,
-		LLMRequest:    &opts,
-		RequestParams: apiReq.ControlParams(),
+	// Build http.Request first so URL, method, and headers are available for
+	// the RequestEvent. The request is fully constructed here but not yet sent.
+	req, err := p.newAPIRequest(ctx, apiKey, body)
+	if err != nil {
+		return nil, llm.NewErrBuildRequest(llm.ProviderNameAnthropic, err)
 	}
 
-	// Create publisher and emit RequestParamsEvent BEFORE the HTTP call
+	parseOpts := ParseOpts{
+		Model:         opts.Model,
+		LLMRequest:    opts,
+		RequestParams: llm.ProviderRequestFromHTTP(req, body),
+	}
+
+	// Create publisher and emit RequestEvent BEFORE the HTTP call
 	// so consumers see what was requested even if the call fails.
 	pub, ch := llm.NewEventPublisher()
 	PublishRequestParams(pub, parseOpts)
-
-	req, err := p.newAPIRequest(ctx, apiKey, body)
-	if err != nil {
-		pub.Close()
-		return nil, llm.NewErrBuildRequest(llm.ProviderNameAnthropic, err)
-	}
 
 	resp, err := p.client.Do(req)
 	if err != nil {

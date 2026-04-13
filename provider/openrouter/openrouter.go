@@ -138,27 +138,28 @@ func (p *Provider) CreateStream(ctx context.Context, opts llm.Request) (llm.Stre
 		return nil, llm.NewErrMissingAPIKey(llm.ProviderNameOpenRouter)
 	}
 
-	body, apiReq, err := buildRequest(opts)
+	body, err := buildRequest(opts)
 	if err != nil {
 		return nil, llm.NewErrBuildRequest(llm.ProviderNameOpenRouter, err)
 	}
 
-	// Create publisher and emit RequestParamsEvent BEFORE the HTTP call.
+	// Build http.Request first so URL, method, and headers are available for
+	// the RequestEvent. The request is fully constructed here but not yet sent.
+	httpReq, err := http.NewRequestWithContext(ctx, "POST", p.opts.BaseURL+"/v1/chat/completions", bytes.NewReader(body))
+	if err != nil {
+		return nil, llm.NewErrBuildRequest(llm.ProviderNameOpenRouter, err)
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("Authorization", "Bearer "+apiKey)
+
+	// Create publisher and emit RequestEvent BEFORE the HTTP call.
 	pub, ch := llm.NewEventPublisher()
-	pub.Publish(&llm.RequestParamsEvent{
-		LLMRequest:            &opts,
-		ProviderRequestParams: apiReq.controlParams(),
+	pub.Publish(&llm.RequestEvent{
+		OriginalRequest: opts,
+		ProviderRequest: llm.ProviderRequestFromHTTP(httpReq, body),
 	})
 
-	req, err := http.NewRequestWithContext(ctx, "POST", p.opts.BaseURL+"/v1/chat/completions", bytes.NewReader(body))
-	if err != nil {
-		pub.Close()
-		return nil, llm.NewErrBuildRequest(llm.ProviderNameOpenRouter, err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+apiKey)
-
-	resp, err := p.client.Do(req)
+	resp, err := p.client.Do(httpReq)
 	if err != nil {
 		pub.Close()
 		return nil, llm.NewErrRequestFailed(llm.ProviderNameOpenRouter, err)
@@ -251,23 +252,7 @@ type functionPayload struct {
 	Parameters  map[string]any `json:"parameters"`
 }
 
-// controlParams returns the request as a map[string]any with verbose fields
-// (messages, tools) stripped out for observability.
-func (r request) controlParams() map[string]any {
-	b, err := json.Marshal(r)
-	if err != nil {
-		return nil
-	}
-	var m map[string]any
-	if err := json.Unmarshal(b, &m); err != nil {
-		return nil
-	}
-	delete(m, "messages")
-	delete(m, "tools")
-	return m
-}
-
-func buildRequest(opts llm.Request) ([]byte, request, error) {
+func buildRequest(opts llm.Request) ([]byte, error) {
 	r := request{
 		Model:         opts.Model,
 		Stream:        true,
@@ -387,7 +372,7 @@ func buildRequest(opts llm.Request) ([]byte, request, error) {
 	}
 
 	body, err := json.Marshal(r)
-	return body, r, err
+	return body, err
 }
 
 // --- SSE stream parsing ---

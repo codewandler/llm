@@ -2,6 +2,7 @@ package anthropic
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -58,16 +59,22 @@ func TestParseStream_LargeStreamNoDeadlock(t *testing.T) {
 }
 
 func TestParseStream_EmitsRequestParams(t *testing.T) {
-	req := &llm.Request{
+	req := llm.Request{
 		Model:    "claude-sonnet-4-6-20251120",
 		Messages: llm.Messages{llm.User("hi")},
 		Effort:   llm.EffortHigh,
 		Thinking: llm.ThinkingOn,
 	}
-	params := map[string]any{
+	paramsBody, err := json.Marshal(map[string]any{
 		"model":      "claude-sonnet-4-6-20251120",
 		"max_tokens": 32000,
 		"thinking":   map[string]any{"type": "adaptive", "budget_tokens": 16000},
+	})
+	require.NoError(t, err)
+	params := llm.ProviderRequest{
+		URL:    "https://api.anthropic.com/v1/messages",
+		Method: "POST",
+		Body:   json.RawMessage(paramsBody),
 	}
 
 	body := buildSSEBody(
@@ -93,24 +100,25 @@ func TestParseStream_EmitsRequestParams(t *testing.T) {
 
 	var foundParams bool
 	for env := range ch {
-		if env.Type == llm.StreamEventRequestParams {
+		if env.Type == llm.StreamEventRequest {
 			foundParams = true
-			rpe, ok := env.Data.(*llm.RequestParamsEvent)
+			rpe, ok := env.Data.(*llm.RequestEvent)
 			if !ok {
-				t.Fatalf("expected *RequestParamsEvent, got %T", env.Data)
+				t.Fatalf("expected *RequestEvent, got %T", env.Data)
 			}
 
-			// LLMRequest
-			require.NotNil(t, rpe.LLMRequest, "LLMRequest must be set")
-			assert.Equal(t, "claude-sonnet-4-6-20251120", rpe.LLMRequest.Model)
-			assert.Equal(t, llm.EffortHigh, rpe.LLMRequest.Effort)
-			assert.Equal(t, llm.ThinkingOn, rpe.LLMRequest.Thinking)
+			// OriginalRequest — struct is never nil, access fields directly
+			assert.Equal(t, "claude-sonnet-4-6-20251120", rpe.OriginalRequest.Model)
+			assert.Equal(t, llm.EffortHigh, rpe.OriginalRequest.Effort)
+			assert.Equal(t, llm.ThinkingOn, rpe.OriginalRequest.Thinking)
 
-			// ProviderRequestParams
-			assert.Equal(t, "claude-sonnet-4-6-20251120", rpe.ProviderRequestParams["model"])
-			thinking, _ := rpe.ProviderRequestParams["thinking"].(map[string]any)
+			// ProviderRequest — unmarshal Body, then assert on the map
+			var gotBody map[string]any
+			require.NoError(t, json.Unmarshal(rpe.ProviderRequest.Body, &gotBody))
+			assert.Equal(t, "claude-sonnet-4-6-20251120", gotBody["model"])
+			thinking, _ := gotBody["thinking"].(map[string]any)
 			assert.Equal(t, "adaptive", thinking["type"])
-			assert.Equal(t, 16000, thinking["budget_tokens"])
+			assert.Equal(t, float64(16000), thinking["budget_tokens"])
 		}
 	}
 	if !foundParams {
@@ -118,7 +126,7 @@ func TestParseStream_EmitsRequestParams(t *testing.T) {
 	}
 }
 
-func TestParseStream_NoRequestParamsWhenNil(t *testing.T) {
+func TestParseStream_AlwaysEmitsRequestEvent(t *testing.T) {
 	body := buildSSEBody(
 		MessageStartEvent{Message: MessageStartPayload{
 			ID: "msg_1", Model: "claude-sonnet-4-5",
@@ -133,12 +141,23 @@ func TestParseStream_NoRequestParamsWhenNil(t *testing.T) {
 
 	ch := ParseStream(context.Background(), body, ParseOpts{
 		Model: "claude-sonnet-4-5",
-		// LLMRequest and RequestParams both nil
+		// LLMRequest and RequestParams both zero-valued
 	})
 
+	var found bool
 	for env := range ch {
-		if env.Type == llm.StreamEventRequestParams {
-			t.Error("should NOT emit request_params when both fields are nil")
+		if env.Type == llm.StreamEventRequest {
+			found = true
+			rpe, ok := env.Data.(*llm.RequestEvent)
+			if !ok {
+				t.Fatalf("expected *RequestEvent, got %T", env.Data)
+			}
+			// Zero-valued fields: no model, no URL
+			assert.Empty(t, rpe.OriginalRequest.Model)
+			assert.Empty(t, rpe.ProviderRequest.URL)
 		}
+	}
+	if !found {
+		t.Error("expected StreamEventRequest to always be emitted")
 	}
 }

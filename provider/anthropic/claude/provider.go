@@ -142,21 +142,22 @@ func (p *Provider) CreateStream(ctx context.Context, req llm.Request) (llm.Strea
 	}
 	p.log.Debug("request body", "body", string(requestBodyBytes))
 
-	parseOpts := anthropic.ParseOpts{
-		Model:         req.Model,
-		LLMRequest:    &req,
-		RequestParams: requestBody.ControlParams(),
-	}
-
-	// Create publisher and emit RequestParamsEvent BEFORE the HTTP call.
-	pub, ch := llm.NewEventPublisher()
-	anthropic.PublishRequestParams(pub, parseOpts)
-
+	// Build http.Request first so URL, method, and headers are available for
+	// the RequestEvent. The request is fully constructed here but not yet sent.
 	httpReq, err := p.newAPIRequest(ctx, token.AccessToken, requestBodyBytes)
 	if err != nil {
-		pub.Close()
 		return nil, llm.NewErrBuildRequest(llm.ProviderNameClaude, err)
 	}
+
+	parseOpts := anthropic.ParseOpts{
+		Model:         req.Model,
+		LLMRequest:    req,
+		RequestParams: llm.ProviderRequestFromHTTP(httpReq, requestBodyBytes),
+	}
+
+	// Create publisher and emit RequestEvent BEFORE the HTTP call.
+	pub, ch := llm.NewEventPublisher()
+	anthropic.PublishRequestParams(pub, parseOpts)
 
 	resp, err := p.client.Do(httpReq)
 	if err != nil {

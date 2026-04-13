@@ -4,6 +4,59 @@
 
 ### Breaking Changes
 
+- **`RequestParamsEvent` replaced by `RequestEvent`.**
+  - `StreamEventRequestParams` wire value changed from `"request_params"` to
+    `"request"`.
+  - `RequestParamsEvent.LLMRequest *Request` → `RequestEvent.OriginalRequest
+    Request` (value, not pointer).
+  - `RequestParamsEvent.ProviderRequestParams map[string]any` →
+    `RequestEvent.ProviderRequest ProviderRequest` (typed struct).
+  - `ParseOpts.LLMRequest` changed from `*llm.Request` to `llm.Request`.
+  - `ParseOpts.RequestParams` changed from `map[string]any` to
+    `llm.ProviderRequest`.
+  - `PublishRequestParams` now emits unconditionally (was guarded on non-nil
+    fields).
+
+### Bug Fixes
+
+- Router no longer swallows per-provider errors when all failover targets are
+  exhausted — original errors are preserved via `errors.Join` and remain
+  inspectable with `errors.Is` / `errors.As`.
+- `ProviderError.Error()` no longer produces a trailing `: ` separator when
+  `Message` is empty.
+
+### Added
+
+- `ProviderRequest` struct (`URL`, `Method`, `Headers`, `Body`) replaces the
+  flat `map[string]any` in `RequestEvent` — includes full HTTP metadata.
+- `ProviderRequestFromHTTP(req, body)` helper builds a `ProviderRequest` from
+  an outgoing `*http.Request`; credential headers (`Authorization`,
+  `X-Api-Key`) are redacted to `[REDACTED]`.
+- `NewErrAllProvidersFailed` error constructor wraps individual provider
+  errors via `errors.Join` when every failover target has been tried.
+- `llmcli infer --max-tokens N` flag to cap token generation (default: 8000).
+- `llmcli infer -v` now prints `── route info ──` and `── stream started ──`
+  sections in addition to request/provider params.
+- Blank-line separator printed to stderr between verbose preamble and first
+  streamed token.
+
+### Changed
+
+- All providers (Anthropic, Claude, MiniMax, OpenRouter) now build the
+  `http.Request` before creating the event publisher, so the `RequestEvent`
+  carries the real URL, method, and headers.
+- HTTP 402 (payment required / insufficient credits) is now treated as a
+  retriable error for provider failover, matching 429 and 503.
+- `llmcli infer -v` provider params section no longer renders `messages` or
+  `tools` (too verbose); array-valued fields now render as compact JSON.
+- `openrouter.buildRequest` simplified to return `([]byte, error)` — the
+  intermediate `request` struct is no longer returned.
+- `NewErrNoProviders` no longer includes a `Message` field (error string is
+  now `"router: no providers"` instead of
+  `"router: no providers: no providers configured"`).
+
+### Breaking Changes
+
 - **`ThinkingEffort` and `OutputEffort` replaced by `Effort` + `ThinkingMode`.**
   - `Request.ThinkingEffort` → `Request.Effort` (type `Effort`: `""`, `"low"`, `"medium"`, `"high"`, `"max"`)
   - `Request.OutputEffort` → `Request.Thinking` (type `ThinkingMode`: `""`, `"on"`, `"off"`)

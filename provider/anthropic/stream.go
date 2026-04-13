@@ -25,13 +25,14 @@ type ParseOpts struct {
 	// Keys should be lowercase header names.
 	ResponseHeaders map[string]string
 
-	// RequestParams, when non-nil, is published as a RequestParamsEvent at
-	// the beginning of the stream. Use Request.ControlParams() to build it.
-	RequestParams map[string]any
+	// RequestParams, when non-zero, is published as a RequestEvent at
+	// the beginning of the stream. Build it with llm.ProviderRequestFromHTTP
+	// after constructing the outgoing *http.Request.
+	RequestParams llm.ProviderRequest
 
 	// LLMRequest is the final llm.Request used to build the provider request.
-	// Included in the RequestParamsEvent for observability.
-	LLMRequest *llm.Request
+	// Included in the RequestEvent for observability.
+	LLMRequest llm.Request
 }
 
 // ParseStream reads an Anthropic-format SSE response body in a background
@@ -50,7 +51,7 @@ func ParseStream(ctx context.Context, body io.ReadCloser, opts ParseOpts) llm.St
 
 // ParseStreamWith starts parsing on an existing publisher. The caller is
 // responsible for having already created the publisher and optionally published
-// early events (e.g. RequestParamsEvent) before the HTTP call.
+// early events (e.g. RequestEvent) before the HTTP call.
 //
 // Ownership: takes ownership of body and closes pub when done.
 func ParseStreamWith(ctx context.Context, body io.ReadCloser, pub llm.Publisher, opts ParseOpts) {
@@ -59,15 +60,13 @@ func ParseStreamWith(ctx context.Context, body io.ReadCloser, pub llm.Publisher,
 	}()
 }
 
-// PublishRequestParams emits a RequestParamsEvent if params are present.
+// PublishRequestParams emits a RequestEvent at the start of every stream.
 // Exported so that providers using ParseStreamWith can call it before the HTTP request.
 func PublishRequestParams(pub llm.Publisher, opts ParseOpts) {
-	if opts.RequestParams != nil || opts.LLMRequest != nil {
-		pub.Publish(&llm.RequestParamsEvent{
-			LLMRequest:            opts.LLMRequest,
-			ProviderRequestParams: opts.RequestParams,
-		})
-	}
+	pub.Publish(&llm.RequestEvent{
+		OriginalRequest: opts.LLMRequest,
+		ProviderRequest: opts.RequestParams,
+	})
 }
 
 // parseStream is the blocking core that reads SSE lines from body and
