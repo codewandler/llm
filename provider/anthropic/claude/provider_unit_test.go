@@ -59,8 +59,11 @@ func TestBuildRequest_PrependsBillingAndSystemBlocks(t *testing.T) {
 	})
 	require.NoError(t, err)
 
+	bodyJSON, err := json.Marshal(body)
+	require.NoError(t, err)
+
 	var req map[string]any
-	require.NoError(t, json.Unmarshal(body, &req))
+	require.NoError(t, json.Unmarshal(bodyJSON, &req))
 
 	rawSystem, ok := req["system"]
 	require.True(t, ok, "system field must be present")
@@ -88,8 +91,11 @@ func TestBuildRequest_UserSystemBlockAppended(t *testing.T) {
 	})
 	require.NoError(t, err)
 
+	bodyJSON, err := json.Marshal(body)
+	require.NoError(t, err)
+
 	var req map[string]any
-	require.NoError(t, json.Unmarshal(body, &req))
+	require.NoError(t, json.Unmarshal(bodyJSON, &req))
 
 	blocks := req["system"].([]any)
 	require.Equal(t, 3, len(blocks), "billing + core + user system")

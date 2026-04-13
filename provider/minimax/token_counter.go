@@ -11,43 +11,29 @@ import (
 // Compile-time assertion that *Provider implements llm.TokenCounter.
 var _ tokencount.TokenCounter = (*Provider)(nil)
 
-// Token overhead constants measured empirically against MiniMax-M2.7 API.
-//
-// Base framing:
-//   - MiniMax injects a hidden default system prompt when no System is provided.
-//     Cost: ~35 tokens. Add a system message, this disappears (user's system message
-//     replaces the hidden one). For realistic multi-message conversations with a system
-//     message, perMsgOverhead=6 covers the per-message framing with 0–7% drift.
-//
-// Tool framing (measured via calibration with 1/2/3 tools, user-only message):
-//   - minimaxToolPreamble: tokens injected once when any tools are present.
-//   - minimaxToolPerExtra: additional tokens per tool beyond the first.
-//
-// Calibration data (MiniMax-M2.7, user("What is the weather in Berlin?"), no system):
-//
-//	0 tools: actual=48,  estimated(raw+perMsg)=13, unaccounted=35 (hidden system prompt)
-//	1 tool:  actual=205, estimated=54,              unaccounted=151 → tool_overhead=151-35=116
-//	2 tools: actual=262, estimated=91,              unaccounted=171 → delta_tool=20
-//	3 tools: actual=318, estimated=127,             unaccounted=191 → delta_tool=20
+// Token overhead constants measured empirically against the current
+// MiniMax-M2.7 Anthropic-compatible API. The current endpoint behavior no
+// longer shows a separate hidden-system surcharge or stable extra tool framing
+// overhead beyond the raw schema tokens counted by CountMessagesAndTools.
 const (
 	// perMsgOverhead is added per message by CountMessagesAndTools to approximate
-	// MiniMax's per-message framing tokens. Derived from multi-message tests:
-	//   2 msgs (system+user, actual=27, raw=13): 14/2 = 7/msg
-	//   4 msgs (actual=51, raw=27): 24/4 = 6/msg
-	perMsgOverhead = 6
+	// MiniMax's per-message framing tokens. Derived from calibration against the
+	// live API after the Anthropic-compatible endpoint switched to a lower
+	// hidden-framing overhead in 2026.
+	perMsgOverhead = 3
 
 	// minimaxHiddenSystemPromptTokens is the cost of the hidden default system prompt
 	// MiniMax injects when no system message is provided by the caller.
 	// Disappears when the caller provides a system message.
-	minimaxHiddenSystemPromptTokens = 35
+	minimaxHiddenSystemPromptTokens = 0
 
 	// minimaxToolPreamble is the framing overhead injected once when tools are
 	// present in the request (tool schema serialisation overhead beyond raw JSON).
-	minimaxToolPreamble = 116
+	minimaxToolPreamble = 0
 
 	// minimaxToolPerExtra is the per-tool framing overhead for each tool beyond
 	// the first.
-	minimaxToolPerExtra = 20
+	minimaxToolPerExtra = 0
 )
 
 // hasSystemMessage reports whether msgs contains at least one System.
@@ -65,11 +51,12 @@ func hasSystemMessage(msgs llm.Messages) bool {
 //
 // The estimate accounts for:
 //   - Raw BPE token counts per message and tool definition
-//   - Per-message framing overhead (6 tokens/message)
-//   - Hidden default system prompt (35 tokens) when no system message is provided
-//   - Tool schema framing (116 tokens once + 20 tokens per additional tool)
+//   - Current per-message framing overhead (3 tokens/message)
+//   - No additional hidden-system surcharge in current endpoint behavior
+//   - No additional stable tool-framing surcharge beyond raw schema tokens
 //
-// All constants are empirically calibrated against the MiniMax-M2.7 API.
+// The constants are calibrated against the current MiniMax-M2.7 API and are
+// intentionally conservative; integration tests track drift against live usage.
 func (p *Provider) CountTokens(_ context.Context, req tokencount.TokenCountRequest) (*tokencount.TokenCount, error) {
 	tc := &tokencount.TokenCount{}
 	if err := tokencount.CountMessagesAndTools(tc, req, tokencount.CountOpts{

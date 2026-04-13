@@ -60,7 +60,7 @@ func TestProcessor_ContentBlockEvent_ThinkingBlock(t *testing.T) {
 
 	envelopes := h.Send(
 		MessageStartEvent{Message: MessageStartPayload{ID: "msg_t2", Model: "claude-sonnet-4-5", Usage: MessageUsage{InputTokens: 10}}},
-		ContentBlockStartEvent{Index: 0, ContentBlock: ContentBlock{Type: "ThinkingConfig"}},
+		ContentBlockStartEvent{Index: 0, ContentBlock: ContentBlock{Type: "thinking"}},
 		ContentBlockDeltaEvent{Index: 0, Delta: ContentBlockDelta{Type: "thinking_delta", Thinking: "Let me reason"}},
 		ContentBlockDeltaEvent{Index: 0, Delta: ContentBlockDelta{Type: "thinking_delta", Thinking: " carefully."}},
 		// signature_delta arrives once, after all thinking_delta events
@@ -90,7 +90,7 @@ func TestProcessor_ContentBlockEvent_SignatureDeltaNotDropped(t *testing.T) {
 
 	envelopes := h.Send(
 		MessageStartEvent{Message: MessageStartPayload{ID: "msg_t3", Model: "claude-sonnet-4-5", Usage: MessageUsage{InputTokens: 10}}},
-		ContentBlockStartEvent{Index: 0, ContentBlock: ContentBlock{Type: "ThinkingConfig"}},
+		ContentBlockStartEvent{Index: 0, ContentBlock: ContentBlock{Type: "thinking"}},
 		ContentBlockDeltaEvent{Index: 0, Delta: ContentBlockDelta{Type: "thinking_delta", Thinking: "Thought..."}},
 		// Signature arrives as a delta event BEFORE the stop event.
 		ContentBlockDeltaEvent{Index: 0, Delta: ContentBlockDelta{Type: "signature_delta", Signature: sig}},
@@ -114,7 +114,7 @@ func TestProcessor_ContentBlockEvent_InterleavedOrder(t *testing.T) {
 	envelopes := h.Send(
 		MessageStartEvent{Message: MessageStartPayload{ID: "msg_t4", Model: "claude-sonnet-4-5", Usage: MessageUsage{InputTokens: 15}}},
 		// Block 0: ThinkingConfig
-		ContentBlockStartEvent{Index: 0, ContentBlock: ContentBlock{Type: "ThinkingConfig"}},
+		ContentBlockStartEvent{Index: 0, ContentBlock: ContentBlock{Type: "thinking"}},
 		ContentBlockDeltaEvent{Index: 0, Delta: ContentBlockDelta{Type: "thinking_delta", Thinking: "Step 1."}},
 		ContentBlockDeltaEvent{Index: 0, Delta: ContentBlockDelta{Type: "signature_delta", Signature: "sig-idx0"}},
 		ContentBlockStopEvent{Index: 0},

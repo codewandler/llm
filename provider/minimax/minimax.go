@@ -13,6 +13,8 @@ import (
 	"github.com/codewandler/llm/provider/anthropic"
 )
 
+const ModelDefault = ModelM27
+
 const (
 	providerName   = "minimax"
 	defaultBaseURL = "https://api.minimax.io/anthropic"
@@ -73,7 +75,7 @@ func (p *Provider) Name() string { return providerName }
 
 func (p *Provider) Models() llm.Models {
 	return []llm.Model{
-		{ID: ModelM27, Name: "MiniMax M2.7", Provider: providerName},
+		{ID: ModelM27, Name: "MiniMax M2.7", Provider: providerName, Aliases: []string{llm.ModelDefault, llm.ModelFast, "minimax"}},
 		{ID: ModelM25, Name: "MiniMax M2.5", Provider: providerName},
 		{ID: ModelM21, Name: "MiniMax M2.1", Provider: providerName},
 		{ID: ModelM2, Name: "MiniMax M2", Provider: providerName},
@@ -85,6 +87,14 @@ func (p *Provider) Resolve(model string) (llm.Model, error) {
 }
 
 func (p *Provider) CreateStream(ctx context.Context, opts llm.Request) (llm.Stream, error) {
+	// Resolve aliases (e.g. "default", "fast", "minimax") to real model IDs.
+	// Unknown model IDs pass through to the API unchanged.
+	if opts.Model != "" {
+		if resolved, err := p.Resolve(opts.Model); err == nil {
+			opts.Model = resolved.ID
+		}
+	}
+
 	if err := opts.Validate(); err != nil {
 		return nil, llm.NewErrBuildRequest(providerName, err)
 	}

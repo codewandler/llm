@@ -43,14 +43,15 @@ func TestBuildRequest_AssistantWithBlocks_WireOrder(t *testing.T) {
 	require.True(t, ok)
 	content, ok := assistantMsg["content"].([]any)
 	require.True(t, ok, "assistant content must be an array of blocks")
-	// Only text + tool_use; ThinkingConfig blocks are filtered out
-	require.Len(t, content, 3, "expecting text + tool_use blocks (no ThinkingConfig)")
+	// Thinking, text, and tool_use blocks are all preserved on the wire.
+	require.Len(t, content, 3, "expecting thinking + text + tool_use blocks")
 
 	// Block 0: thinking
 	b0, ok := content[0].(map[string]any)
 	require.True(t, ok)
-	assert.Equal(t, "thinking", b0["type"], "first block must be text")
+	assert.Equal(t, "thinking", b0["type"], "first block must be thinking")
 	assert.Equal(t, "My reasoning", b0["thinking"])
+	assert.Equal(t, "sig-xyz", b0["signature"])
 
 	// Block 1: text
 	b1, ok := content[1].(map[string]any)
@@ -85,7 +86,7 @@ func TestBuildRequest_AssistantWithBlocks_NoToolCalls(t *testing.T) {
 	messages := req["messages"].([]any)
 	assistantMsg := messages[1].(map[string]any)
 	content := assistantMsg["content"].([]any)
-	require.Len(t, content, 2, "only text block, no thinking")
+	require.Len(t, content, 2, "thinking and text blocks should be preserved")
 
 	assert.Equal(t, "thinking", content[0].(map[string]any)["type"])
 	assert.Equal(t, "text", content[1].(map[string]any)["type"])
@@ -113,12 +114,14 @@ func TestBuildRequest_AssistantWithBlocks_SignatureRoundTrip(t *testing.T) {
 	msgs := outer["messages"].([]any)
 	assistantContent := msgs[1].(map[string]any)["content"].([]any)
 
-	// Only text block should be present; ThinkingConfig blocks are filtered
+	// Thinking block should be preserved, including its signature.
 	require.Len(t, assistantContent, 2)
+	thinkingBlock := assistantContent[0].(map[string]any)
+	assert.Equal(t, "thinking", thinkingBlock["type"])
+	assert.Equal(t, "My reasoning", thinkingBlock["thinking"])
+	assert.Equal(t, "sig-xyz", thinkingBlock["signature"])
+
 	textBlock := assistantContent[1].(map[string]any)
 	assert.Equal(t, "text", textBlock["type"])
 	assert.Equal(t, "result", textBlock["text"])
-	// No thinking block, no signature
-	_, hasThinking := textBlock["thinking"]
-	assert.False(t, hasThinking, "Thinking blocks must not be included in requests")
 }

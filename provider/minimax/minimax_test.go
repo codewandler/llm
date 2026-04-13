@@ -99,3 +99,34 @@ func TestCreateStream_EmptyModel(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "model")
 }
+
+func TestResolve_Aliases(t *testing.T) {
+	t.Parallel()
+
+	p := New()
+
+	tests := []struct {
+		name    string
+		input   string
+		wantID  string
+		wantErr bool
+	}{
+		{"default alias", llm.ModelDefault, ModelM27, false},
+		{"fast alias", llm.ModelFast, ModelM27, false},
+		{"minimax alias", "minimax", ModelM27, false},
+		{"exact model ID", ModelM27, ModelM27, false},
+		{"unknown model", "MiniMax-Future-99", "", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resolved, err := p.Resolve(tt.input)
+			if tt.wantErr {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+				assert.Equal(t, tt.wantID, resolved.ID)
+			}
+		})
+	}
+}

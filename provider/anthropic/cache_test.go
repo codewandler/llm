@@ -310,11 +310,16 @@ func TestBuildRequest_AssistantWithBlocksAndCacheHint_ThinkingBlock(t *testing.T
 
 	assistant := messages[1].(map[string]any)
 	content := assistant["content"].([]any)
-	// Thought block is filtered out; only text block remains
-	require.Len(t, content, 1)
+	// Thinking blocks are preserved on the wire; cache_control attaches to the
+	// last cacheable block, which is still the text block.
+	require.Len(t, content, 2)
 
-	// Only text block with cache_control
-	textBlock := content[0].(map[string]any)
+	thinkingBlock := content[0].(map[string]any)
+	assert.Equal(t, "thinking", thinkingBlock["type"])
+	assert.Equal(t, "Thinking text", thinkingBlock["thinking"])
+	assert.Equal(t, "sig123", thinkingBlock["signature"])
+
+	textBlock := content[1].(map[string]any)
 	assert.Equal(t, "text", textBlock["type"])
 	assert.Equal(t, "answer", textBlock["text"])
 
@@ -347,9 +352,15 @@ func TestBuildRequest_AssistantWithBlocksAndCacheHint_ThinkingBlock_LastBlock(t 
 	assistant := messages[1].(map[string]any)
 	content := assistant["content"].([]any)
 
-	// Only text block; ThinkingConfig is filtered out
-	require.Len(t, content, 1)
-	textBlock := content[0].(map[string]any)
+	// Cache control attaches to the last cacheable block (text), even when a
+	// thinking block precedes it.
+	require.Len(t, content, 2)
+	thinkingBlock := content[0].(map[string]any)
+	assert.Equal(t, "thinking", thinkingBlock["type"])
+	assert.Equal(t, "Thinking text", thinkingBlock["thinking"])
+	assert.Equal(t, "sig123", thinkingBlock["signature"])
+
+	textBlock := content[1].(map[string]any)
 	assert.Equal(t, "text", textBlock["type"])
 	assert.Equal(t, "answer", textBlock["text"])
 

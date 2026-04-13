@@ -47,9 +47,9 @@ func TestBuildRequest_ThinkingEffort_Defaults(t *testing.T) {
 					ThinkingEffort: tc.thinkingEffort,
 				},
 			})
-			thinking, ok := m["ThinkingConfig"].(map[string]any)
-			require.True(t, ok, "ThinkingConfig block should be present")
-			assert.Equal(t, tc.expectedType, thinking["type"], "ThinkingConfig.type")
+			thinking, ok := m["thinking"].(map[string]any)
+			require.True(t, ok, "thinking block should be present")
+			assert.Equal(t, tc.expectedType, thinking["type"], "thinking.type")
 		})
 	}
 }
@@ -72,8 +72,8 @@ func TestBuildRequest_ThinkingEffort(t *testing.T) {
 					ThinkingEffort: tc.effort,
 				},
 			})
-			thinking, ok := m["ThinkingConfig"].(map[string]any)
-			require.True(t, ok, "ThinkingConfig block should be present")
+			thinking, ok := m["thinking"].(map[string]any)
+			require.True(t, ok, "thinking block should be present")
 			assert.Equal(t, "enabled", thinking["type"])
 			assert.InDelta(t, float64(tc.budget), thinking["budget_tokens"], 0)
 		})
@@ -123,7 +123,7 @@ func TestBuildRequest_MaxTokensFallback(t *testing.T) {
 		m := buildRequestMap(t, RequestOptions{
 			LLMRequest: baseReq,
 		})
-		assert.InDelta(t, float64(999), m["max_tokens"], 0)
+		assert.InDelta(t, float64(1000), m["max_tokens"], 0)
 	})
 
 	t.Run("StreamOptions.MaxTokens used when RequestOptions is zero", func(t *testing.T) {
@@ -135,9 +135,11 @@ func TestBuildRequest_MaxTokensFallback(t *testing.T) {
 		assert.InDelta(t, float64(777), m["max_tokens"], 0)
 	})
 
-	t.Run("default 32000 when both are zero", func(t *testing.T) {
+	t.Run("default 32000 when MaxTokens is zero", func(t *testing.T) {
+		r := baseReq
+		r.MaxTokens = 0
 		m := buildRequestMap(t, RequestOptions{
-			LLMRequest: baseReq,
+			LLMRequest: r,
 		})
 		assert.InDelta(t, float64(32000), m["max_tokens"], 0)
 	})

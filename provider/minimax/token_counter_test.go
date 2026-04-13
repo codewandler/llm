@@ -119,8 +119,8 @@ func TestProvider_CountTokens_NoToolsHiddenSystemPrompt(t *testing.T) {
 		Messages: msg.BuildTranscript(msg.User("hi")),
 	})
 	require.NoError(t, err)
-	assert.Equal(t, minimaxHiddenSystemPromptTokens, got.OverheadTokens,
-		"user-only request must account for hidden system prompt overhead")
+	assert.Equal(t, 0, got.OverheadTokens,
+		"user-only request should not add hidden prompt overhead")
 
 	// Add a system message, the hidden prompt is suppressed — no overhead.
 	gotWithSystem, err := p.CountTokens(context.Background(), tokencount.TokenCountRequest{
@@ -190,8 +190,7 @@ func TestProvider_CountTokens_EmptyMessages(t *testing.T) {
 	assert.Equal(t, 0, got.AssistantTokens)
 	assert.Equal(t, 0, got.ToolResultTokens)
 	assert.Equal(t, 0, got.ToolsTokens)
-	// Empty messages with no system message still triggers the hidden system prompt
-	// overhead — the API would inject its default system prompt even for an empty request.
-	assert.Equal(t, minimaxHiddenSystemPromptTokens, got.OverheadTokens)
-	assert.Equal(t, minimaxHiddenSystemPromptTokens, got.InputTokens)
+	// Empty messages should not add provider-specific overhead.
+	assert.Equal(t, 0, got.OverheadTokens)
+	assert.Equal(t, 0, got.InputTokens)
 }

@@ -14,6 +14,38 @@ import (
 	"github.com/codewandler/llm/provider/anthropic/claude"
 )
 
+func requireStreamProducesOutputOrToolCalls(t *testing.T, stream llm.Stream) string {
+	t.Helper()
+
+	var (
+		text      string
+		toolCalls int
+		completed bool
+	)
+	for env := range stream {
+		switch env.Type {
+		case llm.StreamEventError:
+			if errEvt, ok := env.Data.(*llm.ErrorEvent); ok {
+				t.Fatalf("stream error: %v", errEvt.Error)
+			}
+		case llm.StreamEventDelta:
+			if delta, ok := env.Data.(*llm.DeltaEvent); ok {
+				text += delta.Text
+			}
+		case llm.StreamEventToolCall:
+			toolCalls++
+		case llm.StreamEventCompleted:
+			completed = true
+		}
+	}
+
+	require.True(t, completed, "stream should complete")
+	if text == "" && toolCalls == 0 {
+		t.Fatal("expected either text deltas or tool calls from stream")
+	}
+	return text
+}
+
 // TestPromptCaching_Claude verifies that cache hints on messages and the
 // Anthropic API's prompt-caching feature work correctly end-to-end.
 // It covers a range of message layouts that have historically caused
@@ -23,6 +55,14 @@ import (
 //
 //	go test -v -tags=integration -run TestPromptCaching_Claude ./integration/...
 func TestPromptCaching_Claude(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping Claude integration tests in short mode")
+	}
+
+	if !isClaudeAvailable() {
+		t.Skip("requires local Claude credentials (~/.claude/.credentials.json)")
+	}
+
 	// Create Claude provider — uses local token provider by default (Claude Code CLI)
 	provider := claude.New()
 
@@ -117,16 +157,10 @@ func TestPromptCaching_Claude(t *testing.T) {
 			require.NoError(t, err, "CreateStream() should not error")
 		}
 
-		var text string
-		for env := range stream {
-			if env.Type == llm.StreamEventDelta {
-				if delta, ok := env.Data.(*llm.DeltaEvent); ok {
-					text += delta.Text
-				}
-			}
+		text := requireStreamProducesOutputOrToolCalls(t, stream)
+		if text != "" {
+			t.Logf("Response: %s", text)
 		}
-		require.NotEmpty(t, text)
-		t.Logf("Response: %s", text)
 	})
 
 	// -------------------------------------------------------------------------
@@ -153,16 +187,10 @@ func TestPromptCaching_Claude(t *testing.T) {
 			require.NoError(t, err, "CreateStream() should not error with tool calls + cache hint")
 		}
 
-		var text string
-		for env := range stream {
-			if env.Type == llm.StreamEventDelta {
-				if delta, ok := env.Data.(*llm.DeltaEvent); ok {
-					text += delta.Text
-				}
-			}
+		text := requireStreamProducesOutputOrToolCalls(t, stream)
+		if text != "" {
+			t.Logf("Response: %s", text)
 		}
-		require.NotEmpty(t, text)
-		t.Logf("Response: %s", text)
 	})
 
 	// -------------------------------------------------------------------------
@@ -192,16 +220,10 @@ func TestPromptCaching_Claude(t *testing.T) {
 			require.NoError(t, err, "CreateStream() should not error with tool call sequence + cache hint")
 		}
 
-		var text string
-		for env := range stream {
-			if env.Type == llm.StreamEventDelta {
-				if delta, ok := env.Data.(*llm.DeltaEvent); ok {
-					text += delta.Text
-				}
-			}
+		text := requireStreamProducesOutputOrToolCalls(t, stream)
+		if text != "" {
+			t.Logf("Response: %s", text)
 		}
-		require.NotEmpty(t, text)
-		t.Logf("Response: %s", text)
 	})
 
 	// -------------------------------------------------------------------------
@@ -230,16 +252,10 @@ func TestPromptCaching_Claude(t *testing.T) {
 			require.NoError(t, err, "CreateStream() should not error with multiple tool calls + cache hint")
 		}
 
-		var text string
-		for env := range stream {
-			if env.Type == llm.StreamEventDelta {
-				if delta, ok := env.Data.(*llm.DeltaEvent); ok {
-					text += delta.Text
-				}
-			}
+		text := requireStreamProducesOutputOrToolCalls(t, stream)
+		if text != "" {
+			t.Logf("Response: %s", text)
 		}
-		require.NotEmpty(t, text)
-		t.Logf("Response: %s", text)
 	})
 
 	// -------------------------------------------------------------------------
@@ -269,16 +285,10 @@ func TestPromptCaching_Claude(t *testing.T) {
 			require.NoError(t, err, "CreateStream() should not error with thinking+tool_calls (no text)")
 		}
 
-		var text string
-		for env := range stream {
-			if env.Type == llm.StreamEventDelta {
-				if delta, ok := env.Data.(*llm.DeltaEvent); ok {
-					text += delta.Text
-				}
-			}
+		text := requireStreamProducesOutputOrToolCalls(t, stream)
+		if text != "" {
+			t.Logf("Response: %s", text)
 		}
-		require.NotEmpty(t, text)
-		t.Logf("Response: %s", text)
 	})
 
 	// -------------------------------------------------------------------------

@@ -301,3 +301,35 @@ func TestBuildRequest_ToolCallWithNilArguments(t *testing.T) {
 	require.True(t, ok, "input must be an object")
 	assert.Empty(t, inputMap, "input should be an empty object for nil arguments")
 }
+
+func TestResolve_Aliases(t *testing.T) {
+	t.Parallel()
+
+	p := New()
+
+	tests := []struct {
+		name    string
+		input   string
+		wantID  string
+		wantErr bool
+	}{
+		{"default alias", llm.ModelDefault, ModelSonnet, false},
+		{"fast alias", llm.ModelFast, ModelSonnet, false},
+		{"powerful alias", llm.ModelPowerful, ModelOpus, false},
+		{"exact model ID", ModelSonnet, ModelSonnet, false},
+		{"exact model ID opus", ModelOpus, ModelOpus, false},
+		{"unknown model", "claude-future-99", "", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resolved, err := p.Resolve(tt.input)
+			if tt.wantErr {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+				assert.Equal(t, tt.wantID, resolved.ID)
+			}
+		})
+	}
+}

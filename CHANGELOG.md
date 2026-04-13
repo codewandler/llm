@@ -6,6 +6,15 @@
 
 - Coordinate SSE reader shutdown on cancellation and early stop so Anthropic, OpenAI, OpenRouter, and MiniMax streaming paths do not leave blocked scanner goroutines or response bodies hanging.
 
+### Changed
+
+- Upgrade all Go dependencies to latest stable versions.
+- Resolve model aliases in `CreateStream` for Anthropic and MiniMax so callers can use `"default"`, `"fast"`, `"powerful"`, or `"minimax"` directly.
+- Align Anthropic wire format tests with current API behavior: thinking blocks are preserved in assistant content, `thinking` is the top-level request field.
+- Recalibrate MiniMax token counter constants for the current Anthropic-compatible endpoint.
+- Add default/alias model entries for MiniMax (`ModelDefault`) and Anthropic (`allModelsWithAliases`).
+- Make Claude integration test helper fail fast on `StreamEventError`.
+
 ---
 
 ## v0.34.2

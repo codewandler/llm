@@ -23,7 +23,6 @@ const (
 
 // Provider implements the direct Anthropic API backend.
 type Provider struct {
-	models llm.Models
 	opts   *llm.Options
 	client *http.Client
 }
@@ -47,12 +46,22 @@ func New(opts ...llm.Option) *Provider {
 	return &Provider{opts: cfg, client: client}
 }
 
-func (p *Provider) Name() string       { return providerName }
-func (p *Provider) Models() llm.Models { return allModels }
+func (p *Provider) Name() string { return providerName }
+
+func (p *Provider) Models() llm.Models { return allModelsWithAliases }
+
 func (p *Provider) Resolve(modelID string) (llm.Model, error) {
-	return p.models.Resolve(modelID)
+	return allModelsWithAliases.Resolve(modelID)
 }
 func (p *Provider) CreateStream(ctx context.Context, opts llm.Request) (llm.Stream, error) {
+	// Resolve aliases (e.g. "default", "fast") to real model IDs.
+	// Unknown model IDs pass through to the API unchanged.
+	if opts.Model != "" {
+		if resolved, err := p.Resolve(opts.Model); err == nil {
+			opts.Model = resolved.ID
+		}
+	}
+
 	if err := opts.Validate(); err != nil {
 		return nil, llm.NewErrBuildRequest(llm.ProviderNameAnthropic, err)
 	}
@@ -71,8 +80,6 @@ func (p *Provider) CreateStream(ctx context.Context, opts llm.Request) (llm.Stre
 	if err != nil {
 		return nil, llm.NewErrBuildRequest(llm.ProviderNameAnthropic, err)
 	}
-
-	println(string(body))
 
 	req, err := p.newAPIRequest(ctx, apiKey, body)
 	if err != nil {
