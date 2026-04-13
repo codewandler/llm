@@ -5,9 +5,10 @@ import "time"
 type CacheTTL string
 
 const (
-	CacheTTLDefault CacheTTL = ""
-	CacheTTL5m      CacheTTL = "5m"
-	CacheTTL1h      CacheTTL = "1h"
+	CacheTTLUnspecified CacheTTL = ""
+	CacheTTL5m          CacheTTL = "5m"
+	CacheTTL1h          CacheTTL = "1h"
+	CacheTTLDefault              = CacheTTL5m
 )
 
 func (ttl CacheTTL) String() string { return string(ttl) }
