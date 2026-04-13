@@ -393,12 +393,12 @@ func TestCreateStream(t *testing.T) {
 	t.Run("all targets fail with retriable errors", func(t *testing.T) {
 		prov1 := &mockProvider{
 			name:      "prov1",
-			returnErr: errors.New("HTTP429: rate limit"),
+			returnErr: llm.NewErrAPIError("prov1", 429, "rate limit"),
 			models:    []llm.Model{{ID: "gpt-4", Name: "GPT-4", Provider: "openai"}},
 		}
 		prov2 := &mockProvider{
 			name:      "prov2",
-			returnErr: errors.New("HTTP 503: service unavailable"),
+			returnErr: llm.NewErrAPIError("prov2", 503, "service unavailable"),
 			models:    []llm.Model{{ID: "claude", Name: "Claude", Provider: "anthropic"}},
 		}
 
@@ -428,6 +428,40 @@ func TestCreateStream(t *testing.T) {
 		})
 		require.Error(t, err)
 		assert.ErrorIs(t, err, llm.ErrNoProviders)
+		// Original provider errors must not be swallowed.
+		assert.ErrorIs(t, err, llm.ErrAPIError)
+		assert.Contains(t, err.Error(), "429")
+		assert.Contains(t, err.Error(), "503")
+	})
+
+	t.Run("single provider 402 preserves original error", func(t *testing.T) {
+		prov := &mockProvider{
+			name:      "openrouter",
+			returnErr: llm.NewErrAPIError("openrouter", 402, "Payment Required: insufficient credits"),
+			models:    []llm.Model{{ID: "gpt-4", Name: "GPT-4", Provider: "openrouter"}},
+		}
+
+		cfg := Config{
+			Providers: []ProviderInstanceConfig{
+				{Name: "openrouter", Type: "openrouter"},
+			},
+		}
+
+		factories := map[string]Factory{"openrouter": mockFactory(prov)}
+		agg, err := New(cfg, factories)
+		require.NoError(t, err)
+
+		_, err = agg.CreateStream(context.Background(), llm.Request{
+			Model:    "gpt-4",
+			Messages: llm.Messages{llm.User("hi")},
+		})
+		require.Error(t, err)
+		// ErrNoProviders because all targets exhausted.
+		assert.ErrorIs(t, err, llm.ErrNoProviders)
+		// But the original 402 must be accessible — not swallowed.
+		assert.ErrorIs(t, err, llm.ErrAPIError)
+		assert.Contains(t, err.Error(), "402")
+		assert.Contains(t, err.Error(), "insufficient credits")
 	})
 
 	t.Run("unknown model", func(t *testing.T) {
@@ -475,6 +509,7 @@ func TestIsRetriableError(t *testing.T) {
 		{mkpe("rate_limit", 0), true},
 		{mkpe("insufficient quota", 0), true},
 		{mkpe("usage limit exceeded", 0), true},
+		{mkpe("payment required", 402), true},
 		{mkpe("authentication failed", 401), false},
 		{mkpe("invalid API key", 403), false},
 		{mkpe("model not found", 404), false},

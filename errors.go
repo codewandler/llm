@@ -98,9 +98,14 @@ func (e *ProviderError) WithRequestBody(body string) *ProviderError {
 }
 
 // Error returns a human-readable error string in the form:
-// "<provider>: <sentinel>: <message>" or "<provider>: <sentinel>: <message>: <cause>".
+// "<provider>: <sentinel>" or "<provider>: <sentinel>: <message>" (with optional ": <cause>" suffix).
 func (e *ProviderError) Error() string {
-	base := fmt.Sprintf("%s: %s: %s", e.Provider, e.Sentinel.Error(), e.Message)
+	var base string
+	if e.Message == "" {
+		base = fmt.Sprintf("%s: %s", e.Provider, e.Sentinel.Error())
+	} else {
+		base = fmt.Sprintf("%s: %s: %s", e.Provider, e.Sentinel.Error(), e.Message)
+	}
 	if e.Cause != nil {
 		return base + ": " + e.Cause.Error()
 	}
@@ -256,13 +261,25 @@ func NewErrUnknownModel(provider string, modelID string) *ProviderError {
 	}
 }
 
+// NewErrAllProvidersFailed returns an error when every failover target has been
+// tried and all returned retriable errors. The original per-provider errors are
+// preserved as the Cause via errors.Join so callers can inspect them with
+// errors.Is / errors.As without losing the HTTP status, body, or message.
+func NewErrAllProvidersFailed(provider string, errs []error) *ProviderError {
+	return &ProviderError{
+		Sentinel: ErrNoProviders,
+		Provider: provider,
+		Message:  fmt.Sprintf("all %d provider(s) exhausted", len(errs)),
+		Cause:    errors.Join(errs...),
+	}
+}
+
 // NewErrNoProviders returns an error when no providers are available or all
 // failover targets have been exhausted.
 func NewErrNoProviders(provider string) *ProviderError {
 	return &ProviderError{
 		Sentinel: ErrNoProviders,
 		Provider: provider,
-		Message:  "no providers configured",
 	}
 }
 

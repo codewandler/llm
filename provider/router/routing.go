@@ -37,7 +37,9 @@ func isRetriableError(pe *llm.ProviderError) bool {
 	}
 
 	// Use the structured StatusCode field when available — no string matching needed.
-	if pe.StatusCode == 429 || pe.StatusCode == 503 {
+	// 402: payment required / insufficient credits (e.g. OpenRouter out of funds).
+	// 429: rate limited. 503: service unavailable.
+	if pe.StatusCode == 402 || pe.StatusCode == 429 || pe.StatusCode == 503 {
 		return true
 	}
 

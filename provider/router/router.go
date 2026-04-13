@@ -337,5 +337,8 @@ func (p *Provider) CreateStream(ctx context.Context, opts llm.Request) (llm.Stre
 		return ch, nil
 	}
 
+	if len(triedErrors) > 0 {
+		return nil, llm.NewErrAllProvidersFailed(llm.ProviderNameRouter, triedErrors)
+	}
 	return nil, llm.NewErrNoProviders(llm.ProviderNameRouter)
 }
