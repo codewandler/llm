@@ -2,12 +2,14 @@ package minimax
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/codewandler/llm"
+	"github.com/codewandler/llm/provider/anthropic"
 )
 
 func TestProviderNameAndModels(t *testing.T) {
@@ -52,6 +54,7 @@ func TestNewAPIRequestHeaders(t *testing.T) {
 
 	assert.Equal(t, "https://api.test/v1/messages", req.URL.String())
 	assert.Equal(t, "token-123", req.Header.Get("x-api-key"))
+	assert.Equal(t, "Bearer token-123", req.Header.Get("Authorization"))
 	assert.Equal(t, anthropicVersion, req.Header.Get("Anthropic-Version"))
 	assert.Equal(t, "application/json", req.Header.Get("Content-Type"))
 	assert.Equal(t, "application/json", req.Header.Get("Accept"))
@@ -129,4 +132,49 @@ func TestResolve_Aliases(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestAdjustThinkingForMiniMax(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		input anthropic.Request
+	}{
+		{"disabled is nil'd", anthropic.Request{Thinking: &anthropic.ThinkingConfig{Type: "disabled"}}},
+		{"enabled is nil'd", anthropic.Request{Thinking: &anthropic.ThinkingConfig{Type: "enabled", BudgetTokens: 16000}}},
+		{"adaptive is nil'd", anthropic.Request{Thinking: &anthropic.ThinkingConfig{Type: "adaptive"}}},
+		{"nil stays nil", anthropic.Request{Thinking: nil}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := adjustThinkingForMiniMax(tt.input)
+			assert.Nil(t, result.Thinking, "thinking must always be omitted for MiniMax")
+		})
+	}
+}
+
+func TestBuildRequest_ThinkingOff_WireFormat(t *testing.T) {
+	t.Parallel()
+
+	apiReq, err := anthropic.BuildRequest(anthropic.RequestOptions{
+		LLMRequest: llm.Request{
+			Model:    ModelM27,
+			Messages: llm.Messages{llm.User("hi")},
+			Thinking: llm.ThinkingOff,
+		},
+	})
+	require.NoError(t, err)
+
+	apiReq = adjustThinkingForMiniMax(apiReq)
+
+	body, err := json.Marshal(apiReq)
+	require.NoError(t, err)
+
+	var m map[string]any
+	require.NoError(t, json.Unmarshal(body, &m))
+
+	_, hasThinking := m["thinking"]
+	assert.False(t, hasThinking, "thinking field must be absent from MiniMax wire format")
 }

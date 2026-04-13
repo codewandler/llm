@@ -112,6 +112,13 @@ func (p *Provider) CreateStream(ctx context.Context, opts llm.Request) (llm.Stre
 		return nil, llm.NewErrBuildRequest(providerName, err)
 	}
 
+	// MiniMax's Anthropic-compatible endpoint does not support the thinking
+	// field at all: the official Mini-Agent reference client never sends it
+	// and the model thinks by default regardless. Omit the field unconditionally
+	// so the request matches what MiniMax actually expects.
+	// Ref: https://github.com/MiniMax-AI/Mini-Agent
+	apiReq = adjustThinkingForMiniMax(apiReq)
+
 	body, err := json.Marshal(apiReq)
 	if err != nil {
 		return nil, llm.NewErrBuildRequest(providerName, err)
@@ -153,6 +160,18 @@ func (p *Provider) CreateStream(ctx context.Context, opts llm.Request) (llm.Stre
 	return ch, nil
 }
 
+// adjustThinkingForMiniMax removes the thinking field from the request.
+// MiniMax's Anthropic-compatible endpoint does not accept the thinking
+// parameter: the official Mini-Agent reference client never sends it and
+// MiniMax models produce thinking blocks by default regardless of whether
+// the field is present. Sending "disabled" or any other value causes
+// unspecified behaviour, so the field is always omitted.
+// Ref: https://github.com/MiniMax-AI/Mini-Agent
+func adjustThinkingForMiniMax(req anthropic.Request) anthropic.Request {
+	req.Thinking = nil
+	return req
+}
+
 func (p *Provider) newAPIRequest(ctx context.Context, apiKey string, body []byte) (*http.Request, error) {
 	req, err := http.NewRequestWithContext(ctx, "POST", p.opts.BaseURL+"/v1/messages", bytes.NewReader(body))
 	if err != nil {
@@ -163,5 +182,6 @@ func (p *Provider) newAPIRequest(ctx context.Context, apiKey string, body []byte
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Anthropic-Version", anthropicVersion)
 	req.Header.Set("x-api-key", apiKey)
+	req.Header.Set("Authorization", "Bearer "+apiKey)
 	return req, nil
 }
