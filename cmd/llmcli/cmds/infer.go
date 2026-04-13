@@ -22,6 +22,7 @@ func NewInferCmd(root *RootFlags) *cobra.Command {
 	var thinking string
 	var effort string
 	var demoTools bool
+	var maxTokens int
 
 	cmd := &cobra.Command{
 		Use:   "infer <message>",
@@ -37,10 +38,11 @@ Examples:
   llmcli infer --effort max --thinking on "Explain this"	# max effort, force thinking on
   llmcli infer --thinking off "Quick answer"				# disable thinking
   llmcli infer -m powerful "Write a poem about Go"		# Most capable (opus)
-  llmcli infer -s "You are a pirate" "Hello"				# Add system prompt`,
+  llmcli infer -s "You are a pirate" "Hello"				# Add system prompt
+  llmcli infer --max-tokens 512 "Short answer please"		# Limit output length`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runInfer(cmd.Context(), args[0], model, system, thinking, effort, verbose, demoTools, root)
+			return runInfer(cmd.Context(), args[0], model, system, thinking, effort, verbose, demoTools, maxTokens, root)
 		},
 	}
 
@@ -50,10 +52,11 @@ Examples:
 	cmd.Flags().StringVar(&effort, "effort", "", "Effort level: low, medium, high, max (default: provider decides)")
 	cmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "Show usage statistics")
 	cmd.Flags().BoolVar(&demoTools, "demo-tools", false, "Enable demo tool loop (add_fact + complete_turn) and default persona")
+	cmd.Flags().IntVar(&maxTokens, "max-tokens", 8_000, "Maximum tokens to generate")
 	return cmd
 }
 
-func runInfer(ctx context.Context, userMsg, model, system, thinking, effort string, verbose bool, demoTools bool, root *RootFlags) error {
+func runInfer(ctx context.Context, userMsg, model, system, thinking, effort string, verbose bool, demoTools bool, maxTokens int, root *RootFlags) error {
 	httpClient, logHandler := root.BuildHTTPClient()
 	concreteProvider, err := createProvider(ctx, httpClient, root.BuildLLMOptions(logHandler)...)
 	if err != nil {
@@ -62,6 +65,16 @@ func runInfer(ctx context.Context, userMsg, model, system, thinking, effort stri
 	var provider llm.Provider = concreteProvider
 
 	spec := buildInferSpec(userMsg, model, system, thinking, effort, demoTools)
+
+	req := llm.Request{
+		Model:      spec.Model,
+		Messages:   spec.Messages,
+		Effort:     spec.Effort,
+		Thinking:   spec.Thinking,
+		ToolChoice: spec.ToolChoice,
+		Tools:      spec.Tools,
+		MaxTokens:  maxTokens,
+	}
 
 	// --- Token estimate (verbose only) ---
 	var tokenEstimate *tokencount.TokenCount
@@ -79,20 +92,21 @@ func runInfer(ctx context.Context, userMsg, model, system, thinking, effort stri
 		}
 	}
 
-	stream, err := provider.CreateStream(ctx, llm.Request{
-		Model:      spec.Model,
-		Messages:   spec.Messages,
-		Effort:     spec.Effort,
-		Thinking:   spec.Thinking,
-		ToolChoice: spec.ToolChoice,
-		Tools:      spec.Tools,
-	})
+	stream, err := provider.CreateStream(ctx, req)
 	if err != nil {
 		return fmt.Errorf("create stream: %w", err)
 	}
 
 	var inReasoning bool
 	var hadTokenOutput bool
+	var verboseOutputPrinted bool
+
+	printVerboseSeparator := func() {
+		if verboseOutputPrinted {
+			fmt.Fprintln(os.Stderr)
+			verboseOutputPrinted = false
+		}
+	}
 
 	proc := llm.NewEventProcessor(ctx, stream).
 		OnEvent(llm.EventHandlerFunc(func(ev llm.Event) {
@@ -101,9 +115,22 @@ func runInfer(ctx context.Context, userMsg, model, system, thinking, effort stri
 				fmt.Printf("\n[EVT :: %s]\n%s\n", ev.Type(), string(d))
 			}
 		})).
-		OnEvent(llm.TypedEventHandler[*llm.RequestParamsEvent](func(ev *llm.RequestParamsEvent) {
+		OnEvent(llm.TypedEventHandler[*llm.RouteInfoEvent](func(ev *llm.RouteInfoEvent) {
+			if verbose {
+				printRouteInfoEvent(ev)
+				verboseOutputPrinted = true
+			}
+		})).
+		OnEvent(llm.TypedEventHandler[*llm.StreamStartedEvent](func(ev *llm.StreamStartedEvent) {
+			if verbose {
+				printStreamStartedEvent(ev)
+				verboseOutputPrinted = true
+			}
+		})).
+		OnEvent(llm.TypedEventHandler[*llm.RequestEvent](func(ev *llm.RequestEvent) {
 			if verbose {
 				printRequestParamsEvent(ev)
+				verboseOutputPrinted = true
 			}
 		}))
 
@@ -113,6 +140,7 @@ func runInfer(ctx context.Context, userMsg, model, system, thinking, effort stri
 
 	proc = proc.
 		OnTextDelta(func(chunk string) {
+			printVerboseSeparator()
 			if inReasoning {
 				fmt.Print(ansiReset)
 				inReasoning = false
@@ -124,6 +152,7 @@ func runInfer(ctx context.Context, userMsg, model, system, thinking, effort stri
 			}
 		}).
 		OnReasoningDelta(func(chunk string) {
+			printVerboseSeparator()
 			if !inReasoning {
 				fmt.Print(ansiDim)
 				inReasoning = true
@@ -336,21 +365,68 @@ type kvField struct {
 	value string
 }
 
+// printStreamStartedEvent prints the stream-started metadata (request ID, model)
+// when running in verbose mode.
+func printStreamStartedEvent(ev *llm.StreamStartedEvent) {
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintf(os.Stderr, "%s── stream started ──%s\n", ansiDim, ansiReset)
+	var fields []kvField
+	if ev.Model != "" {
+		fields = append(fields, kvField{"model", ev.Model})
+	}
+	if ev.RequestID != "" {
+		fields = append(fields, kvField{"request_id", ev.RequestID})
+	}
+	for k, v := range ev.Extra {
+		fields = append(fields, kvField{k, fmt.Sprint(v)})
+	}
+	printFields(fields)
+}
+
+// printRouteInfoEvent prints the routing decision (provider + model resolution)
+// when running in verbose mode.
+func printRouteInfoEvent(ev *llm.RouteInfoEvent) {
+	ri := ev.RouteInfo
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintf(os.Stderr, "%s── route info ──%s\n", ansiDim, ansiReset)
+	var fields []kvField
+	if ri.Provider != "" {
+		fields = append(fields, kvField{"provider", ri.Provider})
+	}
+	if ri.ModelRequested != "" {
+		fields = append(fields, kvField{"model_requested", ri.ModelRequested})
+	}
+	if ri.ModelResolved != "" {
+		fields = append(fields, kvField{"model_resolved", ri.ModelResolved})
+	}
+	if len(ri.Errors) > 0 {
+		for i, e := range ri.Errors {
+			fields = append(fields, kvField{fmt.Sprintf("error[%d]", i), e.Error()})
+		}
+	}
+	printFields(fields)
+}
+
 // printRequestParamsEvent prints both the llm.Request-level params and the
-// provider-resolved params from a single RequestParamsEvent.
-func printRequestParamsEvent(ev *llm.RequestParamsEvent) {
+// provider-resolved params from a single RequestEvent.
+func printRequestParamsEvent(ev *llm.RequestEvent) {
 	// --- llm.Request params (what the caller asked for) ---
-	if req := ev.LLMRequest; req != nil {
+	if req := ev.OriginalRequest; req.Model != "" {
 		fmt.Fprintln(os.Stderr)
 		fmt.Fprintf(os.Stderr, "%s── request params ──%s\n", ansiDim, ansiReset)
 		printParamMap(mapFromStruct(req, "messages", "tools"))
 	}
 
 	// --- Provider-resolved params (what was actually sent) ---
-	if params := ev.ProviderRequestParams; len(params) > 0 {
+	if pr := ev.ProviderRequest; pr.Body != nil {
 		fmt.Fprintln(os.Stderr)
 		fmt.Fprintf(os.Stderr, "%s── provider params ──%s\n", ansiDim, ansiReset)
-		printParamMap(params)
+		var bodyMap map[string]any
+		if err := json.Unmarshal(pr.Body, &bodyMap); err == nil {
+			delete(bodyMap, "messages")
+			delete(bodyMap, "tools")
+			printParamMap(bodyMap)
+		}
 	}
 }
 
@@ -388,6 +464,9 @@ func printParamMap(m map[string]any) {
 		v := m[k]
 		switch val := v.(type) {
 		case map[string]any:
+			b, _ := json.Marshal(val)
+			fields = append(fields, kvField{k, string(b)})
+		case []any:
 			b, _ := json.Marshal(val)
 			fields = append(fields, kvField{k, string(b)})
 		default:
