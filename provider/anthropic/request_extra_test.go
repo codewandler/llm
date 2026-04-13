@@ -20,160 +20,263 @@ func buildRequestMap(t *testing.T, opts RequestOptions) map[string]any {
 	return m
 }
 
-func TestBuildRequest_ThinkingEffort_Defaults(t *testing.T) {
+func TestBuildRequest_Thinking_Adaptive(t *testing.T) {
 	cases := []struct {
-		model          string
-		thinkingEffort llm.ThinkingEffort
-		expectedType   string
+		name               string
+		model              string
+		thinking           llm.ThinkingMode
+		effort             llm.Effort
+		expectThinkingType string
+		expectBudget       bool
+		expectEffort       string // expected output_config.effort
 	}{
-		// Sonnet 4.6 / Opus 4.6: default to adaptive
-		{"claude-sonnet-4-6-20251120", "", "adaptive"},
-		{"claude-opus-4-6-20251120", "", "adaptive"},
-		{"claude-sonnet-4-6-20251120", llm.ThinkingEffortNone, "disabled"},
-		{"claude-opus-4-6-20251120", llm.ThinkingEffortNone, "disabled"},
-		// Haiku / older models: default to enabled ThinkingConfig with high budget_tokens
-		{"claude-haiku-4-5-20251001", "", "enabled"},
-		{"claude-haiku-4-5-20251001", llm.ThinkingEffortNone, "disabled"},
-		// Sonnet 4.5: default to enabled ThinkingConfig (like Haiku)
-		{"claude-sonnet-4-5-20250514", "", "enabled"},
-		{"claude-sonnet-4-5-20250514", llm.ThinkingEffortNone, "disabled"},
+		{
+			name:               "sonnet-4-6 auto unspecified",
+			model:              "claude-sonnet-4-6-20251120",
+			thinking:           llm.ThinkingAuto,
+			effort:             llm.EffortUnspecified,
+			expectThinkingType: "adaptive",
+			expectEffort:       "medium",
+		},
+		{
+			name:               "sonnet-4-6 auto high",
+			model:              "claude-sonnet-4-6-20251120",
+			thinking:           llm.ThinkingAuto,
+			effort:             llm.EffortHigh,
+			expectThinkingType: "adaptive",
+			expectEffort:       "high",
+		},
+		{
+			name:               "sonnet-4-6 auto max",
+			model:              "claude-sonnet-4-6-20251120",
+			thinking:           llm.ThinkingAuto,
+			effort:             llm.EffortMax,
+			expectThinkingType: "adaptive",
+			expectEffort:       "max",
+		},
+		{
+			name:               "sonnet-4-6 off high",
+			model:              "claude-sonnet-4-6-20251120",
+			thinking:           llm.ThinkingOff,
+			effort:             llm.EffortHigh,
+			expectThinkingType: "disabled",
+			expectEffort:       "high",
+		},
+		{
+			name:               "sonnet-4-6 off unspecified",
+			model:              "claude-sonnet-4-6-20251120",
+			thinking:           llm.ThinkingOff,
+			effort:             llm.EffortUnspecified,
+			expectThinkingType: "disabled",
+			expectEffort:       "medium",
+		},
+		{
+			name:               "sonnet-4-6 on unspecified",
+			model:              "claude-sonnet-4-6-20251120",
+			thinking:           llm.ThinkingOn,
+			effort:             llm.EffortUnspecified,
+			expectThinkingType: "adaptive",
+			expectEffort:       "medium",
+		},
+		{
+			name:               "opus-4-6 auto max",
+			model:              "claude-opus-4-6-20251120",
+			thinking:           llm.ThinkingAuto,
+			effort:             llm.EffortMax,
+			expectThinkingType: "adaptive",
+			expectEffort:       "max",
+		},
 	}
 	for _, tc := range cases {
-		t.Run(tc.model+"_"+string(tc.thinkingEffort), func(t *testing.T) {
+		t.Run(tc.name, func(t *testing.T) {
 			m := buildRequestMap(t, RequestOptions{
 				LLMRequest: llm.Request{
-					Model:          tc.model,
-					Messages:       llm.Messages{llm.User("hi")},
-					ThinkingEffort: tc.thinkingEffort,
+					Model:    tc.model,
+					Messages: llm.Messages{llm.User("hi")},
+					Effort:   tc.effort,
+					Thinking: tc.thinking,
 				},
 			})
+
 			thinking, ok := m["thinking"].(map[string]any)
 			require.True(t, ok, "thinking block should be present")
-			assert.Equal(t, tc.expectedType, thinking["type"], "thinking.type")
+			assert.Equal(t, tc.expectThinkingType, thinking["type"], "thinking.type")
+
+			_, hasBudget := thinking["budget_tokens"]
+			assert.False(t, hasBudget, "adaptive models must NEVER have budget_tokens")
+
+			oc, ok := m["output_config"].(map[string]any)
+			require.True(t, ok, "output_config should be present")
+			assert.Equal(t, tc.expectEffort, oc["effort"], "output_config.effort")
 		})
 	}
 }
 
-func TestBuildRequest_ThinkingEffort(t *testing.T) {
+func TestBuildRequest_Thinking_NonAdaptive(t *testing.T) {
 	cases := []struct {
-		effort llm.ThinkingEffort
+		name               string
+		model              string
+		thinking           llm.ThinkingMode
+		effort             llm.Effort
+		expectThinkingType string
+		expectBudget       int    // 0 means absent
+		expectEffort       string // "" means output_config absent or no effort
 	}{
-		{llm.ThinkingEffortMinimal},
-		{llm.ThinkingEffortLow},
-		{llm.ThinkingEffortMedium},
-		{llm.ThinkingEffortHigh},
-		{llm.ThinkingEffortXHigh},
+		{
+			name:               "haiku auto unspecified",
+			model:              "claude-haiku-4-5-20251001",
+			thinking:           llm.ThinkingAuto,
+			effort:             llm.EffortUnspecified,
+			expectThinkingType: "enabled",
+			expectBudget:       thinkingBudgetHigh,
+		},
+		{
+			name:               "haiku auto low",
+			model:              "claude-haiku-4-5-20251001",
+			thinking:           llm.ThinkingAuto,
+			effort:             llm.EffortLow,
+			expectThinkingType: "enabled",
+			expectBudget:       thinkingBudgetLow,
+		},
+		{
+			name:               "haiku auto high",
+			model:              "claude-haiku-4-5-20251001",
+			thinking:           llm.ThinkingAuto,
+			effort:             llm.EffortHigh,
+			expectThinkingType: "enabled",
+			expectBudget:       thinkingBudgetHigh,
+		},
+		{
+			name:               "haiku off high",
+			model:              "claude-haiku-4-5-20251001",
+			thinking:           llm.ThinkingOff,
+			effort:             llm.EffortHigh,
+			expectThinkingType: "disabled",
+			expectBudget:       0,
+		},
+		{
+			name:               "haiku on medium",
+			model:              "claude-haiku-4-5-20251001",
+			thinking:           llm.ThinkingOn,
+			effort:             llm.EffortMedium,
+			expectThinkingType: "enabled",
+			expectBudget:       16511,
+		},
+		{
+			name:               "opus-4-5 off high",
+			model:              "claude-opus-4-5-20250514",
+			thinking:           llm.ThinkingOff,
+			effort:             llm.EffortHigh,
+			expectThinkingType: "disabled",
+			expectBudget:       0,
+			expectEffort:       "high",
+		},
+		{
+			name:               "opus-4-5 auto high",
+			model:              "claude-opus-4-5-20250514",
+			thinking:           llm.ThinkingAuto,
+			effort:             llm.EffortHigh,
+			expectThinkingType: "enabled",
+			expectBudget:       thinkingBudgetHigh,
+			expectEffort:       "high",
+		},
 	}
 	for _, tc := range cases {
-		t.Run(string(tc.effort), func(t *testing.T) {
-			wantBudget, _ := tc.effort.ToBudget(thinkingBudgetLow, thinkingBudgetHigh)
-
+		t.Run(tc.name, func(t *testing.T) {
 			m := buildRequestMap(t, RequestOptions{
 				LLMRequest: llm.Request{
-					Model:          "claude-sonnet-4-5",
-					Messages:       llm.Messages{llm.User("hi")},
-					ThinkingEffort: tc.effort,
+					Model:    tc.model,
+					Messages: llm.Messages{llm.User("hi")},
+					Effort:   tc.effort,
+					Thinking: tc.thinking,
 				},
 			})
+
 			thinking, ok := m["thinking"].(map[string]any)
 			require.True(t, ok, "thinking block should be present")
-			assert.Equal(t, "enabled", thinking["type"])
-			assert.InDelta(t, float64(wantBudget), thinking["budget_tokens"], 0)
-		})
-	}
-}
+			assert.Equal(t, tc.expectThinkingType, thinking["type"], "thinking.type")
 
-func TestBuildRequest_ThinkingEffort_AdaptiveModelPromotesToOutputEffort(t *testing.T) {
-	// On adaptive models, ThinkingEffort should NOT set budget_tokens (deprecated/rejected).
-	// Instead, when OutputEffort is unset, ThinkingEffort is promoted to output_config.effort.
-	cases := []struct {
-		thinking   llm.ThinkingEffort
-		wantEffort string
-	}{
-		{llm.ThinkingEffortMinimal, "low"},
-		{llm.ThinkingEffortLow, "low"},
-		{llm.ThinkingEffortMedium, "medium"},
-		{llm.ThinkingEffortHigh, "high"},
-		{llm.ThinkingEffortXHigh, "max"},
-	}
-	for _, tc := range cases {
-		for _, model := range []string{"claude-sonnet-4-6-20251120", "claude-opus-4-6-20251120"} {
-			t.Run(model+"_"+string(tc.thinking), func(t *testing.T) {
-				m := buildRequestMap(t, RequestOptions{
-					LLMRequest: llm.Request{
-						Model:          model,
-						Messages:       llm.Messages{llm.User("hi")},
-						ThinkingEffort: tc.thinking,
-					},
-				})
-
-				// Thinking must be bare adaptive — no budget_tokens
-				thinking, ok := m["thinking"].(map[string]any)
-				require.True(t, ok)
-				assert.Equal(t, "adaptive", thinking["type"])
+			if tc.expectBudget > 0 {
+				assert.InDelta(t, float64(tc.expectBudget), thinking["budget_tokens"], 0, "budget_tokens")
+			} else {
 				_, hasBudget := thinking["budget_tokens"]
-				assert.False(t, hasBudget, "adaptive thinking must NOT use budget_tokens")
+				assert.False(t, hasBudget, "budget_tokens should be absent")
+			}
 
-				// ThinkingEffort must be promoted to output_config.effort
+			if tc.expectEffort != "" {
 				oc, ok := m["output_config"].(map[string]any)
 				require.True(t, ok, "output_config should be present")
-				assert.Equal(t, tc.wantEffort, oc["effort"], "ThinkingEffort should be promoted to output_config.effort")
-			})
-		}
-	}
-}
-
-func TestBuildRequest_ThinkingEffort_AdaptiveModelOutputEffortTakesPrecedence(t *testing.T) {
-	// When both ThinkingEffort and OutputEffort are set on adaptive models,
-	// OutputEffort wins for output_config.effort.
-	m := buildRequestMap(t, RequestOptions{
-		LLMRequest: llm.Request{
-			Model:          "claude-sonnet-4-6-20251120",
-			Messages:       llm.Messages{llm.User("hi")},
-			ThinkingEffort: llm.ThinkingEffortXHigh,
-			OutputEffort:   llm.OutputEffortLow,
-		},
-	})
-
-	// Thinking must be bare adaptive
-	thinking, ok := m["thinking"].(map[string]any)
-	require.True(t, ok)
-	assert.Equal(t, "adaptive", thinking["type"])
-	_, hasBudget := thinking["budget_tokens"]
-	assert.False(t, hasBudget)
-
-	// OutputEffort wins
-	oc, ok := m["output_config"].(map[string]any)
-	require.True(t, ok)
-	assert.Equal(t, "low", oc["effort"], "explicit OutputEffort should take precedence")
-}
-
-func TestBuildRequest_ThinkingEffort_AdaptiveModelNoBudgetWhenNoEffort(t *testing.T) {
-	// When no ThinkingEffort is set on adaptive models, budget_tokens should
-	// NOT be present — let the model decide freely.
-	for _, model := range []string{"claude-sonnet-4-6-20251120", "claude-opus-4-6-20251120"} {
-		t.Run(model, func(t *testing.T) {
-			m := buildRequestMap(t, RequestOptions{
-				LLMRequest: llm.Request{
-					Model:    model,
-					Messages: llm.Messages{llm.User("hi")},
-				},
-			})
-			thinking, ok := m["thinking"].(map[string]any)
-			require.True(t, ok, "thinking block should be present")
-			assert.Equal(t, "adaptive", thinking["type"])
-			_, hasBudget := thinking["budget_tokens"]
-			assert.False(t, hasBudget, "adaptive thinking without effort should NOT set budget_tokens")
+				assert.Equal(t, tc.expectEffort, oc["effort"], "output_config.effort")
+			} else {
+				// output_config should be absent or have no effort
+				if oc, ok := m["output_config"].(map[string]any); ok {
+					assert.Empty(t, oc["effort"], "output_config.effort should not be set")
+				}
+			}
 		})
 	}
 }
 
-func TestBuildRequest_ThinkingEffort_ForcedToolChoiceDowngrade(t *testing.T) {
+func TestBuildRequest_OutputConfig(t *testing.T) {
+	cases := []struct {
+		name         string
+		model        string
+		effort       llm.Effort
+		expectEffort string // "" means absent
+	}{
+		{"haiku high", "claude-haiku-4-5-20251001", llm.EffortHigh, ""},
+		{"sonnet-4-5 high", "claude-sonnet-4-5-20250514", llm.EffortHigh, ""},
+		{"opus-4-5 high", "claude-opus-4-5-20250514", llm.EffortHigh, "high"},
+		{"opus-4-5 max", "claude-opus-4-5-20250514", llm.EffortMax, "high"}, // max downgraded to high
+		{"sonnet-4-6 max", "claude-sonnet-4-6-20251120", llm.EffortMax, "max"},
+		{"opus-4-6 max", "claude-opus-4-6-20251120", llm.EffortMax, "max"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			m := buildRequestMap(t, RequestOptions{
+				LLMRequest: llm.Request{
+					Model:    tc.model,
+					Messages: llm.Messages{llm.User("hi")},
+					Effort:   tc.effort,
+				},
+			})
+			oc, hasConfig := m["output_config"].(map[string]any)
+			if tc.expectEffort != "" {
+				require.True(t, hasConfig, "output_config should be present")
+				assert.Equal(t, tc.expectEffort, oc["effort"], "output_config.effort")
+			} else {
+				if hasConfig {
+					assert.Empty(t, oc["effort"], "output_config.effort should NOT be set for %s", tc.model)
+				}
+			}
+		})
+	}
+}
+
+func TestBuildRequest_EffortAndFormat(t *testing.T) {
+	// Both Effort and OutputFormat should coexist in output_config
 	m := buildRequestMap(t, RequestOptions{
 		LLMRequest: llm.Request{
-			Model:          "claude-sonnet-4-5",
-			Messages:       llm.Messages{llm.User("hi")},
-			ThinkingEffort: llm.ThinkingEffortHigh,
+			Model:        "claude-sonnet-4-6-20251120",
+			Messages:     llm.Messages{llm.User("hi")},
+			Effort:       llm.EffortHigh,
+			OutputFormat: llm.OutputFormatJSON,
+		},
+	})
+	oc, ok := m["output_config"].(map[string]any)
+	require.True(t, ok, "output_config should be present")
+	assert.Equal(t, "high", oc["effort"], "output_config.effort")
+	format, ok := oc["format"].(map[string]any)
+	require.True(t, ok, "output_config.format should be present")
+	assert.Equal(t, "json_schema", format["type"], "output_config.format.type")
+}
+
+func TestBuildRequest_Effort_ForcedToolChoiceDowngrade(t *testing.T) {
+	m := buildRequestMap(t, RequestOptions{
+		LLMRequest: llm.Request{
+			Model:    "claude-sonnet-4-5",
+			Messages: llm.Messages{llm.User("hi")},
+			Effort:   llm.EffortHigh,
 			Tools: []tool.Definition{
 				{Name: "my_tool", Description: "a tool", Parameters: map[string]any{"type": "object"}},
 			},
@@ -240,7 +343,7 @@ func TestIsEffortSupported(t *testing.T) {
 	}{
 		{"claude-haiku-4-5-20251001", false},
 		{"claude-haiku-4-6-20251120", false},
-		{"claude-sonnet-4-5-20250514", false}, // Sonnet 4.5 does NOT support effort
+		{"claude-sonnet-4-5-20250514", false},
 		{"claude-sonnet-4-6-20251120", true},
 		{"claude-opus-4-5-20250514", true},
 		{"claude-opus-4-6-20251120", true},
@@ -290,89 +393,6 @@ func TestIsAdaptiveThinkingSupported(t *testing.T) {
 			assert.Equal(t, tc.adaptive, got, "isAdaptiveThinkingSupported(%s)", tc.model)
 		})
 	}
-}
-
-func TestBuildRequest_OutputEffort(t *testing.T) {
-	cases := []struct {
-		model           string
-		outputEffort    llm.OutputEffort
-		expectEffortVal string // expected value if present, empty if not
-	}{
-		// Unsupported models: Haiku
-		{"claude-haiku-4-5-20251001", llm.OutputEffortLow, ""},
-		{"claude-haiku-4-5-20251001", llm.OutputEffortHigh, ""},
-		{"claude-haiku-4-6-20251120", llm.OutputEffortLow, ""},
-		// Unsupported: Sonnet 4.5 does NOT support effort
-		{"claude-sonnet-4-5-20250514", llm.OutputEffortLow, ""},
-		{"claude-sonnet-4-5-20250514", llm.OutputEffortHigh, ""},
-		// Supported: Sonnet 4.6
-		{"claude-sonnet-4-6-20251120", llm.OutputEffortLow, "low"},
-		{"claude-sonnet-4-6-20251120", llm.OutputEffortMedium, "medium"},
-		{"claude-sonnet-4-6-20251120", llm.OutputEffortHigh, "high"},
-		{"claude-sonnet-4-6-20251120", llm.OutputEffortMax, "max"}, // max supported on Sonnet 4.6
-		// Supported: Opus 4.5
-		{"claude-opus-4-5-20250514", llm.OutputEffortLow, "low"},
-		{"claude-opus-4-5-20250514", llm.OutputEffortHigh, "high"},
-		{"claude-opus-4-5-20250514", llm.OutputEffortMax, ""}, // max only on 4.6 models
-		// Supported: Opus 4.6 (all effort levels including max)
-		{"claude-opus-4-6-20251120", llm.OutputEffortLow, "low"},
-		{"claude-opus-4-6-20251120", llm.OutputEffortHigh, "high"},
-		{"claude-opus-4-6-20251120", llm.OutputEffortMax, "max"},
-	}
-	for _, tc := range cases {
-		t.Run(tc.model+"_"+string(tc.outputEffort), func(t *testing.T) {
-			m := buildRequestMap(t, RequestOptions{
-				LLMRequest: llm.Request{
-					Model:        tc.model,
-					Messages:     llm.Messages{llm.User("hi")},
-					OutputEffort: tc.outputEffort,
-				},
-			})
-			oc, hasConfig := m["output_config"].(map[string]any)
-			if tc.expectEffortVal != "" {
-				// Expect effort to be set
-				require.True(t, hasConfig, "output_config should be present")
-				assert.Equal(t, tc.expectEffortVal, oc["effort"], "output_config.effort value")
-			} else {
-				// Expect effort to NOT be set
-				if hasConfig {
-					assert.Empty(t, oc["effort"], "output_config.effort should NOT be set for %s", tc.model)
-				}
-			}
-		})
-	}
-}
-
-func TestBuildRequest_OutputEffort_DefaultMedium(t *testing.T) {
-	// When OutputEffort is not set, it should default to "medium" on supported models
-	m := buildRequestMap(t, RequestOptions{
-		LLMRequest: llm.Request{
-			Model:    "claude-sonnet-4-6-20251120",
-			Messages: llm.Messages{llm.User("hi")},
-			// OutputEffort not set
-		},
-	})
-	oc, ok := m["output_config"].(map[string]any)
-	require.True(t, ok, "output_config should be present on supported model")
-	assert.Equal(t, "medium", oc["effort"], "default effort should be medium")
-}
-
-func TestBuildRequest_OutputEffortAndFormat(t *testing.T) {
-	// Both OutputEffort and OutputFormat should coexist in output_config
-	m := buildRequestMap(t, RequestOptions{
-		LLMRequest: llm.Request{
-			Model:        "claude-sonnet-4-6-20251120",
-			Messages:     llm.Messages{llm.User("hi")},
-			OutputEffort: llm.OutputEffortHigh,
-			OutputFormat: llm.OutputFormatJSON,
-		},
-	})
-	oc, ok := m["output_config"].(map[string]any)
-	require.True(t, ok, "output_config should be present")
-	assert.Equal(t, "high", oc["effort"], "output_config.effort")
-	format, ok := oc["format"].(map[string]any)
-	require.True(t, ok, "output_config.format should be present")
-	assert.Equal(t, "json_schema", format["type"], "output_config.format.type")
 }
 
 func TestRequest_ControlParams(t *testing.T) {
@@ -442,12 +462,12 @@ func TestRequest_ControlParams(t *testing.T) {
 		assert.False(t, hasBudget, "no budget_tokens for bare adaptive")
 	})
 
-	t.Run("sonnet 4.6 with ThinkingEffort promotes to output_config", func(t *testing.T) {
+	t.Run("sonnet 4.6 with Effort promotes to output_config", func(t *testing.T) {
 		req, err := BuildRequest(RequestOptions{
 			LLMRequest: llm.Request{
-				Model:          "claude-sonnet-4-6-20251120",
-				Messages:       llm.Messages{llm.User("hi")},
-				ThinkingEffort: llm.ThinkingEffortHigh,
+				Model:    "claude-sonnet-4-6-20251120",
+				Messages: llm.Messages{llm.User("hi")},
+				Effort:   llm.EffortHigh,
 			},
 		})
 		require.NoError(t, err)
@@ -467,9 +487,9 @@ func TestRequest_ControlParams(t *testing.T) {
 	t.Run("output_config with effort", func(t *testing.T) {
 		req, err := BuildRequest(RequestOptions{
 			LLMRequest: llm.Request{
-				Model:        "claude-sonnet-4-6-20251120",
-				Messages:     llm.Messages{llm.User("hi")},
-				OutputEffort: llm.OutputEffortHigh,
+				Model:    "claude-sonnet-4-6-20251120",
+				Messages: llm.Messages{llm.User("hi")},
+				Effort:   llm.EffortHigh,
 			},
 		})
 		require.NoError(t, err)

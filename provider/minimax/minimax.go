@@ -117,29 +117,39 @@ func (p *Provider) CreateStream(ctx context.Context, opts llm.Request) (llm.Stre
 		return nil, llm.NewErrBuildRequest(providerName, err)
 	}
 
+	parseOpts := anthropic.ParseOpts{
+		Model:         opts.Model,
+		CostFn:        FillCost,
+		LLMRequest:    &opts,
+		RequestParams: apiReq.ControlParams(),
+	}
+
+	// Create publisher and emit RequestParamsEvent BEFORE the HTTP call.
+	pub, ch := llm.NewEventPublisher()
+	anthropic.PublishRequestParams(pub, parseOpts)
+
 	req, err := p.newAPIRequest(ctx, apiKey, body)
 	if err != nil {
+		pub.Close()
 		return nil, llm.NewErrBuildRequest(providerName, err)
 	}
 
 	resp, err := p.client.Do(req)
 	if err != nil {
+		pub.Close()
 		return nil, llm.NewErrRequestFailed(providerName, err)
 	}
 
 	if resp.StatusCode != http.StatusOK {
+		pub.Close()
 		//nolint:errcheck // intentional: defer Close is only for cleanup, failure after response reading is non-fatal
 		defer resp.Body.Close()
 		errBody, _ := io.ReadAll(resp.Body)
 		return nil, llm.NewErrAPIError(providerName, resp.StatusCode, string(errBody))
 	}
 
-	return anthropic.ParseStream(ctx, resp.Body, anthropic.ParseOpts{
-		Model:         opts.Model,
-		CostFn:        FillCost,
-		LLMRequest:    &opts,
-		RequestParams: apiReq.ControlParams(),
-	}), nil
+	anthropic.ParseStreamWith(ctx, resp.Body, pub, parseOpts)
+	return ch, nil
 }
 
 func (p *Provider) newAPIRequest(ctx context.Context, apiKey string, body []byte) (*http.Request, error) {

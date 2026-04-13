@@ -296,10 +296,10 @@ func TestPromptCaching_Claude(t *testing.T) {
 	// -------------------------------------------------------------------------
 	t.Run("Thinking_MultiTurn_NoCacheHint", func(t *testing.T) {
 		req := llm.Request{
-			Model:          claude.ModelSonnet,
-			MaxTokens:      200,
-			ThinkingEffort: llm.ThinkingEffortHigh,
-			OutputEffort:   llm.OutputEffortHigh,
+			Model:     claude.ModelSonnet,
+			MaxTokens: 200,
+			Effort:    llm.EffortHigh,
+			Thinking:  llm.ThinkingOn,
 			Messages: msg.BuildTranscript(
 				llm.User("think about a blue elephant and then tell me in one word which color the elephant is"),
 			),
@@ -341,10 +341,10 @@ func TestPromptCaching_Claude(t *testing.T) {
 		t.Logf("Response: %s", r)
 
 		req2 := llm.Request{
-			Model:          "sonnet",
-			MaxTokens:      200,
-			ThinkingEffort: llm.ThinkingEffortHigh,
-			OutputEffort:   llm.OutputEffortHigh,
+			Model:     "sonnet",
+			MaxTokens: 200,
+			Effort:    llm.EffortHigh,
+			Thinking:  llm.ThinkingOn,
 			Messages: msg.BuildTranscript(
 				llm.User("think about a blue elephant and then tell me in one word which color the elephant is"),
 				res.Next(),

@@ -138,13 +138,21 @@ func (p *Provider) CreateStream(ctx context.Context, opts llm.Request) (llm.Stre
 		return nil, llm.NewErrMissingAPIKey(llm.ProviderNameOpenRouter)
 	}
 
-	body, err := buildRequest(opts)
+	body, apiReq, err := buildRequest(opts)
 	if err != nil {
 		return nil, llm.NewErrBuildRequest(llm.ProviderNameOpenRouter, err)
 	}
 
+	// Create publisher and emit RequestParamsEvent BEFORE the HTTP call.
+	pub, ch := llm.NewEventPublisher()
+	pub.Publish(&llm.RequestParamsEvent{
+		LLMRequest:            &opts,
+		ProviderRequestParams: apiReq.controlParams(),
+	})
+
 	req, err := http.NewRequestWithContext(ctx, "POST", p.opts.BaseURL+"/v1/chat/completions", bytes.NewReader(body))
 	if err != nil {
+		pub.Close()
 		return nil, llm.NewErrBuildRequest(llm.ProviderNameOpenRouter, err)
 	}
 	req.Header.Set("Content-Type", "application/json")
@@ -152,18 +160,19 @@ func (p *Provider) CreateStream(ctx context.Context, opts llm.Request) (llm.Stre
 
 	resp, err := p.client.Do(req)
 	if err != nil {
+		pub.Close()
 		return nil, llm.NewErrRequestFailed(llm.ProviderNameOpenRouter, err)
 	}
 
 	if resp.StatusCode != http.StatusOK {
+		pub.Close()
 		//nolint:errcheck // intentional: defer Close is only for cleanup, failure after response reading is non-fatal
 		defer resp.Body.Close()
 		errBody, _ := io.ReadAll(resp.Body)
 		return nil, llm.NewErrAPIError(llm.ProviderNameOpenRouter, resp.StatusCode, string(errBody))
 	}
 
-	stream, ch := llm.NewEventPublisher()
-	go parseStream(ctx, resp.Body, stream)
+	go parseStream(ctx, resp.Body, pub)
 	return ch, nil
 }
 
@@ -242,7 +251,23 @@ type functionPayload struct {
 	Parameters  map[string]any `json:"parameters"`
 }
 
-func buildRequest(opts llm.Request) ([]byte, error) {
+// controlParams returns the request as a map[string]any with verbose fields
+// (messages, tools) stripped out for observability.
+func (r request) controlParams() map[string]any {
+	b, err := json.Marshal(r)
+	if err != nil {
+		return nil
+	}
+	var m map[string]any
+	if err := json.Unmarshal(b, &m); err != nil {
+		return nil
+	}
+	delete(m, "messages")
+	delete(m, "tools")
+	return m
+}
+
+func buildRequest(opts llm.Request) ([]byte, request, error) {
 	r := request{
 		Model:         opts.Model,
 		Stream:        true,
@@ -264,8 +289,16 @@ func buildRequest(opts llm.Request) ([]byte, error) {
 	if opts.OutputFormat == llm.OutputFormatJSON {
 		r.ResponseFormat = &respFormat{Type: "json_object"}
 	}
-	if !opts.ThinkingEffort.IsEmpty() {
-		r.Reasoning = &reasoningConfig{Effort: string(opts.ThinkingEffort)}
+	effort := opts.Effort
+	if effort == llm.EffortMax {
+		effort = llm.EffortHigh
+	}
+	if opts.Thinking.IsOn() && effort.IsEmpty() {
+		effort = llm.EffortHigh
+	}
+	// ThinkingOff: omit reasoning block entirely (sending it enables reasoning).
+	if !effort.IsEmpty() && !opts.Thinking.IsOff() {
+		r.Reasoning = &reasoningConfig{Effort: string(effort)}
 	}
 
 	for _, t := range opts.Tools {
@@ -353,7 +386,8 @@ func buildRequest(opts llm.Request) ([]byte, error) {
 		}
 	}
 
-	return json.Marshal(r)
+	body, err := json.Marshal(r)
+	return body, r, err
 }
 
 // --- SSE stream parsing ---

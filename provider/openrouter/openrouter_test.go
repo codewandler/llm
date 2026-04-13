@@ -27,7 +27,7 @@ func TestBuildRequest_SystemMessage(t *testing.T) {
 		),
 	}
 
-	body, err := buildRequest(opts)
+	body, _, err := buildRequest(opts)
 	require.NoError(t, err)
 
 	var req request
@@ -47,7 +47,7 @@ func TestBuildRequest_UserMessage(t *testing.T) {
 		),
 	}
 
-	body, err := buildRequest(opts)
+	body, _, err := buildRequest(opts)
 	require.NoError(t, err)
 
 	var req request
@@ -68,7 +68,7 @@ func TestBuildRequest_AssistantMessage(t *testing.T) {
 		),
 	}
 
-	body, err := buildRequest(opts)
+	body, _, err := buildRequest(opts)
 	require.NoError(t, err)
 
 	var req request
@@ -91,7 +91,7 @@ func TestBuildRequest_AssistantWithToolCalls(t *testing.T) {
 		),
 	}
 
-	body, err := buildRequest(opts)
+	body, _, err := buildRequest(opts)
 	require.NoError(t, err)
 
 	var req request
@@ -133,7 +133,7 @@ func TestBuildRequest_ToolResults(t *testing.T) {
 		),
 	}
 
-	body, err := buildRequest(opts)
+	body, _, err := buildRequest(opts)
 	require.NoError(t, err)
 
 	var req request
@@ -168,7 +168,7 @@ func TestBuildRequest_ToolResultEmptyContent(t *testing.T) {
 		),
 	}
 
-	body, err := buildRequest(opts)
+	body, _, err := buildRequest(opts)
 	require.NoError(t, err)
 
 	var req request
@@ -204,7 +204,7 @@ func TestBuildRequest_MultipleToolResults(t *testing.T) {
 		),
 	}
 
-	body, err := buildRequest(opts)
+	body, _, err := buildRequest(opts)
 	require.NoError(t, err)
 
 	var req request
@@ -236,7 +236,7 @@ func TestBuildRequest_ToolResultsMultiple(t *testing.T) {
 		),
 	}
 
-	body, err := buildRequest(opts)
+	body, _, err := buildRequest(opts)
 	require.NoError(t, err)
 
 	var req request
@@ -263,7 +263,7 @@ func TestBuildRequest_NoTools(t *testing.T) {
 		Tools: []tool.Definition{}, // explicitly empty
 	}
 
-	body, err := buildRequest(opts)
+	body, _, err := buildRequest(opts)
 	require.NoError(t, err)
 
 	var req request
@@ -282,7 +282,7 @@ func TestBuildRequest_ModelPassthrough(t *testing.T) {
 		),
 	}
 
-	body, err := buildRequest(opts)
+	body, _, err := buildRequest(opts)
 	require.NoError(t, err)
 
 	var req request
@@ -301,7 +301,7 @@ func TestBuildRequest_MaxTokens(t *testing.T) {
 		),
 	}
 
-	body, err := buildRequest(opts)
+	body, _, err := buildRequest(opts)
 	require.NoError(t, err)
 
 	var req request
@@ -320,7 +320,7 @@ func TestBuildRequest_Temperature(t *testing.T) {
 		),
 	}
 
-	body, err := buildRequest(opts)
+	body, _, err := buildRequest(opts)
 	require.NoError(t, err)
 
 	var req request
@@ -414,7 +414,7 @@ func TestProvider_CreateStream_ExplicitAutoModelPreservedWithCustomDefault(t *te
 }
 
 func TestBuildRequest_DoesNotEnableReasoningByDefault(t *testing.T) {
-	body, err := buildRequest(llm.Request{
+	body, _, err := buildRequest(llm.Request{
 		Model: "test/model",
 		Messages: msg.BuildTranscript(
 			msg.User("Hello"),
@@ -430,10 +430,11 @@ func TestBuildRequest_DoesNotEnableReasoningByDefault(t *testing.T) {
 	assert.NotContains(t, req, "reasoning")
 }
 
-func TestBuildRequest_ThinkingEffortUsesReasoningObject(t *testing.T) {
-	body, err := buildRequest(llm.Request{
-		Model:          "test/model",
-		ThinkingEffort: llm.ThinkingEffortHigh,
+func TestBuildRequest_EffortUsesReasoningObject(t *testing.T) {
+	body, _, err := buildRequest(llm.Request{
+		Model:    "test/model",
+		Effort:   llm.EffortHigh,
+		Thinking: llm.ThinkingOn,
 		Messages: msg.BuildTranscript(
 			msg.User("Hello"),
 		),
@@ -445,11 +446,11 @@ func TestBuildRequest_ThinkingEffortUsesReasoningObject(t *testing.T) {
 
 	reasoning, ok := req["reasoning"].(map[string]any)
 	require.True(t, ok)
-	assert.Equal(t, string(llm.ThinkingEffortHigh), reasoning["effort"])
+	assert.Equal(t, string(llm.EffortHigh), reasoning["effort"])
 }
 
 func TestBuildRequest_AssistantThinkingIncluded(t *testing.T) {
-	body, err := buildRequest(llm.Request{
+	body, _, err := buildRequest(llm.Request{
 		Model: "test/model",
 		Messages: msg.BuildTranscript(
 			msg.User("Hello"),

@@ -31,13 +31,13 @@ func (b *RequestBuilder) Model(modelID string) *RequestBuilder {
 	return b
 }
 
-func (b *RequestBuilder) Thinking(effort ThinkingEffort) *RequestBuilder {
-	b.req.ThinkingEffort = effort
+func (b *RequestBuilder) Thinking(mode ThinkingMode) *RequestBuilder {
+	b.req.Thinking = mode
 	return b
 }
 
-func (b *RequestBuilder) Output(effort OutputEffort) *RequestBuilder {
-	b.req.OutputEffort = effort
+func (b *RequestBuilder) Effort(level Effort) *RequestBuilder {
+	b.req.Effort = level
 	return b
 }
 
@@ -69,21 +69,19 @@ func (b *RequestBuilder) TopP(p float64) *RequestBuilder {
 }
 
 func (b *RequestBuilder) Coding() *RequestBuilder {
-	return b.Thinking(ThinkingEffortMedium).
-		Output(OutputEffortHigh).
+	return b.Thinking(ThinkingOn).
+		Effort(EffortHigh).
 		Temperature(0.1).
 		MaxTokens(16_000)
 }
 
 func newDefaultRequest() *Request {
 	return &Request{
-		Temperature:    0.7,
-		ThinkingEffort: ThinkingEffortNone,
-		OutputEffort:   OutputEffortLow,
-		CacheHint:      msg.NewCacheHint(),
-		ToolChoice:     ToolChoiceAuto{},
-
-		// TODO: generic defaults
+		Temperature: 0.7,
+		Effort:      EffortLow,
+		Thinking:    ThinkingOff,
+		CacheHint:   msg.NewCacheHint(),
+		ToolChoice:  ToolChoiceAuto{},
 	}
 }
 

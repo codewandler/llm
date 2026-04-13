@@ -244,68 +244,52 @@ func getModelInfo(model string) (modelInfo, error) {
 	return info, nil
 }
 
-// mapThinkingEffort maps the user-requested reasoning effort to a valid OpenAI API value.
-// Returns empty string if the parameter should be omitted, or an error if the value is invalid.
-func mapThinkingEffort(model string, effort llm.ThinkingEffort) (string, error) {
-	if effort == "" {
-		return "", nil // omit, let API use its default
-	}
-
+// mapEffortAndThinking maps the user-requested Effort and ThinkingMode to a
+// valid OpenAI reasoning_effort API value.
+// Returns empty string if the parameter should be omitted, or an error if the
+// model is unknown.
+func mapEffortAndThinking(model string, effort llm.Effort, thinking llm.ThinkingMode) (string, error) {
 	info, err := getModelInfo(model)
 	if err != nil {
 		return "", err
 	}
 
-	switch info.Category {
-	case categoryNonReasoning:
-		// Non-reasoning models ignore reasoning_effort
+	// Non-reasoning models never send reasoning_effort.
+	if info.Category == categoryNonReasoning {
 		return "", nil
+	}
 
-	case categoryPreGPT51:
-		// Supports: minimal, low, medium, high
-		// Does NOT support: none, xhigh
-		switch effort {
-		case llm.ThinkingEffortNone:
-			return "", fmt.Errorf("reasoning_effort %q not supported for model %q (use minimal, low, medium, or high)", effort, model)
-		case llm.ThinkingEffortXHigh:
-			return "", fmt.Errorf("reasoning_effort %q not supported for model %q (use minimal, low, medium, or high)", effort, model)
-		case llm.ThinkingEffortMinimal, llm.ThinkingEffortLow, llm.ThinkingEffortMedium, llm.ThinkingEffortHigh:
-			return string(effort), nil
-		}
-
-	case categoryGPT51:
-		// Supports: none, low, medium, high
-		// Does NOT support: minimal, xhigh
-		// Map minimal -> low
-		switch effort {
-		case llm.ThinkingEffortMinimal:
-			return "low", nil // map minimal -> low
-		case llm.ThinkingEffortXHigh:
-			return "", fmt.Errorf("reasoning_effort %q not supported for model %q (use none, low, medium, or high)", effort, model)
-		case llm.ThinkingEffortNone, llm.ThinkingEffortLow, llm.ThinkingEffortMedium, llm.ThinkingEffortHigh:
-			return string(effort), nil
-		}
-
-	case categoryPro:
-		// Only supports: high
-		if effort != llm.ThinkingEffortHigh {
-			return "", fmt.Errorf("reasoning_effort must be %q for model %q", llm.ThinkingEffortHigh, model)
-		}
-		return "high", nil
-
-	case categoryCodex:
-		// Supports: none, low, medium, high, xhigh
-		// Map minimal -> low
-		switch effort {
-		case llm.ThinkingEffortMinimal:
-			return "low", nil // map minimal -> low
-		case llm.ThinkingEffortNone, llm.ThinkingEffortLow, llm.ThinkingEffortMedium, llm.ThinkingEffortHigh, llm.ThinkingEffortXHigh:
-			return string(effort), nil
+	// Thinking explicitly off → disable where possible.
+	if thinking.IsOff() {
+		switch info.Category {
+		case categoryGPT51:
+			return "none", nil
+		default:
+			// pre-GPT-5.1, Pro, Codex: can't reliably disable reasoning
+			// (codex-mini variants reject "none"). Omit gracefully.
+			return "", nil
 		}
 	}
 
-	// Unknown effort value - shouldn't happen if Valid() was called
-	return "", fmt.Errorf("unknown reasoning_effort value %q", effort)
+	// Clamp EffortMax → xhigh for Codex, else High.
+	if effort == llm.EffortMax {
+		if info.Category == categoryCodex {
+			return "xhigh", nil
+		}
+		effort = llm.EffortHigh
+	}
+
+	// Thinking explicitly on but no effort specified → default to high.
+	if thinking.IsOn() && effort.IsEmpty() {
+		return "high", nil
+	}
+
+	// No effort specified → omit, let API use its default.
+	if effort.IsEmpty() {
+		return "", nil
+	}
+
+	return string(effort), nil
 }
 
 // calculateCost computes the cost in USD for the given usage and model and

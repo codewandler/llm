@@ -37,20 +37,28 @@ func TestStreamOptions_Validate(t *testing.T) {
 			wantErr: "model is required",
 		},
 		{
-			name: "invalid - bad ThinkingEffort",
+			name: "invalid - bad Effort",
 			opts: Request{
-				Model:          "gpt-4",
-				Messages:       Messages{User("Hello")},
-				ThinkingEffort: "invalid_value",
+				Model:    "gpt-4",
+				Messages: Messages{User("Hello")},
+				Effort:   "invalid_value",
 			},
-			wantErr: `invalid ThinkingEffort "invalid_value"`,
+			wantErr: `invalid Effort "invalid_value"`,
 		},
 		{
-			name: "valid - ThinkingEffort empty (default)",
+			name: "invalid - bad Thinking",
 			opts: Request{
-				Model:          "gpt-4",
-				Messages:       Messages{User("Hello")},
-				ThinkingEffort: ThinkingEffortUnspecified,
+				Model:    "gpt-4",
+				Messages: Messages{User("Hello")},
+				Thinking: "invalid_value",
+			},
+			wantErr: `invalid Thinking "invalid_value"`,
+		},
+		{
+			name: "valid - Effort and Thinking empty (default)",
+			opts: Request{
+				Model:    "gpt-4",
+				Messages: Messages{User("Hello")},
 			},
 			wantErr: "",
 		},
@@ -192,45 +200,29 @@ func TestToolChoice_Interface(t *testing.T) {
 	var _ ToolChoice = ToolChoiceTool{Name: "test"}
 }
 
-func TestThinkingEffort_Constants(t *testing.T) {
-	// Verify constant values match OpenAI API expectations
-	assert.Equal(t, ThinkingEffort("none"), ThinkingEffortNone)
-	assert.Equal(t, ThinkingEffort("minimal"), ThinkingEffortMinimal)
-	assert.Equal(t, ThinkingEffort("low"), ThinkingEffortLow)
-	assert.Equal(t, ThinkingEffort("medium"), ThinkingEffortMedium)
-	assert.Equal(t, ThinkingEffort("high"), ThinkingEffortHigh)
-	assert.Equal(t, ThinkingEffort("xhigh"), ThinkingEffortXHigh)
+func TestEffort_Constants(t *testing.T) {
+	assert.Equal(t, Effort(""), EffortUnspecified)
+	assert.Equal(t, Effort("low"), EffortLow)
+	assert.Equal(t, Effort("medium"), EffortMedium)
+	assert.Equal(t, Effort("high"), EffortHigh)
+	assert.Equal(t, Effort("max"), EffortMax)
 }
 
-func TestStreamOptions_WithThinkingEffort(t *testing.T) {
-	opts := Request{
-		Model:          "gpt-5",
-		Messages:       Messages{User("Hello")},
-		ThinkingEffort: ThinkingEffortLow,
-	}
-
-	err := opts.Validate()
-	require.NoError(t, err)
-	assert.Equal(t, ThinkingEffortLow, opts.ThinkingEffort)
-}
-
-func TestThinkingEffort_Valid(t *testing.T) {
+func TestEffort_Valid(t *testing.T) {
 	tests := []struct {
-		effort ThinkingEffort
+		effort Effort
 		want   bool
 	}{
-		{"", true},
-		{ThinkingEffortNone, true},
-		{ThinkingEffortMinimal, true},
-		{ThinkingEffortLow, true},
-		{ThinkingEffortMedium, true},
-		{ThinkingEffortHigh, true},
-		{ThinkingEffortXHigh, true},
+		{EffortUnspecified, true},
+		{EffortLow, true},
+		{EffortMedium, true},
+		{EffortHigh, true},
+		{EffortMax, true},
 		{"invalid", false},
-		{"MEDIUM", false}, // case sensitive
-		{"max", false},
+		{"HIGH", false},
+		{"none", false},
+		{"xhigh", false},
 	}
-
 	for _, tt := range tests {
 		t.Run(string(tt.effort), func(t *testing.T) {
 			assert.Equal(t, tt.want, tt.effort.Valid())
@@ -238,24 +230,20 @@ func TestThinkingEffort_Valid(t *testing.T) {
 	}
 }
 
-func TestThinkingEffort_ToBudget(t *testing.T) {
-	low, high := 1024, 32000
+func TestEffort_ToBudget(t *testing.T) {
+	low, high := 1024, 31999
 
 	tests := []struct {
-		effort ThinkingEffort
+		effort Effort
 		want   int
 		ok     bool
 	}{
-		{ThinkingEffortMinimal, low, true},
-		{ThinkingEffortLow, low + (high-low)/4, true},
-		{ThinkingEffortMedium, low + 2*(high-low)/4, true},
-		{ThinkingEffortHigh, low + 3*(high-low)/4, true},
-		{ThinkingEffortXHigh, high, true},
-		// none / empty → no budget
-		{ThinkingEffortNone, 0, false},
-		{"", 0, false},
+		{EffortLow, 1024, true},
+		{EffortMedium, 1024 + (31999-1024)/2, true},
+		{EffortHigh, 31999, true},
+		{EffortMax, 31999, true}, // same as high for budget
+		{EffortUnspecified, 0, false},
 	}
-
 	for _, tt := range tests {
 		t.Run(string(tt.effort), func(t *testing.T) {
 			got, ok := tt.effort.ToBudget(low, high)
@@ -267,20 +255,36 @@ func TestThinkingEffort_ToBudget(t *testing.T) {
 	}
 }
 
-func TestThinkingEffort_ToBudget_BoundaryRange(t *testing.T) {
-	// With a small range, levels should still be ordered
-	low, high := 100, 200
-
-	prev := 0
-	for _, e := range []ThinkingEffort{
-		ThinkingEffortMinimal, ThinkingEffortLow,
-		ThinkingEffortMedium, ThinkingEffortHigh, ThinkingEffortXHigh,
-	} {
-		v, ok := e.ToBudget(low, high)
-		require.True(t, ok, "effort %q should map to a budget", e)
-		assert.GreaterOrEqual(t, v, prev, "effort %q (%d) should be >= previous (%d)", e, v, prev)
-		prev = v
+func TestThinkingMode_Valid(t *testing.T) {
+	tests := []struct {
+		mode ThinkingMode
+		want bool
+	}{
+		{ThinkingAuto, true},
+		{ThinkingOn, true},
+		{ThinkingOff, true},
+		{"invalid", false},
+		{"none", false},
+		{"high", false},
 	}
+	for _, tt := range tests {
+		t.Run(string(tt.mode), func(t *testing.T) {
+			assert.Equal(t, tt.want, tt.mode.Valid())
+		})
+	}
+}
+
+func TestStreamOptions_WithEffortAndThinking(t *testing.T) {
+	opts := Request{
+		Model:    "gpt-5",
+		Messages: Messages{User("Hello")},
+		Effort:   EffortHigh,
+		Thinking: ThinkingOn,
+	}
+	err := opts.Validate()
+	require.NoError(t, err)
+	assert.Equal(t, EffortHigh, opts.Effort)
+	assert.Equal(t, ThinkingOn, opts.Thinking)
 }
 
 func TestToolDefinition_Validate(t *testing.T) {

@@ -41,23 +41,39 @@ type ParseOpts struct {
 // stream ends or ctx is cancelled.
 func ParseStream(ctx context.Context, body io.ReadCloser, opts ParseOpts) llm.Stream {
 	pub, ch := llm.NewEventPublisher()
+	PublishRequestParams(pub, opts)
 	go func() {
 		parseStream(ctx, body, pub, opts)
 	}()
 	return ch
 }
 
-// parseStream is the blocking core that reads SSE lines from body and
-// publishes events to pub. It closes pub when done.
-func parseStream(ctx context.Context, body io.ReadCloser, pub llm.Publisher, opts ParseOpts) {
-	defer pub.Close()
+// ParseStreamWith starts parsing on an existing publisher. The caller is
+// responsible for having already created the publisher and optionally published
+// early events (e.g. RequestParamsEvent) before the HTTP call.
+//
+// Ownership: takes ownership of body and closes pub when done.
+func ParseStreamWith(ctx context.Context, body io.ReadCloser, pub llm.Publisher, opts ParseOpts) {
+	go func() {
+		parseStream(ctx, body, pub, opts)
+	}()
+}
 
+// PublishRequestParams emits a RequestParamsEvent if params are present.
+// Exported so that providers using ParseStreamWith can call it before the HTTP request.
+func PublishRequestParams(pub llm.Publisher, opts ParseOpts) {
 	if opts.RequestParams != nil || opts.LLMRequest != nil {
 		pub.Publish(&llm.RequestParamsEvent{
 			LLMRequest:            opts.LLMRequest,
 			ProviderRequestParams: opts.RequestParams,
 		})
 	}
+}
+
+// parseStream is the blocking core that reads SSE lines from body and
+// publishes events to pub. It closes pub when done.
+func parseStream(ctx context.Context, body io.ReadCloser, pub llm.Publisher, opts ParseOpts) {
+	defer pub.Close()
 
 	proc := newStreamProcessor(opts, pub)
 	err := sse.ForEachDataLine(ctx, body, func(ev sse.Event) bool {

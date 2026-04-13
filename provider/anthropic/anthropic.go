@@ -87,17 +87,31 @@ func (p *Provider) CreateStream(ctx context.Context, opts llm.Request) (llm.Stre
 		return nil, llm.NewErrBuildRequest(llm.ProviderNameAnthropic, err)
 	}
 
+	parseOpts := ParseOpts{
+		Model:         opts.Model,
+		LLMRequest:    &opts,
+		RequestParams: apiReq.ControlParams(),
+	}
+
+	// Create publisher and emit RequestParamsEvent BEFORE the HTTP call
+	// so consumers see what was requested even if the call fails.
+	pub, ch := llm.NewEventPublisher()
+	PublishRequestParams(pub, parseOpts)
+
 	req, err := p.newAPIRequest(ctx, apiKey, body)
 	if err != nil {
+		pub.Close()
 		return nil, llm.NewErrBuildRequest(llm.ProviderNameAnthropic, err)
 	}
 
 	resp, err := p.client.Do(req)
 	if err != nil {
+		pub.Close()
 		return nil, llm.NewErrRequestFailed(llm.ProviderNameAnthropic, err)
 	}
 
 	if resp.StatusCode != http.StatusOK {
+		pub.Close()
 		//nolint:errcheck // intentional: defer Close is only for cleanup, failure after response reading is non-fatal
 		defer resp.Body.Close()
 		errBody, _ := io.ReadAll(resp.Body)
@@ -111,13 +125,10 @@ func (p *Provider) CreateStream(ctx context.Context, opts llm.Request) (llm.Stre
 			headers[strings.ToLower(k)] = v[0]
 		}
 	}
+	parseOpts.ResponseHeaders = headers
 
-	return ParseStream(ctx, resp.Body, ParseOpts{
-		Model:           opts.Model,
-		ResponseHeaders: headers,
-		LLMRequest:      &opts,
-		RequestParams:   apiReq.ControlParams(),
-	}), nil
+	ParseStreamWith(ctx, resp.Body, pub, parseOpts)
+	return ch, nil
 }
 
 func (p *Provider) newAPIRequest(ctx context.Context, apiKey string, body []byte) (*http.Request, error) {

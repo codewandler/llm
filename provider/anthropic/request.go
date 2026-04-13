@@ -87,24 +87,6 @@ const (
 	thinkingBudgetHigh = 31999
 )
 
-// thinkingToOutputEffort maps a ThinkingEffort to an OutputEffort for adaptive
-// models where budget_tokens is deprecated and depth is controlled via
-// output_config.effort instead.
-func thinkingToOutputEffort(t llm.ThinkingEffort) (llm.OutputEffort, bool) {
-	switch t {
-	case llm.ThinkingEffortMinimal, llm.ThinkingEffortLow:
-		return llm.OutputEffortLow, true
-	case llm.ThinkingEffortMedium:
-		return llm.OutputEffortMedium, true
-	case llm.ThinkingEffortHigh:
-		return llm.OutputEffortHigh, true
-	case llm.ThinkingEffortXHigh:
-		return llm.OutputEffortMax, true
-	default:
-		return llm.OutputEffortUnspecified, false
-	}
-}
-
 // isAdaptiveThinkingSupported returns true if the model supports adaptive ThinkingConfig (Sonnet 4.6 / Opus 4.6).
 func isAdaptiveThinkingSupported(model string) bool {
 	return strings.Contains(model, "claude-sonnet-4-6") ||
@@ -169,14 +151,12 @@ func BuildRequest(reqOpts RequestOptions) (Request, error) {
 	if llmRequest.TopP > 0 {
 		req.TopP = llmRequest.TopP
 	}
-	// Output config: format and/or effort
-	if llmRequest.OutputFormat == llm.OutputFormatJSON || !llmRequest.OutputEffort.IsEmpty() {
+	// Output config: format
+	if llmRequest.OutputFormat == llm.OutputFormatJSON {
 		if req.OutputConfig == nil {
 			req.OutputConfig = &outputConfig{}
 		}
-		if llmRequest.OutputFormat == llm.OutputFormatJSON {
-			req.OutputConfig.Format = &jsonOutputFormat{Type: "json_schema"}
-		}
+		req.OutputConfig.Format = &jsonOutputFormat{Type: "json_schema"}
 	}
 
 	userSystemBlocks, messages := convertMessages(llmRequest.Messages)
@@ -201,58 +181,37 @@ func BuildRequest(reqOpts RequestOptions) (Request, error) {
 		})
 	}
 
-	// Wire ThinkingConfig. Incompatible with forced tool_choice — downgrade to auto.
-	// Sonnet 4.6 / Opus 4.6 use adaptive ThinkingConfig (budget_tokens is rejected).
-	// ThinkingEffort "none" explicitly disables ThinkingConfig.
-	// On adaptive models, ThinkingEffort is promoted to output_config.effort.
-	// On older models, ThinkingEffort maps to budget_tokens.
-	if llmRequest.ThinkingEffort == llm.ThinkingEffortNone {
-		// User explicitly disabled ThinkingConfig
+	// 1. Thinking mode — independent of effort
+	switch {
+	case llmRequest.Thinking.IsOff():
 		req.Thinking = &ThinkingConfig{Type: "disabled"}
-	} else if isAdaptiveThinkingSupported(req.Model) {
-		// Sonnet 4.6 / Opus 4.6: always bare adaptive (no budget_tokens).
-		// Depth is controlled via output_config.effort, wired below.
+	case isAdaptiveThinkingSupported(req.Model):
 		req.Thinking = &ThinkingConfig{Type: "adaptive"}
-	} else if !llmRequest.ThinkingEffort.IsEmpty() {
-		// Older models with explicit ThinkingEffort: use enabled + budget_tokens
-		budget, ok := llmRequest.ThinkingEffort.ToBudget(thinkingBudgetLow, thinkingBudgetHigh)
-		if !ok {
-			budget = thinkingBudgetLow + 2*(thinkingBudgetHigh-thinkingBudgetLow)/4 // medium fallback
+	default:
+		// Older models: enabled with budget derived from Effort
+		budget := thinkingBudgetHigh // generous default when EffortUnspecified
+		if b, ok := llmRequest.Effort.ToBudget(thinkingBudgetLow, thinkingBudgetHigh); ok {
+			budget = b
 		}
 		req.Thinking = &ThinkingConfig{Type: "enabled", BudgetTokens: budget}
-	} else {
-		// Haiku / older models: default to enabled ThinkingConfig with high budget_tokens (like Claude Code)
-		req.Thinking = &ThinkingConfig{Type: "enabled", BudgetTokens: thinkingBudgetHigh}
 	}
 	if _, isForced := llmRequest.ToolChoice.(llm.ToolChoiceTool); isForced {
 		llmRequest.ToolChoice = llm.ToolChoiceAuto{}
 	}
 
-	// Wire output effort (Anthropic only). Default to medium effort.
-	// On adaptive models, ThinkingEffort is promoted to output_config.effort
-	// when OutputEffort is not explicitly set.
+	// 2. Output effort — independent of thinking mode, set on supported models
 	if isEffortSupported(req.Model) {
-		effort := llmRequest.OutputEffort
-		// Promote ThinkingEffort → OutputEffort on adaptive models when OutputEffort is unset.
-		if effort.IsEmpty() && isAdaptiveThinkingSupported(req.Model) {
-			if promoted, ok := thinkingToOutputEffort(llmRequest.ThinkingEffort); ok {
-				effort = promoted
-			}
+		effort := llmRequest.Effort
+		if effort == llm.EffortMax && !isMaxEffortSupported(req.Model) {
+			effort = llm.EffortHigh // silent downgrade
 		}
 		if effort.IsEmpty() {
-			effort = llm.OutputEffortMedium
+			effort = llm.EffortMedium // default
 		}
-		effortStr := string(effort)
-		if effort == llm.OutputEffortMax && !isMaxEffortSupported(req.Model) {
-			// Skip max effort on unsupported models; API would reject it anyway
-			effortStr = ""
+		if req.OutputConfig == nil {
+			req.OutputConfig = &outputConfig{}
 		}
-		if effortStr != "" {
-			if req.OutputConfig == nil {
-				req.OutputConfig = &outputConfig{}
-			}
-			req.OutputConfig.Effort = effortStr
-		}
+		req.OutputConfig.Effort = string(effort)
 	}
 
 	if len(llmRequest.Tools) > 0 {

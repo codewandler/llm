@@ -59,10 +59,10 @@ func TestParseStream_LargeStreamNoDeadlock(t *testing.T) {
 
 func TestParseStream_EmitsRequestParams(t *testing.T) {
 	req := &llm.Request{
-		Model:          "claude-sonnet-4-6-20251120",
-		Messages:       llm.Messages{llm.User("hi")},
-		ThinkingEffort: llm.ThinkingEffortHigh,
-		OutputEffort:   llm.OutputEffortHigh,
+		Model:    "claude-sonnet-4-6-20251120",
+		Messages: llm.Messages{llm.User("hi")},
+		Effort:   llm.EffortHigh,
+		Thinking: llm.ThinkingOn,
 	}
 	params := map[string]any{
 		"model":      "claude-sonnet-4-6-20251120",
@@ -103,8 +103,8 @@ func TestParseStream_EmitsRequestParams(t *testing.T) {
 			// LLMRequest
 			require.NotNil(t, rpe.LLMRequest, "LLMRequest must be set")
 			assert.Equal(t, "claude-sonnet-4-6-20251120", rpe.LLMRequest.Model)
-			assert.Equal(t, llm.ThinkingEffortHigh, rpe.LLMRequest.ThinkingEffort)
-			assert.Equal(t, llm.OutputEffortHigh, rpe.LLMRequest.OutputEffort)
+			assert.Equal(t, llm.EffortHigh, rpe.LLMRequest.Effort)
+			assert.Equal(t, llm.ThinkingOn, rpe.LLMRequest.Thinking)
 
 			// ProviderRequestParams
 			assert.Equal(t, "claude-sonnet-4-6-20251120", rpe.ProviderRequestParams["model"])

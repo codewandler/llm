@@ -7,106 +7,88 @@ import (
 	llmtool "github.com/codewandler/llm/tool"
 )
 
-// --- ThinkingEffort ---
+// --- Effort ---
 
-// ThinkingEffort controls the amount of reasoning for reasoning models.
-// Lower values result in faster responses with fewer reasoning tokens.
-type ThinkingEffort string
+// Effort controls how thoroughly the model works on the response.
+// Affects thinking depth, response length, and tool call count.
+// Universal across all providers.
+type Effort string
 
 const (
-	// ThinkingEffortUnspecified is the zero value — no thinking effort was set.
-	ThinkingEffortUnspecified ThinkingEffort = ""
-	// ThinkingEffortNone disables reasoning (GPT-5.1+ only).
-	ThinkingEffortNone ThinkingEffort = "none"
-	// ThinkingEffortMinimal uses minimal reasoning effort.
-	ThinkingEffortMinimal ThinkingEffort = "minimal"
-	// ThinkingEffortLow uses low reasoning effort.
-	ThinkingEffortLow ThinkingEffort = "low"
-	// ThinkingEffortMedium uses medium reasoning effort (default for most models before GPT-5.1).
-	ThinkingEffortMedium ThinkingEffort = "medium"
-	// ThinkingEffortHigh uses high reasoning effort.
-	ThinkingEffortHigh ThinkingEffort = "high"
-	// ThinkingEffortXHigh uses extra high reasoning effort (codex-max+ only).
-	ThinkingEffortXHigh ThinkingEffort = "xhigh"
+	// EffortUnspecified is the zero value — provider picks its default.
+	EffortUnspecified Effort = ""
+	// EffortLow produces fast, cheap, less thorough responses.
+	EffortLow Effort = "low"
+	// EffortMedium produces balanced responses.
+	EffortMedium Effort = "medium"
+	// EffortHigh produces thorough, slower responses.
+	EffortHigh Effort = "high"
+	// EffortMax produces maximum-capability responses.
+	// Silently downgrades to EffortHigh on models that don't support it.
+	EffortMax Effort = "max"
 )
 
-// Valid returns true if the ThinkingEffort is a known valid value or empty.
-func (r ThinkingEffort) Valid() bool {
-	switch r {
-	case ThinkingEffortUnspecified, ThinkingEffortNone, ThinkingEffortMinimal, ThinkingEffortLow,
-		ThinkingEffortMedium, ThinkingEffortHigh, ThinkingEffortXHigh:
+// Valid returns true if the Effort is a known valid value or empty.
+func (e Effort) Valid() bool {
+	switch e {
+	case EffortUnspecified, EffortLow, EffortMedium, EffortHigh, EffortMax:
 		return true
 	default:
 		return false
 	}
 }
 
-// IsEmpty returns true when no thinking effort has been specified.
-func (r ThinkingEffort) IsEmpty() bool { return r == ThinkingEffortUnspecified }
+// IsEmpty returns true when no effort has been specified.
+func (e Effort) IsEmpty() bool { return e == EffortUnspecified }
 
-// thinkingIndex returns the zero-based ordinal of an effort level
-// (minimal=0 … xhigh=4) and true, or (-1, false) for none/empty/unknown.
-func (r ThinkingEffort) thinkingIndex() (int, bool) {
-	switch r {
-	case ThinkingEffortMinimal:
-		return 0, true
-	case ThinkingEffortLow:
-		return 1, true
-	case ThinkingEffortMedium:
-		return 2, true
-	case ThinkingEffortHigh:
-		return 3, true
-	case ThinkingEffortXHigh:
-		return 4, true
+// ToBudget maps this effort to a token budget in [low, high].
+// Used by providers that need budget_tokens (Anthropic < 4.6, Bedrock).
+// EffortMax maps to the same budget as EffortHigh.
+// Returns (0, false) for EffortUnspecified.
+func (e Effort) ToBudget(low, high int) (int, bool) {
+	switch e {
+	case EffortLow:
+		return low, true
+	case EffortMedium:
+		return low + (high-low)/2, true
+	case EffortHigh, EffortMax:
+		return high, true
 	default:
-		return -1, false
-	}
-}
-
-// ToBudget maps this effort to a token budget in the continuous range
-// [low, high]. The five graduated levels (minimal … xhigh) are spaced
-// evenly across the range. Returns (0, false) for none, empty, or
-// unknown effort values.
-func (r ThinkingEffort) ToBudget(low, high int) (int, bool) {
-	idx, ok := r.thinkingIndex()
-	if !ok {
 		return 0, false
 	}
-	const steps = 4 // intervals between 5 levels
-	return low + idx*(high-low)/steps, true
 }
 
-// --- OutputEffort ---
+// --- ThinkingMode ---
 
-// OutputEffort controls the depth/effort of the model's response (Anthropic only).
-// Higher values result in more thorough responses at the cost of latency.
-type OutputEffort string
+// ThinkingMode controls whether the model uses extended/chain-of-thought reasoning.
+// This is a mode selector (on/off/auto), not a depth control — depth is
+// controlled by Effort.
+type ThinkingMode string
 
 const (
-	// OutputEffortUnspecified is the zero value — no output effort was set.
-	OutputEffortUnspecified OutputEffort = ""
-	// OutputEffortLow produces faster, less thorough responses.
-	OutputEffortLow OutputEffort = "low"
-	// OutputEffortMedium produces balanced responses (default).
-	OutputEffortMedium OutputEffort = "medium"
-	// OutputEffortHigh produces thorough, detailed responses.
-	OutputEffortHigh OutputEffort = "high"
-	// OutputEffortMax produces maximum effort responses (Opus 4.6 only).
-	OutputEffortMax OutputEffort = "max"
+	// ThinkingAuto lets the provider/model decide whether to think.
+	ThinkingAuto ThinkingMode = ""
+	// ThinkingOn forces extended thinking on.
+	ThinkingOn ThinkingMode = "on"
+	// ThinkingOff forces extended thinking off.
+	ThinkingOff ThinkingMode = "off"
 )
 
-// Valid returns true if the OutputEffort is a known valid value or empty.
-func (e OutputEffort) Valid() bool {
-	switch e {
-	case OutputEffortUnspecified, OutputEffortLow, OutputEffortMedium, OutputEffortHigh, OutputEffortMax:
+// Valid returns true if the ThinkingMode is a known valid value.
+func (m ThinkingMode) Valid() bool {
+	switch m {
+	case ThinkingAuto, ThinkingOn, ThinkingOff:
 		return true
 	default:
 		return false
 	}
 }
 
-// IsEmpty returns true when no output effort has been specified.
-func (e OutputEffort) IsEmpty() bool { return e == OutputEffortUnspecified }
+// IsOff returns true when thinking is explicitly disabled.
+func (m ThinkingMode) IsOff() bool { return m == ThinkingOff }
+
+// IsOn returns true when thinking is explicitly enabled.
+func (m ThinkingMode) IsOn() bool { return m == ThinkingOn }
 
 // OutputFormat specifies the desired output format for the model response.
 type OutputFormat string
@@ -157,11 +139,12 @@ type Request struct {
 	// ToolChoice controls how the model selects tools. Defaults to Auto when Tools are provided.
 	ToolChoice ToolChoice `json:"tool_choice,omitempty"`
 
-	// ThinkingEffort controls the depth of reasoning for models that support it (e.g. OpenAI o-series).
-	ThinkingEffort ThinkingEffort `json:"thinking_effort,omitempty"`
+	// Effort controls how thoroughly the model works on the response.
+	Effort Effort `json:"effort,omitempty"`
 
-	// OutputEffort controls the depth/effort of the model's response (Anthropic only).
-	OutputEffort OutputEffort `json:"output_effort,omitempty"`
+	// Thinking controls whether extended/chain-of-thought reasoning is used.
+	// This is a mode selector (on/off/auto), not a depth control.
+	Thinking ThinkingMode `json:"thinking,omitempty"`
 
 	// CacheHint is a top-level prompt caching hint. Behaviour is provider-specific:
 	// Anthropic auto mode, Bedrock trailing cachePoint, OpenAI extended retention.
@@ -175,14 +158,14 @@ func (o Request) Validate() error {
 		return errors.New("model is required")
 	}
 
-	// Validate ThinkingEffort
-	if !o.ThinkingEffort.Valid() {
-		return fmt.Errorf("invalid ThinkingEffort %q", o.ThinkingEffort)
+	// Validate Effort
+	if !o.Effort.Valid() {
+		return fmt.Errorf("invalid Effort %q", o.Effort)
 	}
 
-	// Validate OutputEffort
-	if !o.OutputEffort.Valid() {
-		return fmt.Errorf("invalid OutputEffort %q", o.OutputEffort)
+	// Validate Thinking
+	if !o.Thinking.Valid() {
+		return fmt.Errorf("invalid Thinking %q", o.Thinking)
 	}
 
 	// Validate Tools

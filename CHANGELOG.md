@@ -2,22 +2,37 @@
 
 ## Unreleased
 
+### Breaking Changes
+
+- **`ThinkingEffort` and `OutputEffort` replaced by `Effort` + `ThinkingMode`.**
+  - `Request.ThinkingEffort` → `Request.Effort` (type `Effort`: `""`, `"low"`, `"medium"`, `"high"`, `"max"`)
+  - `Request.OutputEffort` → `Request.Thinking` (type `ThinkingMode`: `""`, `"on"`, `"off"`)
+  - All old constants removed (`ThinkingEffortNone`, `ThinkingEffortMinimal`, `OutputEffortHigh`, etc.)
+  - CLI: `--thinking` now accepts `auto|on|off` (was effort levels); `--effort` accepts `low|medium|high|max`
+  - See `docs/thinking-and-effort.md` for migration guide and per-provider mapping.
+
 ### Bug Fixes
 
 - Fix ThinkingEffort silently ignored for adaptive models (Sonnet 4.6 / Opus 4.6) — budget_tokens is now mapped via `ToBudget()` instead of being dropped.
 - Fix unrecognised ThinkingEffort values (minimal, xhigh) producing `budget_tokens: 0` on non-adaptive models.
+- Anthropic ≥ 4.6 no longer sends `budget_tokens` on adaptive thinking (API rejects it with HTTP 400).
 
 ### Added
 
-- `ThinkingEffort.ToBudget(low, high)` maps effort levels to a continuous token budget range, replacing hardcoded per-level switches.
-- `ThinkingEffort.IsEmpty()`, `OutputEffort.IsEmpty()` and `ThinkingEffortUnspecified` / `OutputEffortUnspecified` constants for type-safe zero-value checks.
-- New `request_params` stream event (`RequestParamsEvent`) emitted by Anthropic, Claude, and MiniMax providers carrying the final `llm.Request` and resolved provider params.
-- `llmcli infer -v` now prints request params and provider params sections showing thinking config, output effort, and other control knobs.
-- `Request.ControlParams()` on the Anthropic request struct for observability (marshal → strip verbose fields).
+- `Effort.ToBudget(low, high)` maps effort levels to a continuous token budget range.
+- `ThinkingMode.IsOn()`, `ThinkingMode.IsOff()`, `Effort.IsEmpty()` convenience methods.
+- New `request_params` stream event (`RequestParamsEvent`) emitted by Anthropic, Claude, and MiniMax providers.
+- `llmcli infer -v` now prints request params and provider params sections.
+- `Request.ControlParams()` on the Anthropic request struct for observability.
+- `docs/thinking-and-effort.md` — design documentation with per-provider mapping tables.
 
 ### Changed
 
-- Claude provider default model alias (`"default"`) now resolves to Sonnet 4.6 instead of Haiku 4.5. Haiku remains the provider fallback when no model is specified.
+- Claude provider default model alias (`"default"`) now resolves to Sonnet 4.6 instead of Haiku 4.5.
+- `RequestBuilder.Coding()` preset: `EffortHigh` + `ThinkingOn` (was `ThinkingEffortMedium` + `OutputEffortHigh`).
+- `newDefaultRequest()`: `EffortLow` + `ThinkingOff` (was `ThinkingEffortNone` + `OutputEffortLow`).
+- Bedrock: reasoning only enabled when `ThinkingOn` or `Effort` is explicitly set (avoids cost increase from always-on reasoning).
+- OpenAI Pro models: effort restriction relaxed (was high-only, now accepts any level).
 
 ---
 

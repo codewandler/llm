@@ -299,7 +299,7 @@ func testProvider(t *testing.T, tt ProviderTestCase) {
 						Messages: msg.BuildTranscript(
 							msg.User("Answer briefly: what is 2+2?"),
 						),
-						ThinkingEffort: llm.ThinkingEffortLow,
+						Effort: llm.EffortLow,
 					})
 					require.NoError(t, err)
 
@@ -364,7 +364,7 @@ func testProvider(t *testing.T, tt ProviderTestCase) {
 							msg.System("Use reasoning if available, but keep the final answer short."),
 							msg.User("What is 17 times 19?"),
 						),
-						ThinkingEffort: llm.ThinkingEffortLow,
+						Effort: llm.EffortLow,
 					})
 					require.NoError(t, err)
 

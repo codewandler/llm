@@ -19,8 +19,8 @@ func NewInferCmd(root *RootFlags) *cobra.Command {
 	var model string
 	var system string
 	var verbose bool
-	var thinkingEffort string
-	var outputEffort string
+	var thinking string
+	var effort string
 	var demoTools bool
 
 	cmd := &cobra.Command{
@@ -32,22 +32,22 @@ Uses all stored credential accounts, trying each in alphabetical order
 until one succeeds (useful for rate limit fallback).
 
 Examples:
-  llmcli infer "Hello, how are you?"				# Uses fast model (haiku)
-  llmcli infer -m default "Explain Go channels"		# Balanced (sonnet)
-  llmcli infer -m powerful "Write a poem about Go"	# Most capable (opus)
-  llmcli infer -s "You are a pirate" "Hello"		# Add system prompt
-  llmcli infer -m codex --thinking high "Hello"		# Add thinking
-  llmcli infer --effort high "Explain this"			# High output effort response`,
+  llmcli infer "Hello, how are you?"					# auto thinking, provider-default effort
+  llmcli infer --effort high "Explain channels"			# high effort, auto thinking
+  llmcli infer --effort max --thinking on "Explain this"	# max effort, force thinking on
+  llmcli infer --thinking off "Quick answer"				# disable thinking
+  llmcli infer -m powerful "Write a poem about Go"		# Most capable (opus)
+  llmcli infer -s "You are a pirate" "Hello"				# Add system prompt`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runInfer(cmd.Context(), args[0], model, system, thinkingEffort, outputEffort, verbose, demoTools, root)
+			return runInfer(cmd.Context(), args[0], model, system, thinking, effort, verbose, demoTools, root)
 		},
 	}
 
 	cmd.Flags().StringVarP(&model, "model", "m", "fast", "Model to use (fast, default, powerful, codex, or full path)")
 	cmd.Flags().StringVarP(&system, "system", "s", "", "System prompt to prepend")
-	cmd.Flags().StringVar(&thinkingEffort, "thinking", "", "Thought effort: low, medium, high (for o-series / codex models)")
-	cmd.Flags().StringVar(&outputEffort, "effort", "", "Output effort: low, medium, high, max (Anthropic Sonnet 4.6+ / Opus 4.6+)")
+	cmd.Flags().StringVar(&thinking, "thinking", "", "Thinking mode: auto, on, off (default: auto)")
+	cmd.Flags().StringVar(&effort, "effort", "", "Effort level: low, medium, high, max (default: provider decides)")
 	cmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "Show usage statistics")
 	cmd.Flags().BoolVar(&demoTools, "demo-tools", false, "Enable demo tool loop (add_fact + complete_turn) and default persona")
 	return cmd
@@ -80,12 +80,12 @@ func runInfer(ctx context.Context, userMsg, model, system, thinking, effort stri
 	}
 
 	stream, err := provider.CreateStream(ctx, llm.Request{
-		Model:          spec.Model,
-		Messages:       spec.Messages,
-		ThinkingEffort: spec.ThinkingEffort,
-		OutputEffort:   spec.OutputEffort,
-		ToolChoice:     spec.ToolChoice,
-		Tools:          spec.Tools,
+		Model:      spec.Model,
+		Messages:   spec.Messages,
+		Effort:     spec.Effort,
+		Thinking:   spec.Thinking,
+		ToolChoice: spec.ToolChoice,
+		Tools:      spec.Tools,
 	})
 	if err != nil {
 		return fmt.Errorf("create stream: %w", err)
@@ -410,13 +410,13 @@ func printFields(fields []kvField) {
 }
 
 type inferSpec struct {
-	Model          string
-	Messages       llm.Messages
-	ThinkingEffort llm.ThinkingEffort
-	OutputEffort   llm.OutputEffort
-	ToolChoice     llm.ToolChoice
-	Tools          []tool.Definition
-	ToolHandlers   []tool.NamedHandler
+	Model        string
+	Messages     llm.Messages
+	Effort       llm.Effort
+	Thinking     llm.ThinkingMode
+	ToolChoice   llm.ToolChoice
+	Tools        []tool.Definition
+	ToolHandlers []tool.NamedHandler
 }
 
 type addFactParams struct {
@@ -452,10 +452,10 @@ func buildInferSpec(userMsg, model, system, thinking, effort string, demoTools b
 	msgs = append(msgs, userMsg2)
 
 	spec := inferSpec{
-		Model:          model,
-		Messages:       msgs,
-		ThinkingEffort: llm.ThinkingEffort(thinking),
-		OutputEffort:   llm.OutputEffort(effort),
+		Model:    model,
+		Messages: msgs,
+		Effort:   llm.Effort(effort),
+		Thinking: llm.ThinkingMode(thinking),
 	}
 
 	if !demoTools {

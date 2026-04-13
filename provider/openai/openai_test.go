@@ -626,148 +626,77 @@ func TestGetModelInfo_Categories(t *testing.T) {
 	}
 }
 
-// --- Unit tests for mapThinkingEffort ---
+// --- Unit tests for mapEffortAndThinking ---
 
-func TestMapThinkingEffort_NonReasoning(t *testing.T) {
-	models := []string{"gpt-4o", "gpt-4o-mini", "gpt-4", "gpt-3.5-turbo", "gpt-4.1"}
-	efforts := []llm.ThinkingEffort{llm.ThinkingEffortUnspecified, llm.ThinkingEffortNone, llm.ThinkingEffortMinimal, llm.ThinkingEffortLow, llm.ThinkingEffortMedium, llm.ThinkingEffortHigh, llm.ThinkingEffortXHigh}
-
-	for _, model := range models {
-		for _, effort := range efforts {
-			t.Run(model+"_"+string(effort), func(t *testing.T) {
-				result, err := mapThinkingEffort(model, effort)
-				require.NoError(t, err)
-				assert.Empty(t, result, "non-reasoning models should return empty")
-			})
-		}
-	}
-}
-
-func TestMapThinkingEffort_PreGPT51(t *testing.T) {
-	models := []string{"gpt-5", "gpt-5-mini", "gpt-5-nano", "o1", "o3"}
-
+func TestMapEffortAndThinking(t *testing.T) {
 	tests := []struct {
-		effort  llm.ThinkingEffort
-		want    string
-		wantErr bool
+		name     string
+		model    string
+		effort   llm.Effort
+		thinking llm.ThinkingMode
+		want     string
 	}{
-		{"", "", false},
-		{llm.ThinkingEffortMinimal, "minimal", false},
-		{llm.ThinkingEffortLow, "low", false},
-		{llm.ThinkingEffortMedium, "medium", false},
-		{llm.ThinkingEffortHigh, "high", false},
-		{llm.ThinkingEffortNone, "", true},
-		{llm.ThinkingEffortXHigh, "", true},
-	}
+		// Non-reasoning models: always empty
+		{"non-reasoning/high/auto", "gpt-4o", llm.EffortHigh, llm.ThinkingAuto, ""},
+		{"non-reasoning/high/off", "gpt-4o", llm.EffortHigh, llm.ThinkingOff, ""},
+		{"non-reasoning/unset/on", "gpt-4o", "", llm.ThinkingOn, ""},
 
-	for _, model := range models {
-		for _, tt := range tests {
-			t.Run(model+"_"+string(tt.effort), func(t *testing.T) {
-				result, err := mapThinkingEffort(model, tt.effort)
-				if tt.wantErr {
-					require.Error(t, err)
-				} else {
-					require.NoError(t, err)
-					assert.Equal(t, tt.want, result)
-				}
-			})
-		}
-	}
-}
+		// Pre-GPT-5.1 reasoning models
+		{"pre51/low/auto", "gpt-5", llm.EffortLow, llm.ThinkingAuto, "low"},
+		{"pre51/high/auto", "o3", llm.EffortHigh, llm.ThinkingAuto, "high"},
+		{"pre51/medium/auto", "gpt-5-mini", llm.EffortMedium, llm.ThinkingAuto, "medium"},
+		{"pre51/unset/auto", "gpt-5", "", llm.ThinkingAuto, ""},
+		{"pre51/any/off", "gpt-5", llm.EffortHigh, llm.ThinkingOff, ""},
+		{"pre51/max/auto", "gpt-5", llm.EffortMax, llm.ThinkingAuto, "high"},
+		{"pre51/unset/on", "gpt-5", "", llm.ThinkingOn, "high"},
 
-func TestMapThinkingEffort_GPT51(t *testing.T) {
-	model := "gpt-5.1"
+		// GPT-5.1
+		{"gpt51/low/auto", "gpt-5.1", llm.EffortLow, llm.ThinkingAuto, "low"},
+		{"gpt51/high/auto", "gpt-5.1", llm.EffortHigh, llm.ThinkingAuto, "high"},
+		{"gpt51/any/off", "gpt-5.1", llm.EffortHigh, llm.ThinkingOff, "none"},
+		{"gpt51/unset/on", "gpt-5.1", "", llm.ThinkingOn, "high"},
+		{"gpt51/unset/auto", "gpt-5.1", "", llm.ThinkingAuto, ""},
+		{"gpt51/max/auto", "gpt-5.1", llm.EffortMax, llm.ThinkingAuto, "high"},
 
-	tests := []struct {
-		effort  llm.ThinkingEffort
-		want    string
-		wantErr bool
-	}{
-		{"", "", false},
-		{llm.ThinkingEffortNone, "none", false},
-		{llm.ThinkingEffortMinimal, "low", false},
-		{llm.ThinkingEffortLow, "low", false},
-		{llm.ThinkingEffortMedium, "medium", false},
-		{llm.ThinkingEffortHigh, "high", false},
-		{llm.ThinkingEffortXHigh, "", true},
+		// Codex
+		{"codex/max/auto", "gpt-5.1-codex", llm.EffortMax, llm.ThinkingAuto, "xhigh"},
+		{"codex/high/auto", "gpt-5.1-codex", llm.EffortHigh, llm.ThinkingAuto, "high"},
+		{"codex/low/auto", "gpt-5.1-codex", llm.EffortLow, llm.ThinkingAuto, "low"},
+		{"codex/any/off", "gpt-5.1-codex", llm.EffortHigh, llm.ThinkingOff, ""},
+		{"codex-mini/any/off", "gpt-5.1-codex-mini", llm.EffortHigh, llm.ThinkingOff, ""},
+		{"codex/unset/on", "gpt-5.1-codex", "", llm.ThinkingOn, "high"},
+		{"codex/unset/auto", "gpt-5.1-codex", "", llm.ThinkingAuto, ""},
+
+		// Pro — accepts any effort level (no longer restricted to high-only)
+		{"pro/unset/auto", "gpt-5-pro", "", llm.ThinkingAuto, ""},
+		{"pro/low/auto", "gpt-5-pro", llm.EffortLow, llm.ThinkingAuto, "low"},
+		{"pro/medium/auto", "gpt-5-pro", llm.EffortMedium, llm.ThinkingAuto, "medium"},
+		{"pro/high/auto", "gpt-5-pro", llm.EffortHigh, llm.ThinkingAuto, "high"},
+		{"pro/any/off", "gpt-5-pro", llm.EffortHigh, llm.ThinkingOff, ""},
+		{"pro/unset/on", "gpt-5-pro", "", llm.ThinkingOn, "high"},
+		{"pro/max/auto", "o3-pro", llm.EffortMax, llm.ThinkingAuto, "high"},
 	}
 
 	for _, tt := range tests {
-		t.Run(string(tt.effort), func(t *testing.T) {
-			result, err := mapThinkingEffort(model, tt.effort)
-			if tt.wantErr {
-				require.Error(t, err)
-			} else {
-				require.NoError(t, err)
-				assert.Equal(t, tt.want, result)
-			}
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := mapEffortAndThinking(tt.model, tt.effort, tt.thinking)
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, result)
 		})
 	}
 }
 
-func TestMapThinkingEffort_Pro(t *testing.T) {
-	models := []string{"gpt-5-pro", "gpt-5.2-pro", "o1-pro", "o3-pro"}
-
-	for _, model := range models {
-		t.Run(model+"_empty", func(t *testing.T) {
-			result, err := mapThinkingEffort(model, "")
-			require.NoError(t, err)
-			assert.Empty(t, result)
-		})
-
-		t.Run(model+"_high", func(t *testing.T) {
-			result, err := mapThinkingEffort(model, llm.ThinkingEffortHigh)
-			require.NoError(t, err)
-			assert.Equal(t, "high", result)
-		})
-
-		for _, effort := range []llm.ThinkingEffort{llm.ThinkingEffortNone, llm.ThinkingEffortMinimal, llm.ThinkingEffortLow, llm.ThinkingEffortMedium, llm.ThinkingEffortXHigh} {
-			t.Run(model+"_"+string(effort), func(t *testing.T) {
-				_, err := mapThinkingEffort(model, effort)
-				require.Error(t, err)
-				assert.Contains(t, err.Error(), "must be")
-			})
-		}
-	}
-}
-
-func TestMapThinkingEffort_CodexMax(t *testing.T) {
-	models := []string{"gpt-5.1-codex", "gpt-5.2-codex", "gpt-5.1-codex-max"}
-
-	tests := []struct {
-		effort  llm.ThinkingEffort
-		want    string
-		wantErr bool
-	}{
-		{"", "", false},
-		{llm.ThinkingEffortNone, "none", false},
-		{llm.ThinkingEffortMinimal, "low", false},
-		{llm.ThinkingEffortLow, "low", false},
-		{llm.ThinkingEffortMedium, "medium", false},
-		{llm.ThinkingEffortHigh, "high", false},
-		{llm.ThinkingEffortXHigh, "xhigh", false},
-	}
-
-	for _, model := range models {
-		for _, tt := range tests {
-			t.Run(model+"_"+string(tt.effort), func(t *testing.T) {
-				result, err := mapThinkingEffort(model, tt.effort)
-				if tt.wantErr {
-					require.Error(t, err)
-				} else {
-					require.NoError(t, err)
-					assert.Equal(t, tt.want, result)
-				}
-			})
-		}
-	}
+func TestMapEffortAndThinking_UnknownModel(t *testing.T) {
+	_, err := mapEffortAndThinking("unknown-model", llm.EffortHigh, llm.ThinkingAuto)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unknown model")
 }
 
 // --- enrichOpts + ccBuildRequest integration tests ---
 // These test the full pipeline: enrichOpts (reasoning mapping, cache retention)
 // feeding into ccBuildRequest.
 
-func TestBuildRequest_ThinkingEffortOmitted(t *testing.T) {
+func TestBuildRequest_EffortOmitted(t *testing.T) {
 	opts := llm.Request{
 		Model:    "gpt-4o",
 		Messages: llm.Messages{llm.User("Hello")},
@@ -782,12 +711,12 @@ func TestBuildRequest_ThinkingEffortOmitted(t *testing.T) {
 	assert.False(t, exists, "reasoning_effort should be omitted when not specified")
 }
 
-func TestBuildRequest_ThinkingEffortSet(t *testing.T) {
+func TestBuildRequest_EffortSet(t *testing.T) {
 	// enrichOpts passes the raw effort string through for pre-GPT51 models.
 	opts, err := enrichOpts(llm.Request{
-		Model:          "gpt-5",
-		Messages:       llm.Messages{llm.User("Hello")},
-		ThinkingEffort: llm.ThinkingEffortLow,
+		Model:    "gpt-5",
+		Messages: llm.Messages{llm.User("Hello")},
+		Effort:   llm.EffortLow,
 	})
 	require.NoError(t, err)
 
@@ -799,12 +728,12 @@ func TestBuildRequest_ThinkingEffortSet(t *testing.T) {
 	assert.Equal(t, "low", req["reasoning_effort"])
 }
 
-func TestBuildRequest_ThinkingEffortMapped(t *testing.T) {
-	// enrichOpts maps "minimal" → "low" for gpt-5.1.
+func TestBuildRequest_EffortMapped(t *testing.T) {
+	// enrichOpts maps max → high for gpt-5.1.
 	opts, err := enrichOpts(llm.Request{
-		Model:          "gpt-5.1",
-		Messages:       llm.Messages{llm.User("Hello")},
-		ThinkingEffort: llm.ThinkingEffortMinimal,
+		Model:    "gpt-5.1",
+		Messages: llm.Messages{llm.User("Hello")},
+		Effort:   llm.EffortMax,
 	})
 	require.NoError(t, err)
 
@@ -813,17 +742,23 @@ func TestBuildRequest_ThinkingEffortMapped(t *testing.T) {
 
 	var req map[string]any
 	require.NoError(t, json.Unmarshal(body, &req))
-	assert.Equal(t, "low", req["reasoning_effort"], "minimal should be mapped to low for gpt-5.1")
+	assert.Equal(t, "high", req["reasoning_effort"], "max should be mapped to high for gpt-5.1")
 }
 
-func TestBuildRequest_ThinkingEffortError(t *testing.T) {
-	_, err := enrichOpts(llm.Request{
-		Model:          "gpt-5-pro",
-		Messages:       llm.Messages{llm.User("Hello")},
-		ThinkingEffort: llm.ThinkingEffortLow,
+func TestBuildRequest_ThinkingOff(t *testing.T) {
+	opts, err := enrichOpts(llm.Request{
+		Model:    "gpt-5.1",
+		Messages: llm.Messages{llm.User("Hello")},
+		Thinking: llm.ThinkingOff,
 	})
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "must be")
+	require.NoError(t, err)
+
+	body, err := ccBuildRequest(opts)
+	require.NoError(t, err)
+
+	var req map[string]any
+	require.NoError(t, json.Unmarshal(body, &req))
+	assert.Equal(t, "none", req["reasoning_effort"], "thinking off should map to none for gpt-5.1")
 }
 
 func TestBuildRequest_PromptCacheRetention_ExtendedSupported(t *testing.T) {
@@ -881,33 +816,33 @@ func TestBuildRequest_PromptCacheRetention_NotSupported(t *testing.T) {
 
 // --- Unit tests for model registry ---
 
-func TestEnrichOpts_ThinkingEffortOmitted(t *testing.T) {
+func TestEnrichOpts_EffortOmitted(t *testing.T) {
 	opts := llm.Request{Model: "gpt-4o", Messages: llm.Messages{llm.User("hi")}}
 	out, err := enrichOpts(opts)
 	require.NoError(t, err)
-	assert.Empty(t, out.ThinkingEffort)
+	assert.Empty(t, out.Effort)
 }
 
-func TestEnrichOpts_ThinkingEffortMappedMinimalToLow(t *testing.T) {
+func TestEnrichOpts_EffortMappedMaxToHigh(t *testing.T) {
 	opts := llm.Request{
-		Model:          "gpt-5.1",
-		ThinkingEffort: llm.ThinkingEffortMinimal,
-		Messages:       llm.Messages{llm.User("hi")},
+		Model:    "gpt-5.1",
+		Effort:   llm.EffortMax,
+		Messages: llm.Messages{llm.User("hi")},
 	}
 	out, err := enrichOpts(opts)
 	require.NoError(t, err)
-	assert.Equal(t, llm.ThinkingEffort("low"), out.ThinkingEffort)
+	assert.Equal(t, llm.Effort("high"), out.Effort)
 }
 
-func TestEnrichOpts_ThinkingEffortErrorProModel(t *testing.T) {
+func TestEnrichOpts_ThinkingOffOmitsOnCodex(t *testing.T) {
 	opts := llm.Request{
-		Model:          "gpt-5-pro",
-		ThinkingEffort: llm.ThinkingEffortLow,
-		Messages:       llm.Messages{llm.User("hi")},
+		Model:    "gpt-5.1-codex",
+		Thinking: llm.ThinkingOff,
+		Messages: llm.Messages{llm.User("hi")},
 	}
-	_, err := enrichOpts(opts)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "must be")
+	out, err := enrichOpts(opts)
+	require.NoError(t, err)
+	assert.Equal(t, llm.EffortUnspecified, out.Effort, "codex ThinkingOff should omit effort")
 }
 
 func TestWantsExtendedCache_Set(t *testing.T) {
@@ -935,31 +870,27 @@ func TestWantsExtendedCache_NotSet(t *testing.T) {
 	}
 }
 
-func TestMapThinkingEffort_Codex(t *testing.T) {
+func TestMapEffortAndThinking_Codex(t *testing.T) {
 	tests := []struct {
-		effort  llm.ThinkingEffort
-		want    string
-		wantErr bool
+		effort   llm.Effort
+		thinking llm.ThinkingMode
+		want     string
 	}{
-		{"", "", false},
-		{llm.ThinkingEffortNone, "none", false},
-		{llm.ThinkingEffortMinimal, "low", false},
-		{llm.ThinkingEffortLow, "low", false},
-		{llm.ThinkingEffortMedium, "medium", false},
-		{llm.ThinkingEffortHigh, "high", false},
-		{llm.ThinkingEffortXHigh, "xhigh", false},
+		{"", llm.ThinkingAuto, ""},
+		{llm.EffortLow, llm.ThinkingAuto, "low"},
+		{llm.EffortMedium, llm.ThinkingAuto, "medium"},
+		{llm.EffortHigh, llm.ThinkingAuto, "high"},
+		{llm.EffortMax, llm.ThinkingAuto, "xhigh"},
+		{llm.EffortHigh, llm.ThinkingOff, ""},  // codex: can't reliably disable reasoning
+		{"", llm.ThinkingOn, "high"},
 	}
 
 	for _, model := range []string{"gpt-5.1-codex", "gpt-5.2-codex", "gpt-5.1-codex-max"} {
 		for _, tt := range tests {
-			t.Run(model+"_"+string(tt.effort), func(t *testing.T) {
-				result, err := mapThinkingEffort(model, tt.effort)
-				if tt.wantErr {
-					require.Error(t, err)
-				} else {
-					require.NoError(t, err)
-					assert.Equal(t, tt.want, result)
-				}
+			t.Run(model+"_"+string(tt.effort)+"_"+string(tt.thinking), func(t *testing.T) {
+				result, err := mapEffortAndThinking(model, tt.effort, tt.thinking)
+				require.NoError(t, err)
+				assert.Equal(t, tt.want, result)
 			})
 		}
 	}
@@ -1232,11 +1163,11 @@ func TestRespBuildRequest_ToolCallsAndResults(t *testing.T) {
 	assert.Equal(t, "All 42 tests passed", req.Input[3].Output)
 }
 
-func TestRespBuildRequest_ThinkingEffort(t *testing.T) {
+func TestRespBuildRequest_Effort(t *testing.T) {
 	opts := llm.Request{
-		Model:          "gpt-5.1-codex",
-		Messages:       llm.Messages{llm.User("test")},
-		ThinkingEffort: llm.ThinkingEffortHigh,
+		Model:    "gpt-5.1-codex",
+		Messages: llm.Messages{llm.User("test")},
+		Effort:   llm.EffortHigh,
 	}
 
 	body, err := respBuildRequest(opts)
@@ -1452,39 +1383,35 @@ func TestWantsExtendedCache_TableDriven(t *testing.T) {
 	}
 }
 
-func TestEnrichOpts_ThinkingEffortMapping(t *testing.T) {
+func TestEnrichOpts_EffortMapping(t *testing.T) {
 	tests := []struct {
 		name       string
 		model      string
-		effort     llm.ThinkingEffort
-		wantEffort llm.ThinkingEffort
-		wantErr    bool
+		effort     llm.Effort
+		thinking   llm.ThinkingMode
+		wantEffort llm.Effort
 	}{
-		{"non-reasoning model ignores effort", "gpt-4o", llm.ThinkingEffortHigh, "", false},
-		{"gpt-5.1 accepts high", "gpt-5.1", llm.ThinkingEffortHigh, "high", false},
-		{"gpt-5.1 maps minimal to low", "gpt-5.1", llm.ThinkingEffortMinimal, "low", false},
-		{"gpt-5.1 rejects xhigh", "gpt-5.1", llm.ThinkingEffortXHigh, "", true},
-		{"codex accepts xhigh", "gpt-5.1-codex", llm.ThinkingEffortXHigh, "xhigh", false},
-		{"codex maps minimal to low", "gpt-5.1-codex", llm.ThinkingEffortMinimal, "low", false},
-		{"pro only accepts high", "o1-pro", llm.ThinkingEffortHigh, "high", false},
-		{"pro rejects medium", "o1-pro", llm.ThinkingEffortMedium, "", true},
+		{"non-reasoning model ignores effort", "gpt-4o", llm.EffortHigh, llm.ThinkingAuto, ""},
+		{"gpt-5.1 accepts high", "gpt-5.1", llm.EffortHigh, llm.ThinkingAuto, "high"},
+		{"gpt-5.1 maps max to high", "gpt-5.1", llm.EffortMax, llm.ThinkingAuto, "high"},
+		{"codex accepts max as xhigh", "gpt-5.1-codex", llm.EffortMax, llm.ThinkingAuto, "xhigh"},
+		{"pro accepts high", "o1-pro", llm.EffortHigh, llm.ThinkingAuto, "high"},
+		{"thinking off on gpt-5.1", "gpt-5.1", "", llm.ThinkingOff, "none"},
+		{"thinking on defaults to high", "gpt-5.1-codex", "", llm.ThinkingOn, "high"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			opts := llm.Request{
-				Model:          tt.model,
-				Messages:       llm.Messages{llm.User("test")},
-				ThinkingEffort: tt.effort,
+				Model:    tt.model,
+				Messages: llm.Messages{llm.User("test")},
+				Effort:   tt.effort,
+				Thinking: tt.thinking,
 			}
 
 			enriched, err := enrichOpts(opts)
-			if tt.wantErr {
-				require.Error(t, err)
-			} else {
-				require.NoError(t, err)
-				assert.Equal(t, tt.wantEffort, enriched.ThinkingEffort)
-			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantEffort, enriched.Effort)
 		})
 	}
 }

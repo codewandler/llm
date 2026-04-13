@@ -246,10 +246,10 @@ func respBuildRequest(opts llm.Request) ([]byte, error) {
 		}
 	}
 
-	// Thought effort
-	if !opts.ThinkingEffort.IsEmpty() {
+	// Reasoning effort
+	if !opts.Effort.IsEmpty() {
 		r.Reasoning = &respReason{
-			Effort: string(opts.ThinkingEffort),
+			Effort: string(opts.Effort),
 		}
 	}
 
