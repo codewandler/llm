@@ -282,8 +282,6 @@ type ccToolAccum struct {
 
 func ccParseStream(ctx context.Context, body io.ReadCloser, pub llm.Publisher, meta ccStreamMeta) {
 	defer pub.Close()
-	//nolint:errcheck // intentional: defer Close is only for cleanup, failure after body consumption is non-fatal
-	defer body.Close()
 
 	activeTools := make(map[int]*ccToolAccum)
 	var finalUsage *llm.Usage

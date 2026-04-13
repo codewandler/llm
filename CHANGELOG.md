@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+### Bug Fixes
+
+- Coordinate SSE reader shutdown on cancellation and early stop so Anthropic, OpenAI, OpenRouter, and MiniMax streaming paths do not leave blocked scanner goroutines or response bodies hanging.
+
+---
+
 ## v0.34.2
 
 ### Bug Fixes

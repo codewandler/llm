@@ -341,8 +341,6 @@ type respToolAccum struct {
 
 func respParseStream(ctx context.Context, body io.ReadCloser, pub llm.Publisher, meta respStreamMeta) {
 	defer pub.Close()
-	//nolint:errcheck // intentional: defer Close is only for cleanup, failure after body consumption is non-fatal
-	defer body.Close()
 
 	activeTools := make(map[int]*respToolAccum)
 	startEmitted := false

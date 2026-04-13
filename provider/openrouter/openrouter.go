@@ -412,10 +412,7 @@ type toolAccum struct {
 }
 
 func parseStream(ctx context.Context, body io.ReadCloser, pub llm.Publisher) {
-	defer func() {
-		pub.Close()
-		_ = body.Close()
-	}()
+	defer pub.Close()
 
 	activeTools := make(map[uint32]*toolAccum)
 	startEmitted := false

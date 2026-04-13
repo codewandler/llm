@@ -5,6 +5,7 @@ import (
 	"context"
 	"io"
 	"strings"
+	"sync"
 )
 
 // Event represents one SSE payload with its optional event name.
@@ -24,12 +25,26 @@ type scanResult struct {
 // It supports both plain `data: ...` streams and named events using
 // `event: ...` followed by `data: ...`.
 //
-// Context cancellation is honoured during blocking reads: if ctx is cancelled
-// while waiting for the next line, ForEachDataLine returns ctx.Err() promptly.
+// For closable readers, cancellation and early termination close the reader to
+// unblock any in-flight Read and wait for the scanner goroutine to exit.
 func ForEachDataLine(ctx context.Context, r io.Reader, fn func(Event) bool) error {
 	lines := make(chan scanResult, 16)
+	scannerDone := make(chan struct{})
+
+	var closeReader func()
+	if closer, ok := r.(io.Closer); ok {
+		var once sync.Once
+		closeReader = func() {
+			once.Do(func() {
+				_ = closer.Close()
+			})
+		}
+	} else {
+		closeReader = func() {}
+	}
 
 	go func() {
+		defer close(scannerDone)
 		scanner := bufio.NewScanner(r)
 		scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 		for scanner.Scan() {
@@ -42,17 +57,28 @@ func ForEachDataLine(ctx context.Context, r io.Reader, fn func(Event) bool) erro
 	}()
 
 	var pendingEvent string
+	stop := func(err error) error {
+		closeReader()
+		<-scannerDone
+		return err
+	}
 
 	for {
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
+			return stop(ctx.Err())
 		case res, ok := <-lines:
 			if !ok {
+				if ctx.Err() != nil {
+					return ctx.Err()
+				}
 				// channel closed — scanner finished cleanly
 				return nil
 			}
 			if res.err != nil {
+				if ctx.Err() != nil {
+					return ctx.Err()
+				}
 				return res.err
 			}
 			line := res.line
@@ -63,7 +89,7 @@ func ForEachDataLine(ctx context.Context, r io.Reader, fn func(Event) bool) erro
 				data := strings.TrimPrefix(line, "data:")
 				data = strings.TrimPrefix(data, " ")
 				if !fn(Event{Name: pendingEvent, Data: data}) {
-					return nil
+					return stop(nil)
 				}
 				pendingEvent = ""
 			}
