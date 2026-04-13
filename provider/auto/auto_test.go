@@ -2,6 +2,8 @@ package auto
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -123,6 +125,33 @@ func TestNew_NoProviders(t *testing.T) {
 	require.Error(t, err)
 }
 
+func TestDetectProviders_DoesNotAutoDetectCodexLocal(t *testing.T) {
+	// Create a synthetic ~/.codex/auth.json that would previously trigger
+	// automatic Codex provider registration.
+	home := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(home, ".codex"), 0o755))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(home, ".codex", "auth.json"),
+		[]byte(`{"auth_mode":"chatgpt","tokens":{"access_token":"synthetic-access-token","account_id":"test-account"}}`),
+		0o600,
+	))
+
+	t.Setenv("HOME", home)
+	t.Setenv(EnvOpenAIKey, "test-openai-key")
+
+	providers := detectProviders(nil, nil, map[string]bool{
+		ProviderClaude:     true,
+		ProviderAnthropic:  true,
+		ProviderBedrock:    true,
+		ProviderOpenRouter: true,
+		ProviderMiniMax:    true,
+	})
+
+	require.Len(t, providers, 1)
+	assert.Equal(t, ProviderOpenAI, providers[0].name)
+	assert.Equal(t, ProviderOpenAI, providers[0].providerType)
+}
+
 func TestBuildAliasTargets(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -146,7 +175,7 @@ func TestBuildAliasTargets(t *testing.T) {
 			name:         "openai provider",
 			instanceName: "openai",
 			providerType: ProviderOpenAI,
-			wantAliases:  []string{AliasFast, AliasDefault, AliasPowerful, AliasCodex},
+			wantAliases:  []string{AliasFast, AliasDefault, AliasPowerful},
 		},
 	}
 
@@ -160,6 +189,9 @@ func TestBuildAliasTargets(t *testing.T) {
 			}
 
 			require.NotNil(t, targets)
+			if tt.providerType == ProviderOpenAI {
+				assert.NotContains(t, targets, AliasCodex)
+			}
 			for _, alias := range tt.wantAliases {
 				_, ok := targets[alias]
 				assert.True(t, ok, "missing alias %s", alias)

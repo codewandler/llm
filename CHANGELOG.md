@@ -1,5 +1,32 @@
 # Changelog
 
+## v0.34.2
+
+### Bug Fixes
+
+#### Codex backend request sanitisation (`provider/openai`)
+
+The ChatGPT Codex backend rejects `prompt_cache_retention`, even though the
+standard Responses API accepts it for supported models.
+
+- Strip `prompt_cache_retention` alongside `max_tokens` and `max_output_tokens`
+  before Codex backend requests are sent.
+- Add unit coverage for `codexInjectStore(...)` and transport-level coverage
+  verifying the backend never receives the unsupported field.
+
+#### Codex disabled in auto provider (`provider/auto`)
+
+The auto provider no longer auto-registers Codex local credentials and no longer
+exposes a built-in global `codex` alias for OpenAI.
+
+- Stop auto-detecting `~/.codex/auth.json` in `detectProviders(...)`.
+- Keep `WithCodexLocal()` available for explicit opt-in configuration.
+- Remove the built-in OpenAI global `codex` alias while keeping local OpenAI
+  model aliases such as `openai/codex` intact.
+- Add regression coverage for the new auto-provider behavior.
+
+---
+
 ## v0.34.1
 
 ### Bug Fixes

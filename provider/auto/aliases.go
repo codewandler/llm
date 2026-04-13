@@ -13,7 +13,6 @@ type aliasModels struct {
 	fast     string
 	normal   string
 	powerful string
-	codex    string
 }
 
 // providerAliasModels maps provider types to their alias model mappings.
@@ -38,7 +37,6 @@ var providerAliasModels = map[string]aliasModels{
 		fast:     openai.ModelGPT4oMini,
 		normal:   openai.ModelGPT4o,
 		powerful: openai.ModelO3,
-		codex:    openai.ModelGPT53Codex,
 	},
 	ProviderMiniMax: {
 		fast:     minimax.ModelM27,
@@ -58,9 +56,6 @@ func buildAliasTargets(instanceName, providerType string) map[string]router.Alia
 		AliasFast:     {Provider: instanceName, Model: models.fast},
 		AliasDefault:  {Provider: instanceName, Model: models.normal},
 		AliasPowerful: {Provider: instanceName, Model: models.powerful},
-	}
-	if models.codex != "" {
-		targets[AliasCodex] = router.AliasTarget{Provider: instanceName, Model: models.codex}
 	}
 	return targets
 }
