@@ -2,6 +2,26 @@
 
 ## Unreleased
 
+### Added
+
+- `ops` package — parameterised, use-case-oriented LLM operations built on top
+  of `Provider`. Three generic type parameters (`F` factory params, `I` input,
+  `O` output) drive every operation via two interfaces:
+  - `Factory[F, I, O]` — creates `Operation` instances from a provider + params
+  - `Operation[I, O]` — blocking `Run(ctx, input) (*O, error)`
+- Built-in factories:
+  - `ops.Generate` — free-form text generation (temperature=0.7 default;
+    `ops.Temp(t)` helper for explicit values including 0)
+  - `ops.NewMap[O]` / `ops.MapFactory[O]` — maps unstructured text to any Go
+    struct using tool-forced schema (default) or JSON output mode
+  - `ops.Classify` — maps text to one of a set of labels with case-insensitive
+    normalisation; `ClassifyParams.Hint` for extra context
+  - `ops.Intent` — intent detection with per-intent descriptions and few-shot
+    examples; `IntentParams.Hint` for extra context
+- `ops.NewFactory` — wraps a function into a `Factory`, the primary extension
+  point for user-defined operations
+- `ops.OperationFunc[I, O]` — adapts a plain function to `Operation`
+
 ---
 
 ## [v0.37.0] — 2026-04-14
