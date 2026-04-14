@@ -224,7 +224,7 @@ Tasks 3→4 and 5→6 append code to existing files. The import blocks need to b
 
 ### 10. Missing `ModelsProvider` / `ModelResolver` on blocking test provider
 
-The `llm.Provider` interface requires `Named`, `ModelsProvider`, `ModelResolver`, and `Streamer`. The blocking provider in the fix for issue #1 needs stubs for all of these, not just `CreateStream`. Use `llm.NewProviderFromStreamFunc` or similar helper if available, or mock all methods.
+✅ **Verified non-issue.** Confirmed by reading `provider.go`: `baseProvider.CreateStream` delegates directly to `p.streamer.CreateStream` with no model resolution. `llm.NewProvider("blocking", llm.WithStreamer(...))` fills all interface defaults. The blocking provider used in the plan's cancel tests is safe.
 
 ---
 

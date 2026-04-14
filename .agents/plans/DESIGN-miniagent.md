@@ -248,7 +248,7 @@ The model may emit multiple tool calls in a single response (e.g. two bash comma
 2. After stream ends: `HandleTool` dispatches all calls via sync dispatcher (sequential, in order)
 3. After `Result()`: `ToolCalls()` and `ToolResults()` are 1:1 by index
 
-Display pairs them:
+Display shows results without command references — the commands were already displayed live:
 
 ```
 🔧 bash
@@ -256,13 +256,11 @@ Display pairs them:
 🔧 bash
    $ cat test.txt
 
-✓ $ echo "hello" > test.txt
-  (no output)
-✓ $ cat test.txt
-  hello
+✓ (no output)
+✓ hello
 ```
 
-When there's only one call (the common case), the paired display simplifies naturally:
+When there's only one call (the common case), this simplifies naturally:
 
 ```
 🔧 bash
@@ -543,10 +541,8 @@ I'll create the file and verify it.                          ← streamed text (
 🔧 bash                                                     ← second ToolCallEvent
    $ cat test.txt
                                                              ← bash commands execute here
-✓ $ echo "hello" > test.txt                                 ← paired result display
-  (no output)
-✓ $ cat test.txt                                            ← paired result display
-  hello
+✓ (no output)
+✓ hello
 
    ── step 1 ── input: 1 204  cache_read: 8 432  output: 87  cost: $0.0023
 
@@ -596,12 +592,10 @@ The build is failing because of a missing import.           ← normal (text, af
 ✓ hello world
 ```
 
-**Multiple tool calls**: pair each result with its command for clarity.
+**Multiple tool calls**: results are shown without command references — the commands were already displayed live.
 ```
-✓ $ echo "hello" > test.txt
-  (no output)
-✓ $ cat test.txt
-  hello
+✓ (no output)
+✓ hello
 ```
 
 **Error result**:
@@ -768,7 +762,7 @@ Text and reasoning stream live to stdout. A `stepDisplay` state machine manages 
 `OnEvent(ToolCallEvent)` fires when the stream delivers a completed tool call — *before* `HandleTool` dispatches. The user sees `🔧 bash  $ command` then a natural pause while bash runs, then `✓ result`. Feels like watching the agent work.
 
 ### 3. Paired tool call/result display for multi-call steps
-When the model emits multiple tool calls in one response, all are displayed live as they arrive. Results are displayed after all handlers finish, paired with their commands. Single-call steps (the common case) simplify naturally.
+When the model emits multiple tool calls in one response, all are displayed live as they arrive via ToolCallEvent. After all handlers finish, results are displayed as simple `✓ output` / `✗ output` lines — commands are not repeated since they were already shown.
 
 ### 4. History rollback on turn error
 On any error that prevents a complete turn exchange, `agent.messages` is restored to pre-turn state. This prevents consecutive `role: "user"` messages (Anthropic serializes tool results as `role: "user"`; a dangling tool result + new user message = API rejection).

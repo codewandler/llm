@@ -3,6 +3,7 @@
 **Date**: 2026-05-14  
 **Design**: [DESIGN-miniagent.md](DESIGN-miniagent.md) (v4)  
 **Review**: [REVIEW-plan-miniagent.md](REVIEW-plan-miniagent.md) — all 6 issues applied  
+**Refinement**: v2 — additional fixes from self-review  
 **Estimated time**: ~90 minutes (12 tasks)
 
 ---
@@ -195,6 +196,16 @@ func TestTruncateBytes(t *testing.T) {
         })
     }
 }
+
+func TestTruncateBytes_LargeOutput(t *testing.T) {
+    // Simulate a command producing output larger than maxOutputBytes (20 KB)
+    big := strings.Repeat("x", 30*1024) // 30 KB
+    result := truncateBytes([]byte(big), maxOutputBytes)
+    assert.Contains(t, result, "[...truncated")
+    assert.Contains(t, result, "30720 bytes")
+    // The visible content is maxOutputBytes + the marker line
+    assert.Less(t, len(result), 25*1024, "truncated result should be much smaller than input")
+}
 ```
 
 ### Implementation
@@ -235,12 +246,16 @@ go test ./cmd/miniagent/agent/ -run TestTruncateBytes -v
 Append to `tools_test.go`:
 
 ```go
+// Merge with Task 3 imports — the complete import block for tools_test.go:
 import (
     "context"
     "fmt"
+    "strings"
+    "testing"
     "time"
 
     "github.com/codewandler/llm/tool"
+    "github.com/stretchr/testify/assert"
     "github.com/stretchr/testify/require"
 )
 
@@ -730,13 +745,9 @@ func (d *stepDisplay) End() {
 // ---------------------------------------------------------------------------
 
 func printStepHeader(w io.Writer, step, maxSteps int) {
-    label := fmt.Sprintf("💭 Step %d/%d", step, maxSteps)
-    // Pad to fixed inner width (40 chars) for consistent box
-    inner := fmt.Sprintf(" %s%-*s", label, 39-len(label), "")
-    border := strings.Repeat("─", len(inner))
-    fmt.Fprintf(w, "\n%s╭%s╮%s\n", ansiDim, border, ansiReset)
-    fmt.Fprintf(w, "%s│%s%s%s%s│%s\n", ansiDim, ansiReset, ansiBold+ansiBrightCyan, inner, ansiDim, ansiReset)
-    fmt.Fprintf(w, "%s╰%s╯%s\n", ansiDim, border, ansiReset)
+    fmt.Fprintf(w, "\n%s── %s💭 Step %d/%d%s %s────────────────────────────────%s\n",
+        ansiDim, ansiBold+ansiBrightCyan, step, maxSteps, ansiReset, ansiDim, ansiReset,
+    )
 }
 
 // ---------------------------------------------------------------------------
@@ -811,6 +822,10 @@ go vet ./cmd/miniagent/...
 **Depends on**: 2, 4, 6  
 **Estimated time**: 5 minutes
 
+This task writes the complete `agent.go` file. Task 8 appends `RunTurn` and helpers.
+The import block includes ALL imports needed for both tasks — Task 8 does not
+add new imports.
+
 ### Implementation
 
 ```go
@@ -818,6 +833,9 @@ go vet ./cmd/miniagent/...
 package agent
 
 import (
+    "context"
+    "errors"
+    "fmt"
     "io"
     "os"
     "time"
@@ -918,15 +936,9 @@ go vet ./cmd/miniagent/...
 
 ### Implementation
 
-Append to `cmd/miniagent/agent/agent.go`:
+Append to `cmd/miniagent/agent/agent.go` (imports already in place from Task 7):
 
 ```go
-import (
-    "context"
-    "errors"
-    "fmt"
-)
-
 var errMaxStepsReached = errors.New("maximum steps reached — task may be incomplete")
 
 // RunTurn executes one REPL turn (or one-shot task). Appends a user message,
@@ -1034,20 +1046,9 @@ func (a *Agent) runStep(
 
     printStepUsage(a.out, step, stepUsage)
 
-    // ── Append to conversation history ──
-
-    a.messages = a.messages.Append(result.Next())
-    *stepsCompleted++
-
-    // ── Branch on stop reason ──
+    // ── Branch on stop reason (error paths return before appending to history) ──
 
     switch result.StopReason() {
-    case llm.StopReasonToolUse:
-        return false, nil // continue to next step
-
-    case llm.StopReasonEndTurn:
-        return true, nil // success
-
     case llm.StopReasonCancelled:
         return false, context.Canceled
 
@@ -1056,13 +1057,23 @@ func (a *Agent) runStep(
             return false, rerr
         }
         return false, errors.New("stream error")
+    }
+
+    // ── Append to conversation history (success and tool-use paths only) ──
+
+    a.messages = a.messages.Append(result.Next())
+    *stepsCompleted++
+
+    switch result.StopReason() {
+    case llm.StopReasonToolUse:
+        return false, nil // continue to next step
 
     case llm.StopReasonMaxTokens:
         fmt.Fprintf(a.out, "\n%s⚠ model hit output token limit%s\n", ansiBrightYellow, ansiReset)
         return true, nil // partial but usable
 
-    default:
-        return true, nil
+    default: // StopReasonEndTurn and others
+        return true, nil // success
     }
 }
 
@@ -1137,12 +1148,15 @@ func newTestAgent(t *testing.T, opts ...Option) (*Agent, *bytes.Buffer) {
 }
 
 // blockingProvider creates a provider whose stream never sends events.
-// The only way doProcess exits is via ctx.Done() → deterministic cancel test.
+// doProcess can only exit via ctx.Done() → deterministic cancel test.
+// Uses llm.NewProvider + StreamFunc: baseProvider.CreateStream just
+// delegates to the streamer without model resolution, so this is safe.
 func blockingProvider() llm.Provider {
     return llm.NewProvider("blocking",
         llm.WithStreamer(llm.StreamFunc(
             func(_ context.Context, _ llm.Buildable) (llm.Stream, error) {
-                return make(chan llm.Envelope), nil // unbuffered, never written
+                ch := make(chan llm.Envelope) // unbuffered, never written to
+                return ch, nil
             },
         )),
     )
@@ -1456,6 +1470,9 @@ import (
 
 func main() {
     if err := rootCmd().Execute(); err != nil {
+        // SilenceErrors is true, so cobra won't print the error.
+        // Print it ourselves so the user sees what went wrong.
+        fmt.Fprintf(os.Stderr, "Error: %v\n", err)
         os.Exit(1)
     }
 }
@@ -1633,6 +1650,10 @@ go run ./cmd/miniagent
 - [ ] `--max-steps 1` → errMaxStepsReached
 - [ ] Non-zero bash exit → fed back as tool content (model sees it)
 - [ ] `go build`, `go vet`, `go test -race` all clean
+- [ ] Ctrl+C at prompt → prints session totals, exits 130
+- [ ] Turn error before any successful step → user message rolled back from history
+- [ ] No providers available → clear error message with setup instructions
+- [ ] Non-existent `--workspace` → error on startup before agent construction
 
 ---
 
@@ -1666,3 +1687,12 @@ go run ./cmd/miniagent
 | 4 | `shouldRollback` dead code | Task 8: removed; always `rollback()` in the loop error path |
 | 5 | `errContinue` sentinel anti-pattern | Task 8: `runStep` returns `(done bool, err error)` |
 | 6 | `createProvider` returns concrete type | Task 11: returns `llm.Provider` interface |
+
+## Self-Review Fixes (v2)
+
+| # | Issue | Fix applied in |
+|---|-------|----------------|
+| 7 | Errors silenced in one-shot mode (`SilenceErrors: true` + no print) | Task 11: `main()` prints error to stderr before `os.Exit(1)` |
+| 8 | Step header box misaligns with emoji + variable widths | Task 6: replaced box with simple `── 💭 Step N/M ────...` rule line |
+| 9 | No test for 20KB output truncation cap | Task 3: added `TestTruncateBytes_LargeOutput` |
+| 10 | Import merge ambiguity between Task 7 and Task 8 | Task 7: import block includes all imports for both tasks; Task 8 note says "imports already in place" |
