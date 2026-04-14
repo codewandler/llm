@@ -23,6 +23,9 @@
   implementations now accept `Buildable` instead of `Request`.
   Existing callers passing `llm.Request` are unaffected; only code
   that *implements* the `Streamer` interface needs updating.
+- `llmcli infer` uses `RequestBuilder` to assemble the outgoing
+  request; `inferOpts.buildMessages()` removed, cache hints applied
+  via `CacheTTL1h` rather than manual `CacheHint` field assignment.
 
 ### Bug Fixes
 

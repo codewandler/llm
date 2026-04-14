@@ -7,35 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/codewandler/llm"
-	"github.com/codewandler/llm/msg"
 )
-
-func TestInferOpts_BuildMessages_NoDemoTools(t *testing.T) {
-	opts := inferOpts{UserMsg: "hi", Model: "fast"}
-	msgs := opts.buildMessages()
-
-	require.Len(t, msgs, 1)
-	assert.Equal(t, msg.RoleUser, msgs[0].Role)
-}
-
-func TestInferOpts_BuildMessages_WithSystem(t *testing.T) {
-	opts := inferOpts{UserMsg: "hi", Model: "fast", System: "You are helpful."}
-	msgs := opts.buildMessages()
-
-	require.Len(t, msgs, 2)
-	assert.Equal(t, msg.RoleSystem, msgs[0].Role)
-	assert.Equal(t, msg.RoleUser, msgs[1].Role)
-}
-
-func TestInferOpts_BuildMessages_DemoToolsDefaultSystem(t *testing.T) {
-	opts := inferOpts{UserMsg: "hi", Model: "fast", DemoTools: true}
-	msgs := opts.buildMessages()
-
-	require.Len(t, msgs, 2)
-	assert.Equal(t, msg.RoleSystem, msgs[0].Role)
-	assert.Contains(t, msgs[0].Text(), "Tessa")
-	assert.Equal(t, msg.RoleUser, msgs[1].Role)
-}
 
 func TestBuildDemoTools(t *testing.T) {
 	defs, handlers := buildDemoTools()

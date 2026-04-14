@@ -8,7 +8,6 @@ import (
 	"sort"
 
 	"github.com/codewandler/llm"
-	"github.com/codewandler/llm/msg"
 	"github.com/codewandler/llm/tokencount"
 	"github.com/codewandler/llm/tool"
 	"github.com/spf13/cobra"
@@ -83,25 +82,6 @@ type inferOpts struct {
 	demoToolHandlers []tool.NamedHandler
 }
 
-func (o inferOpts) buildMessages() llm.Messages {
-	cacheHint := &llm.CacheHint{Enabled: true, TTL: "1h"}
-
-	system := o.System
-	if system == "" && o.DemoTools {
-		system = defaultDemoSystemPrompt
-	}
-
-	msgs := make(llm.Messages, 0, 2)
-	if system != "" {
-		m := msg.System(system).Build()
-		m.CacheHint = cacheHint
-		msgs = append(msgs, m)
-	}
-	m := msg.User(o.UserMsg).Build()
-	m.CacheHint = cacheHint
-	return append(msgs, m)
-}
-
 // resolveToolChoice returns the effective tool choice for the request.
 // When --demo-tools is active and --tool-choice was not set, defaults to
 // ToolChoiceRequired. An explicit --tool-choice flag always takes precedence.
@@ -124,27 +104,39 @@ func runInfer(ctx context.Context, opts inferOpts, root *RootFlags) error {
 	var provider llm.Provider = concreteProvider
 
 	// Messages
-	msgs := opts.buildMessages()
-
-	// Tool definitions + handlers (demo-tools only)
-	var tools []tool.Definition
-	toolChoice := opts.resolveToolChoice()
-	if opts.DemoTools {
-		tools, opts.demoToolHandlers = buildDemoTools()
+	// System prompt: explicit --system takes precedence; demo-tools fills the gap.
+	system := opts.System
+	if system == "" && opts.DemoTools {
+		system = defaultDemoSystemPrompt
 	}
 
-	req := llm.Request{
-		Model:        opts.Model,
-		Messages:     msgs,
-		Effort:       opts.Effort,
-		Thinking:     opts.Thinking,
-		ToolChoice:   toolChoice,
-		Tools:        tools,
-		MaxTokens:    opts.MaxTokens,
-		Temperature:  opts.Temperature,
-		TopP:         opts.TopP,
-		TopK:         opts.TopK,
-		OutputFormat: opts.OutputFormat,
+	// Build request.
+	b := llm.NewRequestBuilder().
+		Model(opts.Model).
+		Effort(opts.Effort).
+		Thinking(opts.Thinking).
+		MaxTokens(opts.MaxTokens).
+		Temperature(opts.Temperature).
+		TopP(opts.TopP).
+		TopK(opts.TopK).
+		OutputFormat(opts.OutputFormat)
+	if system != "" {
+		b = b.System(system, llm.CacheTTL1h)
+	}
+	b = b.User(opts.UserMsg, llm.CacheTTL1h)
+
+	toolChoice := opts.resolveToolChoice()
+	if opts.DemoTools {
+		defs, handlers := buildDemoTools()
+		opts.demoToolHandlers = handlers
+		b = b.Tools(defs...).ToolChoice(toolChoice)
+	} else if toolChoice != nil {
+		b = b.ToolChoice(toolChoice)
+	}
+
+	req, err := b.Build()
+	if err != nil {
+		return fmt.Errorf("build request: %w", err)
 	}
 
 	verbose := opts.Verbose
@@ -154,9 +146,9 @@ func runInfer(ctx context.Context, opts inferOpts, root *RootFlags) error {
 	if verbose {
 		if tc, ok := provider.(tokencount.TokenCounter); ok {
 			est, err := tc.CountTokens(ctx, tokencount.TokenCountRequest{
-				Model:    opts.Model,
-				Messages: msgs,
-				Tools:    tools,
+				Model:    req.Model,
+				Messages: req.Messages,
+				Tools:    req.Tools,
 			})
 			if err == nil {
 				tokenEstimate = est
@@ -340,7 +332,7 @@ func printVerboseInfo(result llm.Result, est *tokencount.TokenCount) {
 	// Tool results
 	msgs := result.Next()
 	for i, m := range msgs {
-		if m.Role == msg.RoleTool {
+		if m.Role == llm.RoleTool {
 			label := fmt.Sprintf("result[%d]", i)
 			value := m.ToolResults()[0].ToolOutput
 			if m.ToolResults()[0].IsError {
