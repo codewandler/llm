@@ -260,11 +260,16 @@ func (c *CodexAuth) NewProvider(baseTransport ...http.RoundTripper) *Provider {
 		base = baseTransport[0]
 	}
 	transport := &codexTransport{base: base, auth: c}
-	return New(
+	p := New(
 		llm.WithBaseURL(codexBackendBaseURL),
 		llm.WithAPIKey("chatgpt-oauth"), // placeholder; overridden per-request by transport
 		llm.WithHTTPClient(&http.Client{Transport: transport}),
-	)
+	).WithCodexModels()
+	// Use "chatgpt" as the provider name for usage attribution and routing.
+	// This avoids clashing with the regular "openai" provider when both are
+	// registered simultaneously.
+	p.providerName = llm.ProviderNameChatGPT
+	return p
 }
 
 // codexTransport is an http.RoundTripper that adapts standard OpenAI SDK

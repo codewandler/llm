@@ -15,6 +15,8 @@ import (
 
 	"github.com/codewandler/llm"
 	"github.com/codewandler/llm/provider/anthropic"
+	"github.com/codewandler/llm/tokencount"
+	"github.com/codewandler/llm/usage"
 )
 
 const (
@@ -101,6 +103,10 @@ func New(opts ...Option) *Provider {
 // Name returns the provider name.
 func (p *Provider) Name() string { return providerName }
 
+func (*Provider) CostCalculator() usage.CostCalculator {
+	return usage.Default()
+}
+
 // CreateStream implements llm.Provider.
 func (p *Provider) CreateStream(ctx context.Context, src llm.Buildable) (llm.Stream, error) {
 	req, err := src.BuildRequest(ctx)
@@ -113,6 +119,12 @@ func (p *Provider) CreateStream(ctx context.Context, src llm.Buildable) (llm.Str
 	}
 
 	normalizeRequest(&req)
+
+	// Use the provider default when no model is specified.
+	// Validation below requires a non-empty model, so this must come first.
+	if req.Model == "" {
+		req.Model = ModelDefault
+	}
 
 	// Resolve model to include inference profile prefix.
 
@@ -165,6 +177,29 @@ func (p *Provider) CreateStream(ctx context.Context, src llm.Buildable) (llm.Str
 	pub, ch := llm.NewEventPublisher()
 	anthropic.PublishRequestParams(pub, parseOpts)
 
+	// Emit token estimates: heuristic (local BPE) + API (exact count).
+	// Both are emitted so consumers can compare drift between the two methods.
+
+	// 1. Heuristic estimate (local, no network call)
+	if est, err := p.CountTokens(ctx, tokencount.TokenCountRequest{
+		Model:    req.Model,
+		Messages: req.Messages,
+		Tools:    req.Tools,
+	}); err == nil {
+		for _, rec := range tokencount.EstimateRecords(est, llm.ProviderNameClaude, req.Model, "heuristic", usage.Default()) {
+			pub.TokenEstimate(rec)
+		}
+	}
+
+	// 2. API count (exact, free endpoint — adds one HTTP round-trip).
+	// Build a proper Claude OAuth request with all required headers.
+	if apiCount, err := p.countTokensAPI(ctx, token.AccessToken, requestBody); err == nil {
+		apiEst := &tokencount.TokenCount{InputTokens: apiCount}
+		for _, rec := range tokencount.EstimateRecords(apiEst, llm.ProviderNameClaude, req.Model, "api", usage.Default()) {
+			pub.TokenEstimate(rec)
+		}
+	}
+
 	resp, err := p.client.Do(httpReq)
 	if err != nil {
 		pub.Close()
@@ -200,6 +235,64 @@ func (p *Provider) newAPIRequest(ctx context.Context, accessToken string, body [
 		return nil, err
 	}
 
+	p.setClaudeHeaders(req, accessToken)
+	return req, nil
+}
+
+// countTokensAPI calls /v1/messages/count_tokens with proper Claude OAuth headers.
+func (p *Provider) countTokensAPI(ctx context.Context, accessToken string, apiReq anthropic.Request) (int, error) {
+	countReqBody, err := json.Marshal(struct {
+		Model        string                     `json:"model"`
+		Messages     []anthropic.Message        `json:"messages"`
+		System       anthropic.SystemBlocks     `json:"system,omitempty"`
+		Tools        []anthropic.ToolDefinition `json:"tools,omitempty"`
+		ToolChoice   any                        `json:"tool_choice,omitempty"`
+		Thinking     *anthropic.ThinkingConfig  `json:"thinking,omitempty"`
+		CacheControl *anthropic.CacheControl    `json:"cache_control,omitempty"`
+	}{
+		Model:        apiReq.Model,
+		Messages:     apiReq.Messages,
+		System:       apiReq.System,
+		Tools:        apiReq.Tools,
+		ToolChoice:   apiReq.ToolChoice,
+		Thinking:     apiReq.Thinking,
+		CacheControl: apiReq.CacheControl,
+	})
+	if err != nil {
+		return 0, fmt.Errorf("claude: count_tokens: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST",
+		p.baseURL+"/v1/messages/count_tokens?beta=true",
+		bytes.NewReader(countReqBody))
+	if err != nil {
+		return 0, fmt.Errorf("claude: count_tokens: %w", err)
+	}
+
+	p.setClaudeHeaders(req, accessToken)
+
+	resp, err := p.client.Do(req)
+	if err != nil {
+		return 0, fmt.Errorf("claude: count_tokens: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		errBody, _ := io.ReadAll(resp.Body)
+		return 0, fmt.Errorf("claude: count_tokens: HTTP %d: %s", resp.StatusCode, string(errBody))
+	}
+
+	var result struct {
+		InputTokens int `json:"input_tokens"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return 0, fmt.Errorf("claude: count_tokens: decode: %w", err)
+	}
+	return result.InputTokens, nil
+}
+
+// setClaudeHeaders applies the full set of Claude OAuth headers to a request.
+func (p *Provider) setClaudeHeaders(req *http.Request, accessToken string) {
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Accept-Encoding", "gzip, deflate, br, zstd")
@@ -218,7 +311,6 @@ func (p *Provider) newAPIRequest(ctx context.Context, accessToken string, body [
 	req.Header.Set("X-Stainless-Runtime-Version", stainlessNodeVer)
 	req.Header.Set("X-Stainless-Timeout", "600")
 	req.Header.Set("Connection", "keep-alive")
-	return req, nil
 }
 
 func (p *Provider) buildRequest(llmRequest llm.Request) (anthropic.Request, error) {

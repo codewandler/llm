@@ -334,7 +334,7 @@ func TestPromptCaching_Claude(t *testing.T) {
 		r, _ := json.MarshalIndent(map[string]any{
 			"text":        res.Text(),
 			"think":       res.Thought(),
-			"usage":       res.Usage(),
+			"usage":       res.UsageRecords(),
 			"stop_reason": res.StopReason(),
 			"next":        res.Next(),
 		}, "", "  ")
@@ -365,7 +365,7 @@ func TestPromptCaching_Claude(t *testing.T) {
 		r, _ = json.MarshalIndent(map[string]any{
 			"text":        res.Text(),
 			"think":       res.Thought(),
-			"usage":       res.Usage(),
+			"usage":       res.UsageRecords(),
 			"stop_reason": res.StopReason(),
 			"next":        res.Next(),
 		}, "", "  ")

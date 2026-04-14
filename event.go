@@ -6,25 +6,27 @@ import (
 
 	"github.com/codewandler/llm/msg"
 	"github.com/codewandler/llm/tool"
+	"github.com/codewandler/llm/usage"
 )
 
 // EventType identifies the kind of streaming event from a provider.
 type EventType string
 
 const (
-	StreamEventCreated         EventType = "created"
-	StreamEventClosed          EventType = "closed"
-	StreamEventModelResolved   EventType = "model_resolved"
+	StreamEventCreated          EventType = "created"
+	StreamEventClosed           EventType = "closed"
+	StreamEventModelResolved    EventType = "model_resolved"
 	StreamEventProviderFailover EventType = "provider_failover"
-	StreamEventStarted         EventType = "started"
-	StreamEventUsageUpdated    EventType = "usage"
-	StreamEventDelta           EventType = "delta"
-	StreamEventToolCall        EventType = "tool_call"
-	StreamEventContentPart     EventType = "content_part"
-	StreamEventCompleted       EventType = "completed"
-	StreamEventError           EventType = "error"
-	StreamEventDebug           EventType = "debug"
-	StreamEventRequest         EventType = "request"
+	StreamEventStarted          EventType = "started"
+	StreamEventUsageUpdated     EventType = "usage"
+	StreamEventTokenEstimate    EventType = "token_estimate"
+	StreamEventDelta            EventType = "delta"
+	StreamEventToolCall         EventType = "tool_call"
+	StreamEventContentPart      EventType = "content_part"
+	StreamEventCompleted        EventType = "completed"
+	StreamEventError            EventType = "error"
+	StreamEventDebug            EventType = "debug"
+	StreamEventRequest          EventType = "request"
 )
 
 type (
@@ -44,7 +46,8 @@ type (
 		ToolCall(tc tool.Call)
 		ContentBlock(evt ContentPartEvent)
 
-		Usage(usage Usage)
+		UsageRecord(r usage.Record)
+		TokenEstimate(r usage.Record)
 		Completed(completed CompletedEvent)
 
 		Error(err error)
@@ -116,7 +119,17 @@ type (
 	}
 
 	UsageUpdatedEvent struct {
-		Usage Usage `json:"usage"`
+		Record usage.Record `json:"record"`
+	}
+
+	// TokenEstimateEvent is dispatched before the first response delta.
+	// It carries the pre-request token estimate so consumers can display
+	// estimates and drift without calling CountTokens themselves.
+	TokenEstimateEvent struct {
+		// Estimate is one pre-request estimate record.
+		// The event is emitted once per record; multiple events may be emitted per request
+		// when a labeled breakdown is provided (each with distinct Dims.Labels).
+		Estimate usage.Record `json:"estimate"` // IsEstimate == true
 	}
 
 	CompletedEvent struct {
@@ -153,15 +166,16 @@ type (
 	}
 )
 
-func (e DebugEvent) Type() EventType          { return StreamEventDebug }
-func (e RequestEvent) Type() EventType        { return StreamEventRequest }
-func (e ModelResolvedEvent) Type() EventType  { return StreamEventModelResolved }
+func (e DebugEvent) Type() EventType            { return StreamEventDebug }
+func (e RequestEvent) Type() EventType          { return StreamEventRequest }
+func (e ModelResolvedEvent) Type() EventType    { return StreamEventModelResolved }
 func (e ProviderFailoverEvent) Type() EventType { return StreamEventProviderFailover }
-func (e StreamCreatedEvent) Type() EventType  { return StreamEventCreated }
-func (e StreamClosedEvent) Type() EventType   { return StreamEventClosed }
-func (e ToolCallEvent) Type() EventType       { return StreamEventToolCall }
-func (e StreamStartedEvent) Type() EventType  { return StreamEventStarted }
-func (e CompletedEvent) Type() EventType      { return StreamEventCompleted }
-func (e UsageUpdatedEvent) Type() EventType   { return StreamEventUsageUpdated }
-func (e ErrorEvent) Type() EventType          { return StreamEventError }
-func (e ContentPartEvent) Type() EventType    { return StreamEventContentPart }
+func (e StreamCreatedEvent) Type() EventType    { return StreamEventCreated }
+func (e StreamClosedEvent) Type() EventType     { return StreamEventClosed }
+func (e ToolCallEvent) Type() EventType         { return StreamEventToolCall }
+func (e StreamStartedEvent) Type() EventType    { return StreamEventStarted }
+func (e CompletedEvent) Type() EventType        { return StreamEventCompleted }
+func (e UsageUpdatedEvent) Type() EventType     { return StreamEventUsageUpdated }
+func (e TokenEstimateEvent) Type() EventType    { return StreamEventTokenEstimate }
+func (e ErrorEvent) Type() EventType            { return StreamEventError }
+func (e ContentPartEvent) Type() EventType      { return StreamEventContentPart }

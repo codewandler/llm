@@ -20,6 +20,7 @@ import (
 	"github.com/codewandler/llm/provider/openai"
 	"github.com/codewandler/llm/provider/openrouter"
 	"github.com/codewandler/llm/tool"
+	"github.com/codewandler/llm/usage"
 )
 
 type ProviderTestCase struct {
@@ -371,7 +372,7 @@ func testProvider(t *testing.T, tt ProviderTestCase) {
 					var (
 						gotCompleted     bool
 						gotThinkingDelta bool
-						usage            *llm.Usage
+						usageRec         *usage.Record
 					)
 					for event := range stream {
 						switch event.Type {
@@ -384,7 +385,8 @@ func testProvider(t *testing.T, tt ProviderTestCase) {
 							}
 						case llm.StreamEventUsageUpdated:
 							u := event.Data.(*llm.UsageUpdatedEvent)
-							usage = &u.Usage
+							r := u.Record
+							usageRec = &r
 						case llm.StreamEventCompleted:
 							gotCompleted = true
 						}
@@ -396,11 +398,15 @@ func testProvider(t *testing.T, tt ProviderTestCase) {
 					} else {
 						t.Skip("model did not emit reasoning deltas; OpenRouter/provider behavior is model-dependent")
 					}
-					if usage != nil {
-						assert.GreaterOrEqual(t, usage.InputTokens, 0)
-						assert.GreaterOrEqual(t, usage.OutputTokens, 0)
-						assert.GreaterOrEqual(t, usage.TotalTokens, 0)
-						t.Logf("usage: input=%d output=%d total=%d cached=%d reasoning=%d cost=%f", usage.InputTokens, usage.OutputTokens, usage.TotalTokens, usage.CacheReadTokens, usage.ReasoningTokens, usage.Cost)
+					if usageRec != nil {
+						assert.GreaterOrEqual(t, usageRec.Tokens.TotalInput(), 0)
+						assert.GreaterOrEqual(t, usageRec.Tokens.TotalOutput(), 0)
+						t.Logf("usage: input=%d output=%d cached=%d reasoning=%d cost=%f",
+							usageRec.Tokens.TotalInput(), usageRec.Tokens.TotalOutput(),
+							usageRec.Tokens.Count(usage.KindCacheRead),
+							usageRec.Tokens.Count(usage.KindReasoning),
+							usageRec.Cost.Total,
+						)
 					} else {
 						t.Skip("stream completed without usage update; provider/model did not return usage details")
 					}

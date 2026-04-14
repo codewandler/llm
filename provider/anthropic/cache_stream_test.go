@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/codewandler/llm"
+	"github.com/codewandler/llm/usage"
 )
 
 func TestParseStream_CacheTokens(t *testing.T) {
@@ -36,28 +37,30 @@ func TestParseStream_CacheTokens(t *testing.T) {
 
 	body := io.NopCloser(strings.NewReader(sse))
 	ch := ParseStream(context.Background(), body, ParseOpts{
-		Model: "claude-sonnet-4-5",
+		Model:        "claude-sonnet-4-5",
+		ProviderName: providerName,
 	})
 
-	var doneUsage *llm.Usage
+	var doneRec *usage.Record
 	for env := range ch {
 		if env.Type == llm.StreamEventUsageUpdated {
 			ue := env.Data.(*llm.UsageUpdatedEvent)
-			doneUsage = &ue.Usage
+			doneRec = &ue.Record
 		}
 	}
 
-	require.NotNil(t, doneUsage, "expected StreamEventDone with usage")
-	assert.Equal(t, 1546, doneUsage.InputTokens)
-	assert.Equal(t, 512, doneUsage.CacheWriteTokens, "cache creation tokens should map to CacheWriteTokens")
-	assert.Equal(t, 1024, doneUsage.CacheReadTokens, "cache read tokens should map to CacheReadTokens")
-	assert.Equal(t, 5, doneUsage.OutputTokens)
+	require.NotNil(t, doneRec, "expected StreamEventUsageUpdated")
+	// InputTokens = 10 (non-cache), CacheWrite = 512, CacheRead = 1024
+	assert.Equal(t, 10, doneRec.Tokens.Count(usage.KindInput))
+	assert.Equal(t, 512, doneRec.Tokens.Count(usage.KindCacheWrite), "cache creation tokens should map to KindCacheWrite")
+	assert.Equal(t, 1024, doneRec.Tokens.Count(usage.KindCacheRead), "cache read tokens should map to KindCacheRead")
+	assert.Equal(t, 5, doneRec.Tokens.Count(usage.KindOutput))
 
-	assert.InDelta(t, 10.0/1_000_000*3.00, doneUsage.InputCost, 1e-10, "InputCost")
-	assert.InDelta(t, 1024.0/1_000_000*0.30, doneUsage.CacheReadCost, 1e-10, "CacheReadCost")
-	assert.InDelta(t, 512.0/1_000_000*3.75, doneUsage.CacheWriteCost, 1e-10, "CacheWriteCost")
-	assert.InDelta(t, 5.0/1_000_000*15.00, doneUsage.OutputCost, 1e-10, "OutputCost")
-	assert.InDelta(t, doneUsage.Cost, doneUsage.InputCost+doneUsage.CacheReadCost+doneUsage.CacheWriteCost+doneUsage.OutputCost, 1e-10, "breakdown should sum to Cost")
+	assert.InDelta(t, 10.0/1_000_000*3.00, doneRec.Cost.Input, 1e-10, "Input cost")
+	assert.InDelta(t, 1024.0/1_000_000*0.30, doneRec.Cost.CacheRead, 1e-10, "CacheRead cost")
+	assert.InDelta(t, 512.0/1_000_000*3.75, doneRec.Cost.CacheWrite, 1e-10, "CacheWrite cost")
+	assert.InDelta(t, 5.0/1_000_000*15.00, doneRec.Cost.Output, 1e-10, "Output cost")
+	assert.InDelta(t, doneRec.Cost.Total, doneRec.Cost.Input+doneRec.Cost.CacheRead+doneRec.Cost.CacheWrite+doneRec.Cost.Output, 1e-10, "breakdown should sum to Total")
 }
 
 func TestParseStream_NoCacheTokens(t *testing.T) {
@@ -84,18 +87,19 @@ func TestParseStream_NoCacheTokens(t *testing.T) {
 
 	body := io.NopCloser(strings.NewReader(sse))
 	ch := ParseStream(context.Background(), body, ParseOpts{
-		Model: "claude-haiku-4-5",
+		Model:        "claude-haiku-4-5",
+		ProviderName: providerName,
 	})
 
-	var doneUsage *llm.Usage
+	var doneRec *usage.Record
 	for env := range ch {
 		if env.Type == llm.StreamEventUsageUpdated {
 			ue := env.Data.(*llm.UsageUpdatedEvent)
-			doneUsage = &ue.Usage
+			doneRec = &ue.Record
 		}
 	}
 
-	require.NotNil(t, doneUsage)
-	assert.Equal(t, 0, doneUsage.CacheWriteTokens)
-	assert.Equal(t, 0, doneUsage.CacheReadTokens)
+	require.NotNil(t, doneRec)
+	assert.Equal(t, 0, doneRec.Tokens.Count(usage.KindCacheWrite))
+	assert.Equal(t, 0, doneRec.Tokens.Count(usage.KindCacheRead))
 }

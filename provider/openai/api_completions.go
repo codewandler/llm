@@ -11,6 +11,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"log/slog"
 	"net/http"
 	"sort"
 	"strings"
@@ -20,7 +21,9 @@ import (
 	"github.com/codewandler/llm/internal/sse"
 	"github.com/codewandler/llm/msg"
 	"github.com/codewandler/llm/sortmap"
+	"github.com/codewandler/llm/tokencount"
 	"github.com/codewandler/llm/tool"
+	"github.com/codewandler/llm/usage"
 )
 
 // streamCompletions sends a Chat Completions request and returns an event
@@ -56,9 +59,21 @@ func (p *Provider) streamCompletions(ctx context.Context, opts llm.Request) (llm
 	}
 
 	pub, ch := llm.NewEventPublisher()
+
+	// Emit token estimates (primary + per-segment breakdown)
+	if est, err := p.CountTokens(ctx, tokencount.TokenCountRequest{
+		Model: opts.Model, Messages: opts.Messages, Tools: opts.Tools,
+	}); err == nil {
+		for _, rec := range tokencount.EstimateRecords(est, p.Name(), opts.Model, "heuristic", usage.Default()) {
+			pub.TokenEstimate(rec)
+		}
+	}
+
 	go ccParseStream(ctx, resp.Body, pub, ccStreamMeta{
 		requestedModel: opts.Model,
 		startTime:      startTime,
+		providerName:   p.Name(),
+		logger:         p.opts.Logger,
 	})
 	return ch, nil
 }
@@ -241,6 +256,22 @@ type ccStreamMeta struct {
 	// first actual content.
 	responseID    string
 	responseModel string
+	// providerName is the billing/attribution provider for usage records.
+	// Defaults to llm.ProviderNameOpenAI; set to llm.ProviderNameChatGPT
+	// for requests routed through the ChatGPT Codex backend.
+	providerName string
+	// logger, when non-nil, receives warnings about anomalous API data
+	// (e.g. negative token counts from arithmetic clamping).
+	logger *slog.Logger
+}
+
+// provider returns the provider name for usage records.
+// Falls back to llm.ProviderNameOpenAI when providerName is empty.
+func (m *ccStreamMeta) provider() string {
+	if m.providerName != "" {
+		return m.providerName
+	}
+	return llm.ProviderNameOpenAI
 }
 
 type ccStreamChunk struct {
@@ -284,7 +315,7 @@ func ccParseStream(ctx context.Context, body io.ReadCloser, pub llm.Publisher, m
 	defer pub.Close()
 
 	activeTools := make(map[int]*ccToolAccum)
-	var finalUsage *llm.Usage
+	var inputTokens, outputTokens, cachedTokens, reasoningTokens int
 	var stopReason llm.StopReason
 	startEmitted := false
 
@@ -295,12 +326,17 @@ func ccParseStream(ctx context.Context, body io.ReadCloser, pub llm.Publisher, m
 		}
 
 		if data == "[DONE]" {
-			if finalUsage != nil {
-				calculateCost(meta.requestedModel, finalUsage)
+			items := buildUsageTokenItems(inputTokens, outputTokens, cachedTokens, reasoningTokens, meta.logger, meta.provider(), meta.requestedModel)
+
+			rec := usage.Record{
+				Dims:       usage.Dims{Provider: meta.provider(), Model: meta.requestedModel, RequestID: meta.responseID},
+				Tokens:     items,
+				RecordedAt: time.Now(),
 			}
-			if finalUsage != nil {
-				pub.Usage(*finalUsage)
+			if cost, ok := usage.Default().Calculate(meta.provider(), meta.requestedModel, items); ok {
+				rec.Cost = cost
 			}
+			pub.UsageRecord(rec)
 			pub.Completed(llm.CompletedEvent{StopReason: stopReason})
 			return false
 		}
@@ -319,16 +355,13 @@ func ccParseStream(ctx context.Context, body io.ReadCloser, pub llm.Publisher, m
 		}
 
 		if chunk.Usage != nil {
-			finalUsage = &llm.Usage{
-				InputTokens:  chunk.Usage.PromptTokens,
-				OutputTokens: chunk.Usage.CompletionTokens,
-				TotalTokens:  chunk.Usage.TotalTokens,
-			}
+			inputTokens = chunk.Usage.PromptTokens
+			outputTokens = chunk.Usage.CompletionTokens
 			if chunk.Usage.PromptTokensDetails != nil {
-				finalUsage.CacheReadTokens = chunk.Usage.PromptTokensDetails.CachedTokens
+				cachedTokens = chunk.Usage.PromptTokensDetails.CachedTokens
 			}
 			if chunk.Usage.CompletionTokensDetails != nil {
-				finalUsage.ReasoningTokens = chunk.Usage.CompletionTokensDetails.ReasoningTokens
+				reasoningTokens = chunk.Usage.CompletionTokensDetails.ReasoningTokens
 			}
 		}
 

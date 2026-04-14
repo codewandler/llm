@@ -13,6 +13,7 @@ type aliasModels struct {
 	fast     string
 	normal   string
 	powerful string
+	codex    string // optional: the codex model to use for the AliasCodex global alias
 }
 
 // providerAliasModels maps provider types to their alias model mappings.
@@ -43,6 +44,14 @@ var providerAliasModels = map[string]aliasModels{
 		normal:   minimax.ModelM27,
 		powerful: minimax.ModelM27,
 	},
+	// ChatGPT / Codex: accessed via chatgpt.com/backend-api using Codex CLI OAuth.
+	// All models are Codex-category; no general-purpose GPT aliases here.
+	ProviderChatGPT: {
+		fast:     openai.ModelGPT51CodexMini,
+		normal:   openai.ModelGPT53Codex,
+		powerful: openai.ModelGPT53Codex,
+		codex:    openai.ModelGPT53Codex,
+	},
 }
 
 // buildAliasTargets creates alias targets for a provider instance.
@@ -57,6 +66,10 @@ func buildAliasTargets(instanceName, providerType string) map[string]router.Alia
 		AliasDefault:  {Provider: instanceName, Model: models.normal},
 		AliasPowerful: {Provider: instanceName, Model: models.powerful},
 	}
+	// Wire the global "codex" alias for providers that designate a codex model.
+	if models.codex != "" {
+		targets[AliasCodex] = router.AliasTarget{Provider: instanceName, Model: models.codex}
+	}
 	return targets
 }
 
@@ -68,6 +81,8 @@ func modelAliasesForProvider(providerType string) map[string]string {
 		return anthropic.ModelAliases
 	case ProviderOpenAI:
 		return openai.ModelAliases
+	case ProviderChatGPT:
+		return openai.CodexModelAliases
 	case ProviderBedrock:
 		return bedrock.ModelAliases
 	case ProviderMiniMax:

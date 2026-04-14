@@ -9,18 +9,22 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime"
 	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime/document"
 	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime/types"
+	gonanoid "github.com/matoous/go-nanoid/v2"
 
 	"github.com/codewandler/llm"
 	"github.com/codewandler/llm/msg"
 	"github.com/codewandler/llm/provider/anthropic"
 	"github.com/codewandler/llm/sortmap"
+	"github.com/codewandler/llm/tokencount"
 	"github.com/codewandler/llm/tool"
+	"github.com/codewandler/llm/usage"
 )
 
 // Environment variable names for AWS configuration.
@@ -211,6 +215,11 @@ func New(opts ...Option) *Provider {
 
 func (p *Provider) Name() string { return providerName }
 
+// CostCalculator returns the default cost calculator for Bedrock.
+func (*Provider) CostCalculator() usage.CostCalculator {
+	return usage.Default()
+}
+
 // DefaultModel returns the configured default model ID.
 func (p *Provider) DefaultModel() string {
 	return p.defaultModel
@@ -335,8 +344,19 @@ func (p *Provider) CreateStream(ctx context.Context, src llm.Buildable) (llm.Str
 		RequestedModel: opts.Model,
 		ResolvedModel:  resolvedModel,
 		Logger:         p.logger,
+		RequestID:      gonanoid.Must(),
 	}
 	pub, ch := llm.NewEventPublisher()
+
+	// Emit token estimates (primary + per-segment breakdown)
+	if est, err := p.CountTokens(ctx, tokencount.TokenCountRequest{
+		Model: opts.Model, Messages: opts.Messages, Tools: opts.Tools,
+	}); err == nil {
+		for _, rec := range tokencount.EstimateRecords(est, llm.ProviderNameBedrock, opts.Model, "heuristic", usage.Default()) {
+			pub.TokenEstimate(rec)
+		}
+	}
+
 	go parseStream(ctx, output, pub, meta)
 	return ch, nil
 }
@@ -661,6 +681,7 @@ type streamMeta struct {
 	RequestedModel string
 	ResolvedModel  string
 	Logger         *slog.Logger
+	RequestID      string // synthesized; Bedrock API does not provide one
 }
 
 func parseStream(ctx context.Context, output *bedrockruntime.ConverseStreamOutput, pub llm.Publisher, meta streamMeta) {
@@ -697,7 +718,7 @@ func parseStream(ctx context.Context, output *bedrockruntime.ConverseStreamOutpu
 		argsBuf strings.Builder
 	}
 	activeTools := make(map[int]*toolAccum)
-	var usage llm.Usage
+	var inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens int
 	var stopReason llm.StopReason
 	startEmitted := false
 
@@ -764,24 +785,39 @@ func parseStream(ctx context.Context, output *bedrockruntime.ConverseStreamOutpu
 			logEvent("metadata", e.Value)
 			if e.Value.Usage != nil {
 				if e.Value.Usage.InputTokens != nil {
-					usage.InputTokens = int(*e.Value.Usage.InputTokens)
+					inputTokens = int(*e.Value.Usage.InputTokens)
 				}
 				if e.Value.Usage.OutputTokens != nil {
-					usage.OutputTokens = int(*e.Value.Usage.OutputTokens)
-				}
-				if e.Value.Usage.TotalTokens != nil {
-					usage.TotalTokens = int(*e.Value.Usage.TotalTokens)
+					outputTokens = int(*e.Value.Usage.OutputTokens)
 				}
 				if e.Value.Usage.CacheReadInputTokens != nil {
-					usage.CacheReadTokens = int(*e.Value.Usage.CacheReadInputTokens)
+					cacheReadTokens = int(*e.Value.Usage.CacheReadInputTokens)
 				}
 				if e.Value.Usage.CacheWriteInputTokens != nil {
-					usage.CacheWriteTokens = int(*e.Value.Usage.CacheWriteInputTokens)
+					cacheWriteTokens = int(*e.Value.Usage.CacheWriteInputTokens)
 				}
-				usage.InputTokens += usage.CacheReadTokens + usage.CacheWriteTokens
-				fillCost(meta.ResolvedModel, &usage)
+				// inputTokens from Bedrock is the non-cache portion.
 			}
-			pub.Usage(usage)
+			tokens := usage.TokenItems{
+				{Kind: usage.KindInput, Count: inputTokens},
+				{Kind: usage.KindCacheRead, Count: cacheReadTokens},
+				{Kind: usage.KindCacheWrite, Count: cacheWriteTokens},
+				{Kind: usage.KindOutput, Count: outputTokens},
+			}.NonZero()
+
+			// Strip regional inference profile prefix (us., eu., global., etc.)
+			// before cost lookup — the pricing table uses bare model IDs.
+			costModel := stripRegionPrefix(meta.ResolvedModel)
+
+			rec := usage.Record{
+				Dims:       usage.Dims{Provider: llm.ProviderNameBedrock, Model: meta.ResolvedModel, RequestID: meta.RequestID},
+				Tokens:     tokens,
+				RecordedAt: time.Now(),
+			}
+			if cost, ok := usage.Default().Calculate(llm.ProviderNameBedrock, costModel, tokens); ok {
+				rec.Cost = cost
+			}
+			pub.UsageRecord(rec)
 			pub.Completed(llm.CompletedEvent{StopReason: stopReason})
 			return
 

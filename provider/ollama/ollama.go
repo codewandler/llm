@@ -14,7 +14,9 @@ import (
 	"github.com/codewandler/llm"
 	"github.com/codewandler/llm/msg"
 	"github.com/codewandler/llm/sortmap"
+	"github.com/codewandler/llm/tokencount"
 	"github.com/codewandler/llm/tool"
+	"github.com/codewandler/llm/usage"
 )
 
 // Known model IDs for Ollama.
@@ -97,6 +99,13 @@ func (p *Provider) DefaultModel() string {
 }
 
 func (p *Provider) Name() string { return "ollama" }
+
+func (*Provider) CostCalculator() usage.CostCalculator {
+	// Ollama is local; no cost information is available.
+	return usage.CostCalculatorFunc(func(_, _ string, _ usage.TokenItems) (usage.Cost, bool) {
+		return usage.Cost{}, false
+	})
+}
 
 // Models returns a curated list of tested models that are known to work
 // with streaming, tool calling, and conversations.
@@ -285,6 +294,16 @@ func (p *Provider) CreateStream(ctx context.Context, src llm.Buildable) (llm.Str
 		StartTime:      startTime,
 	}
 	pub, ch := llm.NewEventPublisher()
+
+	// Emit token estimates (Ollama is local, no cost charged — pass nil calculator)
+	if est, err := p.CountTokens(ctx, tokencount.TokenCountRequest{
+		Model: opts.Model, Messages: opts.Messages, Tools: opts.Tools,
+	}); err == nil {
+		for _, rec := range tokencount.EstimateRecords(est, llm.ProviderNameOllama, opts.Model, "heuristic", nil) {
+			pub.TokenEstimate(rec)
+		}
+	}
+
 	go parseStream(ctx, resp.Body, pub, meta)
 	return ch, nil
 }
@@ -433,8 +452,10 @@ type streamChunk struct {
 			} `json:"function"`
 		} `json:"tool_calls,omitempty"`
 	} `json:"message"`
-	Done       bool   `json:"done"`
-	DoneReason string `json:"done_reason,omitempty"`
+	Done            bool   `json:"done"`
+	DoneReason      string `json:"done_reason,omitempty"`
+	PromptEvalCount int    `json:"prompt_eval_count,omitempty"` // input tokens (final chunk only)
+	EvalCount       int    `json:"eval_count,omitempty"`        // output tokens (final chunk only)
 }
 
 func parseStream(ctx context.Context, body io.ReadCloser, pub llm.Publisher, meta streamMeta) {
@@ -445,8 +466,7 @@ func parseStream(ctx context.Context, body io.ReadCloser, pub llm.Publisher, met
 	scanner := bufio.NewScanner(body)
 	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 
-	var usage llm.Usage
-	toolCallID := 0
+	var toolCallID int
 	startEmitted := false
 
 	for scanner.Scan() {
@@ -501,7 +521,19 @@ func parseStream(ctx context.Context, body io.ReadCloser, pub llm.Publisher, met
 					stopReason = llm.StopReasonToolUse
 				}
 			}
-			pub.Usage(usage)
+			// Build usage record from the token counts Ollama provides in the
+			// final chunk. PromptEvalCount / EvalCount may be zero on older
+			// Ollama builds; the record is emitted regardless so consumers
+			// always receive a UsageUpdatedEvent.
+			tokens := usage.TokenItems{
+				{Kind: usage.KindInput, Count: chunk.PromptEvalCount},
+				{Kind: usage.KindOutput, Count: chunk.EvalCount},
+			}.NonZero()
+			pub.UsageRecord(usage.Record{
+				Dims:       usage.Dims{Provider: llm.ProviderNameOllama, Model: meta.ResolvedModel},
+				Tokens:     tokens,
+				RecordedAt: time.Now(),
+			})
 			pub.Completed(llm.CompletedEvent{StopReason: stopReason})
 			return
 		}

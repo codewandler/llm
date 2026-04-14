@@ -10,11 +10,15 @@ import (
 
 	"github.com/codewandler/llm/msg"
 	"github.com/codewandler/llm/tool"
+	"github.com/codewandler/llm/usage"
 )
 
 type Result interface {
 	Response
 	Next() msg.Messages
+	UsageRecords() []usage.Record   // provider-reported, in arrival order
+	TokenEstimates() []usage.Record // pre-request estimates, in order
+	Drift() *usage.Drift            // nil if no estimate received
 }
 
 type result struct {
@@ -22,7 +26,8 @@ type result struct {
 	thinkingBuffer    strings.Builder
 	thinkingSignature string
 	stopReason        StopReason
-	usage             *Usage
+	usageRecords      []usage.Record
+	estimateRecs      []usage.Record
 	toolCalls         []tool.Call
 	toolResults       []tool.Result
 	errors            []error
@@ -30,12 +35,12 @@ type result struct {
 
 func (r *result) MarshalJSON() ([]byte, error) {
 	type resultJSON struct {
-		StopReason  StopReason    `json:"stop_reason"`
-		Messages    []msg.Message `json:"messages"`
-		ToolCalls   []tool.Call   `json:"tool_calls"`
-		ToolResults []tool.Result `json:"tool_results"`
-		Usage       *Usage        `json:"usage"`
-		Error       string        `json:"error,omitempty"`
+		StopReason   StopReason     `json:"stop_reason"`
+		Messages     []msg.Message  `json:"messages"`
+		ToolCalls    []tool.Call    `json:"tool_calls"`
+		ToolResults  []tool.Result  `json:"tool_results"`
+		UsageRecords []usage.Record `json:"usage_records,omitempty"`
+		Error        string         `json:"error,omitempty"`
 	}
 	var err = r.Error()
 	var errMsg string
@@ -43,12 +48,12 @@ func (r *result) MarshalJSON() ([]byte, error) {
 		errMsg = err.Error()
 	}
 	return json.Marshal(resultJSON{
-		Messages:    r.Next(),
-		ToolCalls:   r.ToolCalls(),
-		Usage:       r.Usage(),
-		StopReason:  r.StopReason(),
-		ToolResults: r.ToolResults(),
-		Error:       errMsg,
+		Messages:     r.Next(),
+		ToolCalls:    r.ToolCalls(),
+		UsageRecords: r.UsageRecords(),
+		StopReason:   r.StopReason(),
+		ToolResults:  r.ToolResults(),
+		Error:        errMsg,
 	})
 }
 
@@ -100,9 +105,35 @@ func (r *result) ToolResults() []tool.Result { return r.toolResults }
 func (r *result) Text() string               { return r.textBuffer.String() }
 func (r *result) Thought() string            { return r.thinkingBuffer.String() }
 func (r *result) StopReason() StopReason     { return r.stopReason }
-func (r *result) Usage() *Usage              { return r.usage }
 func (r *result) Error() error               { return errors.Join(r.errors...) }
 func (r *result) ToolCalls() []tool.Call     { return r.toolCalls }
+
+func (r *result) UsageRecords() []usage.Record {
+	return r.usageRecords
+}
+
+func (r *result) TokenEstimates() []usage.Record {
+	return r.estimateRecs
+}
+
+func (r *result) Drift() *usage.Drift {
+	if len(r.estimateRecs) == 0 || len(r.usageRecords) == 0 {
+		return nil
+	}
+	// Find the first unlabeled (primary) estimate — the same logic as
+	// Tracker.Drift so the two always agree.
+	var primary *usage.Record
+	for i := range r.estimateRecs {
+		if r.estimateRecs[i].Dims.Labels == nil {
+			primary = &r.estimateRecs[i]
+			break
+		}
+	}
+	if primary == nil {
+		return nil
+	}
+	return usage.ComputeDrift(primary, &r.usageRecords[0])
+}
 
 func (r *result) addError(err error) {
 	r.errors = append(r.errors, err)
@@ -119,10 +150,12 @@ func (r *result) applyDelta(ev *DeltaEvent) {
 	}
 }
 
-func (r *result) applyUsage(u *Usage) {
-	if r.usage == nil {
-		r.usage = u
-	}
+func (r *result) applyUsage(rec usage.Record) {
+	r.usageRecords = append(r.usageRecords, rec)
+}
+
+func (r *result) applyEstimate(rec usage.Record) {
+	r.estimateRecs = append(r.estimateRecs, rec)
 }
 
 func (r *result) applyToolCall(tc tool.Call) {
@@ -360,7 +393,9 @@ func (r *StreamProcessor) processEvent(e Envelope) {
 	case *CompletedEvent:
 		r.result.stopReason = actual.StopReason
 	case *UsageUpdatedEvent:
-		r.result.applyUsage(&actual.Usage)
+		r.result.applyUsage(actual.Record)
+	case *TokenEstimateEvent:
+		r.result.applyEstimate(actual.Estimate)
 	case *ErrorEvent:
 		r.result.addError(actual.Error)
 		r.result.stopReason = StopReasonError

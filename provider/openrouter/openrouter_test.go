@@ -16,6 +16,7 @@ import (
 	"github.com/codewandler/llm/msg"
 	"github.com/codewandler/llm/tokencount"
 	"github.com/codewandler/llm/tool"
+	"github.com/codewandler/llm/usage"
 )
 
 func TestBuildRequest_SystemMessage(t *testing.T) {
@@ -529,21 +530,23 @@ data: [DONE]
 
 `, "")
 
-	var usage *llm.Usage
+	var usageRec *usage.Record
 	for _, event := range events {
 		if event.Type == llm.StreamEventUsageUpdated {
 			u := event.Data.(*llm.UsageUpdatedEvent)
-			usage = &u.Usage
+			usageRec = &u.Record
 		}
 	}
 
-	require.NotNil(t, usage)
-	assert.Equal(t, 100, usage.InputTokens)
-	assert.Equal(t, 50, usage.OutputTokens)
-	assert.Equal(t, 150, usage.TotalTokens)
-	assert.Equal(t, 80, usage.CacheReadTokens)
-	assert.Equal(t, 30, usage.ReasoningTokens)
-	assert.Equal(t, 0.123, usage.Cost)
+	require.NotNil(t, usageRec)
+	// 100 - 80 cached = 20 regular input; 50 - 30 reasoning = 20 regular output
+	assert.Equal(t, 20, usageRec.Tokens.Count(usage.KindInput))
+	assert.Equal(t, 20, usageRec.Tokens.Count(usage.KindOutput))
+	assert.Equal(t, 80, usageRec.Tokens.Count(usage.KindCacheRead))
+	assert.Equal(t, 30, usageRec.Tokens.Count(usage.KindReasoning))
+	// OpenRouter reports cost directly → Source == "reported"
+	assert.Equal(t, "reported", usageRec.Cost.Source)
+	assert.InDelta(t, 0.123, usageRec.Cost.Total, 1e-10)
 }
 
 func TestParseStream_ReasoningDetails(t *testing.T) {
@@ -624,7 +627,7 @@ func collectStreamEvents(t *testing.T, sseData string, requestedModel string) []
 	t.Helper()
 
 	pub, ch := llm.NewEventPublisher()
-	go parseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), pub, requestedModel)
+	go parseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), pub, requestedModel, nil)
 
 	var events []llm.Envelope
 	for event := range ch {

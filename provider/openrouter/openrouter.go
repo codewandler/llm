@@ -6,14 +6,18 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/codewandler/llm"
 	"github.com/codewandler/llm/internal/sse"
 	"github.com/codewandler/llm/msg"
+	"github.com/codewandler/llm/tokencount"
 	"github.com/codewandler/llm/tool"
+	"github.com/codewandler/llm/usage"
 )
 
 const (
@@ -81,6 +85,10 @@ func (p *Provider) WithDefaultModel(modelID string) *Provider {
 func (p *Provider) DefaultModel() string { return p.defaultModel }
 func (p *Provider) Name() string         { return providerName }
 func (p *Provider) Models() llm.Models   { return p.models }
+
+func (*Provider) CostCalculator() usage.CostCalculator {
+	return usage.Default()
+}
 func (p *Provider) Resolve(model string) (llm.Model, error) {
 	return p.models.Resolve(p.normalizeRequestModel(model))
 }
@@ -172,6 +180,17 @@ func (p *Provider) CreateStream(ctx context.Context, src llm.Buildable) (llm.Str
 		ProviderRequest: llm.ProviderRequestFromHTTP(httpReq, body),
 	})
 
+	// Emit pre-request token estimates (primary + per-segment breakdown).
+	if est, err := p.CountTokens(ctx, tokencount.TokenCountRequest{
+		Model:    opts.Model,
+		Messages: opts.Messages,
+		Tools:    opts.Tools,
+	}); err == nil {
+		for _, rec := range tokencount.EstimateRecords(est, providerName, opts.Model, "heuristic", usage.Default()) {
+			pub.TokenEstimate(rec)
+		}
+	}
+
 	resp, err := p.client.Do(httpReq)
 	if err != nil {
 		pub.Close()
@@ -192,7 +211,7 @@ func (p *Provider) CreateStream(ctx context.Context, src llm.Buildable) (llm.Str
 		return ch, nil
 	}
 
-	go parseStream(ctx, resp.Body, pub, opts.Model)
+	go parseStream(ctx, resp.Body, pub, opts.Model, p.opts.Logger)
 	return ch, nil
 }
 
@@ -219,7 +238,6 @@ type request struct {
 	TopK           int              `json:"top_k,omitempty"`
 	ResponseFormat *respFormat      `json:"response_format,omitempty"`
 	Stream         bool             `json:"stream"`
-	StreamOptions  *streamOptions   `json:"stream_options,omitempty"`
 }
 
 type reasoningConfig struct {
@@ -230,9 +248,6 @@ type respFormat struct {
 	Type string `json:"type"`
 }
 
-type streamOptions struct {
-	IncludeUsage bool `json:"include_usage"`
-}
 
 type reasoningDetailInput struct {
 	Type      string `json:"type"`
@@ -273,9 +288,8 @@ type functionPayload struct {
 
 func buildRequest(opts llm.Request) ([]byte, error) {
 	r := request{
-		Model:         opts.Model,
-		Stream:        true,
-		StreamOptions: &streamOptions{IncludeUsage: true},
+		Model:  opts.Model,
+		Stream: true,
 	}
 
 	if opts.MaxTokens > 0 {
@@ -423,7 +437,8 @@ type streamChunk struct {
 		TotalTokens         int     `json:"total_tokens"`
 		Cost                float64 `json:"cost"`
 		PromptTokensDetails *struct {
-			CachedTokens int `json:"cached_tokens"`
+			CachedTokens     int `json:"cached_tokens"`
+			CacheWriteTokens int `json:"cache_write_tokens"`
 		} `json:"prompt_tokens_details,omitempty"`
 		CompletionTokensDetails *struct {
 			ReasoningTokens int `json:"reasoning_tokens"`
@@ -450,12 +465,14 @@ type toolAccum struct {
 	argsBuf strings.Builder
 }
 
-func parseStream(ctx context.Context, body io.ReadCloser, pub llm.Publisher, requestedModel string) {
+func parseStream(ctx context.Context, body io.ReadCloser, pub llm.Publisher, requestedModel string, logger *slog.Logger) {
 	defer pub.Close()
 
 	activeTools := make(map[uint32]*toolAccum)
 	startEmitted := false
-	var usage *llm.Usage
+	var inputTokens, outputTokens, cachedTokens, cacheWriteTokens, reasoningTokens int
+	var reportedCostUSD float64
+	var responseID string
 	var stopReason llm.StopReason
 
 	err := sse.ForEachDataLine(ctx, body, func(ev sse.Event) bool {
@@ -465,9 +482,64 @@ func parseStream(ctx context.Context, body io.ReadCloser, pub llm.Publisher, req
 		}
 
 		if data == "[DONE]" {
-			if usage != nil {
-				pub.Usage(*usage)
+			regularInput := inputTokens - cachedTokens - cacheWriteTokens
+			if regularInput < 0 {
+				if logger != nil {
+					logger.Warn("clamping negative regularInput to 0",
+						"provider", llm.ProviderNameOpenRouter,
+						"model", requestedModel,
+						"inputTokens", inputTokens,
+						"cachedTokens", cachedTokens,
+						"cacheWriteTokens", cacheWriteTokens,
+					)
+				}
+				regularInput = 0
 			}
+			var outputItem, reasoningItem usage.TokenItem
+			if reasoningTokens > 0 {
+				netOutput := outputTokens - reasoningTokens
+				if netOutput < 0 {
+					if logger != nil {
+						logger.Warn("clamping negative netOutput to 0",
+							"provider", llm.ProviderNameOpenRouter,
+							"model", requestedModel,
+							"outputTokens", outputTokens,
+							"reasoningTokens", reasoningTokens,
+						)
+					}
+					netOutput = 0
+				}
+				outputItem = usage.TokenItem{Kind: usage.KindOutput, Count: netOutput}
+				reasoningItem = usage.TokenItem{Kind: usage.KindReasoning, Count: reasoningTokens}
+			} else {
+				outputItem = usage.TokenItem{Kind: usage.KindOutput, Count: outputTokens}
+			}
+			items := usage.TokenItems{{Kind: usage.KindInput, Count: regularInput}, outputItem}.NonZero()
+			if cachedTokens > 0 {
+				items = append(items, usage.TokenItem{Kind: usage.KindCacheRead, Count: cachedTokens})
+			}
+			if cacheWriteTokens > 0 {
+				items = append(items, usage.TokenItem{Kind: usage.KindCacheWrite, Count: cacheWriteTokens})
+			}
+			if reasoningTokens > 0 {
+				items = append(items, reasoningItem)
+			}
+
+			var costField usage.Cost
+			if reportedCostUSD > 0 {
+				// OpenRouter reports USD cost directly — use it.
+				costField = usage.Cost{Total: reportedCostUSD, Source: "reported"}
+			} else if cost, ok := usage.Default().Calculate(llm.ProviderNameOpenRouter, requestedModel, items); ok {
+				costField = cost
+			}
+
+			rec := usage.Record{
+				Dims:       usage.Dims{Provider: llm.ProviderNameOpenRouter, Model: requestedModel, RequestID: responseID},
+				Tokens:     items,
+				Cost:       costField,
+				RecordedAt: time.Now(),
+			}
+			pub.UsageRecord(rec)
 			pub.Completed(llm.CompletedEvent{StopReason: stopReason})
 			return false
 		}
@@ -485,6 +557,7 @@ func parseStream(ctx context.Context, body io.ReadCloser, pub llm.Publisher, req
 
 		if !startEmitted {
 			startEmitted = true
+			responseID = chunk.ID
 			// If the API resolved a different model than was requested (e.g. "auto"
 			// resolved to a specific model), emit ModelResolvedEvent first.
 			if chunk.Model != "" && chunk.Model != requestedModel {
@@ -497,17 +570,15 @@ func parseStream(ctx context.Context, body io.ReadCloser, pub llm.Publisher, req
 		}
 
 		if chunk.Usage != nil {
-			usage = &llm.Usage{
-				InputTokens:  chunk.Usage.PromptTokens,
-				OutputTokens: chunk.Usage.CompletionTokens,
-				TotalTokens:  chunk.Usage.TotalTokens,
-				Cost:         chunk.Usage.Cost,
-			}
+			inputTokens = chunk.Usage.PromptTokens
+			outputTokens = chunk.Usage.CompletionTokens
+			reportedCostUSD = chunk.Usage.Cost
 			if chunk.Usage.PromptTokensDetails != nil {
-				usage.CacheReadTokens = chunk.Usage.PromptTokensDetails.CachedTokens
+				cachedTokens = chunk.Usage.PromptTokensDetails.CachedTokens
+				cacheWriteTokens = chunk.Usage.PromptTokensDetails.CacheWriteTokens
 			}
 			if chunk.Usage.CompletionTokensDetails != nil {
-				usage.ReasoningTokens = chunk.Usage.CompletionTokensDetails.ReasoningTokens
+				reasoningTokens = chunk.Usage.CompletionTokensDetails.ReasoningTokens
 			}
 		}
 

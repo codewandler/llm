@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/codewandler/llm"
+	"github.com/codewandler/llm/usage"
 )
 
 // collectText returns all text content from delta envelopes.
@@ -40,12 +41,12 @@ func collectReasoning(envelopes []llm.Envelope) string {
 	return b.String()
 }
 
-// findUsage returns the Usage from the first UsageUpdated envelope, or nil.
-func findUsage(envelopes []llm.Envelope) *llm.Usage {
+// findUsageRecord returns the usage Record from the first UsageUpdated envelope, or nil.
+func findUsageRecord(envelopes []llm.Envelope) *usage.Record {
 	for _, env := range envelopes {
 		if env.Type == llm.StreamEventUsageUpdated {
 			ue := env.Data.(*llm.UsageUpdatedEvent)
-			return &ue.Usage
+			return &ue.Record
 		}
 	}
 	return nil
@@ -75,7 +76,7 @@ func findError(envelopes []llm.Envelope) error {
 }
 
 func TestProcessor_TextDeltaFlow(t *testing.T) {
-	h := newHarness(ParseOpts{Model: "claude-sonnet-4-5"})
+	h := newHarness(ParseOpts{Model: "claude-sonnet-4-5", ProviderName: providerName})
 
 	envelopes := h.Send(
 		MessageStartEvent{Message: MessageStartPayload{
@@ -95,14 +96,14 @@ func TestProcessor_TextDeltaFlow(t *testing.T) {
 
 	assert.Equal(t, "Hello, world", collectText(envelopes))
 
-	u := findUsage(envelopes)
-	require.NotNil(t, u)
-	assert.Equal(t, 10, u.InputTokens)
-	assert.Equal(t, 5, u.OutputTokens)
+	rec := findUsageRecord(envelopes)
+	require.NotNil(t, rec)
+	assert.Equal(t, 10, rec.Tokens.Count(usage.KindInput))
+	assert.Equal(t, 5, rec.Tokens.Count(usage.KindOutput))
 }
 
 func TestProcessor_ReasoningDeltaFlow(t *testing.T) {
-	h := newHarness(ParseOpts{Model: "claude-sonnet-4-5"})
+	h := newHarness(ParseOpts{Model: "claude-sonnet-4-5", ProviderName: providerName})
 
 	envelopes := h.Send(
 		MessageStartEvent{Message: MessageStartPayload{
@@ -128,7 +129,7 @@ func TestProcessor_ReasoningDeltaFlow(t *testing.T) {
 }
 
 func TestProcessor_ToolCallAccumulation(t *testing.T) {
-	h := newHarness(ParseOpts{Model: "claude-sonnet-4-5"})
+	h := newHarness(ParseOpts{Model: "claude-sonnet-4-5", ProviderName: providerName})
 
 	envelopes := h.Send(
 		MessageStartEvent{Message: MessageStartPayload{ID: "msg_03", Model: "claude-sonnet-4-5"}},
@@ -153,7 +154,7 @@ func TestProcessor_ToolCallAccumulation(t *testing.T) {
 }
 
 func TestProcessor_CacheTokenAccounting(t *testing.T) {
-	h := newHarness(ParseOpts{Model: "claude-sonnet-4-5"})
+	h := newHarness(ParseOpts{Model: "claude-sonnet-4-5", ProviderName: providerName})
 
 	envelopes := h.Send(
 		MessageStartEvent{Message: MessageStartPayload{
@@ -174,17 +175,19 @@ func TestProcessor_CacheTokenAccounting(t *testing.T) {
 		MessageStopEvent{},
 	)
 
-	u := findUsage(envelopes)
-	require.NotNil(t, u)
-	// InputTokens should be base + cache write + cache read
-	assert.Equal(t, 10+512+1024, u.InputTokens)
-	assert.Equal(t, 512, u.CacheWriteTokens)
-	assert.Equal(t, 1024, u.CacheReadTokens)
-	assert.Equal(t, 5, u.OutputTokens)
+	rec := findUsageRecord(envelopes)
+	require.NotNil(t, rec)
+	// KindInput is only the non-cache portion
+	assert.Equal(t, 10, rec.Tokens.Count(usage.KindInput))
+	assert.Equal(t, 512, rec.Tokens.Count(usage.KindCacheWrite))
+	assert.Equal(t, 1024, rec.Tokens.Count(usage.KindCacheRead))
+	assert.Equal(t, 5, rec.Tokens.Count(usage.KindOutput))
+	// TotalInput includes all three input categories
+	assert.Equal(t, 10+512+1024, rec.Tokens.TotalInput())
 }
 
 func TestProcessor_ErrorEventTerminatesStream(t *testing.T) {
-	h := newHarness(ParseOpts{Model: "claude-sonnet-4-5"})
+	h := newHarness(ParseOpts{Model: "claude-sonnet-4-5", ProviderName: providerName})
 
 	envelopes := h.Send(
 		MessageStartEvent{Message: MessageStartPayload{ID: "msg_05", Model: "claude-sonnet-4-5"}},

@@ -25,9 +25,12 @@ var (
 )
 
 // ProviderMapping maps internal provider names to models.dev provider IDs.
+// Note: usage/pricing.go maintains its own providerAliases for cost calculation;
+// keep the two in sync when adding provider aliases.
 var ProviderMapping = map[string]string{
 	"bedrock":    "amazon-bedrock",
 	"anthropic":  "anthropic",
+	"claude":     "anthropic", // OAuth wrapper — same models and pricing as anthropic
 	"openai":     "openai",
 	"openrouter": "openrouter",
 	"google":     "google",

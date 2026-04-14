@@ -1,8 +1,6 @@
 package bedrock
 
 import (
-	"strings"
-
 	"github.com/codewandler/llm"
 )
 
@@ -101,6 +99,8 @@ const (
 // -----------------------------------------------------------------------------
 
 // modelDef defines a single model with all its metadata.
+// Pricing fields are the authoritative source for the entries in usage/pricing.go;
+// they are not used for runtime cost calculation (which goes through usage.Default()).
 type modelDef struct {
 	ID               string   // Bedrock model ID (use constants above)
 	Name             string   // Human-readable name
@@ -199,35 +199,12 @@ var allModels = []modelDef{
 // Derived Data Structures
 // -----------------------------------------------------------------------------
 
-// modelInfo contains metadata and pricing for a Bedrock model.
-type modelInfo struct {
-	ID               string  // Bedrock model ID
-	Name             string  // Human-readable name
-	InputPrice       float64 // USD per 1M input tokens (0 if unknown)
-	OutputPrice      float64 // USD per 1M output tokens (0 if unknown)
-	CachedInputPrice float64 // USD per 1M cache read tokens (~0.1× input)
-	CacheWritePrice  float64 // USD per 1M cache write tokens (~1.25× input)
-}
-
-// modelRegistry maps model IDs to their info (derived from allModels).
-var modelRegistry map[string]modelInfo
-
 // inferenceProfiles maps model IDs to their inference profiles (derived from allModels).
 var inferenceProfiles map[string]InferenceProfile
 
 func init() {
-	modelRegistry = make(map[string]modelInfo, len(allModels))
 	inferenceProfiles = make(map[string]InferenceProfile)
-
 	for _, m := range allModels {
-		modelRegistry[m.ID] = modelInfo{
-			ID:               m.ID,
-			Name:             m.Name,
-			InputPrice:       m.InputPrice,
-			OutputPrice:      m.OutputPrice,
-			CachedInputPrice: m.CachedInputPrice,
-			CacheWritePrice:  m.CacheWritePrice,
-		}
 		if len(m.Prefixes) > 0 {
 			inferenceProfiles[m.ID] = InferenceProfile{Prefixes: m.Prefixes}
 		}
@@ -254,38 +231,4 @@ var ModelAliases = map[string]string{
 	"haiku":  ModelHaikuLatest,
 	"sonnet": ModelSonnetLatest,
 	"opus":   ModelOpusLatest,
-}
-
-// fillCost calculates the cost for the given usage and model and populates
-// both the total Cost field and the granular breakdown fields on the usage struct.
-// No-op if usage is nil or the model is unknown.
-func fillCost(model string, usage *llm.Usage) {
-	if usage == nil {
-		return
-	}
-
-	// Strip inference profile prefix (us., eu., global., etc.) to match registry
-	modelID := model
-	if idx := strings.Index(model, "."); idx != -1 {
-		prefix := model[:idx]
-		if prefix == PrefixUS || prefix == PrefixEU || prefix == PrefixGlobal || prefix == PrefixAPAC || prefix == "ap" {
-			modelID = model[idx+1:]
-		}
-	}
-
-	info, ok := modelRegistry[modelID]
-	if !ok {
-		return
-	}
-
-	regularInput := usage.InputTokens - usage.CacheReadTokens - usage.CacheWriteTokens
-	if regularInput < 0 {
-		regularInput = 0
-	}
-
-	usage.InputCost = (float64(regularInput) / 1_000_000) * info.InputPrice
-	usage.CacheReadCost = (float64(usage.CacheReadTokens) / 1_000_000) * info.CachedInputPrice
-	usage.CacheWriteCost = (float64(usage.CacheWriteTokens) / 1_000_000) * info.CacheWritePrice
-	usage.OutputCost = (float64(usage.OutputTokens) / 1_000_000) * info.OutputPrice
-	usage.Cost = usage.InputCost + usage.CacheReadCost + usage.CacheWriteCost + usage.OutputCost
 }

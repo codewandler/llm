@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"strings"
+
+	"github.com/codewandler/llm/usage"
 )
 
 const (
@@ -37,15 +39,20 @@ func (f ModelResolveFunc) Resolve(modelID string) (Model, error) { return f(mode
 
 // Model represents an LLM model.
 type Model struct {
-	ID       string   `json:"id"`
-	Name     string   `json:"name"`
-	Provider string   `json:"provider"`
-	Aliases  []string `json:"aliases,omitempty"`
+	ID       string         `json:"id"`
+	Name     string         `json:"name"`
+	Provider string         `json:"provider"`
+	Aliases  []string       `json:"aliases,omitempty"`
+	Pricing  *usage.Pricing `json:"pricing,omitempty"` // nil unless fetched dynamically
 }
 
 type Models []Model
 
 func (m Models) Resolve(modelID string) (Model, error) {
+	if modelID == "" {
+		return Model{}, fmt.Errorf("model ID is required")
+	}
+
 	// match exact
 	for _, model := range m {
 		if model.ID == modelID || strings.Contains(strings.ToLower(model.Name), strings.ToLower(modelID)) {
@@ -62,7 +69,7 @@ func (m Models) Resolve(modelID string) (Model, error) {
 		}
 	}
 
-	return Model{}, fmt.Errorf("model %q not found", m)
+	return Model{}, fmt.Errorf("model %q not found", modelID)
 }
 
 func (m Models) Models() Models { return m }
@@ -103,4 +110,16 @@ func ProviderWithAliasResolver(p Provider) *AliasResolvingProvider {
 			return found, nil
 		}),
 	}
+}
+
+// ModelListCalculator returns a CostCalculator backed by a dynamically-fetched model list.
+func ModelListCalculator(models Models) usage.CostCalculator {
+	return usage.CostCalculatorFunc(func(_, model string, tokens usage.TokenItems) (usage.Cost, bool) {
+		for _, m := range models {
+			if m.ID == model && m.Pricing != nil {
+				return usage.CalcCost(tokens, *m.Pricing), true
+			}
+		}
+		return usage.Cost{}, false
+	})
 }

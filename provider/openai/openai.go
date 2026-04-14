@@ -8,6 +8,7 @@ import (
 	"net/http"
 
 	"github.com/codewandler/llm"
+	"github.com/codewandler/llm/usage"
 )
 
 const (
@@ -22,9 +23,11 @@ const (
 // It dispatches to the Responses API for Codex models and to Chat Completions
 // for everything else.
 type Provider struct {
-	opts         *llm.Options
-	defaultModel string
-	client       *http.Client
+	opts            *llm.Options
+	defaultModel    string
+	client          *http.Client
+	codexModelsOnly bool   // when true, Models() returns only categoryCodex models
+	providerName    string // "openai" by default; "chatgpt" for Codex OAuth providers
 }
 
 // DefaultOptions returns the default options for the OpenAI provider.
@@ -59,20 +62,46 @@ func (p *Provider) WithDefaultModel(modelID string) *Provider {
 	return &clone
 }
 
+// WithCodexModels returns a copy of the provider that exposes only Codex-category
+// models (categoryCodex). This is used by CodexAuth.NewProvider() to prevent
+// non-Codex models from being offered to the router when the provider is registered
+// under the "chatgpt" prefix — those model IDs are not accepted by the
+// chatgpt.com/backend-api/codex/responses endpoint.
+func (p *Provider) WithCodexModels() *Provider {
+	clone := *p
+	clone.codexModelsOnly = true
+	return &clone
+}
+
 // GetDefaultModel returns the configured default model ID.
-func (p *Provider) GetDefaultModel() string                   { return p.defaultModel }
-func (p *Provider) Name() string                              { return providerName }
+func (p *Provider) GetDefaultModel() string { return p.defaultModel }
+func (p *Provider) Name() string {
+	if p.providerName != "" {
+		return p.providerName
+	}
+	return providerName
+}
+
+func (*Provider) CostCalculator() usage.CostCalculator {
+	return usage.Default()
+}
+
 func (p *Provider) Resolve(modelID string) (llm.Model, error) { return p.Models().Resolve(modelID) }
 
 // Models returns a curated list of well-known OpenAI models.
+// When the provider was created with WithCodexModels(), only Codex-category
+// models are returned.
 func (p *Provider) Models() llm.Models {
 	models := make([]llm.Model, 0, len(modelOrder))
 	for _, id := range modelOrder {
 		if info, ok := modelRegistry[id]; ok {
+			if p.codexModelsOnly && info.Category != categoryCodex {
+				continue
+			}
 			models = append(models, llm.Model{
 				ID:       info.ID,
 				Name:     info.Name,
-				Provider: providerName,
+				Provider: p.Name(),
 			})
 		}
 	}

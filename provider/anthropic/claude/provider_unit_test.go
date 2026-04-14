@@ -21,7 +21,6 @@ func TestNormalizeModel_Aliases(t *testing.T) {
 		{"haiku", ModelHaiku},
 		{"Haiku", ModelHaiku},
 		{"claude-sonnet-4-6", "claude-sonnet-4-6"},
-		{"", ModelDefault},
 		{llm.ModelDefault, ModelSonnet},
 	}
 	for _, tc := range cases {
@@ -31,6 +30,14 @@ func TestNormalizeModel_Aliases(t *testing.T) {
 			assert.Equal(t, tc.want, resolved.ID)
 		})
 	}
+}
+
+func TestNormalizeModel_EmptyReturnsError(t *testing.T) {
+	// claudeModels.Resolve does not do default-model substitution — that is
+	// CreateStream's responsibility.  An empty model ID must be an error here.
+	p := newClaudeModels()
+	_, err := p.Resolve("")
+	require.Error(t, err)
 }
 
 func TestStainlessOS(t *testing.T) {

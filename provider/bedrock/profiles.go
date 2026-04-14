@@ -87,3 +87,16 @@ func containsPrefix(prefixes []string, prefix string) bool {
 	}
 	return false
 }
+
+// stripRegionPrefix removes a regional inference profile prefix (us., eu.,
+// apac., global.) from a resolved model ID, returning the bare model ID
+// suitable for pricing table lookups.
+// Example: "us.anthropic.claude-sonnet-4-6" → "anthropic.claude-sonnet-4-6"
+func stripRegionPrefix(model string) string {
+	for _, prefix := range validPrefixes {
+		if len(model) > len(prefix) && model[:len(prefix)] == prefix {
+			return model[len(prefix):]
+		}
+	}
+	return model
+}

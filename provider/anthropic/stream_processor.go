@@ -3,10 +3,12 @@ package anthropic
 import (
 	"encoding/json"
 	"strings"
+	"time"
 
 	"github.com/codewandler/llm"
 	"github.com/codewandler/llm/msg"
 	"github.com/codewandler/llm/tool"
+	"github.com/codewandler/llm/usage"
 )
 
 // streamingToolBlock accumulates streaming tool-call input fragments.
@@ -33,14 +35,18 @@ type streamingThinkingBlock struct {
 //
 // ParseStream feeds it via dispatch; tests feed it directly via the on* methods.
 type streamProcessor struct {
-	meta           ParseOpts
-	pub            llm.Publisher
-	activeTools    map[int]*streamingToolBlock
-	activeText     map[int]*streamingTextBlock
-	activeThinking map[int]*streamingThinkingBlock
-	usage          llm.Usage
-	stopReason     llm.StopReason
-	rateLimits     *llm.RateLimits
+	meta             ParseOpts
+	pub              llm.Publisher
+	activeTools      map[int]*streamingToolBlock
+	activeText       map[int]*streamingTextBlock
+	activeThinking   map[int]*streamingThinkingBlock
+	regularInput     int // input tokens (non-cache portion)
+	cacheReadTokens  int
+	cacheWriteTokens int
+	outputTokens     int
+	requestID        string // stored from message_start for Record.Dims
+	stopReason       llm.StopReason
+	rateLimits       *llm.RateLimits
 }
 
 func newStreamProcessor(meta ParseOpts, pub llm.Publisher) *streamProcessor {
@@ -112,10 +118,13 @@ func (p *streamProcessor) dispatch(data string) bool {
 }
 
 func (p *streamProcessor) onMessageStart(evt MessageStartEvent) {
-	p.usage.CacheWriteTokens = evt.Message.Usage.CacheCreationInputTokens
-	p.usage.CacheReadTokens = evt.Message.Usage.CacheReadInputTokens
-	p.usage.InputTokens = evt.Message.Usage.InputTokens +
-		p.usage.CacheWriteTokens + p.usage.CacheReadTokens
+	p.cacheWriteTokens = evt.Message.Usage.CacheCreationInputTokens
+	p.cacheReadTokens = evt.Message.Usage.CacheReadInputTokens
+	p.regularInput = evt.Message.Usage.InputTokens
+	// Anthropic API: InputTokens is the non-cache, non-write portion of input.
+	// Total input = InputTokens + CacheCreationInputTokens + CacheReadInputTokens.
+	// See: https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching#tracking-cache-performance
+	p.requestID = evt.Message.ID
 
 	// Build Extra map with rate limits if available
 	var extra map[string]any
@@ -139,18 +148,41 @@ func (p *streamProcessor) onMessageStart(evt MessageStartEvent) {
 }
 
 func (p *streamProcessor) onMessageDelta(evt MessageDeltaEvent) {
-	p.usage.OutputTokens = evt.Usage.OutputTokens
-	p.usage.TotalTokens = p.usage.InputTokens + p.usage.OutputTokens
+	p.outputTokens = evt.Usage.OutputTokens
 	p.stopReason = mapAnthropicStopReason(evt.Delta.StopReason)
 }
 
 func (p *streamProcessor) onMessageStop() {
-	costFn := p.meta.CostFn
-	if costFn == nil {
-		costFn = FillCost
+	tokens := usage.TokenItems{
+		{Kind: usage.KindInput, Count: p.regularInput},
+		{Kind: usage.KindCacheRead, Count: p.cacheReadTokens},
+		{Kind: usage.KindCacheWrite, Count: p.cacheWriteTokens},
+		{Kind: usage.KindOutput, Count: p.outputTokens},
+	}.NonZero()
+
+	var extras map[string]any
+	if p.rateLimits != nil {
+		extras = map[string]any{"rate_limits": p.rateLimits}
 	}
-	costFn(p.meta.Model, &p.usage)
-	p.pub.Usage(p.usage)
+
+	rec := usage.Record{
+		Dims: usage.Dims{
+			// Use p.meta.ProviderName so MiniMax (which reuses this parser)
+			// gets its own provider name in the record, not "anthropic".
+			Provider:  p.meta.ProviderName,
+			Model:     p.meta.Model,
+			RequestID: p.requestID,
+		},
+		Tokens:     tokens,
+		Extras:     extras,
+		RecordedAt: time.Now(),
+	}
+
+	if cost, ok := usage.Default().Calculate(p.meta.ProviderName, p.meta.Model, tokens); ok {
+		rec.Cost = cost
+	}
+
+	p.pub.UsageRecord(rec)
 	p.pub.Completed(llm.CompletedEvent{StopReason: p.stopReason})
 }
 

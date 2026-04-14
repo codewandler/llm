@@ -9,6 +9,8 @@ import (
 	"strings"
 
 	"github.com/codewandler/llm"
+	"github.com/codewandler/llm/tokencount"
+	"github.com/codewandler/llm/usage"
 )
 
 const (
@@ -56,6 +58,10 @@ func New(opts ...llm.Option) *Provider {
 func (p *Provider) Name() string { return providerName }
 
 func (p *Provider) Models() llm.Models { return allModelsWithAliases }
+
+func (*Provider) CostCalculator() usage.CostCalculator {
+	return usage.Default()
+}
 
 func (p *Provider) Resolve(modelID string) (llm.Model, error) {
 	return allModelsWithAliases.Resolve(modelID)
@@ -116,6 +122,28 @@ func (p *Provider) CreateStream(ctx context.Context, src llm.Buildable) (llm.Str
 	// so consumers see what was requested even if the call fails.
 	pub, ch := llm.NewEventPublisher()
 	PublishRequestParams(pub, parseOpts)
+
+	// Emit token estimates: heuristic (local BPE) + API (exact count).
+	// Both are emitted so consumers can compare drift between the two methods.
+
+	// 1. Heuristic estimate (local, no network call)
+	if est, err := p.CountTokens(ctx, tokencount.TokenCountRequest{
+		Model:    opts.Model,
+		Messages: opts.Messages,
+		Tools:    opts.Tools,
+	}); err == nil {
+		for _, rec := range tokencount.EstimateRecords(est, llm.ProviderNameAnthropic, opts.Model, "heuristic", usage.Default()) {
+			pub.TokenEstimate(rec)
+		}
+	}
+
+	// 2. API count (exact, free endpoint — adds one HTTP round-trip)
+	if apiCount, err := p.CountTokensAPI(ctx, apiReq); err == nil {
+		apiEst := &tokencount.TokenCount{InputTokens: apiCount}
+		for _, rec := range tokencount.EstimateRecords(apiEst, llm.ProviderNameAnthropic, opts.Model, "api", usage.Default()) {
+			pub.TokenEstimate(rec)
+		}
+	}
 
 	resp, err := p.client.Do(req)
 	if err != nil {

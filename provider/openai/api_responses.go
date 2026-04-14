@@ -27,7 +27,9 @@ import (
 	"github.com/codewandler/llm/internal/sse"
 	"github.com/codewandler/llm/msg"
 	"github.com/codewandler/llm/sortmap"
+	"github.com/codewandler/llm/tokencount"
 	"github.com/codewandler/llm/tool"
+	"github.com/codewandler/llm/usage"
 )
 
 // streamResponses sends a Responses API request and returns an event channel.
@@ -63,9 +65,21 @@ func (p *Provider) streamResponses(ctx context.Context, opts llm.Request) (llm.S
 	}
 
 	pub, ch := llm.NewEventPublisher()
+
+	// Emit token estimates (primary + per-segment breakdown)
+	if est, err := p.CountTokens(ctx, tokencount.TokenCountRequest{
+		Model: opts.Model, Messages: opts.Messages, Tools: opts.Tools,
+	}); err == nil {
+		for _, rec := range tokencount.EstimateRecords(est, p.Name(), opts.Model, "heuristic", usage.Default()) {
+			pub.TokenEstimate(rec)
+		}
+	}
+
 	go respParseStream(ctx, resp.Body, pub, respStreamMeta{
 		requestedModel: opts.Model,
 		startTime:      startTime,
+		providerName:   p.Name(),
+		logger:         p.opts.Logger,
 	})
 	return ch, nil
 }
@@ -487,20 +501,26 @@ func respHandleEvent(
 			})
 		}
 
-		var usage *llm.Usage
+		var usageRec *usage.Record
 		if u := ev.Response.Usage; u != nil {
-			usage = &llm.Usage{
-				InputTokens:  u.InputTokens,
-				OutputTokens: u.OutputTokens,
-				TotalTokens:  u.InputTokens + u.OutputTokens,
-			}
+			cached := 0
 			if u.InputTokensDetails != nil {
-				usage.CacheReadTokens = u.InputTokensDetails.CachedTokens
+				cached = u.InputTokensDetails.CachedTokens
 			}
+			reasoningTok := 0
 			if u.OutputTokensDetails != nil {
-				usage.ReasoningTokens = u.OutputTokensDetails.ReasoningTokens
+				reasoningTok = u.OutputTokensDetails.ReasoningTokens
 			}
-			calculateCost(meta.requestedModel, usage)
+			items := buildUsageTokenItems(u.InputTokens, u.OutputTokens, cached, reasoningTok, meta.logger, meta.provider(), meta.requestedModel)
+			rec := usage.Record{
+				Dims:       usage.Dims{Provider: meta.provider(), Model: meta.requestedModel, RequestID: meta.responseID},
+				Tokens:     items,
+				RecordedAt: time.Now(),
+			}
+			if cost, ok := usage.Default().Calculate(meta.provider(), meta.requestedModel, items); ok {
+				rec.Cost = cost
+			}
+			usageRec = &rec
 		}
 
 		stopReason := llm.StopReasonEndTurn
@@ -514,8 +534,8 @@ func respHandleEvent(
 		} else if *hadToolCalls {
 			stopReason = llm.StopReasonToolUse
 		}
-		if usage != nil {
-			pub.Usage(*usage)
+		if usageRec != nil {
+			pub.UsageRecord(*usageRec)
 		}
 		pub.Completed(llm.CompletedEvent{StopReason: stopReason})
 

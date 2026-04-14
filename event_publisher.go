@@ -8,6 +8,7 @@ import (
 	gonanoid "github.com/matoous/go-nanoid/v2"
 
 	"github.com/codewandler/llm/tool"
+	"github.com/codewandler/llm/usage"
 )
 
 type eventPub struct {
@@ -72,7 +73,8 @@ func (s *eventPub) Failover(from, to string, err error) {
 	})
 }
 func (s *eventPub) Delta(d *DeltaEvent)                { s.Publish(d) }
-func (s *eventPub) Usage(usage Usage)                  { s.Publish(&UsageUpdatedEvent{Usage: usage}) }
+func (s *eventPub) UsageRecord(r usage.Record)         { s.Publish(&UsageUpdatedEvent{Record: r}) }
+func (s *eventPub) TokenEstimate(r usage.Record)       { s.Publish(&TokenEstimateEvent{Estimate: r}) }
 func (s *eventPub) Completed(completed CompletedEvent) { s.Publish(&completed) }
 func (s *eventPub) Error(err error)                    { s.Publish(&ErrorEvent{Error: err}) }
 func (s *eventPub) ToolCall(tc tool.Call)              { s.Publish(&ToolCallEvent{ToolCall: tc}) }

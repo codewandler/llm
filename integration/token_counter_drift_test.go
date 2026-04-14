@@ -23,6 +23,7 @@ import (
 	"github.com/codewandler/llm/provider/minimax"
 	"github.com/codewandler/llm/provider/openai"
 	"github.com/codewandler/llm/tool"
+	"github.com/codewandler/llm/usage"
 )
 
 // driftPct returns the absolute percentage difference between estimated and
@@ -65,9 +66,14 @@ func testTokenCounterDrift(t *testing.T, provider llm.Provider, model string, ms
 
 	result := llm.NewEventProcessor(ctx, stream).Result()
 	require.NoError(t, result.Error())
-	require.NotNil(t, result.Usage(), "provider returned no usage data")
+	require.NotEmpty(t, result.UsageRecords(), "provider returned no usage data")
 
-	actual := result.Usage().InputTokens
+	rec0 := result.UsageRecords()[0]
+	actual := rec0.Tokens.TotalInput()
+	if rec0.Tokens.Count(usage.KindCacheRead) > 0 {
+		// For drift comparison use only the non-cache input portion
+		actual = rec0.Tokens.Count(usage.KindInput)
+	}
 	drift := driftPct(est.InputTokens, actual)
 
 	t.Logf("model=%s  estimated=%d  actual=%d  drift=%.1f%%", model, est.InputTokens, actual, drift)

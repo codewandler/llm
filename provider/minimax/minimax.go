@@ -12,6 +12,8 @@ import (
 
 	"github.com/codewandler/llm"
 	"github.com/codewandler/llm/provider/anthropic"
+	"github.com/codewandler/llm/tokencount"
+	"github.com/codewandler/llm/usage"
 )
 
 const ModelDefault = ModelM27
@@ -69,6 +71,10 @@ func WithLLMOpts(llmOpts ...llm.Option) Option {
 }
 
 func (p *Provider) Name() string { return providerName }
+
+func (*Provider) CostCalculator() usage.CostCalculator {
+	return usage.Default()
+}
 
 func (p *Provider) Models() llm.Models {
 	return []llm.Model{
@@ -135,7 +141,6 @@ func (p *Provider) CreateStream(ctx context.Context, src llm.Buildable) (llm.Str
 	parseOpts := anthropic.ParseOpts{
 		Model:         opts.Model,
 		ProviderName:  providerName,
-		CostFn:        FillCost,
 		LLMRequest:    opts,
 		RequestParams: llm.ProviderRequestFromHTTP(req, body),
 	}
@@ -143,6 +148,15 @@ func (p *Provider) CreateStream(ctx context.Context, src llm.Buildable) (llm.Str
 	// Create publisher and emit RequestEvent BEFORE the HTTP call.
 	pub, ch := llm.NewEventPublisher()
 	anthropic.PublishRequestParams(pub, parseOpts)
+
+	// Emit token estimates (primary + per-segment breakdown)
+	if est, err := p.CountTokens(ctx, tokencount.TokenCountRequest{
+		Model: opts.Model, Messages: opts.Messages, Tools: opts.Tools,
+	}); err == nil {
+		for _, rec := range tokencount.EstimateRecords(est, providerName, opts.Model, "heuristic", usage.Default()) {
+			pub.TokenEstimate(rec)
+		}
+	}
 
 	resp, err := p.client.Do(req)
 	if err != nil {

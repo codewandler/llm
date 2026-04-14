@@ -147,6 +147,12 @@ func WithClaudeLocal() Option {
 // (~/.codex/auth.json). The OAuth access token is refreshed automatically
 // when it approaches expiry, so no OPENAI_API_KEY is needed.
 //
+// The provider is registered under the "chatgpt" prefix (e.g. "chatgpt/gpt-5.3-codex")
+// to avoid clashing with a regular OpenAI API key provider ("openai/...") when
+// both are active. Only Codex-category models are exposed; general-purpose GPT
+// models are omitted because the chatgpt.com/backend-api/codex/responses endpoint
+// does not accept them.
+//
 // Requests are routed to https://chatgpt.com/backend-api (not api.openai.com)
 // because the ChatGPT Plus OAuth token lacks the api.responses.write scope
 // required by the standard developer API.
@@ -161,8 +167,8 @@ func WithCodexLocal() Option {
 		}
 		httpClient := c.httpClient
 		c.providers = append(c.providers, providerEntry{
-			name:         ProviderOpenAI,
-			providerType: ProviderOpenAI,
+			name:         ProviderChatGPT,
+			providerType: ProviderChatGPT,
 			factory: func(opts ...llm.Option) llm.Provider {
 				// Route through the Codex backend transport.
 				// Preserve any custom httpClient transport for proxy/timeout settings.
@@ -172,7 +178,7 @@ func WithCodexLocal() Option {
 				}
 				return auth.NewProvider(base)
 			},
-			modelAliases: openai.ModelAliases,
+			modelAliases: openai.CodexModelAliases,
 			hasAliases:   true,
 		})
 	}

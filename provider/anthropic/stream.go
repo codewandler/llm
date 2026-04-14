@@ -8,11 +8,6 @@ import (
 	"github.com/codewandler/llm/internal/sse"
 )
 
-// CostFn calculates token costs for a given model and populates the cost
-// fields on usage. Providers that reuse ParseStream with different pricing
-// (e.g. MiniMax) supply their own CostFn instead of wrapping the publisher.
-type CostFn func(model string, usage *llm.Usage)
-
 // ParseOpts configures how ParseStream processes an Anthropic-format SSE body.
 type ParseOpts struct {
 	Model string
@@ -21,10 +16,6 @@ type ParseOpts struct {
 	// a different model than was requested. Set to the provider's own name
 	// (e.g. "anthropic", "claude", "minimax").
 	ProviderName string
-
-	// CostFn overrides the default Anthropic cost calculation.
-	// When nil, FillCost (Anthropic pricing) is used.
-	CostFn CostFn
 
 	// ResponseHeaders contains HTTP response headers, used to extract rate-limit info.
 	// Keys should be lowercase header names.

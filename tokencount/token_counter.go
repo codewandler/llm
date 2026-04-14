@@ -88,6 +88,11 @@ type TokenCount struct {
 	// The invariant: InputTokens == sum(PerMessage) + ToolsTokens + OverheadTokens
 	// (plus any per-message overhead, e.g. +4/msg for OpenAI).
 	OverheadTokens int
+
+	// Encoder is the name of the BPE encoding or counting method used.
+	// Examples: "cl100k_base", "o200k_base", "cl100k_base+anthropic_overhead".
+	// Empty when unknown.
+	Encoder string
 }
 
 // applyRoleBreakdown fills tc.SystemTokens, tc.UserTokens, tc.AssistantTokens,

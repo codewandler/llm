@@ -20,21 +20,25 @@ const (
 	ModelDefault = ModelHaiku
 )
 
-type modelMap map[string]llm.Model
+// preferredModels is the ordered, canonical list of curated Claude models.
+// The first entry determines which model is used when CreateStream receives an
+// empty model ID — the substitution happens in CreateStream, not in Resolve.
+// A lookup map (preferredModelsByID) is derived from this slice at init time
+// for O(1) alias injection in getClaudeModels.
+var preferredModels = []llm.Model{
+	{ID: ModelHaiku, Name: "Claude Haiku 4.5", Provider: providerName, Aliases: []string{modelNameHaiku, llm.ModelFast}},
+	{ID: ModelSonnet, Name: "Claude Sonnet 4.6", Provider: providerName, Aliases: []string{modelNameSonnet, llm.ModelDefault}},
+	{ID: ModelOpus, Name: "Claude Opus 4.6", Provider: providerName, Aliases: []string{modelNameOpus, llm.ModelPowerful}},
+}
 
-func (m modelMap) Models() llm.Models {
-	all := make([]llm.Model, 0, len(m))
-	for _, mm := range m {
-		all = append(all, mm)
+// preferredModelsByID is a map built once from preferredModels for O(1) lookup.
+var preferredModelsByID = func() map[string]llm.Model {
+	m := make(map[string]llm.Model, len(preferredModels))
+	for _, model := range preferredModels {
+		m[model.ID] = model
 	}
-	return all
-}
-
-var modelPreferences = modelMap{
-	ModelHaiku:  {ID: ModelHaiku, Name: "Claude Haiku 4.5", Provider: providerName, Aliases: []string{modelNameHaiku, llm.ModelFast}},
-	ModelSonnet: {ID: ModelSonnet, Name: "Claude Sonnet 4.6", Provider: providerName, Aliases: []string{modelNameSonnet, llm.ModelDefault}},
-	ModelOpus:   {ID: ModelOpus, Name: "Claude Opus 4.6", Provider: providerName, Aliases: []string{modelNameOpus, llm.ModelPowerful}},
-}
+	return m
+}()
 
 type claudeModels struct {
 	models llm.Models
@@ -78,11 +82,14 @@ func getClaudeModels() []llm.Model {
 			name = id
 		}
 		mm := llm.Model{ID: id, Name: name, Provider: providerName}
-		if aliases, ok := modelPreferences[id]; ok {
-			mm.Aliases = aliases.Aliases
+		// Inject curated aliases from preferredModelsByID (O(1) lookup).
+		if pref, ok := preferredModelsByID[id]; ok {
+			mm.Aliases = pref.Aliases
 		}
 		out = append(out, mm)
 	}
 
-	return append(modelPreferences.Models(), out...)
+	// preferredModels comes first: its ordering determines the provider default
+	// (position 0) and the alias set visible to callers.
+	return append(preferredModels, out...)
 }

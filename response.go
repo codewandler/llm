@@ -32,7 +32,6 @@ type Response interface {
 	Text() string
 	Thought() string
 	StopReason() StopReason
-	Usage() *Usage
 	Error() error
 	ToolCalls() []tool.Call
 	ToolResults() []tool.Result

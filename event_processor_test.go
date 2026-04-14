@@ -12,6 +12,7 @@ import (
 	"github.com/codewandler/llm/llmtest"
 	"github.com/codewandler/llm/msg"
 	"github.com/codewandler/llm/tool"
+	"github.com/codewandler/llm/usage"
 )
 
 // --- tests ---
@@ -28,7 +29,9 @@ func TestStreamResponse_TextAccumulation(t *testing.T) {
 	require.NoError(t, result.Error())
 	assert.Equal(t, "hello world", result.Text())
 	assert.Equal(t, llm.StopReasonEndTurn, result.StopReason())
-	assert.Nil(t, result.Usage())
+	assert.Empty(t, result.UsageRecords())
+	assert.Empty(t, result.TokenEstimates())
+	assert.Nil(t, result.Drift())
 }
 
 func TestStreamResponse_ReasoningAccumulation(t *testing.T) {
@@ -46,14 +49,96 @@ func TestStreamResponse_ReasoningAccumulation(t *testing.T) {
 }
 
 func TestStreamResponse_Usage(t *testing.T) {
-	usage := llm.Usage{InputTokens: 10, OutputTokens: 5, TotalTokens: 15, Cost: 0.001}
-	ch := llmtest.SendEvents(llmtest.TextEvent("hi"), llmtest.UsageEvent(usage), llmtest.CompletedEvent(llm.StopReasonEndTurn))
+	ch := make(chan llm.Envelope, 10)
+	ch <- llm.Envelope{Data: &llm.StreamCreatedEvent{}}
+	ch <- llm.Envelope{Data: &llm.UsageUpdatedEvent{
+		Record: usage.Record{
+			Tokens: usage.TokenItems{{Kind: usage.KindInput, Count: 10}, {Kind: usage.KindOutput, Count: 5}},
+			Cost:   usage.Cost{Total: 0.001, Source: "calculated"},
+		},
+	}}
+	close(ch)
 
 	result := llm.NewEventProcessor(context.Background(), ch).Result()
-	require.NoError(t, result.Error())
-	require.NotNil(t, result.Usage())
-	assert.Equal(t, 10, result.Usage().InputTokens)
-	assert.Equal(t, 5, result.Usage().OutputTokens)
+
+	require.Len(t, result.UsageRecords(), 1)
+	assert.Equal(t, 10, result.UsageRecords()[0].Tokens.Count(usage.KindInput))
+	assert.Equal(t, 5, result.UsageRecords()[0].Tokens.Count(usage.KindOutput))
+	assert.InDelta(t, 0.001, result.UsageRecords()[0].Cost.Total, 0.0001)
+}
+
+func TestEventProcessor_Drift(t *testing.T) {
+	ch := make(chan llm.Envelope, 10)
+	ch <- llm.Envelope{Data: &llm.StreamCreatedEvent{}}
+	ch <- llm.Envelope{Data: &llm.TokenEstimateEvent{
+		Estimate: usage.Record{
+			IsEstimate: true,
+			Tokens:     usage.TokenItems{{Kind: usage.KindInput, Count: 1000}},
+			Dims:       usage.Dims{RequestID: "req1"},
+		},
+	}}
+	ch <- llm.Envelope{Data: &llm.UsageUpdatedEvent{
+		Record: usage.Record{
+			Tokens: usage.TokenItems{{Kind: usage.KindInput, Count: 1100}},
+			Dims:   usage.Dims{RequestID: "req1"},
+		},
+	}}
+	close(ch)
+
+	result := llm.NewEventProcessor(context.Background(), ch).Result()
+
+	drift := result.Drift()
+	require.NotNil(t, drift)
+	assert.Equal(t, 1000, drift.EstimatedInput)
+	assert.Equal(t, 1100, drift.ActualInput)
+	assert.Equal(t, 100, drift.InputDelta)
+	assert.InDelta(t, 10.0, drift.InputPct, 0.01)
+}
+
+func TestEventProcessor_Drift_LabeledBreakdownsIgnoredForPrimary(t *testing.T) {
+	// A provider emits: primary estimate (no labels) then two labeled breakdowns.
+	// Drift() must pair the primary (first emitted) with the actual, not a breakdown.
+	ch := make(chan llm.Envelope, 10)
+	ch <- llm.Envelope{Data: &llm.StreamCreatedEvent{}}
+	// primary estimate — emitted first
+	ch <- llm.Envelope{Data: &llm.TokenEstimateEvent{
+		Estimate: usage.Record{
+			IsEstimate: true,
+			Tokens:     usage.TokenItems{{Kind: usage.KindInput, Count: 500}},
+		},
+	}}
+	// labeled breakdown — emitted after the primary
+	ch <- llm.Envelope{Data: &llm.TokenEstimateEvent{
+		Estimate: usage.Record{
+			IsEstimate: true,
+			Tokens:     usage.TokenItems{{Kind: usage.KindInput, Count: 300}},
+			Dims:       usage.Dims{Labels: map[string]string{"segment": "system"}},
+		},
+	}}
+	ch <- llm.Envelope{Data: &llm.TokenEstimateEvent{
+		Estimate: usage.Record{
+			IsEstimate: true,
+			Tokens:     usage.TokenItems{{Kind: usage.KindInput, Count: 200}},
+			Dims:       usage.Dims{Labels: map[string]string{"segment": "conversation"}},
+		},
+	}}
+	ch <- llm.Envelope{Data: &llm.UsageUpdatedEvent{
+		Record: usage.Record{
+			Tokens: usage.TokenItems{{Kind: usage.KindInput, Count: 550}},
+		},
+	}}
+	close(ch)
+
+	result := llm.NewEventProcessor(context.Background(), ch).Result()
+
+	require.Len(t, result.TokenEstimates(), 3, "all three estimates should be stored")
+
+	drift := result.Drift()
+	require.NotNil(t, drift)
+	// Drift is against the primary (500), not any breakdown.
+	assert.Equal(t, 500, drift.EstimatedInput)
+	assert.Equal(t, 550, drift.ActualInput)
+	assert.Equal(t, 50, drift.InputDelta)
 }
 
 func TestStreamResponse_OnTextCallback(t *testing.T) {

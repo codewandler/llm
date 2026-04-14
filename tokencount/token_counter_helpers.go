@@ -118,6 +118,7 @@ func CountMessagesAndToolsAnthropic(tc *TokenCount, req TokenCountRequest) error
 	if len(req.Tools) > 0 {
 		ApplyAnthropicToolOverhead(tc, len(req.Tools))
 	}
+	tc.Encoder = EncodingCL100K + "+anthropic_overhead"
 	return nil
 }
 
@@ -189,6 +190,7 @@ func CountMessagesAndTools(tc *TokenCount, req TokenCountRequest, opts CountOpts
 	total += toolTotal + opts.ReplyPriming
 
 	tc.InputTokens = total
+	tc.Encoder = opts.Encoding
 	applyRoleBreakdown(tc, msgs)
 	return nil
 }

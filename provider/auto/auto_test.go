@@ -147,9 +147,43 @@ func TestDetectProviders_DoesNotAutoDetectCodexLocal(t *testing.T) {
 		ProviderMiniMax:    true,
 	})
 
+	// Only the regular openai provider should be detected; codex is opt-in only.
 	require.Len(t, providers, 1)
 	assert.Equal(t, ProviderOpenAI, providers[0].name)
 	assert.Equal(t, ProviderOpenAI, providers[0].providerType)
+}
+
+func TestWithCodexLocal_UsesChatGPTPrefix(t *testing.T) {
+	// Write a synthetic ~/.codex/auth.json in a temp HOME.
+	home := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(home, ".codex"), 0o755))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(home, ".codex", "auth.json"),
+		[]byte(`{"auth_mode":"chatgpt","tokens":{"access_token":"synthetic-access-token","account_id":"test-account"}}`),
+		0o600,
+	))
+	t.Setenv("HOME", home)
+
+	ctx := context.Background()
+	p, err := New(ctx,
+		WithoutAutoDetect(),
+		WithCodexLocal(),
+	)
+	require.NoError(t, err)
+	require.NotNil(t, p)
+
+	// All models should be under the "chatgpt" prefix, NOT "openai".
+	models := p.Models()
+	require.NotEmpty(t, models)
+	for _, m := range models {
+		assert.Contains(t, m.ID, "chatgpt/", "model %q should have chatgpt/ prefix, got %q", m.Name, m.ID)
+		assert.NotContains(t, m.ID, "openai/", "model %q must not have openai/ prefix", m.Name)
+	}
+
+	// Only Codex-category models should be present.
+	for _, m := range models {
+		assert.Contains(t, m.Name, "Codex", "non-Codex model should not appear in chatgpt provider: %q", m.Name)
+	}
 }
 
 func TestBuildAliasTargets(t *testing.T) {
@@ -158,6 +192,7 @@ func TestBuildAliasTargets(t *testing.T) {
 		instanceName string
 		providerType string
 		wantAliases  []string
+		wantCodex    bool
 	}{
 		{
 			name:         "claude provider",
@@ -176,6 +211,14 @@ func TestBuildAliasTargets(t *testing.T) {
 			instanceName: "openai",
 			providerType: ProviderOpenAI,
 			wantAliases:  []string{AliasFast, AliasDefault, AliasPowerful},
+			wantCodex:    false,
+		},
+		{
+			name:         "chatgpt provider wires codex alias",
+			instanceName: "chatgpt",
+			providerType: ProviderChatGPT,
+			wantAliases:  []string{AliasFast, AliasDefault, AliasPowerful, AliasCodex},
+			wantCodex:    true,
 		},
 	}
 
@@ -189,7 +232,7 @@ func TestBuildAliasTargets(t *testing.T) {
 			}
 
 			require.NotNil(t, targets)
-			if tt.providerType == ProviderOpenAI {
+			if !tt.wantCodex {
 				assert.NotContains(t, targets, AliasCodex)
 			}
 			for _, alias := range tt.wantAliases {
@@ -213,7 +256,7 @@ func TestModelAliasesForProvider(t *testing.T) {
 	require.NotNil(t, anthropicAliases)
 	assert.Equal(t, anthropic.ModelSonnet, anthropicAliases["sonnet"])
 
-	// OpenAI should have model aliases
+	// OpenAI should have model aliases (full GPT + o-series set)
 	openaiAliases := modelAliasesForProvider(ProviderOpenAI)
 	require.NotNil(t, openaiAliases)
 	assert.Equal(t, "gpt-5.4", openaiAliases["flagship"])
@@ -223,15 +266,28 @@ func TestModelAliasesForProvider(t *testing.T) {
 	assert.Equal(t, "gpt-5.3-codex", openaiAliases["codex"])
 	assert.Equal(t, "o4-mini", openaiAliases["o4"])
 	assert.Equal(t, "o3", openaiAliases["o3"])
+
+	// ChatGPT provider should have only codex aliases
+	chatgptAliases := modelAliasesForProvider(ProviderChatGPT)
+	require.NotNil(t, chatgptAliases)
+	assert.Equal(t, "gpt-5.3-codex", chatgptAliases["codex"], "chatgpt/codex -> gpt-5.3-codex")
+	assert.Equal(t, "gpt-5.1-codex-mini", chatgptAliases["mini"], "chatgpt/mini -> gpt-5.1-codex-mini")
+	// Should NOT have general-purpose GPT or o-series aliases
+	_, hasFlagship := chatgptAliases["flagship"]
+	assert.False(t, hasFlagship, "chatgpt aliases must not include flagship (non-codex model)")
 }
 
 func TestConstants(t *testing.T) {
 	// Verify constants are not empty
 	assert.NotEmpty(t, ProviderClaude)
 	assert.NotEmpty(t, ProviderBedrock)
+	assert.NotEmpty(t, ProviderChatGPT)
 	assert.NotEmpty(t, ProviderOpenAI)
 	assert.NotEmpty(t, ProviderOpenRouter)
 	assert.NotEmpty(t, ProviderAnthropic)
+
+	// ChatGPT and OpenAI must be distinct to avoid routing clashes
+	assert.NotEqual(t, ProviderChatGPT, ProviderOpenAI)
 
 	assert.NotEmpty(t, EnvOpenAIKey)
 	assert.NotEmpty(t, EnvOpenRouterKey)
@@ -240,6 +296,7 @@ func TestConstants(t *testing.T) {
 	assert.NotEmpty(t, AliasFast)
 	assert.NotEmpty(t, AliasDefault)
 	assert.NotEmpty(t, AliasPowerful)
+	assert.NotEmpty(t, AliasCodex)
 
 	// Model constants are now in provider packages
 	assert.NotEmpty(t, anthropic.ModelOpus)

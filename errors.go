@@ -12,6 +12,7 @@ const (
 	ProviderNameAnthropic  = "anthropic"
 	ProviderNameClaude     = "claude"
 	ProviderNameBedrock    = "bedrock"
+	ProviderNameChatGPT    = "chatgpt"
 	ProviderNameOllama     = "ollama"
 	ProviderNameOpenAI     = "openai"
 	ProviderNameOpenRouter = "openrouter"
@@ -282,7 +283,7 @@ func NewErrAllProvidersFailed(provider string, errs []error) *ProviderError {
 // (retriable, so the router can fail over to the next target).
 func IsRetriableHTTPStatus(code int) bool {
 	switch code {
-	case http.StatusTooManyRequests,   // 429 — rate limited
+	case http.StatusTooManyRequests, // 429 — rate limited
 		http.StatusServiceUnavailable, // 503 — temporarily down
 		http.StatusPaymentRequired:    // 402 — OpenRouter out of credits
 		return true

@@ -197,3 +197,22 @@ func TestInferenceProfilesRegistry(t *testing.T) {
 		})
 	}
 }
+
+func TestStripRegionPrefix(t *testing.T) {
+	tests := []struct {
+		model string
+		want  string
+	}{
+		{"us.anthropic.claude-sonnet-4-6", "anthropic.claude-sonnet-4-6"},
+		{"eu.anthropic.claude-sonnet-4-6", "anthropic.claude-sonnet-4-6"},
+		{"apac.anthropic.claude-sonnet-4-6", "anthropic.claude-sonnet-4-6"},
+		{"global.anthropic.claude-sonnet-4-6", "anthropic.claude-sonnet-4-6"},
+		{"anthropic.claude-sonnet-4-6", "anthropic.claude-sonnet-4-6"}, // no prefix
+		{"amazon.nova-pro-v1:0", "amazon.nova-pro-v1:0"},               // no prefix
+	}
+	for _, tt := range tests {
+		t.Run(tt.model, func(t *testing.T) {
+			assert.Equal(t, tt.want, stripRegionPrefix(tt.model))
+		})
+	}
+}

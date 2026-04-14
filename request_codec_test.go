@@ -127,9 +127,9 @@ func TestParseToolChoice_Invalid(t *testing.T) {
 
 func TestToolChoiceFlag_TextRoundtrip(t *testing.T) {
 	tests := []struct {
-		name  string
-		flag  ToolChoiceFlag
-		text  string
+		name string
+		flag ToolChoiceFlag
+		text string
 	}{
 		{"nil", ToolChoiceFlag{}, ""},
 		{"auto", ToolChoiceFlag{ToolChoiceAuto{}}, "auto"},

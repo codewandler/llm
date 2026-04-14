@@ -2,6 +2,63 @@
 
 ## Unreleased
 
+### Added
+
+- `usage` package — centralised usage tracking with `Record`, `TokenItems`,
+  `Cost`, `CostCalculator`, and `Dims` types. Replaces the flat `llm.Usage`
+  struct with a richer model separating tokens (facts) from cost (derived).
+- `usage.Static()` — manually-verified pricing table for Anthropic, Bedrock,
+  OpenAI, and MiniMax models; longest-prefix matching with date-suffix stripping.
+- `usage.ModelDB()` — fallback calculator using the embedded models.dev database.
+- `usage.Compose()` — chains multiple calculators (first match wins).
+- `usage.Default()` — `Compose(Static(), ModelDB())`, used by all providers.
+- `tokencount.EstimateRecords()` — converts `TokenCount` into labelled
+  `usage.Record` estimates with per-segment breakdowns (system, user,
+  assistant, tools, overhead).
+- `TokenEstimateEvent` — new stream event emitted before each request with
+  pre-request token estimates and optional drift tracking.
+- `UsageRecordEvent` — replaces `UsageUpdatedEvent`; carries a full
+  `usage.Record` with token breakdown, cost, and attribution.
+- `Record.Source` field — `"api"`, `"heuristic"`, or `""` (actual) to
+  distinguish how token counts were obtained.
+- `Record.Encoder` field — identifies the tokenizer used (e.g.
+  `"cl100k_base+anthropic_overhead"`).
+- `CostCalculatorProvider` interface — providers expose `CostCalculator()`
+  for consumer-side cost enrichment.
+- Anthropic `/v1/messages/count_tokens` API integration — exact, free
+  pre-request token counts emitted alongside the heuristic estimate.
+  Both Claude OAuth and direct Anthropic providers emit dual estimates.
+- Router `CostCalculator()` — composes sub-provider calculators with
+  `usage.Default()` fallback; auto provider inherits this.
+- `provider/openai/usage.go` — shared `buildUsageTokenItems()` helper
+  for Chat Completions and Responses API parsers (DRY).
+- Ollama usage parsing — `prompt_eval_count` and `eval_count` are now
+  emitted as `UsageRecordEvent` (previously silently ignored).
+- `chatgpt` provider name for Codex OAuth routing.
+
+### Changed
+
+- **BREAKING**: `llm.Usage` removed; all usage flows use `usage.Record`.
+- All providers now always emit `UsageRecord()` (no conditional guards).
+- Provider-specific `fillCost`/`calculateCost` functions removed; cost
+  calculation centralised in `usage` package.
+- OpenRouter: removed deprecated `stream_options: { include_usage: true }`
+  (usage is now always included); added `cache_write_tokens` parsing;
+  Anthropic models use `CountMessagesAndToolsAnthropic` for accurate
+  heuristic estimates (fixes 600%+ drift on tool-heavy requests).
+- Bedrock: regional inference profile prefix (`us.`, `eu.`, etc.) stripped
+  before cost lookup (fixes silent zero-cost regression).
+- `WithCodexModels()` used in codex provider flow instead of direct field
+  mutation.
+
+### Fixed
+
+- Bedrock pricing regression — models with regional inference profile
+  prefixes now correctly resolve in the pricing table.
+- OpenRouter token estimates for Anthropic models — tool-use preamble
+  overhead (~541 tokens for 2 tools) now included in heuristic.
+- Ollama empty usage bug — `prompt_eval_count`/`eval_count` are now parsed.
+
 ---
 
 ## [v0.38.0] — 2026-04-14

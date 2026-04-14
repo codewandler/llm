@@ -8,8 +8,8 @@ import (
 	"sort"
 
 	"github.com/codewandler/llm"
-	"github.com/codewandler/llm/tokencount"
 	"github.com/codewandler/llm/tool"
+	"github.com/codewandler/llm/usage"
 	"github.com/spf13/cobra"
 )
 
@@ -141,22 +141,6 @@ func runInfer(ctx context.Context, opts inferOpts, root *RootFlags) error {
 
 	verbose := opts.Verbose
 
-	// --- Token estimate (verbose only) ---
-	var tokenEstimate *tokencount.TokenCount
-	if verbose {
-		if tc, ok := provider.(tokencount.TokenCounter); ok {
-			est, err := tc.CountTokens(ctx, tokencount.TokenCountRequest{
-				Model:    req.Model,
-				Messages: req.Messages,
-				Tools:    req.Tools,
-			})
-			if err == nil {
-				tokenEstimate = est
-				printTokenEstimate(est)
-			}
-		}
-	}
-
 	stream, err := provider.CreateStream(ctx, req)
 	if err != nil {
 		return fmt.Errorf("create stream: %w", err)
@@ -180,6 +164,16 @@ func runInfer(ctx context.Context, opts inferOpts, root *RootFlags) error {
 				fmt.Printf("\n[EVT :: %s]\n%s\n", ev.Type(), string(d))
 			}
 		})).
+		OnEvent(llm.TypedEventHandler[*llm.TokenEstimateEvent](func(ev *llm.TokenEstimateEvent) {
+			if verbose {
+				if ev.Estimate.Dims.Labels == nil {
+					printTokenEstimate(ev.Estimate)
+				} else {
+					printTokenEstimateBreakdown(ev.Estimate)
+				}
+				verboseOutputPrinted = true
+			}
+		})).
 		OnEvent(llm.TypedEventHandler[*llm.ProviderFailoverEvent](func(ev *llm.ProviderFailoverEvent) {
 			if verbose {
 				printProviderFailoverEvent(ev)
@@ -201,6 +195,12 @@ func runInfer(ctx context.Context, opts inferOpts, root *RootFlags) error {
 		OnEvent(llm.TypedEventHandler[*llm.RequestEvent](func(ev *llm.RequestEvent) {
 			if verbose {
 				printRequestParamsEvent(ev)
+				verboseOutputPrinted = true
+			}
+		})).
+		OnEvent(llm.TypedEventHandler[*llm.UsageUpdatedEvent](func(ev *llm.UsageUpdatedEvent) {
+			if verbose {
+				printUsageRecord(ev.Record)
 				verboseOutputPrinted = true
 			}
 		}))
@@ -248,67 +248,64 @@ func runInfer(ctx context.Context, opts inferOpts, root *RootFlags) error {
 	}
 
 	if verbose {
-		printVerboseInfo(result, tokenEstimate)
+		printVerboseInfo(result)
 	}
 
 	return nil
 }
 
 // printTokenEstimate prints the pre-request token estimate section when running
-// in verbose mode. Called before CreateStream.
-func printTokenEstimate(est *tokencount.TokenCount) {
+// in verbose mode. Called when a TokenEstimateEvent (unlabeled) arrives.
+func printTokenEstimate(est usage.Record) {
+	sourceLabel := "est"
+	switch est.Source {
+	case "api":
+		sourceLabel = "api"
+	case "heuristic":
+		sourceLabel = "heuristic"
+	}
+
+	header := fmt.Sprintf("── token estimate (%s)", sourceLabel)
+	if est.Encoder != "" {
+		header += fmt.Sprintf(" [%s]", est.Encoder)
+	}
+	header += " ──"
+
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintf(os.Stderr, "%s── token estimate ──%s\n", ansiDim, ansiReset)
+	fmt.Fprintf(os.Stderr, "%s%s%s\n", ansiDim, header, ansiReset)
 
-	type field struct {
-		label string
-		value string
+	var fields []kvField
+	fields = append(fields, kvField{"input (" + sourceLabel + ")", fmt.Sprintf("%d", est.Tokens.Count(usage.KindInput))})
+	if !est.Cost.IsZero() {
+		fields = append(fields, kvField{"cost (est)", formatCost(est.Cost.Total)})
 	}
-	fields := []field{
-		{"input (est)", fmt.Sprintf("%d", est.InputTokens)},
-	}
-	if est.SystemTokens > 0 {
-		fields = append(fields, field{"  system", fmt.Sprintf("%d", est.SystemTokens)})
-	}
-	if est.UserTokens > 0 {
-		fields = append(fields, field{"  user", fmt.Sprintf("%d", est.UserTokens)})
-	}
-	if est.AssistantTokens > 0 {
-		fields = append(fields, field{"  assistant", fmt.Sprintf("%d", est.AssistantTokens)})
-	}
-	if est.ToolResultTokens > 0 {
-		fields = append(fields, field{"  tool_results", fmt.Sprintf("%d", est.ToolResultTokens)})
-	}
-	if est.ToolsTokens > 0 {
-		fields = append(fields, field{"  tools", fmt.Sprintf("%d", est.ToolsTokens)})
-		for name, n := range est.PerTool {
-			fields = append(fields, field{fmt.Sprintf("    %s", name), fmt.Sprintf("%d", n)})
-		}
-	}
-	if est.OverheadTokens > 0 {
-		fields = append(fields, field{"  overhead", fmt.Sprintf("%d", est.OverheadTokens)})
-	}
-
-	maxWidth := 0
-	for _, f := range fields {
-		if len(f.label) > maxWidth {
-			maxWidth = len(f.label)
-		}
-	}
-	for _, f := range fields {
-		fmt.Fprintf(os.Stderr, "%*s: %s\n", maxWidth, f.label, f.value)
-	}
+	printFields(fields)
 }
 
-// printVerboseInfo prints multi-line verbose metadata with right-aligned labels.
-func printVerboseInfo(result llm.Result, est *tokencount.TokenCount) {
+// printTokenEstimateBreakdown prints a labeled breakdown line (e.g. system, user,
+// tools) as part of the token estimate section. Called for each labeled
+// TokenEstimateEvent that follows the primary.
+func printTokenEstimateBreakdown(est usage.Record) {
+	if est.Dims.Labels == nil {
+		return
+	}
+	category := est.Dims.Labels["category"]
+	if category == "" {
+		return
+	}
+	fmt.Fprintf(os.Stderr, "%*s: %d\n", 14, "  "+category, est.Tokens.Count(usage.KindInput))
+}
+
+// printVerboseInfo prints post-stream metadata: stop reason, reasoning size,
+// tool calls/results, and drift (estimate vs actual input tokens).
+// Token counts and cost are shown live via printUsageRecord when the
+// UsageUpdatedEvent arrives during stream processing.
+func printVerboseInfo(result llm.Result) {
 	type field struct {
 		label string
 		value string
 	}
 	var fields []field
-
-	usage := result.Usage()
 
 	// Stop reason
 	if result.StopReason() != "" {
@@ -339,48 +336,15 @@ func printVerboseInfo(result llm.Result, est *tokencount.TokenCount) {
 				value = "(error) " + value
 			}
 			if len(value) > 120 {
-				value = value[:120] + "…"
+				value = value[:120] + "\u2026"
 			}
 			fields = append(fields, field{label, value})
 		}
 	}
 
-	// Token usage
-	if usage != nil {
-		tokLine := fmt.Sprintf("%d in, %d out", usage.InputTokens, usage.OutputTokens)
-		if est != nil {
-			drift := 0.0
-			if usage.InputTokens > 0 {
-				diff := float64(est.InputTokens - usage.InputTokens)
-				if diff < 0 {
-					diff = -diff
-				}
-				drift = diff / float64(usage.InputTokens) * 100
-			}
-			tokLine += fmt.Sprintf("  (est %d in, drift %.1f%%)", est.InputTokens, drift)
-		}
-		fields = append(fields, field{"tokens", tokLine})
-	}
-
-	// Cache usage (shown only when provider returned cache data)
-	if usage != nil && (usage.CacheReadTokens > 0 || usage.CacheWriteTokens > 0) {
-		fields = append(fields, field{"cache", fmt.Sprintf("%d read, %d written", usage.CacheReadTokens, usage.CacheWriteTokens)})
-	}
-
-	// Cost
-	if usage != nil && usage.Cost > 0 {
-		hasBreakdown := usage.InputCost > 0 || usage.CacheReadCost > 0 || usage.CacheWriteCost > 0
-		if hasBreakdown {
-			fields = append(fields, field{"cost", fmt.Sprintf("%s (in %s, cache-r %s, cache-w %s, out %s)",
-				formatCost(usage.Cost),
-				formatCost(usage.InputCost),
-				formatCost(usage.CacheReadCost),
-				formatCost(usage.CacheWriteCost),
-				formatCost(usage.OutputCost),
-			)})
-		} else {
-			fields = append(fields, field{"cost", formatCost(usage.Cost)})
-		}
+	// Drift: estimated vs actual input tokens, shown as a dedicated field.
+	if d := result.Drift(); d != nil {
+		fields = append(fields, field{"drift", fmt.Sprintf("%+d input (%+.1f%%)", d.InputDelta, d.InputPct)})
 	}
 
 	if len(fields) == 0 {
@@ -414,6 +378,22 @@ func printVerboseInfo(result llm.Result, est *tokencount.TokenCount) {
 			fmt.Printf("  %s\n", b)
 		}
 	}
+}
+
+// printUsageRecord prints the per-kind token breakdown from a UsageUpdatedEvent
+// when running in verbose mode. Called live as the event arrives, so it appears
+// immediately after response text ends — before the post-stream summary.
+func printUsageRecord(rec usage.Record) {
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintf(os.Stderr, "%s── usage ──%s\n", ansiDim, ansiReset)
+	var fields []kvField
+	for _, item := range rec.Tokens.NonZero() {
+		fields = append(fields, kvField{string(item.Kind), fmt.Sprintf("%d", item.Count)})
+	}
+	if !rec.Cost.IsZero() {
+		fields = append(fields, kvField{"cost", formatCost(rec.Cost.Total)})
+	}
+	printFields(fields)
 }
 
 // formatCost formats cost with appropriate precision for the amount.

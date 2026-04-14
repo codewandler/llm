@@ -14,6 +14,7 @@ import (
 	"github.com/codewandler/llm"
 	"github.com/codewandler/llm/msg"
 	"github.com/codewandler/llm/tool"
+	"github.com/codewandler/llm/usage"
 )
 
 // testMeta returns a ccStreamMeta for testing.
@@ -413,7 +414,7 @@ data: [DONE]
 	pub, ch := llm.NewEventPublisher()
 	go ccParseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), pub, testMeta("gpt-4o"))
 
-	var usage *llm.Usage
+	var usageRec *usage.Record
 	for event := range ch {
 		if event.Type == llm.StreamEventCompleted {
 			if ce, ok := event.Data.(*llm.CompletedEvent); ok {
@@ -422,15 +423,14 @@ data: [DONE]
 		}
 		if event.Type == llm.StreamEventUsageUpdated {
 			if ue, ok := event.Data.(*llm.UsageUpdatedEvent); ok {
-				usage = &ue.Usage
+				usageRec = &ue.Record
 			}
 		}
 	}
 
-	require.NotNil(t, usage)
-	assert.Equal(t, 10, usage.InputTokens)
-	assert.Equal(t, 5, usage.OutputTokens)
-	assert.Equal(t, 15, usage.TotalTokens)
+	require.NotNil(t, usageRec)
+	assert.Equal(t, 10, usageRec.Tokens.Count(usage.KindInput))
+	assert.Equal(t, 5, usageRec.Tokens.Count(usage.KindOutput))
 }
 
 func TestParseStream_UsageWithDetails(t *testing.T) {
@@ -441,119 +441,78 @@ data: [DONE]
 	pub, ch := llm.NewEventPublisher()
 	go ccParseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), pub, testMeta("gpt-5"))
 
-	var usage *llm.Usage
+	var usageRec *usage.Record
 	for event := range ch {
 		if event.Type == llm.StreamEventUsageUpdated {
 			if ue, ok := event.Data.(*llm.UsageUpdatedEvent); ok {
-				usage = &ue.Usage
+				usageRec = &ue.Record
 			}
 		}
 	}
 
-	require.NotNil(t, usage)
-	assert.Equal(t, 100, usage.InputTokens)
-	assert.Equal(t, 50, usage.OutputTokens)
-	assert.Equal(t, 150, usage.TotalTokens)
-	assert.Equal(t, 80, usage.CacheReadTokens)
-	assert.Equal(t, 30, usage.ReasoningTokens)
+	require.NotNil(t, usageRec)
+	// 100 prompt - 80 cached = 20 regular input; 50 - 30 reasoning = 20 output
+	assert.Equal(t, 20, usageRec.Tokens.Count(usage.KindInput))
+	assert.Equal(t, 20, usageRec.Tokens.Count(usage.KindOutput))
+	assert.Equal(t, 80, usageRec.Tokens.Count(usage.KindCacheRead))
+	assert.Equal(t, 30, usageRec.Tokens.Count(usage.KindReasoning))
 }
 
 // --- Unit tests for calculateCost ---
 
+// TestCalculateCost tests cost calculation via usage.Static() — the centralised
+// pricing table that replaced the per-provider calculateCost function.
 func TestCalculateCost(t *testing.T) {
+	calc := usage.Static()
 	tests := []struct {
-		name              string
-		model             string
-		usage             *llm.Usage
-		wantCost          float64
-		wantInputCost     float64
-		wantCacheReadCost float64
-		wantOutputCost    float64
+		name     string
+		model    string
+		tokens   usage.TokenItems
+		wantCost float64
 	}{
 		{
-			name:  "gpt-4o basic",
-			model: "gpt-4o",
-			usage: &llm.Usage{
-				InputTokens:  1_000_000,
-				OutputTokens: 1_000_000,
-			},
+			name:   "gpt-4o basic",
+			model:  "gpt-4o",
+			tokens: usage.TokenItems{{Kind: usage.KindInput, Count: 1_000_000}, {Kind: usage.KindOutput, Count: 1_000_000}},
 			// $2.50/1M input + $10.00/1M output = $12.50
-			wantCost:          12.50,
-			wantInputCost:     2.50,
-			wantCacheReadCost: 0,
-			wantOutputCost:    10.00,
+			wantCost: 12.50,
 		},
 		{
-			name:  "gpt-4o with cache",
-			model: "gpt-4o",
-			usage: &llm.Usage{
-				InputTokens:     1_000_000,
-				OutputTokens:    500_000,
-				CacheReadTokens: 800_000,
-			},
-			// (200k regular * $2.50/1M) + (800k cached * $1.25/1M) + (500k output * $10.00/1M)
-			// = $0.50 + $1.00 + $5.00 = $6.50
-			wantCost:          6.50,
-			wantInputCost:     0.50,
-			wantCacheReadCost: 1.00,
-			wantOutputCost:    5.00,
+			name:   "gpt-4o with cache",
+			model:  "gpt-4o",
+			tokens: usage.TokenItems{{Kind: usage.KindInput, Count: 200_000}, {Kind: usage.KindCacheRead, Count: 800_000}, {Kind: usage.KindOutput, Count: 500_000}},
+			// (200k * $2.50) + (800k * $1.25) + (500k * $10.00) / 1M = $0.50 + $1.00 + $5.00 = $6.50
+			wantCost: 6.50,
 		},
 		{
-			name:  "gpt-4o-mini cheap",
-			model: "gpt-4o-mini",
-			usage: &llm.Usage{
-				InputTokens:  1_000_000,
-				OutputTokens: 1_000_000,
-			},
-			// $0.15/1M input + $0.60/1M output = $0.75
-			wantCost:          0.75,
-			wantInputCost:     0.15,
-			wantCacheReadCost: 0,
-			wantOutputCost:    0.60,
+			name:     "gpt-4o-mini cheap",
+			model:    "gpt-4o-mini",
+			tokens:   usage.TokenItems{{Kind: usage.KindInput, Count: 1_000_000}, {Kind: usage.KindOutput, Count: 1_000_000}},
+			wantCost: 0.75,
 		},
 		{
-			name:  "o1-pro expensive",
-			model: "o1-pro",
-			usage: &llm.Usage{
-				InputTokens:  1_000_000,
-				OutputTokens: 1_000_000,
-			},
-			// $150/1M input + $600/1M output = $750
-			wantCost:          750.0,
-			wantInputCost:     150.0,
-			wantCacheReadCost: 0,
-			wantOutputCost:    600.0,
+			name:     "o1-pro expensive",
+			model:    "o1-pro",
+			tokens:   usage.TokenItems{{Kind: usage.KindInput, Count: 1_000_000}, {Kind: usage.KindOutput, Count: 1_000_000}},
+			wantCost: 750.0,
 		},
 		{
 			name:     "unknown model returns zero",
 			model:    "unknown-model",
-			usage:    &llm.Usage{InputTokens: 1000, OutputTokens: 1000},
-			wantCost: 0,
-		},
-		{
-			name:     "nil usage returns zero",
-			model:    "gpt-4o",
-			usage:    nil,
+			tokens:   usage.TokenItems{{Kind: usage.KindInput, Count: 1000}, {Kind: usage.KindOutput, Count: 1000}},
 			wantCost: 0,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Make a copy so we can check mutation
-			var u *llm.Usage
-			if tt.usage != nil {
-				c := *tt.usage
-				u = &c
+			cost, ok := calc.Calculate("openai", tt.model, tt.tokens)
+			if tt.wantCost == 0 {
+				assert.False(t, ok)
+				return
 			}
-			calculateCost(tt.model, u)
-			if u == nil {
-				return // nil case; no further checks
-			}
-			assert.InDelta(t, tt.wantCost, u.Cost, 0.001, "Cost mismatch")
-			assert.InDelta(t, tt.wantInputCost, u.InputCost, 0.001, "InputCost mismatch")
-			assert.InDelta(t, tt.wantCacheReadCost, u.CacheReadCost, 0.001, "CacheReadCost mismatch")
-			assert.InDelta(t, tt.wantOutputCost, u.OutputCost, 0.001, "OutputCost mismatch")
+			require.True(t, ok)
+			assert.InDelta(t, tt.wantCost, cost.Total, 0.001)
 		})
 	}
 }
@@ -567,8 +526,6 @@ func TestGetModelInfo(t *testing.T) {
 			require.NoError(t, err, "model %s should be in registry", id)
 			assert.Equal(t, id, info.ID)
 			assert.NotEmpty(t, info.Name)
-			assert.Greater(t, info.InputPrice, 0.0, "model %s should have input price", id)
-			assert.Greater(t, info.OutputPrice, 0.0, "model %s should have output price", id)
 		})
 	}
 
@@ -881,7 +838,7 @@ func TestMapEffortAndThinking_Codex(t *testing.T) {
 		{llm.EffortMedium, llm.ThinkingAuto, "medium"},
 		{llm.EffortHigh, llm.ThinkingAuto, "high"},
 		{llm.EffortMax, llm.ThinkingAuto, "xhigh"},
-		{llm.EffortHigh, llm.ThinkingOff, ""},  // codex: can't reliably disable reasoning
+		{llm.EffortHigh, llm.ThinkingOff, ""}, // codex: can't reliably disable reasoning
 		{"", llm.ThinkingOn, "high"},
 	}
 
@@ -907,22 +864,22 @@ data: [DONE]
 	pub, ch := llm.NewEventPublisher()
 	go ccParseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), pub, testMeta("gpt-4o"))
 
-	var usage *llm.Usage
+	var usageRec *usage.Record
 	for event := range ch {
 		if event.Type == llm.StreamEventUsageUpdated {
 			if ue, ok := event.Data.(*llm.UsageUpdatedEvent); ok {
-				usage = &ue.Usage
+				usageRec = &ue.Record
 			}
 		}
 	}
 
-	require.NotNil(t, usage)
-	assert.Equal(t, 100, usage.InputTokens)
-	assert.Equal(t, 50, usage.OutputTokens)
+	require.NotNil(t, usageRec)
+	assert.Equal(t, 100, usageRec.Tokens.Count(usage.KindInput))
+	assert.Equal(t, 50, usageRec.Tokens.Count(usage.KindOutput))
 
 	// Expected cost: (100/1M * $2.50) + (50/1M * $10.00) = $0.00025 + $0.0005 = $0.00075
 	expectedCost := 0.00075
-	assert.InDelta(t, expectedCost, usage.Cost, 0.0000001)
+	assert.InDelta(t, expectedCost, usageRec.Cost.Total, 0.0000001)
 }
 
 func TestParseStream_CostCalculation_WithCache(t *testing.T) {
@@ -934,35 +891,33 @@ data: [DONE]
 	pub, ch := llm.NewEventPublisher()
 	go ccParseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), pub, testMeta("gpt-4o"))
 
-	var usage *llm.Usage
+	var usageRec *usage.Record
 	for event := range ch {
 		if event.Type == llm.StreamEventUsageUpdated {
 			if ue, ok := event.Data.(*llm.UsageUpdatedEvent); ok {
-				usage = &ue.Usage
+				usageRec = &ue.Record
 			}
 		}
 	}
 
-	require.NotNil(t, usage)
-	assert.Equal(t, 1000, usage.InputTokens)
-	assert.Equal(t, 800, usage.CacheReadTokens)
-	assert.Equal(t, 500, usage.OutputTokens)
+	require.NotNil(t, usageRec)
+	// 1000 prompt - 800 cached = 200 regular input
+	assert.Equal(t, 200, usageRec.Tokens.Count(usage.KindInput))
+	assert.Equal(t, 800, usageRec.Tokens.Count(usage.KindCacheRead))
+	assert.Equal(t, 500, usageRec.Tokens.Count(usage.KindOutput))
 
-	// Expected cost:
-	// Regular input: (200/1M * $2.50) = $0.0005
-	// Cached input: (800/1M * $1.25) = $0.001
-	// Output: (500/1M * $10.00) = $0.005
-	// Total: $0.0065
+	// Expected cost: Regular input: (200/1M * $2.50) = $0.0005
+	// Cached input: (800/1M * $1.25) = $0.001; Output: (500/1M * $10.00) = $0.005; Total: $0.0065
 	expectedCost := 0.0065
-	assert.InDelta(t, expectedCost, usage.Cost, 0.0000001)
+	assert.InDelta(t, expectedCost, usageRec.Cost.Total, 0.0000001)
 
 	// Verify granular cost breakdown
-	assert.InDelta(t, 0.0005, usage.InputCost, 0.0000001, "InputCost")
-	assert.InDelta(t, 0.001, usage.CacheReadCost, 0.0000001, "CacheReadCost")
-	assert.InDelta(t, 0.0, usage.CacheWriteCost, 0.0000001, "CacheWriteCost should be zero for OpenAI")
-	assert.InDelta(t, 0.005, usage.OutputCost, 0.0000001, "OutputCost")
+	assert.InDelta(t, 0.0005, usageRec.Cost.Input, 0.0000001, "Input cost")
+	assert.InDelta(t, 0.001, usageRec.Cost.CacheRead, 0.0000001, "CacheRead cost")
+	assert.InDelta(t, 0.0, usageRec.Cost.CacheWrite, 0.0000001, "CacheWrite should be zero for OpenAI")
+	assert.InDelta(t, 0.005, usageRec.Cost.Output, 0.0000001, "Output cost")
 	// Sanity: breakdown sums to total
-	assert.InDelta(t, usage.Cost, usage.InputCost+usage.CacheReadCost+usage.CacheWriteCost+usage.OutputCost, 0.0000001, "breakdown should sum to Cost")
+	assert.InDelta(t, usageRec.Cost.Total, usageRec.Cost.Input+usageRec.Cost.CacheRead+usageRec.Cost.CacheWrite+usageRec.Cost.Output, 0.0000001, "breakdown should sum to Total")
 }
 
 // --- Unit tests for Responses API request building ---
@@ -1266,21 +1221,21 @@ data: {"response":{"id":"resp_123","model":"gpt-5.1-codex","usage":{"input_token
 	pub, ch := llm.NewEventPublisher()
 	go respParseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), pub, testMeta("gpt-5.1-codex"))
 
-	var usage *llm.Usage
+	var usageRec *usage.Record
 	for event := range ch {
 		if event.Type == llm.StreamEventUsageUpdated {
 			if ue, ok := event.Data.(*llm.UsageUpdatedEvent); ok {
-				usage = &ue.Usage
+				usageRec = &ue.Record
 			}
 		}
 	}
 
-	require.NotNil(t, usage)
-	assert.Equal(t, 100, usage.InputTokens)
-	assert.Equal(t, 50, usage.OutputTokens)
-	assert.Equal(t, 150, usage.TotalTokens)
-	assert.Equal(t, 80, usage.CacheReadTokens)
-	assert.Equal(t, 30, usage.ReasoningTokens)
+	require.NotNil(t, usageRec)
+	// 100 input - 80 cached = 20 regular input; 50 output - 30 reasoning = 20 regular output
+	assert.Equal(t, 20, usageRec.Tokens.Count(usage.KindInput))
+	assert.Equal(t, 20, usageRec.Tokens.Count(usage.KindOutput))
+	assert.Equal(t, 80, usageRec.Tokens.Count(usage.KindCacheRead))
+	assert.Equal(t, 30, usageRec.Tokens.Count(usage.KindReasoning))
 }
 
 func TestRespParseStream_CostCalculation(t *testing.T) {
@@ -1295,19 +1250,19 @@ data: {"response":{"id":"resp_123","model":"gpt-5.1-codex","usage":{"input_token
 	pub, ch := llm.NewEventPublisher()
 	go respParseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), pub, testMeta("gpt-5.1-codex"))
 
-	var usage *llm.Usage
+	var usageRec2 *usage.Record
 	for event := range ch {
 		if event.Type == llm.StreamEventUsageUpdated {
 			if ue, ok := event.Data.(*llm.UsageUpdatedEvent); ok {
-				usage = &ue.Usage
+				usageRec2 = &ue.Record
 			}
 		}
 	}
 
-	require.NotNil(t, usage)
+	require.NotNil(t, usageRec2)
 	// Expected cost: (1000/1M * $1.25) + (500/1M * $10.00) = $0.00125 + $0.005 = $0.00625
 	expectedCost := 0.00625
-	assert.InDelta(t, expectedCost, usage.Cost, 0.0000001)
+	assert.InDelta(t, expectedCost, usageRec2.Cost.Total, 0.0000001)
 }
 
 func TestRespParseStream_Error(t *testing.T) {
