@@ -22,10 +22,6 @@ var ModelAliases = map[string]string{
 	"haiku":  ModelHaiku,
 }
 
-var allModels = llm.Models{
-	{ID: "claude-sonnet-4-5-20250929", Name: "Claude Sonnet 4.5", Provider: providerName},
-	{ID: "claude-haiku-4-5-20251001", Name: "Claude Haiku 4.5", Provider: providerName},
-}
 var allModelsWithAliases = llm.Models{
 	{ID: ModelSonnet, Name: "Claude Sonnet 4.6", Provider: providerName, Aliases: []string{llm.ModelDefault, llm.ModelFast, ModelAliases["sonnet"], "claude-sonnet-4-6"}},
 	{ID: ModelOpus, Name: "Claude Opus 4.6", Provider: providerName, Aliases: []string{llm.ModelPowerful, ModelAliases["opus"], "claude-opus-4-6"}},

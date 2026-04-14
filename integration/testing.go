@@ -18,10 +18,7 @@ func isOpenAiAvailable() bool {
 	}
 	p := openai.New(llm.WithAPIKey(apiKey))
 	_, err := p.FetchModels(context.Background())
-	if err != nil {
-		return false
-	}
-	return true
+	return err == nil
 }
 
 // isClaudeAvailable checks if Claude Code credentials are available.

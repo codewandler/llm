@@ -76,9 +76,9 @@ func parseStream(ctx context.Context, body io.ReadCloser, pub llm.Publisher, opt
 	})
 	if err != nil {
 		if ctx.Err() != nil {
-			pub.Error(llm.NewErrContextCancelled(llm.ProviderNameAnthropic, err))
+			pub.Error(llm.NewErrContextCancelled(opts.ProviderName, err))
 			return
 		}
-		pub.Error(llm.NewErrStreamRead(llm.ProviderNameAnthropic, err))
+		pub.Error(llm.NewErrStreamRead(opts.ProviderName, err))
 	}
 }

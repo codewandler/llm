@@ -274,7 +274,7 @@ func (p *streamProcessor) onContentBlockStop(evt ContentBlockStopEvent) {
 }
 
 func (p *streamProcessor) onError(evt StreamErrorEvent) {
-	p.pub.Error(llm.NewErrProviderMsg(llm.ProviderNameAnthropic, evt.Error.Message))
+	p.pub.Error(llm.NewErrProviderMsg(p.meta.ProviderName, evt.Error.Message))
 }
 
 func mapAnthropicStopReason(s string) llm.StopReason {

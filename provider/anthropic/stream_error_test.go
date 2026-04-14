@@ -23,7 +23,8 @@ func TestParseStream_ContextCancellation(t *testing.T) {
 	t.Cleanup(func() { _ = pw.Close() }) // nolint:errcheck // prevent goroutine leak if test fails
 
 	ch := ParseStream(ctx, pr, ParseOpts{
-		Model: "claude-sonnet-4-5",
+		Model:        "claude-sonnet-4-5",
+		ProviderName: "anthropic",
 	})
 
 	var errEnv *llm.Envelope
@@ -43,11 +44,14 @@ func TestParseStream_ContextCancellation(t *testing.T) {
 		errors.Is(pe.Sentinel, llm.ErrContextCancelled) || errors.Is(pe.Cause, context.Canceled),
 		"error should reflect context cancellation, got: %v", pe,
 	)
+	assert.Equal(t, "anthropic", pe.Provider,
+		"error provider name should match ParseOpts.ProviderName")
 }
 
 func TestParseStream_ReadError(t *testing.T) {
 	ch := ParseStream(context.Background(), io.NopCloser(failReader{}), ParseOpts{
-		Model: "claude-sonnet-4-5",
+		Model:        "claude-sonnet-4-5",
+		ProviderName: "anthropic",
 	})
 
 	var errEnv *llm.Envelope
@@ -64,6 +68,8 @@ func TestParseStream_ReadError(t *testing.T) {
 	var pe *llm.ProviderError
 	require.ErrorAs(t, errEvt.Error, &pe)
 	assert.ErrorIs(t, pe.Sentinel, llm.ErrStreamRead)
+	assert.Equal(t, "anthropic", pe.Provider,
+		"error provider name should match ParseOpts.ProviderName")
 }
 
 func TestParseStream_CancellationClosesBodyToUnblockRead(t *testing.T) {

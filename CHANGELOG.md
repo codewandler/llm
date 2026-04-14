@@ -4,6 +4,21 @@
 
 ### Added
 
+- `cmd/miniagent` — minimal agentic CLI that runs an autonomous
+  LLM→bash→LLM loop. Supports one-shot and interactive REPL modes.
+  Streams tokens live, displays per-step/turn/session usage and cost.
+  Implemented with the bash tool only; uses `provider/auto` for
+  zero-config provider detection.
+
+### Fixed
+
+- Anthropic stream parser now uses `ParseOpts.ProviderName` in error
+  events instead of hardcoding `llm.ProviderNameAnthropic`. Fixes
+  incorrect provider attribution when the parser is reused by MiniMax
+  and Claude OAuth providers.
+
+### Added
+
 - `usage` package — centralised usage tracking with `Record`, `TokenItems`,
   `Cost`, `CostCalculator`, and `Dims` types. Replaces the flat `llm.Usage`
   struct with a richer model separating tokens (facts) from cost (derived).

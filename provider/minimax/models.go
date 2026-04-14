@@ -1,7 +1,5 @@
 package minimax
 
-import "github.com/codewandler/llm"
-
 // Model ToolCallID constants for programmatic use.
 const (
 	ModelM27          = "MiniMax-M2.7"
@@ -24,13 +22,3 @@ var ModelAliases = map[string]string{
 	"minimax:2":    ModelM2,
 }
 
-// allModels lists all MiniMax models.
-var allModels = llm.Models{
-	{ID: ModelM27, Name: "MiniMax M2.7", Provider: "minimax"},
-	{ID: ModelM27Highspeed, Name: "MiniMax M2.7 Highspeed", Provider: "minimax"},
-	{ID: ModelM25, Name: "MiniMax M2.5", Provider: "minimax"},
-	{ID: ModelM25Highspeed, Name: "MiniMax M2.5 Highspeed", Provider: "minimax"},
-	{ID: ModelM21, Name: "MiniMax M2.1", Provider: "minimax"},
-	{ID: ModelM21Highspeed, Name: "MiniMax M2.1 Highspeed", Provider: "minimax"},
-	{ID: ModelM2, Name: "MiniMax M2", Provider: "minimax"},
-}
