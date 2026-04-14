@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 )
 
 // Provider name constants used in ProviderError.Provider.
@@ -272,6 +273,21 @@ func NewErrAllProvidersFailed(provider string, errs []error) *ProviderError {
 		Message:  fmt.Sprintf("all %d provider(s) exhausted", len(errs)),
 		Cause:    errors.Join(errs...),
 	}
+}
+
+// IsRetriableHTTPStatus reports whether an HTTP status code indicates a
+// transient condition where retrying with a different provider may succeed.
+// Providers use this to decide whether to surface an HTTP error through the
+// event stream (non-retriable) or return it as an error from CreateStream
+// (retriable, so the router can fail over to the next target).
+func IsRetriableHTTPStatus(code int) bool {
+	switch code {
+	case http.StatusTooManyRequests,   // 429 — rate limited
+		http.StatusServiceUnavailable, // 503 — temporarily down
+		http.StatusPaymentRequired:    // 402 — OpenRouter out of credits
+		return true
+	}
+	return false
 }
 
 // NewErrNoProviders returns an error when no providers are available or all

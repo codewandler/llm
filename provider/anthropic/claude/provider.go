@@ -167,11 +167,21 @@ func (p *Provider) CreateStream(ctx context.Context, req llm.Request) (llm.Strea
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		pub.Close()
 		//nolint:errcheck // intentional: defer Close is only for cleanup, failure after response reading is non-fatal
 		defer resp.Body.Close()
 		errBody, _ := io.ReadAll(resp.Body)
-		return nil, llm.NewErrAPIErrorWithRequest(llm.ProviderNameClaude, string(requestBodyBytes), resp.StatusCode, string(errBody))
+		apiErr := llm.NewErrAPIErrorWithRequest(llm.ProviderNameClaude, string(requestBodyBytes), resp.StatusCode, string(errBody))
+		if llm.IsRetriableHTTPStatus(resp.StatusCode) {
+			// Retriable: return error so the router can try the next provider.
+			// Events already emitted (RequestEvent) are lost, but failover is more important.
+			pub.Close()
+			return nil, apiErr
+		}
+		// Non-retriable: surface the error through the stream so all
+		// preamble events (RequestEvent etc.) remain visible to the caller.
+		pub.Error(apiErr)
+		pub.Close()
+		return ch, nil
 	}
 
 	anthropic.ParseStreamWith(ctx, resp.Body, pub, parseOpts)
