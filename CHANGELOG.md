@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+---
+
+## [v0.38.0] — 2026-04-14
+
 ### Added
 
 - `ops` package — parameterised, use-case-oriented LLM operations built on top
