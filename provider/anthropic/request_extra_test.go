@@ -518,3 +518,27 @@ func TestRequest_ControlParams(t *testing.T) {
 		assert.True(t, hasToolChoice, "tool_choice should be present")
 	})
 }
+
+func TestBuildRequest_ThinkingDowngradesToolChoice(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		toolChoice llm.ToolChoice
+	}{
+		{"required", llm.ToolChoiceRequired{}},
+		{"specific_tool", llm.ToolChoiceTool{Name: "search"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			m := buildRequestMap(t, RequestOptions{
+				LLMRequest: llm.Request{
+					Model:      "claude-sonnet-4-5",
+					Messages:   llm.Messages{llm.User("hello")},
+					Thinking:   llm.ThinkingOn,
+					ToolChoice: tc.toolChoice,
+					Tools:      []tool.Definition{tool.NewSpec[struct{}]("search", "search").Definition()},
+				},
+			})
+			// Must not error; tool_choice must be downgraded to auto
+			assert.Equal(t, map[string]any{"type": "auto"}, m["tool_choice"])
+		})
+	}
+}

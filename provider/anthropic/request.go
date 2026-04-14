@@ -195,8 +195,14 @@ func BuildRequest(reqOpts RequestOptions) (Request, error) {
 		}
 		req.Thinking = &ThinkingConfig{Type: "enabled", BudgetTokens: budget}
 	}
-	if _, isForced := llmRequest.ToolChoice.(llm.ToolChoiceTool); isForced {
-		llmRequest.ToolChoice = llm.ToolChoiceAuto{}
+
+	// Anthropic API restriction: thinking cannot be combined with forced
+	// tool_choice. Silently downgrade to auto so the request succeeds.
+	if req.Thinking != nil && req.Thinking.Type != "disabled" {
+		switch llmRequest.ToolChoice.(type) {
+		case llm.ToolChoiceRequired, llm.ToolChoiceTool:
+			llmRequest.ToolChoice = llm.ToolChoiceAuto{}
+		}
 	}
 
 	// 2. Output effort — independent of thinking mode, set on supported models
