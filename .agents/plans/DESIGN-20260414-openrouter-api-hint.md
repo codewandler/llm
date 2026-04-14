@@ -21,14 +21,13 @@ additional wire protocols:
    Anthropic-native features without Chat Completions translation overhead.
 
 Using the right protocol for each model class improves fidelity and enables
-model-native features. Surfacing the chosen API in `StreamStartedEvent` gives
-consumers (CLI, evaluation harnesses) full observability into which wire
-protocol was actually used — useful for comparing outputs across backends.
+model-native features. Recording which protocol was chosen in `RequestEvent`
+and which upstream provider served the request in `StreamStartedEvent` gives
+consumers (CLI, evaluation harnesses, routers) full observability.
 
-Beyond OpenRouter, a general `ApiType` field on `llm.Request` gives callers
-explicit control without coupling to provider internals. The direct OpenAI
-provider already auto-dispatches between Chat Completions and Responses, but
-today the caller cannot override that choice.
+A general `ApiTypeHint` field on `llm.Request` lets callers express a
+preference without coupling to provider internals. Providers are free to
+honour or ignore the hint.
 
 ---
 
@@ -36,27 +35,30 @@ today the caller cannot override that choice.
 
 **In scope:**
 
-- New `ApiType` type and `ApiType` field on `llm.Request` (with validation +
-  `UnmarshalText` for cobra)
-- `ApiType` field on `StreamStartedEvent` — every provider sets it; consumers
-  see which API was actually used regardless of what was requested
+- New `ApiType` type and `ApiTypeHint ApiType` field on `llm.Request` (with
+  validation + `UnmarshalText` for cobra)
+- `ResolvedApiType ApiType` field on `RequestEvent` — set before the HTTP call
+  so consumers know which API was chosen even before streaming begins
+- `Provider string` field on `StreamStartedEvent` — the upstream provider that
+  served the request; for routing providers (OpenRouter) this is extracted from
+  the response and differs from the routing provider name
 - `--api` flag on `llmcli infer`
-- `ApiType()` fluent setter on `RequestBuilder` + `WithApiType` functional option
+- `ApiTypeHint()` fluent setter on `RequestBuilder` + `WithApiTypeHint` functional option
 - OpenRouter: dispatch to Responses API, Anthropic Messages API, or Chat
-  Completions based on `ApiType`; smart auto-dispatch in `ApiTypeAuto` mode
+  Completions based on `ApiTypeHint`; smart auto-dispatch in auto mode
 - New `provider/openrouter/api_responses.go`
 - New `provider/openrouter/api_messages.go`
 - **Bug fix** (identified during this design): `parseStream` and `onError` in
   `provider/anthropic` hardcode `llm.ProviderNameAnthropic` in error
-  constructors instead of using `opts.ProviderName` — this must be fixed here
-  because `api_messages.go` reuses those code paths with `ProviderName =
-  "openrouter"`
+  constructors instead of using `opts.ProviderName` — already being fixed by
+  AUTO-4/AUTO-5 sub-agents; this design depends on those fixes
 
 **Out of scope (future work):**
 
-- OpenAI provider respecting `ApiTypeOpenAIChatCompletion` to force downgrade
-- Bedrock or Anthropic direct providers reading `ApiType` from `Request`
-  (they have a fixed protocol; they ignore it on input but set it on output)
+- OpenAI provider respecting `ApiTypeHint` to force Chat Completions downgrade
+- Bedrock or Anthropic direct providers reading `ApiTypeHint` from `Request`
+  (they have a fixed protocol; they ignore the hint on input but always set
+  `ResolvedApiType` correctly on output)
 - `phase` field round-trip in `llm.Message` / `msg.Part`
 
 ---
@@ -68,14 +70,15 @@ today the caller cannot override that choice.
 | OpenRouter provider | Chat Completions only |
 | OpenRouter `/v1/responses` | Supported by OpenRouter; unused |
 | OpenRouter `/v1/messages` | Supported by OpenRouter; unused |
-| `llm.Request` | No API selection field |
-| `StreamStartedEvent` | No `ApiType` field |
+| `llm.Request` | No API hint field |
+| `RequestEvent` | No `ResolvedApiType` field |
+| `StreamStartedEvent` | No `Provider` field |
 | `llmcli infer` | No `--api` flag |
-| OpenAI provider | Auto-dispatches Chat Completions ↔ Responses; no caller override |
-| `anthropic.ParseOpts.ProviderName` | ✅ exists; used by MiniMax already |
-| `anthropic.ParseStreamWith` | ✅ already exported |
+| OpenAI provider | Auto-dispatches Chat Completions ↔ Responses; no caller hint |
+| `anthropic.ParseStreamWith` | ✅ already exported; used by MiniMax |
 | `anthropic.BuildRequestBytes` | ✅ already exported |
-| `anthropic.parseStream` error constructors | ❌ hardcode `ProviderNameAnthropic` |
+| `anthropic.ParseOpts.ProviderName` | ✅ exists; used by MiniMax |
+| `anthropic.parseStream` error constructors | ❌ hardcode `ProviderNameAnthropic` (being fixed by AUTO-4/5) |
 
 ---
 
@@ -84,28 +87,25 @@ today the caller cannot override that choice.
 ### 1. `ApiType` type — `request.go`
 
 ```go
-// ApiType selects the wire protocol a provider should use when it supports
-// multiple API backends for the same model. Providers ignore values they do
-// not implement. The resolved ApiType is always reported in StreamStartedEvent.
+// ApiType identifies a wire protocol for LLM API requests.
+// Used both as a hint on llm.Request and as a resolved value on RequestEvent.
 type ApiType string
 
 const (
-    // ApiTypeAuto lets the provider select the best API. This is the default.
+    // ApiTypeAuto is the zero value — the provider selects the best API.
     ApiTypeAuto ApiType = ""
-    // ApiTypeOpenAIChatCompletion requests the OpenAI Chat Completions API
-    // (/v1/chat/completions). Supported by: OpenRouter.
+    // ApiTypeOpenAIChatCompletion is the OpenAI Chat Completions API
+    // (/v1/chat/completions).
     ApiTypeOpenAIChatCompletion ApiType = "openai-chat"
-    // ApiTypeOpenAIResponses requests the OpenAI Responses API (/v1/responses).
+    // ApiTypeOpenAIResponses is the OpenAI Responses API (/v1/responses).
     // Required for models that use the phase field (gpt-5.3-codex, gpt-5.4-*).
-    // Supported by: OpenRouter, OpenAI direct.
     ApiTypeOpenAIResponses ApiType = "openai-responses"
-    // ApiTypeAnthropicMessages requests the Anthropic Messages API (/v1/messages).
+    // ApiTypeAnthropicMessages is the Anthropic Messages API (/v1/messages).
     // Provides native cache_control, thinking blocks, and anthropic-beta headers.
-    // Supported by: OpenRouter (anthropic/* model IDs), Anthropic direct.
     ApiTypeAnthropicMessages ApiType = "anthropic-messages"
 )
 
-// Valid returns true if t is a known value or the zero value (auto).
+// Valid returns true if t is a known value or the zero value.
 func (t ApiType) Valid() bool {
     switch t {
     case ApiTypeAuto, ApiTypeOpenAIChatCompletion, ApiTypeOpenAIResponses, ApiTypeAnthropicMessages:
@@ -115,8 +115,7 @@ func (t ApiType) Valid() bool {
     }
 }
 
-// UnmarshalText implements encoding.TextUnmarshaler so ApiType works with
-// cobra's TextVar flag binding.
+// UnmarshalText implements encoding.TextUnmarshaler for cobra TextVar binding.
 func (t *ApiType) UnmarshalText(b []byte) error {
     v := ApiType(b)
     if !v.Valid() {
@@ -127,23 +126,90 @@ func (t *ApiType) UnmarshalText(b []byte) error {
 }
 ```
 
-Add to `Request` struct (follows existing `Effort Effort`, `Thinking ThinkingMode` pattern):
+### 2. `Request.ApiTypeHint` — `request.go`
+
+Field name is `ApiTypeHint` — explicitly a *hint*, not a binding instruction.
+Providers that support multiple backends treat it as a preference. Providers
+with a fixed protocol ignore it entirely.
 
 ```go
-// ApiType selects which wire protocol to use when the provider supports
-// multiple backends. Defaults to ApiTypeAuto (empty string = provider decides).
-ApiType ApiType `json:"api_type,omitempty"`
+// ApiTypeHint expresses a preferred wire protocol. Providers honour it when
+// they support the requested API; otherwise they fall back to their default.
+// The actual API used is always reported in RequestEvent.ResolvedApiType.
+ApiTypeHint ApiType `json:"api_type_hint,omitempty"`
 ```
 
 Add to `Request.Validate()`:
 
 ```go
-if !o.ApiType.Valid() {
-    return fmt.Errorf("invalid ApiType %q; valid values: openai-chat, openai-responses, anthropic-messages, auto", o.ApiType)
+if !o.ApiTypeHint.Valid() {
+    return fmt.Errorf("invalid ApiTypeHint %q; valid values: openai-chat, openai-responses, anthropic-messages, auto", o.ApiTypeHint)
 }
 ```
 
-### 2. `StreamStartedEvent` — `event.go`
+Codec in `request_codec.go` (follows `Effort`, `ThinkingMode` pattern):
+
+```go
+func (t ApiType) MarshalText() ([]byte, error)  { return []byte(t), nil }
+func (t *ApiType) UnmarshalText(b []byte) error { /* as above */ }
+```
+
+### 3. `RequestEvent.ResolvedApiType` — `event.go`
+
+The resolved API is known before the HTTP call (it determines the URL). Record
+it on `RequestEvent` where it sits alongside the `ProviderRequest` URL that
+already implies the choice:
+
+```go
+RequestEvent struct {
+    OriginalRequest Request         `json:"original_request"`
+    ProviderRequest ProviderRequest `json:"provider_request"`
+
+    // ResolvedApiType is the wire protocol actually used for this request.
+    // Always set to a concrete value (never ApiTypeAuto). Set by the provider
+    // when it publishes RequestEvent, before the HTTP call is made.
+    ResolvedApiType ApiType `json:"resolved_api_type,omitempty"`
+}
+```
+
+Every provider sets `ResolvedApiType` when publishing `RequestEvent`:
+
+| Provider | Value |
+|---|---|
+| `provider/anthropic` | `ApiTypeAnthropicMessages` (always) |
+| `provider/anthropic/claude` | `ApiTypeAnthropicMessages` (always) |
+| `provider/minimax` | `ApiTypeAnthropicMessages` (always, via `PublishRequestParams`) |
+| `provider/openai` | `ApiTypeOpenAIResponses` or `ApiTypeOpenAIChatCompletion` (based on internal dispatch) |
+| `provider/bedrock` | `ApiTypeAnthropicMessages` (always) |
+| `provider/ollama` | `ApiTypeOpenAIChatCompletion` (always) |
+| `provider/fake` | `ApiTypeOpenAIChatCompletion` (always) |
+| `provider/openrouter` — Chat Completions | `ApiTypeOpenAIChatCompletion` |
+| `provider/openrouter` — Responses | `ApiTypeOpenAIResponses` |
+| `provider/openrouter` — Messages | `ApiTypeAnthropicMessages` |
+
+**`anthropic.PublishRequestParams` hardcodes the value:**
+
+```go
+// PublishRequestParams emits a RequestEvent. Always sets ResolvedApiType to
+// ApiTypeAnthropicMessages because this function is only ever called for
+// providers that use the Anthropic Messages wire format.
+func PublishRequestParams(pub llm.Publisher, opts ParseOpts) {
+    pub.Publish(&llm.RequestEvent{
+        OriginalRequest:  opts.LLMRequest,
+        ProviderRequest:  opts.RequestParams,
+        ResolvedApiType:  llm.ApiTypeAnthropicMessages,
+    })
+}
+```
+
+No `ApiType` field is needed on `ParseOpts` — the value is always known at
+the call site and the parser is always the Anthropic Messages parser. The
+user's point stands: *it would always be `anthropic-messages`*.
+
+For providers that publish `RequestEvent` directly (rather than via
+`PublishRequestParams`), each sets its own concrete constant at the call site.
+
+### 4. `StreamStartedEvent.Provider` — `event.go`
 
 ```go
 StreamStartedEvent struct {
@@ -152,90 +218,151 @@ StreamStartedEvent struct {
     // Model is the model identifier echoed back by the upstream API.
     Model string `json:"model,omitempty"`
 
-    // ApiType is the wire protocol that was actually used for this stream.
-    // Always set by the provider. Consumers can rely on this to know which
-    // API backend processed the request, regardless of what was requested
-    // via llm.Request.ApiType.
-    ApiType ApiType `json:"api_type,omitempty"`
+    // Provider is the upstream provider that served the request.
+    // For simple (non-routing) providers this equals the provider name.
+    // For routing providers such as OpenRouter it is the upstream backend
+    // extracted from the response (e.g. "anthropic", "openai", "meta-llama")
+    // and will differ from the routing provider's own name.
+    Provider string `json:"provider,omitempty"`
 
     // Extra holds provider-specific data such as rate-limit headers.
     Extra map[string]any `json:"extra,omitempty"`
 }
 ```
 
-Every provider sets `ApiType` on `pub.Started(...)`. The value is concrete —
-never `ApiTypeAuto`:
+#### How `Provider` is set
 
-| Provider | `ApiType` value set |
+**Direct providers** (non-routing): `Provider = providerName` — the routing
+and upstream providers are the same thing.
+
+**OpenRouter** has three paths, each with a different source:
+
+| Path | Source of `Provider` |
 |---|---|
-| `provider/openrouter` | Dynamic: `ApiTypeOpenAIChatCompletion`, `ApiTypeOpenAIResponses`, or `ApiTypeAnthropicMessages` based on `selectAPI` |
-| `provider/openai` | `ApiTypeOpenAIResponses` (Responses path) or `ApiTypeOpenAIChatCompletion` (Chat Completions path) |
-| `provider/anthropic` | `ApiTypeAnthropicMessages` |
-| `provider/bedrock` | `ApiTypeAnthropicMessages` |
-| `provider/minimax` | `ApiTypeAnthropicMessages` |
-| `provider/ollama` | `ApiTypeOpenAIChatCompletion` |
-| `provider/fake` | `ApiTypeOpenAIChatCompletion` |
+| Chat Completions | Extracted from `chunk.Model` prefix in the first SSE chunk.<br>`"anthropic/claude-opus-4-5"` → `"anthropic"`<br>`"openai/gpt-4o"` → `"openai"`<br>`"meta-llama/llama-4-maverick"` → `"meta-llama"`<br>No prefix (`"auto"`) → `"openrouter"` (fallback) |
+| Responses API | Hardcoded `"openai"` — only ever used for `openai/*` models |
+| Anthropic Messages API | Hardcoded `"anthropic"` — only ever used for `anthropic/*` models |
 
-The resolved `ApiType` is threaded into stream parsers via metadata structs
-(see §5–7 below); `pub.Started()` is called inside the parsers, not from
-`CreateStream` itself.
-
-### 3. `RequestBuilder` changes — `request_builder.go`
-
-Fluent method (follows existing `Effort`/`Thinking`/`OutputFormat` pattern):
+Helper in `provider/openrouter/openrouter.go`:
 
 ```go
-func (b *RequestBuilder) ApiType(t ApiType) *RequestBuilder {
-    b.req.ApiType = t
-    return b
+// upstreamProviderFromModel extracts the provider prefix from an OpenRouter
+// model ID. Returns providerName as fallback when no slash is present.
+func upstreamProviderFromModel(model string) string {
+    if i := strings.IndexByte(model, '/'); i > 0 {
+        return model[:i]
+    }
+    return providerName // "openrouter" fallback
 }
 ```
 
-Functional option:
+**Anthropic Messages parser** (`onMessageStart`): needs to set `Provider` from
+context. The existing `ParseOpts.ProviderName` field is for error attribution
+(always `"openrouter"` when called from OpenRouter). We add a separate
+`UpstreamProvider` field to `ParseOpts` for the `StreamStartedEvent.Provider`:
 
 ```go
-func WithApiType(t ApiType) RequestOption {
-    return func(r *Request) { r.ApiType = t }
+type ParseOpts struct {
+    Model            string
+    ProviderName     string  // used in errors and usage records
+    UpstreamProvider string  // used in StreamStartedEvent.Provider; falls back to ProviderName when empty
+    ResponseHeaders  map[string]string
+    RequestParams    llm.ProviderRequest
+    LLMRequest       llm.Request
 }
 ```
 
-### 4. `llmcli infer` changes — `cmd/llmcli/cmds/infer.go`
-
-Add to `inferOpts`:
+In `onMessageStart`:
 
 ```go
-ApiType llm.ApiType // f.TextVar — zero value means auto
+provider := p.meta.UpstreamProvider
+if provider == "" {
+    provider = p.meta.ProviderName
+}
+p.pub.Started(llm.StreamStartedEvent{
+    Model:     evt.Message.Model,
+    RequestID: evt.Message.ID,
+    Provider:  provider,
+    Extra:     extra,
+})
 ```
 
-Add flag in `NewInferCmd`:
+For all existing callers (anthropic direct, minimax, claude), `UpstreamProvider`
+is left empty → falls back to `ProviderName` → correct. Only OpenRouter's
+Messages path sets it:
 
 ```go
-f.TextVar(&opts.ApiType, "api", llm.ApiType(""),
-    "API backend: openai-chat, openai-responses, anthropic-messages, auto")
+anthropic.ParseStreamWith(ctx, resp.Body, pub, anthropic.ParseOpts{
+    Model:            opts.Model,
+    ProviderName:     providerName,      // "openrouter" — for errors/usage
+    UpstreamProvider: "anthropic",        // for StreamStartedEvent.Provider
+})
 ```
 
-Thread to the request builder (alongside `Effort`, `Thinking`, etc.):
+Similarly, **`RespStreamMeta`** (OpenAI Responses parser) gains an
+`UpstreamProvider` field for the same purpose:
 
 ```go
-b = b.ApiType(opts.ApiType)
-```
-
-Verbose output — add to `printStreamStartedEvent`:
-
-```go
-if ev.ApiType != "" {
-    fields = append(fields, kvField{"api", string(ev.ApiType)})
+type RespStreamMeta struct {
+    RequestedModel   string
+    StartTime        time.Time
+    ProviderName     string       // for errors / usage
+    UpstreamProvider string       // for StreamStartedEvent.Provider; falls back to ProviderName
+    Logger           *slog.Logger
 }
 ```
 
-The `── request params ──` block picks up `api_type` automatically via
-`mapFromStruct` because it reads all non-zero JSON fields from `OriginalRequest`.
+OpenRouter's Responses path passes `UpstreamProvider: "openai"`.
 
 ---
 
-### 5. OpenRouter dispatch — `provider/openrouter/openrouter.go`
+### 5. `RequestBuilder` changes — `request_builder.go`
 
-#### 5a. `selectAPI`
+Follows existing `Effort`/`Thinking`/`OutputFormat` pattern:
+
+```go
+func (b *RequestBuilder) ApiTypeHint(t ApiType) *RequestBuilder {
+    b.req.ApiTypeHint = t
+    return b
+}
+
+func WithApiTypeHint(t ApiType) RequestOption {
+    return func(r *Request) { r.ApiTypeHint = t }
+}
+```
+
+---
+
+### 6. `llmcli infer` changes — `cmd/llmcli/cmds/infer.go`
+
+```go
+// in inferOpts:
+ApiTypeHint llm.ApiType
+
+// flag:
+f.TextVar(&opts.ApiTypeHint, "api", llm.ApiType(""),
+    "API backend hint: openai-chat, openai-responses, anthropic-messages, auto")
+
+// builder:
+b = b.ApiTypeHint(opts.ApiTypeHint)
+```
+
+Verbose output — `RequestEvent` is already printed; `ResolvedApiType` will
+appear via `mapFromStruct` if non-zero. Additionally, `StreamStartedEvent`
+gains `Provider`:
+
+```go
+// in printStreamStartedEvent:
+if ev.Provider != "" {
+    fields = append(fields, kvField{"provider", ev.Provider})
+}
+```
+
+---
+
+### 7. OpenRouter dispatch — `provider/openrouter/openrouter.go`
+
+#### `selectAPI`
 
 ```go
 type orAPIBackend int
@@ -246,16 +373,16 @@ const (
     orMessages
 )
 
-// selectAPI resolves the effective OpenRouter API backend and the concrete
-// ApiType to report in StreamStartedEvent.
+// selectAPI resolves the effective API backend and the ResolvedApiType to
+// record on RequestEvent.
 //
-// Auto-dispatch rules:
-//   - openai/* models that require Responses API  →  Responses API
-//   - openai/* other                              →  Chat Completions
-//   - anthropic/*                                 →  Anthropic Messages API
-//   - everything else                             →  Chat Completions
-func selectAPI(model string, t llm.ApiType) (orAPIBackend, llm.ApiType) {
-    switch t {
+// Auto-dispatch rules (ApiTypeHint == ""):
+//   - openai/* models requiring Responses API  →  Responses
+//   - openai/* other                           →  Chat Completions
+//   - anthropic/*                              →  Anthropic Messages
+//   - everything else                          →  Chat Completions
+func selectAPI(model string, hint llm.ApiType) (orAPIBackend, llm.ApiType) {
+    switch hint {
     case llm.ApiTypeOpenAIResponses:
         return orResponses, llm.ApiTypeOpenAIResponses
     case llm.ApiTypeAnthropicMessages:
@@ -263,7 +390,7 @@ func selectAPI(model string, t llm.ApiType) (orAPIBackend, llm.ApiType) {
     case llm.ApiTypeOpenAIChatCompletion:
         return orChatCompletions, llm.ApiTypeOpenAIChatCompletion
     }
-    // ApiTypeAuto: infer from model prefix.
+    // Auto: infer from model prefix.
     if bare, ok := strings.CutPrefix(model, "openai/"); ok {
         if orUseResponsesAPI(bare) {
             return orResponses, llm.ApiTypeOpenAIResponses
@@ -275,284 +402,215 @@ func selectAPI(model string, t llm.ApiType) (orAPIBackend, llm.ApiType) {
     }
     return orChatCompletions, llm.ApiTypeOpenAIChatCompletion
 }
-
-// orUseResponsesAPI reports whether the bare model ID (without "openai/" prefix)
-// requires the Responses API on OpenRouter.
-// Keep in sync with provider/openai.useResponsesAPI (cross-reference comment).
-func orUseResponsesAPI(bare string) bool {
-    switch bare {
-    case "gpt-5.4", "gpt-5.4-mini", "gpt-5.4-nano", "gpt-5.4-pro",
-        "gpt-5.3-codex",
-        "gpt-5.2-codex",
-        "gpt-5.1-codex", "gpt-5.1-codex-max", "gpt-5.1-codex-mini",
-        "gpt-5-codex":
-        return true
-    }
-    return false
-}
 ```
 
-Note: uses `strings.CutPrefix` (Go 1.20+) instead of the hand-rolled helper
-from v2.
+#### Refactored `CreateStream`
 
-#### 5b. `CreateStream` dispatch
+The HTTP request construction and `RequestEvent` publication move into each
+sub-method (each path has a different URL and `ResolvedApiType`). `CreateStream`
+handles what is common: request building, normalisation, API key resolution,
+publisher creation, model resolution event, and token estimates.
 
 ```go
 func (p *Provider) CreateStream(ctx context.Context, src llm.Buildable) (llm.Stream, error) {
     opts, err := src.BuildRequest(ctx)
-    // ... existing: normalise, validate, resolve API key ...
-
-    backend, resolvedApiType := selectAPI(opts.Model, opts.ApiType)
+    // ...normalise, validate...
+    apiKey, err := p.opts.ResolveAPIKey(ctx)
+    // ...
 
     pub, ch := llm.NewEventPublisher()
-    // ... existing: emit ModelResolved, RequestEvent, token estimates ...
+    if opts.Model != requestedModel {
+        pub.ModelResolved(providerName, requestedModel, opts.Model)
+    }
+    // ...token estimates...
 
+    backend, resolvedApiType := selectAPI(opts.Model, opts.ApiTypeHint)
     switch backend {
     case orResponses:
         go p.streamResponses(ctx, opts, resolvedApiType, apiKey, pub)
     case orMessages:
         go p.streamMessages(ctx, opts, resolvedApiType, apiKey, pub)
-    default: // orChatCompletions
-        // HTTP request already constructed for the Chat Completions path
-        go parseStream(ctx, resp.Body, pub, parseStreamMeta{
-            requestedModel: opts.Model,
-            apiType:        resolvedApiType,
-            logger:         p.opts.Logger,
-        })
+    default:
+        go p.streamCompletions(ctx, opts, resolvedApiType, apiKey, pub)
     }
     return ch, nil
 }
 ```
 
-The `resolvedApiType` flows down into every goroutine so `pub.Started()` (called
-inside the parser) can stamp it on `StreamStartedEvent`.
+The existing `CreateStream` body that builds the Chat Completions httpReq and
+calls `go parseStream(...)` becomes `streamCompletions`.
 
 ---
 
-### 6. OpenRouter Responses API — `provider/openrouter/api_responses.go`
+### 8. OpenRouter Responses API — `provider/openrouter/api_responses.go`
 
 **Endpoint**: `POST {baseURL}/v1/responses`  
 **Wire format**: identical to OpenAI Responses API  
 **Auth**: `Authorization: Bearer <key>`
 
-#### Reuse strategy: export `RespParseStream` from `provider/openai`
+#### Changes to `provider/openai/api_responses.go`
 
-The Responses API SSE parser in `provider/openai/api_responses.go` is generic;
-the only provider-specific references are `llm.ProviderNameOpenAI` and the
-`prompt_cache_retention` logic (openai model registry; not relevant to
-OpenRouter).
-
-**Changes to `provider/openai/api_responses.go`:**
-
-1. Rename the unexported `ccStreamMeta` alias → exported `RespStreamMeta` struct
-   with `ProviderName string` and `ApiType llm.ApiType` fields.
-2. Make `respParseStream` → exported `RespParseStream`.
-3. Inside `RespParseStream`, when calling `pub.Started(...)`, set `ApiType:
-   meta.ApiType`.
+Export the stream metadata type and parser:
 
 ```go
 // RespStreamMeta holds per-request metadata for the Responses API SSE parser.
 type RespStreamMeta struct {
-    RequestedModel string
-    StartTime      time.Time
-    ProviderName   string       // "openai" or "openrouter"
-    ApiType        llm.ApiType  // stamped on StreamStartedEvent
-    Logger         *slog.Logger
+    RequestedModel   string
+    StartTime        time.Time
+    ProviderName     string       // used in errors and usage records
+    UpstreamProvider string       // used in StreamStartedEvent.Provider; falls back to ProviderName
+    Logger           *slog.Logger
 }
 
-// RespParseStream reads a Responses API SSE body and publishes events.
-// Exported so provider/openrouter can reuse the parse logic without duplication.
+// RespParseStream is the exported Responses API SSE parser.
 func RespParseStream(ctx context.Context, body io.ReadCloser, pub llm.Publisher, meta RespStreamMeta)
 ```
 
-No logic changes — rename + export + thread `ApiType`.
+Inside `RespParseStream`, `pub.Started()` sets:
+```go
+Provider: cmp.Or(meta.UpstreamProvider, meta.ProviderName),
+```
 
-**`streamResponses` in `provider/openrouter/api_responses.go`:**
+No `ApiType` or `ResolvedApiType` threading through this parser — the
+`RequestEvent` (with `ResolvedApiType`) is published by the calling code before
+the HTTP call, not inside the parser.
+
+#### `streamResponses`
 
 ```go
 func (p *Provider) streamResponses(
-    ctx context.Context,
-    opts llm.Request,
-    apiType llm.ApiType,
-    apiKey string,
-    pub llm.Publisher,
+    ctx context.Context, opts llm.Request,
+    resolvedApiType llm.ApiType, apiKey string, pub llm.Publisher,
 ) {
     body, err := orRespBuildRequest(opts)
-    if err != nil {
-        pub.Error(llm.NewErrBuildRequest(providerName, err))
-        pub.Close()
-        return
-    }
-
-    req, err := http.NewRequestWithContext(ctx, "POST",
+    // ...
+    req, _ := http.NewRequestWithContext(ctx, "POST",
         p.opts.BaseURL+"/v1/responses", bytes.NewReader(body))
-    if err != nil {
-        pub.Error(llm.NewErrBuildRequest(providerName, err))
-        pub.Close()
-        return
-    }
     req.Header.Set("Content-Type", "application/json")
     req.Header.Set("Authorization", "Bearer "+apiKey)
 
+    pub.Publish(&llm.RequestEvent{
+        OriginalRequest:  opts,
+        ProviderRequest:  llm.ProviderRequestFromHTTP(req, body),
+        ResolvedApiType:  resolvedApiType, // ApiTypeOpenAIResponses
+    })
+
     resp, err := p.client.Do(req)
-    // ... error handling identical to Chat Completions path ...
+    // ...error handling...
 
     openai.RespParseStream(ctx, resp.Body, pub, openai.RespStreamMeta{
-        RequestedModel: opts.Model,
-        StartTime:      time.Now(),
-        ProviderName:   providerName, // "openrouter"
-        ApiType:        apiType,
-        Logger:         p.opts.Logger,
+        RequestedModel:   opts.Model,
+        ProviderName:     providerName,  // "openrouter"
+        UpstreamProvider: "openai",
+        Logger:           p.opts.Logger,
     })
 }
 ```
 
-**`orRespBuildRequest`**: copy of `openai.respBuildRequest` minus
-`prompt_cache_retention` (OpenRouter does not surface that knob). Model ID is
-sent as-is (`"openai/gpt-5.4"` — OpenRouter format). Marked with
-`// TODO: consolidate with openai.respBuildRequest`.
+`orRespBuildRequest`: copy of `openai.respBuildRequest` minus
+`prompt_cache_retention`. Model ID sent as-is (`"openai/gpt-5.4"`). Annotated
+with `// TODO: consolidate with openai.respBuildRequest`.
 
 ---
 
-### 7. OpenRouter Anthropic Messages API — `provider/openrouter/api_messages.go`
+### 9. OpenRouter Anthropic Messages API — `provider/openrouter/api_messages.go`
 
 **Endpoint**: `POST {baseURL}/v1/messages`  
 **Wire format**: Anthropic Messages API  
-**Auth**: `Authorization: Bearer <key>` ← NOT `x-api-key`  
-**Model**: strip `"anthropic/"` prefix before the request body
-
-#### Reuse strategy: call existing exported functions directly
-
-The anthropic package already exports everything needed:
-- `anthropic.BuildRequestBytes(RequestOptions{LLMRequest: opts}) ([]byte, error)` — builds the JSON body
-- `anthropic.ParseStreamWith(ctx, body, pub, ParseOpts{...})` — already used by MiniMax with a custom `ProviderName`
-- `anthropic.AnthropicVersion` and `anthropic.BetaInterleavedThinking` — exported constants
-
-No new exports or options are needed. `provider/openrouter` imports
-`provider/anthropic` the same way `provider/minimax` already does.
-
-**`streamMessages` in `provider/openrouter/api_messages.go`:**
+**Auth**: `Authorization: Bearer <key>` (NOT `x-api-key`)
 
 ```go
 func (p *Provider) streamMessages(
-    ctx context.Context,
-    opts llm.Request,
-    apiType llm.ApiType,
-    apiKey string,
-    pub llm.Publisher,
+    ctx context.Context, opts llm.Request,
+    resolvedApiType llm.ApiType, apiKey string, pub llm.Publisher,
 ) {
-    // Strip "anthropic/" prefix: OpenRouter's /v1/messages expects bare model IDs.
     opts.Model = strings.TrimPrefix(opts.Model, "anthropic/")
 
     body, err := anthropic.BuildRequestBytes(anthropic.RequestOptions{LLMRequest: opts})
-    if err != nil {
-        pub.Error(llm.NewErrBuildRequest(providerName, err))
-        pub.Close()
-        return
-    }
-
-    req, err := http.NewRequestWithContext(ctx, "POST",
+    // ...
+    req, _ := http.NewRequestWithContext(ctx, "POST",
         p.opts.BaseURL+"/v1/messages", bytes.NewReader(body))
-    if err != nil {
-        pub.Error(llm.NewErrBuildRequest(providerName, err))
-        pub.Close()
-        return
-    }
     req.Header.Set("Content-Type", "application/json")
-    req.Header.Set("Authorization", "Bearer "+apiKey)          // OpenRouter auth
+    req.Header.Set("Authorization", "Bearer "+apiKey)
     req.Header.Set("Anthropic-Version", anthropic.AnthropicVersion)
     req.Header.Set("Anthropic-Beta", anthropic.BetaInterleavedThinking)
 
-    resp, err := p.client.Do(req)
-    // ... error handling ...
+    pub.Publish(&llm.RequestEvent{
+        OriginalRequest:  opts,
+        ProviderRequest:  llm.ProviderRequestFromHTTP(req, body),
+        ResolvedApiType:  resolvedApiType, // ApiTypeAnthropicMessages
+    })
 
-    // ParseStreamWith is the same path MiniMax uses; ProviderName controls
-    // the label on all events (errors, usage records, model-resolved).
+    resp, err := p.client.Do(req)
+    // ...error handling...
+
     anthropic.ParseStreamWith(ctx, resp.Body, pub, anthropic.ParseOpts{
-        Model:        opts.Model,
-        ProviderName: providerName, // "openrouter"
-        ApiType:      apiType,      // ApiTypeAnthropicMessages — see §8 below
+        Model:            opts.Model,
+        ProviderName:     providerName,  // "openrouter" — errors/usage
+        UpstreamProvider: "anthropic",   // StreamStartedEvent.Provider
     })
 }
 ```
 
-No `anthropicBackend` field on `Provider`. No `sync.Once`. No event forwarding.
-Clean and consistent with how MiniMax reuses the anthropic parser today.
+`provider/openrouter` imports `provider/anthropic` — same as `provider/minimax`
+already does. No import cycle.
 
 ---
 
-### 8. Bug fix: anthropic `ProviderName` in error constructors
+### 10. OpenRouter Chat Completions — `streamCompletions`
 
-**File**: `provider/anthropic/stream.go` and `stream_processor.go`
-
-`ParseOpts.ProviderName` was introduced so MiniMax could reuse the parser.
-However, two call sites still hardcode `llm.ProviderNameAnthropic`:
+The existing `CreateStream` body extracted into `streamCompletions`. Key
+addition: `RequestEvent.ResolvedApiType` and `StreamStartedEvent.Provider`:
 
 ```go
-// stream.go — parseStream
-pub.Error(llm.NewErrContextCancelled(llm.ProviderNameAnthropic, err)) // ❌
-pub.Error(llm.NewErrStreamRead(llm.ProviderNameAnthropic, err))       // ❌
+func (p *Provider) streamCompletions(
+    ctx context.Context, opts llm.Request,
+    resolvedApiType llm.ApiType, apiKey string, pub llm.Publisher,
+) {
+    // ...build httpReq (existing code)...
 
-// stream_processor.go — onError
-p.pub.Error(llm.NewErrProviderMsg(llm.ProviderNameAnthropic, evt.Error.Message)) // ❌
-```
+    pub.Publish(&llm.RequestEvent{
+        OriginalRequest:  opts,
+        ProviderRequest:  llm.ProviderRequestFromHTTP(httpReq, body),
+        ResolvedApiType:  resolvedApiType, // ApiTypeOpenAIChatCompletion
+    })
 
-Fix: replace the hardcoded constant with `opts.ProviderName` (in `parseStream`)
-and `p.meta.ProviderName` (in `onError`). This is a pure correctness fix; it
-makes the existing MiniMax usage correct as well.
+    resp, err := p.client.Do(httpReq)
+    // ...existing error handling...
 
-**Add `ApiType` to `ParseOpts` and `StreamStartedEvent` stamping:**
-
-```go
-// stream.go
-type ParseOpts struct {
-    Model           string
-    ProviderName    string
-    ApiType         llm.ApiType  // NEW: stamped on StreamStartedEvent
-    ResponseHeaders map[string]string
-    RequestParams   llm.ProviderRequest
-    LLMRequest      llm.Request
+    go parseStream(ctx, resp.Body, pub, opts.Model, p.opts.Logger)
 }
 ```
 
-In `streamProcessor.onMessageStart`:
+In `parseStream`, the existing `pub.Started(...)` call gains `Provider`:
 
 ```go
-p.pub.Started(llm.StreamStartedEvent{
-    Model:     evt.Message.Model,
-    RequestID: evt.Message.ID,
-    ApiType:   p.meta.ApiType,   // NEW
-    Extra:     extra,
+pub.Started(llm.StreamStartedEvent{
+    Model:     chunk.Model,
+    RequestID: chunk.ID,
+    Provider:  upstreamProviderFromModel(chunk.Model), // NEW
 })
 ```
 
-All existing callers (`provider/anthropic/anthropic.go`, `provider/minimax/`,
-`provider/anthropic/claude/`) pass `ParseOpts{...}` with no `ApiType` field —
-the zero value `ApiTypeAuto` / `""` would be wrong. They each get a concrete
-constant added:
-
-- `provider/anthropic/anthropic.go` → `ApiType: llm.ApiTypeAnthropicMessages`
-- `provider/minimax/minimax.go` → `ApiType: llm.ApiTypeAnthropicMessages`
-- `provider/anthropic/claude/provider.go` → `ApiType: llm.ApiTypeAnthropicMessages`
-
 ---
 
-### 9. Auto-dispatch summary for OpenRouter
+### 11. Auto-dispatch summary for OpenRouter
 
-| `Request.ApiType` | Model prefix | API Used | `StreamStartedEvent.ApiType` |
-|---|---|---|---|
-| `openai-responses` | any | Responses | `openai-responses` |
-| `anthropic-messages` | any | Messages | `anthropic-messages` |
-| `openai-chat` | any | Chat Completions | `openai-chat` |
-| `""` (auto) | `openai/gpt-5.4*`, `openai/*-codex*` | Responses | `openai-responses` |
-| `""` (auto) | `openai/*` other | Chat Completions | `openai-chat` |
-| `""` (auto) | `anthropic/*` | **Messages** | `anthropic-messages` |
-| `""` (auto) | anything else | Chat Completions | `openai-chat` |
+| `Request.ApiTypeHint` | Model prefix | API Used | `RequestEvent.ResolvedApiType` | `StreamStartedEvent.Provider` |
+|---|---|---|---|---|
+| `openai-responses` | any | Responses | `openai-responses` | `"openai"` |
+| `anthropic-messages` | any | Messages | `anthropic-messages` | `"anthropic"` |
+| `openai-chat` | any | Chat Completions | `openai-chat` | from model prefix |
+| `""` (auto) | `openai/gpt-5.4*`, `openai/*-codex*` | Responses | `openai-responses` | `"openai"` |
+| `""` (auto) | `openai/*` other | Chat Completions | `openai-chat` | `"openai"` |
+| `""` (auto) | `anthropic/*` | **Messages** | `anthropic-messages` | `"anthropic"` |
+| `""` (auto) | anything else | Chat Completions | `openai-chat` | from model prefix |
 
-**Behaviour change in auto mode**: existing OpenRouter users calling
-`anthropic/*` models move from Chat Completions to Anthropic Messages API.
-Output is semantically equivalent or better; the change is observable via
-`StreamStartedEvent.ApiType`. Documented in changelog as intentional.
+**Behaviour change**: existing OpenRouter users calling `anthropic/*` models
+move from Chat Completions to Anthropic Messages API in auto mode. Output is
+semantically equivalent or better. The change is visible via
+`RequestEvent.ResolvedApiType`. Explicit `--api openai-chat` override is always
+available.
 
 ---
 
@@ -560,23 +618,24 @@ Output is semantically equivalent or better; the change is observable via
 
 | File | Change |
 |---|---|
-| `request.go` | Add `ApiType` type, constants, `Valid()`, `UnmarshalText()`, field on `Request`, validation in `Validate()` |
-| `request_builder.go` | Add `ApiType()` fluent method, `WithApiType()` functional option |
-| `event.go` | Add `ApiType ApiType` field to `StreamStartedEvent` |
-| `provider/anthropic/stream.go` | Add `ApiType llm.ApiType` to `ParseOpts`; fix `parseStream` error constructors to use `opts.ProviderName` |
-| `provider/anthropic/stream_processor.go` | Set `ApiType: p.meta.ApiType` in `onMessageStart`; fix `onError` to use `p.meta.ProviderName` |
-| `provider/anthropic/anthropic.go` | Pass `ApiType: llm.ApiTypeAnthropicMessages` in `ParseOpts` |
-| `provider/anthropic/claude/provider.go` | Pass `ApiType: llm.ApiTypeAnthropicMessages` in `ParseOpts` |
-| `provider/minimax/minimax.go` | Pass `ApiType: llm.ApiTypeAnthropicMessages` in `ParseOpts` |
-| `provider/openai/api_responses.go` | Export `RespStreamMeta` (add `ApiType`, `ProviderName`); export `RespParseStream`; set `ApiType` on `pub.Started()` |
-| `provider/openai/openai.go` | Pass correct `ApiType` (`ApiTypeOpenAIResponses` / `ApiTypeOpenAIChatCompletion`) when calling parsers |
-| `provider/bedrock/bedrock.go` | Set `ApiType: llm.ApiTypeAnthropicMessages` in `pub.Started()` |
-| `provider/ollama/ollama.go` | Set `ApiType: llm.ApiTypeOpenAIChatCompletion` in `pub.Started()` |
-| `provider/fake/fake.go` | Set `ApiType: llm.ApiTypeOpenAIChatCompletion` in `pub.Started()` |
-| `provider/openrouter/openrouter.go` | Add `selectAPI`, `orUseResponsesAPI`; refactor `CreateStream` dispatch; pass `resolvedApiType` + `apiType` to `parseStream` meta |
+| `request.go` | Add `ApiType` type + constants + `Valid()` + `UnmarshalText()`; add `ApiTypeHint ApiType` field on `Request`; add validation |
+| `request_codec.go` | Add `ApiType.MarshalText()` |
+| `request_builder.go` | Add `ApiTypeHint()` fluent method, `WithApiTypeHint()` functional option |
+| `event.go` | Add `ResolvedApiType ApiType` to `RequestEvent`; add `Provider string` to `StreamStartedEvent` |
+| `provider/anthropic/stream.go` | Add `UpstreamProvider string` to `ParseOpts`; update `PublishRequestParams` to hardcode `ResolvedApiType: llm.ApiTypeAnthropicMessages`; fix `parseStream` error constructors (already done by AUTO-5) |
+| `provider/anthropic/stream_processor.go` | Use `UpstreamProvider \|\| ProviderName` for `StreamStartedEvent.Provider`; fix `onError` (already done by AUTO-4) |
+| `provider/anthropic/anthropic.go` | Set `ResolvedApiType: llm.ApiTypeAnthropicMessages` in `RequestEvent` publish |
+| `provider/anthropic/claude/provider.go` | Set `ResolvedApiType: llm.ApiTypeAnthropicMessages` in `RequestEvent` publish |
+| `provider/minimax/minimax.go` | No changes needed — `PublishRequestParams` now sets `ResolvedApiType` automatically |
+| `provider/openai/api_responses.go` | Export `RespStreamMeta` (add `UpstreamProvider`), export `RespParseStream`; set `Provider` in `pub.Started()` |
+| `provider/openai/openai.go` | Set `ResolvedApiType` (`ApiTypeOpenAIResponses` / `ApiTypeOpenAIChatCompletion`) in `RequestEvent`; set `Provider: "openai"` in `pub.Started()` |
+| `provider/bedrock/bedrock.go` | Set `ResolvedApiType: llm.ApiTypeAnthropicMessages` in `RequestEvent`; set `Provider: "bedrock"` in `pub.Started()` |
+| `provider/ollama/ollama.go` | Set `ResolvedApiType: llm.ApiTypeOpenAIChatCompletion` in `RequestEvent`; set `Provider: "ollama"` in `pub.Started()` |
+| `provider/fake/fake.go` | Set `ResolvedApiType: llm.ApiTypeOpenAIChatCompletion` in `RequestEvent`; set `Provider: "fake"` in `pub.Started()` |
+| `provider/openrouter/openrouter.go` | Add `selectAPI`, `orUseResponsesAPI`, `upstreamProviderFromModel`; refactor `CreateStream` → dispatch + `streamCompletions`; add `Provider` to `pub.Started()` in `parseStream` |
 | `provider/openrouter/api_responses.go` | New: `streamResponses`, `orRespBuildRequest` |
 | `provider/openrouter/api_messages.go` | New: `streamMessages` |
-| `cmd/llmcli/cmds/infer.go` | Add `ApiType` to `inferOpts`, `--api` flag, builder thread-through, verbose display |
+| `cmd/llmcli/cmds/infer.go` | Add `ApiTypeHint` to `inferOpts`; `--api` flag; builder thread-through; verbose display of `provider` in `── stream started ──` |
 
 **No changes to**: `event_delta.go`, `msg/`, `tool/`, `provider/auto/`, `provider/router/`.
 
@@ -587,70 +646,70 @@ Output is semantically equivalent or better; the change is observable via
 ### Unit tests
 
 **`request_test.go`**:
-- `TestApiType_Valid` — table-driven; all known values → true; unknown → false.
+- `TestApiType_Valid` — all known values → true; unknown → false.
 - `TestApiType_UnmarshalText` — valid values parse; unknown returns error.
-- `TestRequest_Validate_ApiType` — valid passes; unknown fails with message.
+- `TestRequest_Validate_ApiTypeHint` — valid hint passes; unknown fails.
 
-**`provider/openrouter/openrouter_test.go`** — `selectAPI` table test:
+**`provider/openrouter/openrouter_test.go`** — `selectAPI` table:
 
-| Test | Model | `ApiType` input | Expected backend | Expected resolved `ApiType` |
-|---|---|---|---|---|
-| explicit responses | any | `openai-responses` | `orResponses` | `openai-responses` |
-| explicit messages | any | `anthropic-messages` | `orMessages` | `anthropic-messages` |
-| explicit chat | any | `openai-chat` | `orChatCompletions` | `openai-chat` |
-| auto / openai codex | `openai/gpt-5.3-codex` | `""` | `orResponses` | `openai-responses` |
-| auto / gpt-5.4 | `openai/gpt-5.4` | `""` | `orResponses` | `openai-responses` |
-| auto / gpt-4o | `openai/gpt-4o` | `""` | `orChatCompletions` | `openai-chat` |
-| auto / anthropic | `anthropic/claude-opus-4-5` | `""` | `orMessages` | `anthropic-messages` |
-| auto / unknown | `meta/llama-4-maverick` | `""` | `orChatCompletions` | `openai-chat` |
+| Model | Hint | Backend | `ResolvedApiType` |
+|---|---|---|---|
+| any | `openai-responses` | `orResponses` | `openai-responses` |
+| any | `anthropic-messages` | `orMessages` | `anthropic-messages` |
+| any | `openai-chat` | `orChatCompletions` | `openai-chat` |
+| `openai/gpt-5.3-codex` | `""` | `orResponses` | `openai-responses` |
+| `openai/gpt-5.4` | `""` | `orResponses` | `openai-responses` |
+| `openai/gpt-4o` | `""` | `orChatCompletions` | `openai-chat` |
+| `anthropic/claude-opus-4-5` | `""` | `orMessages` | `anthropic-messages` |
+| `meta/llama-4-maverick` | `""` | `orChatCompletions` | `openai-chat` |
+
+**`provider/openrouter/openrouter_test.go`** — `upstreamProviderFromModel`:
+- `"anthropic/claude-opus-4-5"` → `"anthropic"`
+- `"openai/gpt-4o"` → `"openai"`
+- `"meta-llama/llama-4-maverick"` → `"meta-llama"`
+- `"auto"` (no slash) → `"openrouter"` (fallback)
 
 **`provider/openrouter/api_responses_test.go`**:
-- `TestOrRespBuildRequest_Basic` — model, `stream: true`, `input` array shape.
-- `TestOrRespBuildRequest_NoPromptCacheRetention` — field absent.
-- `TestOrRespBuildRequest_Tools` — tools + tool choice.
-- `TestOrRespBuildRequest_Reasoning` — `reasoning.effort` present when `Effort` set.
+- `TestOrRespBuildRequest_Basic`, `_NoPromptCacheRetention`, `_Tools`, `_Reasoning`
 
 **`provider/openrouter/api_messages_test.go`**:
-- `TestStreamMessages_StripAnthropicPrefix` — `anthropic/claude-opus-4-5` →
-  model in JSON body is `claude-opus-4-5`.
+- `TestStreamMessages_StripAnthropicPrefix` — body model is `"claude-opus-4-5"` not `"anthropic/claude-opus-4-5"`
 
-**`provider/anthropic/stream_test.go`** (extend):
-- `TestParseOpts_ProviderName_InErrors` — use a synthetic SSE fixture with an
-  `error` event; verify the error event carries the custom `ProviderName`, not
-  `"anthropic"`.
-- `TestParseOpts_ApiType_InStreamStarted` — verify `StreamStartedEvent.ApiType`
-  matches the value in `ParseOpts`.
+**`provider/anthropic/stream_processor_test.go`** (extend):
+- `TestParseOpts_UpstreamProvider_InStreamStarted` — when `UpstreamProvider = "openrouter-upstream"`, `StreamStartedEvent.Provider` equals that value.
+- `TestParseOpts_UpstreamProvider_FallbackToProviderName` — when `UpstreamProvider = ""`, `Provider` equals `ProviderName`.
 
 **`provider/openai/api_responses_test.go`** (extend):
-- `TestRespStreamMeta_ApiType` — verify `ApiType` flows through to
-  `StreamStartedEvent` in a synthetic SSE fixture.
+- `TestRespStreamMeta_UpstreamProvider` — `UpstreamProvider` flows to `StreamStartedEvent.Provider`.
 
 **`cmd/llmcli/cmds/infer_test.go`** (extend):
-- `TestInferCmd_ApiFlag` — `--api openai-responses` sets `inferOpts.ApiType`;
-  `--api bad` returns an error from `TextVar`.
+- `TestInferCmd_ApiFlag` — `--api openai-responses` sets `inferOpts.ApiTypeHint`; `--api bad` errors.
 
 ### Integration tests (manual)
 
 ```bash
-# Auto → Anthropic Messages for anthropic/* model
+# Auto → Anthropic Messages; provider shows "anthropic"
 go run ./cmd/llmcli infer -v -m openrouter/anthropic/claude-opus-4-5 "Hi"
-# ── stream started ── shows: api: anthropic-messages
+# ── request params ── resolved_api_type: anthropic-messages
+# ── stream started ── provider: anthropic
 
-# Auto → Responses for gpt-5.4
+# Auto → Responses; provider shows "openai"
 go run ./cmd/llmcli infer -v -m openrouter/openai/gpt-5.4 "Hi"
-# ── stream started ── shows: api: openai-responses
+# ── request params ── resolved_api_type: openai-responses
+# ── stream started ── provider: openai
 
-# Auto → Chat Completions for legacy model
+# Auto → Chat Completions
 go run ./cmd/llmcli infer -v -m openrouter/openai/gpt-4o "Hi"
-# ── stream started ── shows: api: openai-chat
+# ── request params ── resolved_api_type: openai-chat
 
-# Explicit override: Responses API for a non-required model
+# Explicit override
 go run ./cmd/llmcli infer -v -m openrouter/openai/gpt-4o --api openai-responses "Hi"
-# ── stream started ── shows: api: openai-responses
+# ── request params ── api_type_hint: openai-responses | resolved_api_type: openai-responses
 
-# Explicit override: Chat Completions for an Anthropic model (compare outputs)
+# Override to Chat Completions for comparison
 go run ./cmd/llmcli infer -v -m openrouter/anthropic/claude-opus-4-5 --api openai-chat "Hi"
-# ── stream started ── shows: api: openai-chat
+# ── request params ── resolved_api_type: openai-chat
+# ── stream started ── provider: anthropic  (extracted from model prefix in response)
 ```
 
 ---
@@ -658,20 +717,17 @@ go run ./cmd/llmcli infer -v -m openrouter/anthropic/claude-opus-4-5 --api opena
 ## Open Questions
 
 1. **Does OpenRouter's `/v1/messages` accept `anthropic/claude-*` model IDs or
-   bare `claude-*`?** We strip the prefix regardless (safe default). Verify
-   during integration testing; revert the strip if OpenRouter needs the prefix.
+   bare `claude-*`?** We strip the prefix regardless. Verify during integration.
 
-2. **Does OpenRouter's `/v1/messages` endpoint require the `Anthropic-Version`
-   header?** The design sends it defensively (same as the direct provider).
-   If OpenRouter rejects it or ignores it, simply drop the header.
+2. **Does OpenRouter's `/v1/messages` require `Anthropic-Version`?** Sent
+   defensively. Drop if OpenRouter rejects it.
 
-3. **Does OpenRouter surface `phase` in its Responses API stream?** Out of scope
-   now; would motivate a follow-up design to model `phase` in `msg.Part`.
+3. **Does OpenRouter surface `phase` in its Responses API stream?** Out of
+   scope; motivates a follow-up design.
 
-4. **Should thinking work through OpenRouter's Messages endpoint?** The
-   `Anthropic-Beta: interleaved-thinking-2025-05-14` header is set, matching
-   what the direct anthropic provider sends. OpenRouter likely proxies this
-   through. Validate during integration.
+4. **Does thinking work through OpenRouter's Messages endpoint?** The
+   `Anthropic-Beta` header is sent. OpenRouter likely proxies it through.
+   Validate during integration.
 
 ---
 
@@ -679,25 +735,24 @@ go run ./cmd/llmcli infer -v -m openrouter/anthropic/claude-opus-4-5 --api opena
 
 | Risk | Mitigation |
 |---|---|
-| Auto-dispatch to Anthropic Messages breaks existing anthropic/* users | Semantically equivalent output; `StreamStartedEvent.ApiType` makes the change visible; explicit `--api openai-chat` override available |
-| OpenRouter `/v1/responses` SSE format differs from OpenAI's | Caught in integration tests; fall back to `--api openai-chat` |
-| `orRespBuildRequest` drifts from `openai.respBuildRequest` | `// TODO` cross-reference comment in both files |
-| `anthropic.ParseOpts.ApiType` zero-value `""` instead of a concrete constant | Compile-time: adding `ApiType` without a default means the field defaults to `""`. Every call site that creates `ParseOpts` must be updated. CI build + grep for `ParseOpts{` confirms completeness. |
-| `provider/openrouter` now depends on `provider/openai` and `provider/anthropic` | No import cycle. Binary size increases for users who import openrouter. Acceptable trade-off; avoids code duplication. |
+| Auto-dispatch to Anthropic Messages breaks existing anthropic/* users | Semantically equivalent output; `ResolvedApiType` in `RequestEvent` makes the change visible; `--api openai-chat` override always available |
+| OpenRouter `/v1/responses` SSE format differs from OpenAI's | Caught immediately in integration tests; fall back to `--api openai-chat` |
+| `orRespBuildRequest` drifts from `openai.respBuildRequest` | Cross-reference `// TODO` comment in both files |
+| `PublishRequestParams` hardcodes `ApiTypeAnthropicMessages` — wrong if ever reused for a non-Messages parser | Function name and doc comment make the invariant explicit; not a generic "publish request" utility |
+| `provider/openrouter` imports `provider/openai` + `provider/anthropic` | No cycle. Same pattern as `provider/minimax` → `provider/anthropic` today. Binary size increase is acceptable. |
 
 ---
 
 ## Acceptance Criteria
 
-- [ ] `ApiType` type with four constants, `Valid()`, `UnmarshalText()`, field on `Request`, validation
-- [ ] `RequestBuilder.ApiType()` and `WithApiType()` work
-- [ ] `StreamStartedEvent.ApiType` is set by every provider; never `""` after dispatch
+- [ ] `ApiType` type with four constants, `Valid()`, `MarshalText()`, `UnmarshalText()`
+- [ ] `Request.ApiTypeHint` field with validation in `Validate()`
+- [ ] `RequestEvent.ResolvedApiType` always set to a concrete value (never `""`) by every provider
+- [ ] `StreamStartedEvent.Provider` set by every provider
+- [ ] `RequestBuilder.ApiTypeHint()` and `WithApiTypeHint()` work
 - [ ] `llmcli infer --api openai-responses` routes OpenRouter to `/v1/responses`
 - [ ] `llmcli infer --api anthropic-messages` routes OpenRouter to `/v1/messages`
-- [ ] `llmcli infer` (auto) dispatches `anthropic/*` → Messages API
-- [ ] `llmcli infer` (auto) dispatches `openai/gpt-5.4` → Responses API
-- [ ] `llmcli infer` (auto) keeps `openai/gpt-4o` on Chat Completions
-- [ ] `llmcli -v infer` shows `api: <type>` in `── stream started ──`
-- [ ] All events on all three OpenRouter paths carry `provider = "openrouter"`
-- [ ] Anthropic provider error events carry the correct `ProviderName` (bug fix)
-- [ ] All existing tests pass; `go build ./...` and `go vet ./...` pass
+- [ ] `llmcli infer` (auto) dispatches `anthropic/*` → Messages; `openai/gpt-5.4` → Responses; `openai/gpt-4o` → Chat Completions
+- [ ] `llmcli -v infer` shows `resolved_api_type` in `── request params ──` and `provider` in `── stream started ──`
+- [ ] For all three OpenRouter paths, events carry `provider = "openrouter"` on errors/usage and `Provider = <upstream>` on `StreamStartedEvent`
+- [ ] `go build ./...` and `go vet ./...` pass; all existing tests pass
