@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+---
+
+## [v1.0.0] — 2026-04-14
+
 ### Breaking Changes
 
 - **`RouteInfoEvent` replaced by `ModelResolvedEvent` + `ProviderFailoverEvent`.**
@@ -14,30 +18,6 @@
     `Publisher.Failover(from, to string, err error)`.
   - `ParseOpts` gains `ProviderName string` (set by all Anthropic-based
     providers; empty string is safe but omits the resolver from the event).
-
-### Added
-
-- `ModelResolvedEvent{Resolver, Name, Resolved}` — emitted whenever a model
-  name is translated: by router alias lookup, by OpenRouter's default-model
-  normalisation, or by any provider whose API returns a different model than
-  was requested.
-- `ProviderFailoverEvent{Provider, FailoverProvider, Error}` — emitted by
-  the router once per skipped provider when a retriable error occurs.
-  Not emitted for the last-tried provider (terminal failure is an error
-  return, not an event).
-- `llmcli infer -v` now prints `── provider failover ──` and
-  `── model resolved ──` sections (replaces `── route info ──`).
-
-### Changed
-
-- Router's `CreateStream` no longer overwrites `StreamStartedEvent.Model`
-  unconditionally; the provider-reported model is preserved when non-empty
-  (important for OpenRouter auto-model requests).
-- `openrouter.collectStreamEvents` (test helper) now requires an explicit
-  `requestedModel` parameter.
-
-### Breaking Changes
-
 - **`RequestParamsEvent` replaced by `RequestEvent`.**
   - `StreamEventRequestParams` wire value changed from `"request_params"` to
     `"request"`.
@@ -50,17 +30,23 @@
     `llm.ProviderRequest`.
   - `PublishRequestParams` now emits unconditionally (was guarded on non-nil
     fields).
-
-### Bug Fixes
-
-- Router no longer swallows per-provider errors when all failover targets are
-  exhausted — original errors are preserved via `errors.Join` and remain
-  inspectable with `errors.Is` / `errors.As`.
-- `ProviderError.Error()` no longer produces a trailing `: ` separator when
-  `Message` is empty.
+- **`ThinkingEffort` and `OutputEffort` replaced by `Effort` + `ThinkingMode`.**
+  - `Request.ThinkingEffort` → `Request.Effort` (type `Effort`: `""`, `"low"`, `"medium"`, `"high"`, `"max"`)
+  - `Request.OutputEffort` → `Request.Thinking` (type `ThinkingMode`: `""`, `"on"`, `"off"`)
+  - All old constants removed (`ThinkingEffortNone`, `ThinkingEffortMinimal`, `OutputEffortHigh`, etc.)
+  - CLI: `--thinking` now accepts `auto|on|off` (was effort levels); `--effort` accepts `low|medium|high|max`
+  - See `docs/thinking-and-effort.md` for migration guide and per-provider mapping.
 
 ### Added
 
+- `ModelResolvedEvent{Resolver, Name, Resolved}` — emitted whenever a model
+  name is translated: by router alias lookup, by OpenRouter's default-model
+  normalisation, or by any provider whose API returns a different model than
+  was requested.
+- `ProviderFailoverEvent{Provider, FailoverProvider, Error}` — emitted by
+  the router once per skipped provider when a retriable error occurs.
+  Not emitted for the last-tried provider (terminal failure is an error
+  return, not an event).
 - `ProviderRequest` struct (`URL`, `Method`, `Headers`, `Body`) replaces the
   flat `map[string]any` in `RequestEvent` — includes full HTTP metadata.
 - `ProviderRequestFromHTTP(req, body)` helper builds a `ProviderRequest` from
@@ -69,13 +55,15 @@
 - `NewErrAllProvidersFailed` error constructor wraps individual provider
   errors via `errors.Join` when every failover target has been tried.
 - `llmcli infer --max-tokens N` flag to cap token generation (default: 8000).
-- `llmcli infer -v` now prints `── route info ──` and `── stream started ──`
-  sections in addition to request/provider params.
-- Blank-line separator printed to stderr between verbose preamble and first
-  streamed token.
+- `llmcli infer -v` now prints `── provider failover ──`, `── model resolved ──`,
+  and `── stream started ──` sections; a blank-line separator is printed
+  between the verbose preamble and the first streamed token.
 
 ### Changed
 
+- Router's `CreateStream` no longer overwrites `StreamStartedEvent.Model`
+  unconditionally; the provider-reported model is preserved when non-empty
+  (important for OpenRouter auto-model requests).
 - All providers (Anthropic, Claude, MiniMax, OpenRouter) now build the
   `http.Request` before creating the event publisher, so the `RequestEvent`
   carries the real URL, method, and headers.
@@ -88,15 +76,19 @@
 - `NewErrNoProviders` no longer includes a `Message` field (error string is
   now `"router: no providers"` instead of
   `"router: no providers: no providers configured"`).
+- MiniMax: `thinking` field is now omitted from all requests (the official
+  Mini-Agent client never sends it; models think by default and the
+  `"disabled"` type is not supported).
+- MiniMax: `Authorization: Bearer <key>` header added alongside `x-api-key`,
+  matching the reference client.
 
-### Breaking Changes
+### Bug Fixes
 
-- **`ThinkingEffort` and `OutputEffort` replaced by `Effort` + `ThinkingMode`.**
-  - `Request.ThinkingEffort` → `Request.Effort` (type `Effort`: `""`, `"low"`, `"medium"`, `"high"`, `"max"`)
-  - `Request.OutputEffort` → `Request.Thinking` (type `ThinkingMode`: `""`, `"on"`, `"off"`)
-  - All old constants removed (`ThinkingEffortNone`, `ThinkingEffortMinimal`, `OutputEffortHigh`, etc.)
-  - CLI: `--thinking` now accepts `auto|on|off` (was effort levels); `--effort` accepts `low|medium|high|max`
-  - See `docs/thinking-and-effort.md` for migration guide and per-provider mapping.
+- Router no longer swallows per-provider errors when all failover targets are
+  exhausted — original errors are preserved via `errors.Join` and remain
+  inspectable with `errors.Is` / `errors.As`.
+- `ProviderError.Error()` no longer produces a trailing `: ` separator when
+  `Message` is empty.
 
 ### Bug Fixes
 
