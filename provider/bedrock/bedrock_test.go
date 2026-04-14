@@ -7,8 +7,14 @@ import (
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/codewandler/llm"
+	"github.com/codewandler/llm/msg"
+	"github.com/codewandler/llm/provider/anthropic"
+	"github.com/codewandler/llm/tool"
 )
 
 // mockCredentialsProvider implements aws.CredentialsProvider for testing.
@@ -315,4 +321,69 @@ func TestGetRegionFromEnv(t *testing.T) {
 			assert.Equal(t, tt.expectedRegion, result)
 		})
 	}
+}
+
+func TestBuildRequest_AssistantInterleavedThinking(t *testing.T) {
+	t.Parallel()
+
+	tr := msg.Assistant(
+		msg.Thinking("Plan search", "sig-1"),
+		msg.ToolCall{ID: "tc1", Name: "search", Args: tool.Args{"q": "go"}},
+		msg.Thinking("Evaluate results", "sig-2"),
+		msg.Text("Here are the results"),
+	).Build()
+
+	input, err := buildRequest(llm.Request{
+		Model:    "us.anthropic.claude-sonnet-4-20250514-v1:0",
+		Messages: llm.Messages{llm.User("find it"), tr},
+		Thinking: llm.ThinkingOn,
+		Effort:   llm.EffortHigh,
+	})
+	require.NoError(t, err)
+
+	require.Len(t, input.Messages, 2) // user + assistant
+	assistant := input.Messages[1]
+	require.Len(t, assistant.Content, 4)
+
+	// Block 0: reasoning (thinking)
+	_, ok := assistant.Content[0].(*types.ContentBlockMemberReasoningContent)
+	assert.True(t, ok, "block 0 must be reasoning content")
+
+	// Block 1: tool_use
+	_, ok = assistant.Content[1].(*types.ContentBlockMemberToolUse)
+	assert.True(t, ok, "block 1 must be tool use")
+
+	// Block 2: reasoning (thinking)
+	_, ok = assistant.Content[2].(*types.ContentBlockMemberReasoningContent)
+	assert.True(t, ok, "block 2 must be reasoning content")
+
+	// Block 3: text
+	_, ok = assistant.Content[3].(*types.ContentBlockMemberText)
+	assert.True(t, ok, "block 3 must be text")
+}
+
+func TestBuildRequest_AnthropicBetaHeader(t *testing.T) {
+	t.Parallel()
+
+	input, err := buildRequest(llm.Request{
+		Model:    "us.anthropic.claude-sonnet-4-20250514-v1:0",
+		Messages: llm.Messages{llm.User("hello")},
+	})
+	require.NoError(t, err)
+
+	require.NotNil(t, input.AdditionalModelRequestFields)
+
+	// Inspect the Smithy document via UnmarshalSmithyDocument.
+	// The error from UnmarshalSmithyDocument is ignored because the
+	// Bedrock SDK's LazyDocument returns "unsupported json type" for
+	// map[string]any but still populates the target correctly.
+	fields := make(map[string]any)
+	_ = input.AdditionalModelRequestFields.UnmarshalSmithyDocument(&fields)
+
+	beta, ok := fields["anthropic_beta"]
+	require.True(t, ok, "anthropic_beta must be present in additional fields")
+
+	betaList, ok := beta.([]any)
+	require.True(t, ok, "anthropic_beta must be an array")
+	require.Contains(t, betaList, anthropic.BetaInterleavedThinking)
 }

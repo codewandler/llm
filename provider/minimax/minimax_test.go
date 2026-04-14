@@ -55,9 +55,10 @@ func TestNewAPIRequestHeaders(t *testing.T) {
 	assert.Equal(t, "https://api.test/v1/messages", req.URL.String())
 	assert.Equal(t, "token-123", req.Header.Get("x-api-key"))
 	assert.Equal(t, "Bearer token-123", req.Header.Get("Authorization"))
-	assert.Equal(t, anthropicVersion, req.Header.Get("Anthropic-Version"))
+	assert.Equal(t, anthropic.AnthropicVersion, req.Header.Get("Anthropic-Version"))
 	assert.Equal(t, "application/json", req.Header.Get("Content-Type"))
 	assert.Equal(t, "application/json", req.Header.Get("Accept"))
+	assert.Equal(t, anthropic.BetaInterleavedThinking, req.Header.Get("Anthropic-Beta"))
 }
 
 func TestNew_DefaultOptions(t *testing.T) {

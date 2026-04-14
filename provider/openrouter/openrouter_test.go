@@ -632,3 +632,43 @@ func collectStreamEvents(t *testing.T, sseData string, requestedModel string) []
 	}
 	return events
 }
+
+func TestBuildRequest_AssistantInterleavedThinkingOrder(t *testing.T) {
+	// Verify that reasoning_details preserve the part emission order
+	// when thinking is interleaved with tool calls.
+	body, err := buildRequest(llm.Request{
+		Model: "test/model",
+		Messages: msg.BuildTranscript(
+			msg.User("find it"),
+			msg.Assistant(
+				msg.Thinking("Plan search", "sig-1"),
+				msg.ToolCall{ID: "tc1", Name: "search", Args: tool.Args{"q": "go"}},
+				msg.Thinking("Evaluate results", "sig-2"),
+				msg.Text("Here are the results"),
+			),
+		),
+	})
+	require.NoError(t, err)
+
+	var req map[string]any
+	require.NoError(t, json.Unmarshal(body, &req))
+
+	messages := req["messages"].([]any)
+	assistantMsg := messages[1].(map[string]any)
+
+	// reasoning_details must have 2 entries in the correct order
+	details := assistantMsg["reasoning_details"].([]any)
+	require.Len(t, details, 2)
+	assert.Equal(t, "Plan search", details[0].(map[string]any)["text"])
+	assert.Equal(t, "sig-1", details[0].(map[string]any)["signature"])
+	assert.Equal(t, "Evaluate results", details[1].(map[string]any)["text"])
+	assert.Equal(t, "sig-2", details[1].(map[string]any)["signature"])
+
+	// reasoning string must concatenate thinking texts
+	assert.Equal(t, "Plan searchEvaluate results", assistantMsg["reasoning"])
+
+	// tool_calls must be present
+	toolCalls := assistantMsg["tool_calls"].([]any)
+	require.Len(t, toolCalls, 1)
+	assert.Equal(t, "tc1", toolCalls[0].(map[string]any)["id"])
+}

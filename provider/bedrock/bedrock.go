@@ -18,6 +18,7 @@ import (
 
 	"github.com/codewandler/llm"
 	"github.com/codewandler/llm/msg"
+	"github.com/codewandler/llm/provider/anthropic"
 	"github.com/codewandler/llm/sortmap"
 	"github.com/codewandler/llm/tool"
 )
@@ -405,21 +406,40 @@ func buildRequest(opts llm.Request) (*bedrockruntime.ConverseStreamInput, error)
 
 		case msg.RoleAssistant:
 			var content []types.ContentBlock
-			if m.Text() != "" {
-				content = append(content, &types.ContentBlockMemberText{Value: m.Text()})
-			}
-			for _, tc := range m.ToolCalls() {
-				inputDoc, err := toDocument(tc.Args)
-				if err != nil {
-					return nil, fmt.Errorf("marshal tool arguments: %w", err)
+			for _, p := range m.Parts {
+				switch p.Type {
+				case msg.PartTypeText:
+					// Individual text blocks preserve interleaved position
+					// relative to thinking blocks.
+					if p.Text != "" {
+						content = append(content, &types.ContentBlockMemberText{Value: p.Text})
+					}
+				case msg.PartTypeThinking:
+					if p.Thinking == nil {
+						continue
+					}
+					content = append(content, &types.ContentBlockMemberReasoningContent{
+						Value: &types.ReasoningContentBlockMemberReasoningText{
+							Value: types.ReasoningTextBlock{
+								Text:      aws.String(p.Thinking.Text),
+								Signature: aws.String(p.Thinking.Signature),
+							},
+						},
+					})
+				case msg.PartTypeToolCall:
+					tc := p.ToolCall
+					inputDoc, err := toDocument(tc.Args)
+					if err != nil {
+						return nil, fmt.Errorf("marshal tool arguments: %w", err)
+					}
+					content = append(content, &types.ContentBlockMemberToolUse{
+						Value: types.ToolUseBlock{
+							ToolUseId: aws.String(tc.ID),
+							Name:      aws.String(tc.Name),
+							Input:     inputDoc,
+						},
+					})
 				}
-				content = append(content, &types.ContentBlockMemberToolUse{
-					Value: types.ToolUseBlock{
-						ToolUseId: aws.String(tc.ID),
-						Name:      aws.String(tc.Name),
-						Input:     inputDoc,
-					},
-				})
 			}
 			if cp := buildBedrockCachePoint(m.CacheHint, opts.Model); cp != nil {
 				content = append(content, &types.ContentBlockMemberCachePoint{Value: *cp})
@@ -576,6 +596,15 @@ func buildRequest(opts llm.Request) (*bedrockruntime.ConverseStreamInput, error)
 			"type":          "enabled",
 			"budget_tokens": budget,
 		}
+	}
+
+	// Enable interleaved thinking beta for Claude models.
+	// Harmless no-op for models that don't support it.
+	if isClaudeModel(opts.Model) {
+		if additionalFields == nil {
+			additionalFields = make(map[string]any)
+		}
+		additionalFields["anthropic_beta"] = []string{anthropic.BetaInterleavedThinking}
 	}
 
 	// Set additional fields if any were collected

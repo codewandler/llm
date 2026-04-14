@@ -153,19 +153,17 @@ func convertMessages(messages msg.Messages) (systemBlocks []*TextBlock, out []Me
 			out = append(out, mm)
 		case llm.RoleAssistant:
 			var blocks []MessageContentBlock
-			// 1. Thinking
-			for _, t := range m.Parts.ByType(msg.PartTypeThinking) {
-				blocks = append(blocks, Thinking(t.Thinking.Text, t.Thinking.Signature))
-			}
-			// 2. Text
-			for _, p := range m.Parts.ByType(msg.PartTypeText) {
-				blocks = append(blocks, Text(p.Text))
-			}
-			// 3. Tool calls
-			for _, p := range m.Parts.ByType(msg.PartTypeToolCall) {
-				tc := p.ToolCall
-				tub := ToolUse(tc.ID, tc.Name, tc.Args)
-				blocks = append(blocks, &tub)
+			for _, p := range m.Parts {
+				switch p.Type {
+				case msg.PartTypeThinking:
+					blocks = append(blocks, Thinking(p.Thinking.Text, p.Thinking.Signature))
+				case msg.PartTypeText:
+					blocks = append(blocks, Text(p.Text))
+				case msg.PartTypeToolCall:
+					tc := p.ToolCall
+					tub := ToolUse(tc.ID, tc.Name, tc.Args)
+					blocks = append(blocks, &tub)
+				}
 			}
 			mm := Message{Role: "assistant", Content: blocks}
 			mm.setCacheControl(m.CacheHint)

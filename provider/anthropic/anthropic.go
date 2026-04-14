@@ -15,8 +15,14 @@ const (
 	providerName   = "anthropic"
 	defaultBaseURL = "https://api.anthropic.com"
 	// AnthropicVersion is the Anthropic API version header value used by all
-	// providers that speak the Anthropic API (anthropic, claude).
+	// providers that speak the Anthropic API (anthropic, claude, minimax).
 	AnthropicVersion = "2023-06-01"
+
+	// BetaInterleavedThinking is the Anthropic beta header value that enables
+	// interleaved thinking — thinking blocks between text and tool-use blocks
+	// within a single assistant turn. Always sent for models that support it;
+	// harmless no-op for models that don't.
+	BetaInterleavedThinking = "interleaved-thinking-2025-05-14"
 
 	// Keep the unexported alias so existing internal usages compile.
 	anthropicVersion = AnthropicVersion
@@ -113,11 +119,17 @@ func (p *Provider) CreateStream(ctx context.Context, opts llm.Request) (llm.Stre
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		pub.Close()
 		//nolint:errcheck // intentional: defer Close is only for cleanup, failure after response reading is non-fatal
 		defer resp.Body.Close()
 		errBody, _ := io.ReadAll(resp.Body)
-		return nil, llm.NewErrAPIError(llm.ProviderNameAnthropic, resp.StatusCode, string(errBody))
+		apiErr := llm.NewErrAPIError(llm.ProviderNameAnthropic, resp.StatusCode, string(errBody))
+		if llm.IsRetriableHTTPStatus(resp.StatusCode) {
+			pub.Close()
+			return nil, apiErr
+		}
+		pub.Error(apiErr)
+		pub.Close()
+		return ch, nil
 	}
 
 	// Extract headers for rate-limit info (lowercase keys)
@@ -143,6 +155,7 @@ func (p *Provider) newAPIRequest(ctx context.Context, apiKey string, body []byte
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Accept-Encoding", "gzip, deflate, br, zstd")
 	req.Header.Set("Anthropic-Version", anthropicVersion)
+	req.Header.Set("Anthropic-Beta", BetaInterleavedThinking)
 	req.Header.Set("x-api-key", apiKey)
 	return req, nil
 }

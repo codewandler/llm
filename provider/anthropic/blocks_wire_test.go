@@ -125,3 +125,47 @@ func TestBuildRequest_AssistantWithBlocks_SignatureRoundTrip(t *testing.T) {
 	assert.Equal(t, "text", textBlock["type"])
 	assert.Equal(t, "result", textBlock["text"])
 }
+
+// TestBuildRequest_AssistantInterleavedOrder verifies that when an assistant
+// message has interleaved parts (thinking between tool calls), the wire
+// output preserves the exact emission order.
+func TestBuildRequest_AssistantInterleavedOrder(t *testing.T) {
+	// Simulate interleaved thinking: think → tool → think → text → tool
+	tr := msg.Assistant(
+		msg.Thinking("Plan search", "sig-1"),
+		msg.ToolCall{ID: "tc1", Name: "search", Args: tool.Args{"q": "go"}},
+		msg.Thinking("Evaluate results", "sig-2"),
+		msg.Text("Here are the results"),
+		msg.ToolCall{ID: "tc2", Name: "fetch", Args: tool.Args{"url": "x"}},
+	).Build()
+
+	m := buildRequestMap(t, RequestOptions{
+		LLMRequest: llm.Request{
+			Model:    "claude-sonnet-4-5",
+			Messages: llm.Messages{llm.User("find it"), tr},
+		},
+	})
+
+	messages := m["messages"].([]any)
+	assistantMsg := messages[1].(map[string]any)
+	content := assistantMsg["content"].([]any)
+	require.Len(t, content, 5, "all 5 interleaved blocks must be present")
+
+	// Verify exact order: thinking, tool_use, thinking, text, tool_use
+	assert.Equal(t, "thinking", content[0].(map[string]any)["type"])
+	assert.Equal(t, "Plan search", content[0].(map[string]any)["thinking"])
+	assert.Equal(t, "sig-1", content[0].(map[string]any)["signature"])
+
+	assert.Equal(t, "tool_use", content[1].(map[string]any)["type"])
+	assert.Equal(t, "search", content[1].(map[string]any)["name"])
+
+	assert.Equal(t, "thinking", content[2].(map[string]any)["type"])
+	assert.Equal(t, "Evaluate results", content[2].(map[string]any)["thinking"])
+	assert.Equal(t, "sig-2", content[2].(map[string]any)["signature"])
+
+	assert.Equal(t, "text", content[3].(map[string]any)["type"])
+	assert.Equal(t, "Here are the results", content[3].(map[string]any)["text"])
+
+	assert.Equal(t, "tool_use", content[4].(map[string]any)["type"])
+	assert.Equal(t, "fetch", content[4].(map[string]any)["name"])
+}

@@ -174,11 +174,17 @@ func (p *Provider) CreateStream(ctx context.Context, opts llm.Request) (llm.Stre
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		pub.Close()
 		//nolint:errcheck // intentional: defer Close is only for cleanup, failure after response reading is non-fatal
 		defer resp.Body.Close()
 		errBody, _ := io.ReadAll(resp.Body)
-		return nil, llm.NewErrAPIError(llm.ProviderNameOpenRouter, resp.StatusCode, string(errBody))
+		apiErr := llm.NewErrAPIError(llm.ProviderNameOpenRouter, resp.StatusCode, string(errBody))
+		if llm.IsRetriableHTTPStatus(resp.StatusCode) {
+			pub.Close()
+			return nil, apiErr
+		}
+		pub.Error(apiErr)
+		pub.Close()
+		return ch, nil
 	}
 
 	go parseStream(ctx, resp.Body, pub, opts.Model)
@@ -340,32 +346,33 @@ func buildRequest(opts llm.Request) ([]byte, error) {
 				Role:    "assistant",
 				Content: m.Text(),
 			}
-			thinkingParts := m.Parts.ByType(msg.PartTypeThinking)
-			if len(thinkingParts) > 0 {
-				var reasoningText strings.Builder
-				for _, part := range thinkingParts {
-					if part.Thinking == nil {
+			var reasoningText strings.Builder
+			for _, p := range m.Parts {
+				switch p.Type {
+				case msg.PartTypeThinking:
+					if p.Thinking == nil {
 						continue
 					}
-					reasoningText.WriteString(part.Thinking.Text)
+					reasoningText.WriteString(p.Thinking.Text)
 					mp.ReasoningDetails = append(mp.ReasoningDetails, reasoningDetailInput{
 						Type:      "reasoning.text",
-						Text:      part.Thinking.Text,
-						Signature: part.Thinking.Signature,
+						Text:      p.Thinking.Text,
+						Signature: p.Thinking.Signature,
+					})
+				case msg.PartTypeToolCall:
+					argsJSON, _ := json.Marshal(p.ToolCall.Args)
+					mp.ToolCalls = append(mp.ToolCalls, toolCallItem{
+						ID:   p.ToolCall.ID,
+						Type: "function",
+						Function: functionCall{
+							Name:      p.ToolCall.Name,
+							Arguments: string(argsJSON),
+						},
 					})
 				}
-				mp.Reasoning = reasoningText.String()
 			}
-			for _, tc := range m.ToolCalls() {
-				argsJSON, _ := json.Marshal(tc.Args)
-				mp.ToolCalls = append(mp.ToolCalls, toolCallItem{
-					ID:   tc.ID,
-					Type: "function",
-					Function: functionCall{
-						Name:      tc.Name,
-						Arguments: string(argsJSON),
-					},
-				})
+			if reasoningText.Len() > 0 {
+				mp.Reasoning = reasoningText.String()
 			}
 			r.Messages = append(r.Messages, mp)
 		case msg.RoleTool:

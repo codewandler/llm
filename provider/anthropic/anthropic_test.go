@@ -34,6 +34,7 @@ func TestNewAPIRequestHeaders(t *testing.T) {
 	assert.Equal(t, "token-123", req.Header.Get("x-api-key"))
 	assert.Equal(t, anthropicVersion, req.Header.Get("Anthropic-Version"))
 	assert.Equal(t, "application/json", req.Header.Get("Content-Type"))
+	assert.Equal(t, BetaInterleavedThinking, req.Header.Get("Anthropic-Beta"))
 }
 
 func TestBuildRequest_SystemAndTools(t *testing.T) {
