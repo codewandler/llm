@@ -285,6 +285,15 @@ func (p *Provider) Resolve(modelID string) (llm.Model, error) {
 	return p.models[idx], nil
 }
 
+// failoverRecord holds information about a single provider attempt that failed
+// with a retriable error, used to emit ProviderFailoverEvents after a successful
+// provider is found.
+type failoverRecord struct {
+	from string
+	to   string
+	err  error
+}
+
 // CreateStream creates a stream by routing to the appropriate provider.
 // It tries each target in order until one succeeds or all fail.
 func (p *Provider) CreateStream(ctx context.Context, opts llm.Request) (llm.Stream, error) {
@@ -298,7 +307,9 @@ func (p *Provider) CreateStream(ctx context.Context, opts llm.Request) (llm.Stre
 	}
 
 	var triedErrors []error
-	for _, target := range targets {
+	var failovers []failoverRecord
+
+	for i, target := range targets {
 		streamOpts := opts
 		streamOpts.Model = target.modelID
 
@@ -307,18 +318,26 @@ func (p *Provider) CreateStream(ctx context.Context, opts llm.Request) (llm.Stre
 			pe := llm.AsProviderError(target.providerName, err)
 			if isRetriableError(pe) {
 				triedErrors = append(triedErrors, pe)
+				// Only record a failover when there IS a next target to try.
+				if i+1 < len(targets) {
+					failovers = append(failovers, failoverRecord{
+						from: target.providerName,
+						to:   targets[i+1].providerName,
+						err:  pe,
+					})
+				}
 				continue
 			}
 			return nil, pe
 		}
 
 		pub, ch := llm.NewEventPublisher()
-		pub.Routed(llm.RouteInfo{
-			Provider:       target.providerName,
-			ModelRequested: opts.Model,
-			ModelResolved:  target.fullID,
-			Errors:         triedErrors,
-		})
+
+		// Replay failover events in order before the model-resolved event.
+		for _, f := range failovers {
+			pub.Failover(f.from, f.to, f.err)
+		}
+		pub.ModelResolved(p.name, opts.Model, target.fullID)
 
 		go func() {
 			defer pub.Close()
@@ -326,11 +345,14 @@ func (p *Provider) CreateStream(ctx context.Context, opts llm.Request) (llm.Stre
 				if evt.Type == llm.StreamEventCreated {
 					continue
 				}
-
 				if started, ok := evt.Data.(*llm.StreamStartedEvent); ok {
-					started.Model = target.modelID
+					// Only fill in model when the provider did not supply one.
+					// Preserves the resolved model when a provider (e.g. OpenRouter)
+					// reports the actual model chosen for an "auto" request.
+					if started.Model == "" {
+						started.Model = target.modelID
+					}
 				}
-
 				pub.Publish(evt.Data.(llm.Event))
 			}
 		}()

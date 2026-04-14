@@ -115,9 +115,15 @@ func runInfer(ctx context.Context, userMsg, model, system, thinking, effort stri
 				fmt.Printf("\n[EVT :: %s]\n%s\n", ev.Type(), string(d))
 			}
 		})).
-		OnEvent(llm.TypedEventHandler[*llm.RouteInfoEvent](func(ev *llm.RouteInfoEvent) {
+		OnEvent(llm.TypedEventHandler[*llm.ProviderFailoverEvent](func(ev *llm.ProviderFailoverEvent) {
 			if verbose {
-				printRouteInfoEvent(ev)
+				printProviderFailoverEvent(ev)
+				verboseOutputPrinted = true
+			}
+		})).
+		OnEvent(llm.TypedEventHandler[*llm.ModelResolvedEvent](func(ev *llm.ModelResolvedEvent) {
+			if verbose {
+				printModelResolvedEvent(ev)
 				verboseOutputPrinted = true
 			}
 		})).
@@ -383,26 +389,36 @@ func printStreamStartedEvent(ev *llm.StreamStartedEvent) {
 	printFields(fields)
 }
 
-// printRouteInfoEvent prints the routing decision (provider + model resolution)
-// when running in verbose mode.
-func printRouteInfoEvent(ev *llm.RouteInfoEvent) {
-	ri := ev.RouteInfo
+// printModelResolvedEvent prints model name translation when running in verbose mode.
+func printModelResolvedEvent(ev *llm.ModelResolvedEvent) {
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintf(os.Stderr, "%s── route info ──%s\n", ansiDim, ansiReset)
+	fmt.Fprintf(os.Stderr, "%s── model resolved ──%s\n", ansiDim, ansiReset)
 	var fields []kvField
-	if ri.Provider != "" {
-		fields = append(fields, kvField{"provider", ri.Provider})
+	if ev.Resolver != "" {
+		fields = append(fields, kvField{"resolver", ev.Resolver})
 	}
-	if ri.ModelRequested != "" {
-		fields = append(fields, kvField{"model_requested", ri.ModelRequested})
+	if ev.Name != "" {
+		fields = append(fields, kvField{"name", ev.Name})
 	}
-	if ri.ModelResolved != "" {
-		fields = append(fields, kvField{"model_resolved", ri.ModelResolved})
+	if ev.Resolved != "" {
+		fields = append(fields, kvField{"resolved", ev.Resolved})
 	}
-	if len(ri.Errors) > 0 {
-		for i, e := range ri.Errors {
-			fields = append(fields, kvField{fmt.Sprintf("error[%d]", i), e.Error()})
-		}
+	printFields(fields)
+}
+
+// printProviderFailoverEvent prints a provider failover when running in verbose mode.
+func printProviderFailoverEvent(ev *llm.ProviderFailoverEvent) {
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintf(os.Stderr, "%s── provider failover ──%s\n", ansiDim, ansiReset)
+	var fields []kvField
+	if ev.Provider != "" {
+		fields = append(fields, kvField{"from", ev.Provider})
+	}
+	if ev.FailoverProvider != "" {
+		fields = append(fields, kvField{"to", ev.FailoverProvider})
+	}
+	if ev.Error != nil {
+		fields = append(fields, kvField{"error", ev.Error.Error()})
 	}
 	printFields(fields)
 }

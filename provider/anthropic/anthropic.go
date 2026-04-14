@@ -96,6 +96,7 @@ func (p *Provider) CreateStream(ctx context.Context, opts llm.Request) (llm.Stre
 
 	parseOpts := ParseOpts{
 		Model:         opts.Model,
+		ProviderName:  providerName,
 		LLMRequest:    opts,
 		RequestParams: llm.ProviderRequestFromHTTP(req, body),
 	}

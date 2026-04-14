@@ -486,7 +486,7 @@ data: {"choices":[{"finish_reason":"tool_calls"}]}
 
 data: [DONE]
 
-`)
+`, "")
 
 	var toolCalls []tool.Call
 	for _, event := range events {
@@ -510,7 +510,7 @@ data: {"choices":[{"finish_reason":"stop"}]}
 
 data: [DONE]
 
-`)
+`, "")
 
 	for _, event := range events {
 		if event.Type == llm.StreamEventCreated {
@@ -527,7 +527,7 @@ data: {"choices":[],"usage":{"prompt_tokens":100,"completion_tokens":50,"total_t
 
 data: [DONE]
 
-`)
+`, "")
 
 	var usage *llm.Usage
 	for _, event := range events {
@@ -551,7 +551,7 @@ func TestParseStream_ReasoningDetails(t *testing.T) {
 
 data: [DONE]
 
-`)
+`, "")
 
 	var thoughts []string
 	for _, event := range events {
@@ -569,7 +569,7 @@ data: [DONE]
 func TestParseStream_ErrorBeforeStart(t *testing.T) {
 	events := collectStreamEvents(t, `data: {"error":{"message":"boom"}}
 
-`)
+`, "")
 
 	require.Len(t, events, 2)
 	assert.Equal(t, llm.StreamEventCreated, events[0].Type)
@@ -620,11 +620,11 @@ func TestProvider_CountTokens_UsesDefaultModelWhenEmpty(t *testing.T) {
 	assert.Positive(t, got.InputTokens)
 }
 
-func collectStreamEvents(t *testing.T, sseData string) []llm.Envelope {
+func collectStreamEvents(t *testing.T, sseData string, requestedModel string) []llm.Envelope {
 	t.Helper()
 
 	pub, ch := llm.NewEventPublisher()
-	go parseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), pub)
+	go parseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), pub, requestedModel)
 
 	var events []llm.Envelope
 	for event := range ch {

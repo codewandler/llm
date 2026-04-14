@@ -57,7 +57,20 @@ func (s *eventPub) Started(started StreamStartedEvent) {
 func (s *eventPub) Debug(msg string, data any) {
 	s.Publish(&DebugEvent{Message: msg, Data: data})
 }
-func (s *eventPub) Routed(routed RouteInfo)            { s.Publish(&RouteInfoEvent{RouteInfo: routed}) }
+func (s *eventPub) ModelResolved(resolver, name, resolved string) {
+	s.Publish(&ModelResolvedEvent{
+		Resolver: resolver,
+		Name:     name,
+		Resolved: resolved,
+	})
+}
+func (s *eventPub) Failover(from, to string, err error) {
+	s.Publish(&ProviderFailoverEvent{
+		Provider:         from,
+		FailoverProvider: to,
+		Error:            err,
+	})
+}
 func (s *eventPub) Delta(d *DeltaEvent)                { s.Publish(d) }
 func (s *eventPub) Usage(usage Usage)                  { s.Publish(&UsageUpdatedEvent{Usage: usage}) }
 func (s *eventPub) Completed(completed CompletedEvent) { s.Publish(&completed) }

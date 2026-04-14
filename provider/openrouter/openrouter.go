@@ -125,6 +125,7 @@ func (p *Provider) FetchModels(ctx context.Context) ([]llm.Model, error) {
 }
 
 func (p *Provider) CreateStream(ctx context.Context, opts llm.Request) (llm.Stream, error) {
+	requestedModel := opts.Model // save before normalisation
 	opts.Model = p.normalizeRequestModel(opts.Model)
 	if err := opts.Validate(); err != nil {
 		return nil, llm.NewErrBuildRequest(llm.ProviderNameOpenRouter, err)
@@ -154,6 +155,13 @@ func (p *Provider) CreateStream(ctx context.Context, opts llm.Request) (llm.Stre
 
 	// Create publisher and emit RequestEvent BEFORE the HTTP call.
 	pub, ch := llm.NewEventPublisher()
+
+	// Emit model resolution when the client-side normalisation changed the name
+	// (e.g. "" or ModelDefault → "auto").
+	if opts.Model != requestedModel {
+		pub.ModelResolved(providerName, requestedModel, opts.Model)
+	}
+
 	pub.Publish(&llm.RequestEvent{
 		OriginalRequest: opts,
 		ProviderRequest: llm.ProviderRequestFromHTTP(httpReq, body),
@@ -173,7 +181,7 @@ func (p *Provider) CreateStream(ctx context.Context, opts llm.Request) (llm.Stre
 		return nil, llm.NewErrAPIError(llm.ProviderNameOpenRouter, resp.StatusCode, string(errBody))
 	}
 
-	go parseStream(ctx, resp.Body, pub)
+	go parseStream(ctx, resp.Body, pub, opts.Model)
 	return ch, nil
 }
 
@@ -430,7 +438,7 @@ type toolAccum struct {
 	argsBuf strings.Builder
 }
 
-func parseStream(ctx context.Context, body io.ReadCloser, pub llm.Publisher) {
+func parseStream(ctx context.Context, body io.ReadCloser, pub llm.Publisher, requestedModel string) {
 	defer pub.Close()
 
 	activeTools := make(map[uint32]*toolAccum)
@@ -465,6 +473,11 @@ func parseStream(ctx context.Context, body io.ReadCloser, pub llm.Publisher) {
 
 		if !startEmitted {
 			startEmitted = true
+			// If the API resolved a different model than was requested (e.g. "auto"
+			// resolved to a specific model), emit ModelResolvedEvent first.
+			if chunk.Model != "" && chunk.Model != requestedModel {
+				pub.ModelResolved(providerName, requestedModel, chunk.Model)
+			}
 			pub.Started(llm.StreamStartedEvent{
 				Model:     chunk.Model,
 				RequestID: chunk.ID,

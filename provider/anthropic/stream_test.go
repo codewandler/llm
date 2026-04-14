@@ -161,3 +161,58 @@ func TestParseStream_AlwaysEmitsRequestEvent(t *testing.T) {
 		t.Error("expected StreamEventRequest to always be emitted")
 	}
 }
+
+func TestParseStream_ModelResolvedEmittedWhenModelDiffers(t *testing.T) {
+	h := newHarness(ParseOpts{
+		Model:        "claude-sonnet-4-5", // requested alias
+		ProviderName: "anthropic",
+	})
+
+	evts := h.Send(
+		MessageStartEvent{Message: MessageStartPayload{
+			ID: "msg_1", Model: "claude-sonnet-4-5-20251022", // resolved versioned ID
+			Usage: MessageUsage{InputTokens: 5},
+		}},
+		MessageDeltaEvent{Delta: MessageDelta{StopReason: "end_turn"}, Usage: OutputUsage{OutputTokens: 3}},
+	)
+
+	// Find ModelResolvedEvent — must come before StreamStartedEvent.
+	var resolvedIdx, startedIdx int = -1, -1
+	for i, ev := range evts {
+		switch ev.Type {
+		case llm.StreamEventModelResolved:
+			resolvedIdx = i
+		case llm.StreamEventStarted:
+			startedIdx = i
+		}
+	}
+	require.NotEqual(t, -1, resolvedIdx, "expected ModelResolvedEvent")
+	require.NotEqual(t, -1, startedIdx, "expected StreamStartedEvent")
+	assert.Less(t, resolvedIdx, startedIdx, "ModelResolvedEvent must precede StreamStartedEvent")
+
+	mr, ok := evts[resolvedIdx].Data.(*llm.ModelResolvedEvent)
+	require.True(t, ok)
+	assert.Equal(t, "anthropic", mr.Resolver)
+	assert.Equal(t, "claude-sonnet-4-5", mr.Name)
+	assert.Equal(t, "claude-sonnet-4-5-20251022", mr.Resolved)
+}
+
+func TestParseStream_NoModelResolvedWhenModelMatches(t *testing.T) {
+	h := newHarness(ParseOpts{
+		Model:        "claude-haiku-4-5", // exact match
+		ProviderName: "anthropic",
+	})
+
+	evts := h.Send(
+		MessageStartEvent{Message: MessageStartPayload{
+			ID: "msg_1", Model: "claude-haiku-4-5",
+			Usage: MessageUsage{InputTokens: 5},
+		}},
+		MessageDeltaEvent{Delta: MessageDelta{StopReason: "end_turn"}, Usage: OutputUsage{OutputTokens: 2}},
+	)
+
+	for _, ev := range evts {
+		assert.NotEqual(t, llm.StreamEventModelResolved, ev.Type,
+			"ModelResolvedEvent must not be emitted when model matches")
+	}
+}

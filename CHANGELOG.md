@@ -4,6 +4,40 @@
 
 ### Breaking Changes
 
+- **`RouteInfoEvent` replaced by `ModelResolvedEvent` + `ProviderFailoverEvent`.**
+  - `StreamEventRouted` wire value `"routed"` removed; replaced by
+    `StreamEventModelResolved = "model_resolved"` and
+    `StreamEventProviderFailover = "provider_failover"`.
+  - `RouteInfo` and `RouteInfoEvent` types deleted.
+  - `Publisher.Routed(RouteInfo)` removed; replaced by
+    `Publisher.ModelResolved(resolver, name, resolved string)` and
+    `Publisher.Failover(from, to string, err error)`.
+  - `ParseOpts` gains `ProviderName string` (set by all Anthropic-based
+    providers; empty string is safe but omits the resolver from the event).
+
+### Added
+
+- `ModelResolvedEvent{Resolver, Name, Resolved}` — emitted whenever a model
+  name is translated: by router alias lookup, by OpenRouter's default-model
+  normalisation, or by any provider whose API returns a different model than
+  was requested.
+- `ProviderFailoverEvent{Provider, FailoverProvider, Error}` — emitted by
+  the router once per skipped provider when a retriable error occurs.
+  Not emitted for the last-tried provider (terminal failure is an error
+  return, not an event).
+- `llmcli infer -v` now prints `── provider failover ──` and
+  `── model resolved ──` sections (replaces `── route info ──`).
+
+### Changed
+
+- Router's `CreateStream` no longer overwrites `StreamStartedEvent.Model`
+  unconditionally; the provider-reported model is preserved when non-empty
+  (important for OpenRouter auto-model requests).
+- `openrouter.collectStreamEvents` (test helper) now requires an explicit
+  `requestedModel` parameter.
+
+### Breaking Changes
+
 - **`RequestParamsEvent` replaced by `RequestEvent`.**
   - `StreamEventRequestParams` wire value changed from `"request_params"` to
     `"request"`.

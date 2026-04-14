@@ -125,6 +125,12 @@ func (p *streamProcessor) onMessageStart(evt MessageStartEvent) {
 		}
 	}
 
+	// If the API resolved a different model than was requested, emit
+	// ModelResolvedEvent before StreamStartedEvent.
+	if evt.Message.Model != "" && evt.Message.Model != p.meta.Model {
+		p.pub.ModelResolved(p.meta.ProviderName, p.meta.Model, evt.Message.Model)
+	}
+
 	p.pub.Started(llm.StreamStartedEvent{
 		Model:     evt.Message.Model,
 		RequestID: evt.Message.ID,

@@ -12,18 +12,19 @@ import (
 type EventType string
 
 const (
-	StreamEventCreated      EventType = "created"
-	StreamEventClosed       EventType = "closed"
-	StreamEventRouted       EventType = "routed"
-	StreamEventStarted      EventType = "started"
-	StreamEventUsageUpdated EventType = "usage"
-	StreamEventDelta        EventType = "delta"
-	StreamEventToolCall     EventType = "tool_call"
-	StreamEventContentPart  EventType = "content_part"
-	StreamEventCompleted    EventType = "completed"
-	StreamEventError        EventType = "error"
-	StreamEventDebug        EventType = "debug"
-	StreamEventRequest      EventType = "request"
+	StreamEventCreated         EventType = "created"
+	StreamEventClosed          EventType = "closed"
+	StreamEventModelResolved   EventType = "model_resolved"
+	StreamEventProviderFailover EventType = "provider_failover"
+	StreamEventStarted         EventType = "started"
+	StreamEventUsageUpdated    EventType = "usage"
+	StreamEventDelta           EventType = "delta"
+	StreamEventToolCall        EventType = "tool_call"
+	StreamEventContentPart     EventType = "content_part"
+	StreamEventCompleted       EventType = "completed"
+	StreamEventError           EventType = "error"
+	StreamEventDebug           EventType = "debug"
+	StreamEventRequest         EventType = "request"
 )
 
 type (
@@ -37,7 +38,8 @@ type (
 		Publish(payload Event)
 
 		Started(started StreamStartedEvent)
-		Routed(routed RouteInfo)
+		ModelResolved(resolver, name, resolved string)
+		Failover(from, to string, err error)
 		Delta(d *DeltaEvent)
 		ToolCall(tc tool.Call)
 		ContentBlock(evt ContentPartEvent)
@@ -89,15 +91,24 @@ type (
 		Data    any    `json:"data,omitempty"`
 	}
 
-	RouteInfo struct {
-		Provider       string  `json:"provider"`
-		ModelRequested string  `json:"model_requested,omitempty"`
-		ModelResolved  string  `json:"model_resolved,omitempty"`
-		Errors         []error `json:"-"`
+	// ModelResolvedEvent is emitted whenever a requested model name is
+	// translated to a different resolved name: by router alias lookup,
+	// by OpenRouter's default-model normalization, or by a provider
+	// revealing the actual model chosen for the request.
+	ModelResolvedEvent struct {
+		Resolver string `json:"resolver"`
+		Name     string `json:"name,omitempty"`
+		Resolved string `json:"resolved,omitempty"`
 	}
 
-	RouteInfoEvent struct {
-		RouteInfo RouteInfo `json:"route_info"`
+	// ProviderFailoverEvent is emitted by the router each time a provider
+	// attempt fails with a retriable error and the next provider is tried.
+	// It is NOT emitted when the last provider in the list fails (that is
+	// terminal, surfaced as an error return, not an event).
+	ProviderFailoverEvent struct {
+		Provider         string `json:"provider"`          // failed provider
+		FailoverProvider string `json:"failover_provider"` // next provider being tried
+		Error            error  `json:"-"`
 	}
 
 	ToolCallEvent struct {
@@ -142,14 +153,15 @@ type (
 	}
 )
 
-func (e DebugEvent) Type() EventType         { return StreamEventDebug }
-func (e RequestEvent) Type() EventType       { return StreamEventRequest }
-func (e RouteInfoEvent) Type() EventType     { return StreamEventRouted }
-func (e StreamCreatedEvent) Type() EventType { return StreamEventCreated }
-func (e StreamClosedEvent) Type() EventType  { return StreamEventClosed }
-func (e ToolCallEvent) Type() EventType      { return StreamEventToolCall }
-func (e StreamStartedEvent) Type() EventType { return StreamEventStarted }
-func (e CompletedEvent) Type() EventType     { return StreamEventCompleted }
-func (e UsageUpdatedEvent) Type() EventType  { return StreamEventUsageUpdated }
-func (e ErrorEvent) Type() EventType         { return StreamEventError }
-func (e ContentPartEvent) Type() EventType   { return StreamEventContentPart }
+func (e DebugEvent) Type() EventType          { return StreamEventDebug }
+func (e RequestEvent) Type() EventType        { return StreamEventRequest }
+func (e ModelResolvedEvent) Type() EventType  { return StreamEventModelResolved }
+func (e ProviderFailoverEvent) Type() EventType { return StreamEventProviderFailover }
+func (e StreamCreatedEvent) Type() EventType  { return StreamEventCreated }
+func (e StreamClosedEvent) Type() EventType   { return StreamEventClosed }
+func (e ToolCallEvent) Type() EventType       { return StreamEventToolCall }
+func (e StreamStartedEvent) Type() EventType  { return StreamEventStarted }
+func (e CompletedEvent) Type() EventType      { return StreamEventCompleted }
+func (e UsageUpdatedEvent) Type() EventType   { return StreamEventUsageUpdated }
+func (e ErrorEvent) Type() EventType          { return StreamEventError }
+func (e ContentPartEvent) Type() EventType    { return StreamEventContentPart }

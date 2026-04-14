@@ -17,6 +17,11 @@ type CostFn func(model string, usage *llm.Usage)
 type ParseOpts struct {
 	Model string
 
+	// ProviderName is used in ModelResolvedEvent.Resolver when the API returns
+	// a different model than was requested. Set to the provider's own name
+	// (e.g. "anthropic", "claude", "minimax").
+	ProviderName string
+
 	// CostFn overrides the default Anthropic cost calculation.
 	// When nil, FillCost (Anthropic pricing) is used.
 	CostFn CostFn

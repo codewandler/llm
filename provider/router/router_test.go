@@ -297,9 +297,14 @@ func TestCreateStream(t *testing.T) {
 		for evt := range stream {
 			events = append(events, evt)
 		}
-		assert.Len(t, events, 4) // created, routed, delta, done
+		assert.Len(t, events, 4) // created, model_resolved, delta, done
 		assert.Equal(t, llm.StreamEventCreated, events[0].Type)
-		assert.Equal(t, llm.StreamEventRouted, events[1].Type)
+		assert.Equal(t, llm.StreamEventModelResolved, events[1].Type)
+		if ev, ok := events[1].Data.(*llm.ModelResolvedEvent); ok {
+			assert.Equal(t, "router", ev.Resolver) // router's default name
+			assert.Equal(t, "gpt-4", ev.Name)
+			assert.NotEmpty(t, ev.Resolved)
+		}
 		assert.Equal(t, llm.StreamEventDelta, events[2].Type)
 		assert.Equal(t, llm.StreamEventCompleted, events[3].Type)
 	})
@@ -486,6 +491,110 @@ func TestCreateStream(t *testing.T) {
 		})
 		require.Error(t, err)
 		assert.ErrorIs(t, err, ErrUnknownModel)
+	})
+
+	t.Run("emits ProviderFailoverEvent then ModelResolvedEvent on failover", func(t *testing.T) {
+		prov1 := &mockProvider{
+			name:      "prov1",
+			returnErr: llm.NewErrAPIError("prov1", 429, "rate limited"),
+			models:    []llm.Model{{ID: "m", Provider: "type1"}},
+		}
+		prov2 := &mockProvider{
+			name: "prov2",
+			streamFunc: func(_ context.Context, _ llm.Request) (llm.Stream, error) {
+				ch := make(chan llm.Envelope, 1)
+				go func() {
+					ch <- llm.Envelope{Type: llm.StreamEventCompleted, Data: &llm.CompletedEvent{}}
+					close(ch)
+				}()
+				return ch, nil
+			},
+			models: []llm.Model{{ID: "m", Provider: "type2"}},
+		}
+
+		cfg := Config{
+			Providers: []ProviderInstanceConfig{
+				{Name: "prov1", Type: "type1"},
+				{Name: "prov2", Type: "type2"},
+			},
+			Aliases: map[string][]AliasTarget{
+				"fast": {
+					{Provider: "prov1", Model: "m"},
+					{Provider: "prov2", Model: "m"},
+				},
+			},
+		}
+		agg, err := New(cfg, map[string]Factory{
+			"type1": mockFactory(prov1),
+			"type2": mockFactory(prov2),
+		})
+		require.NoError(t, err)
+
+		stream, err := agg.CreateStream(context.Background(), llm.Request{
+			Model:    "fast",
+			Messages: llm.Messages{llm.User("hi")},
+		})
+		require.NoError(t, err)
+
+		var events []llm.Envelope
+		for evt := range stream {
+			events = append(events, evt)
+		}
+
+		// Expect: created, provider_failover, model_resolved, completed
+		require.GreaterOrEqual(t, len(events), 3)
+		assert.Equal(t, llm.StreamEventCreated, events[0].Type)
+		assert.Equal(t, llm.StreamEventProviderFailover, events[1].Type)
+		if fev, ok := events[1].Data.(*llm.ProviderFailoverEvent); ok {
+			assert.Equal(t, "prov1", fev.Provider)
+			assert.Equal(t, "prov2", fev.FailoverProvider)
+			assert.NotNil(t, fev.Error)
+		}
+		assert.Equal(t, llm.StreamEventModelResolved, events[2].Type)
+		if mev, ok := events[2].Data.(*llm.ModelResolvedEvent); ok {
+			assert.Equal(t, "fast", mev.Name)
+			assert.NotEmpty(t, mev.Resolved)
+		}
+	})
+
+	t.Run("all retriable failures return ErrAllProvidersFailed", func(t *testing.T) {
+		prov1 := &mockProvider{
+			name:      "prov1",
+			returnErr: llm.NewErrAPIError("prov1", 429, "rate limited"),
+			models:    []llm.Model{{ID: "m", Provider: "type1"}},
+		}
+		prov2 := &mockProvider{
+			name:      "prov2",
+			returnErr: llm.NewErrAPIError("prov2", 503, "unavailable"),
+			models:    []llm.Model{{ID: "m", Provider: "type2"}},
+		}
+
+		cfg := Config{
+			Providers: []ProviderInstanceConfig{
+				{Name: "prov1", Type: "type1"},
+				{Name: "prov2", Type: "type2"},
+			},
+			Aliases: map[string][]AliasTarget{
+				"fast": {
+					{Provider: "prov1", Model: "m"},
+					{Provider: "prov2", Model: "m"},
+				},
+			},
+		}
+		agg, err := New(cfg, map[string]Factory{
+			"type1": mockFactory(prov1),
+			"type2": mockFactory(prov2),
+		})
+		require.NoError(t, err)
+
+		stream, err := agg.CreateStream(context.Background(), llm.Request{
+			Model:    "fast",
+			Messages: llm.Messages{llm.User("hi")},
+		})
+		// No stream returned — error only.
+		require.Error(t, err)
+		assert.Nil(t, stream)
+		assert.ErrorIs(t, err, llm.ErrNoProviders)
 	})
 }
 

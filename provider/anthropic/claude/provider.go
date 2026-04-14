@@ -151,6 +151,7 @@ func (p *Provider) CreateStream(ctx context.Context, req llm.Request) (llm.Strea
 
 	parseOpts := anthropic.ParseOpts{
 		Model:         req.Model,
+		ProviderName:  providerName,
 		LLMRequest:    req,
 		RequestParams: llm.ProviderRequestFromHTTP(httpReq, requestBodyBytes),
 	}
