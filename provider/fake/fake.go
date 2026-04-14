@@ -42,7 +42,7 @@ func NewProvider(opts ...llm.ProviderOpt) llm.Provider {
 	)
 }
 
-func (f *Provider) CreateStream(_ context.Context, _ llm.Request) (llm.Stream, error) {
+func (f *Provider) CreateStream(_ context.Context, _ llm.Buildable) (llm.Stream, error) {
 	pub, ch := llm.NewEventPublisher()
 	go func() {
 		defer pub.Close()

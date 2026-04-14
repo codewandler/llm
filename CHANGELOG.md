@@ -2,6 +2,37 @@
 
 ## Unreleased
 
+### Added
+
+- `RequestBuilder` — fluent builder for `llm.Request` with message
+  methods (`System`, `User`, `Append`), tool methods (`Tools`,
+  `ToolChoice`), all sampling fields, and a `Coding()` preset.
+- Dual configuration API: thirteen `With*` option constructors
+  (`WithModel`, `WithSystem`, `WithUser`, `WithTools`, `WithToolChoice`,
+  `WithMaxTokens`, …) and `Apply(opts ...RequestOption)` allow callers
+  to use fluent chains, composable `[]RequestOption` slices, or both.
+- `Buildable` interface — `BuildRequest(ctx context.Context) (Request,
+  error)`; both `Request` and `*RequestBuilder` satisfy it, so either
+  can be passed directly to `CreateStream`.
+- `CacheOpt`, `CacheTTL`, `CacheTTL5m`, and `CacheTTL1h` re-exported
+  at the `llm` package level so callers need not import `msg` directly.
+
+### Changed
+
+- `Streamer.CreateStream` and all provider `CreateStream`
+  implementations now accept `Buildable` instead of `Request`.
+  Existing callers passing `llm.Request` are unaffected; only code
+  that *implements* the `Streamer` interface needs updating.
+
+### Bug Fixes
+
+- `NewRequestBuilder()` no longer pre-fills `Temperature: 0.7`,
+  `Effort: EffortLow`, `Thinking: ThinkingOff`, and
+  `ToolChoice: ToolChoiceAuto{}`; all fields now zero out to
+  provider-level defaults.
+- `BuildRequest(opts ...RequestOption)` silently dropped its arguments;
+  `opts` are now forwarded correctly.
+
 ---
 
 ## [v0.36.0] — 2026-04-14

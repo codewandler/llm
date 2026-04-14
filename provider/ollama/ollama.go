@@ -245,7 +245,12 @@ func (p *Provider) downloadModel(ctx context.Context, modelID string) error {
 	return nil
 }
 
-func (p *Provider) CreateStream(ctx context.Context, opts llm.Request) (llm.Stream, error) {
+func (p *Provider) CreateStream(ctx context.Context, src llm.Buildable) (llm.Stream, error) {
+	opts, err := src.BuildRequest(ctx)
+	if err != nil {
+		return nil, llm.NewErrBuildRequest(llm.ProviderNameOllama, err)
+	}
+
 	if err := opts.Validate(); err != nil {
 		return nil, llm.NewErrBuildRequest(llm.ProviderNameOllama, err)
 	}

@@ -22,7 +22,11 @@ type mockProvider struct {
 func (m *mockProvider) Name() string                              { return m.name }
 func (m *mockProvider) Models() llm.Models                        { return m.models }
 func (m *mockProvider) Resolve(modelID string) (llm.Model, error) { return m.models.Resolve(modelID) }
-func (m *mockProvider) CreateStream(ctx context.Context, opts llm.Request) (llm.Stream, error) {
+func (m *mockProvider) CreateStream(ctx context.Context, src llm.Buildable) (llm.Stream, error) {
+	opts, err := src.BuildRequest(ctx)
+	if err != nil {
+		return nil, err
+	}
 	if m.returnErr != nil {
 		return nil, m.returnErr
 	}

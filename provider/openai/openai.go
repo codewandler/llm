@@ -131,7 +131,12 @@ func (p *Provider) FetchModels(ctx context.Context) ([]llm.Model, error) {
 // Thought effort is validated and mapped before the request is forwarded.
 // Unknown models (not in the registry) default to Chat Completions so that
 // newly released models work without a registry update.
-func (p *Provider) CreateStream(ctx context.Context, opts llm.Request) (llm.Stream, error) {
+func (p *Provider) CreateStream(ctx context.Context, src llm.Buildable) (llm.Stream, error) {
+	opts, err := src.BuildRequest(ctx)
+	if err != nil {
+		return nil, llm.NewErrBuildRequest(llm.ProviderNameOpenAI, err)
+	}
+
 	enriched, err := enrichOpts(opts)
 	if err != nil {
 		return nil, err

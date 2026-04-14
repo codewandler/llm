@@ -102,7 +102,12 @@ func New(opts ...Option) *Provider {
 func (p *Provider) Name() string { return providerName }
 
 // CreateStream implements llm.Provider.
-func (p *Provider) CreateStream(ctx context.Context, req llm.Request) (llm.Stream, error) {
+func (p *Provider) CreateStream(ctx context.Context, src llm.Buildable) (llm.Stream, error) {
+	req, err := src.BuildRequest(ctx)
+	if err != nil {
+		return nil, llm.NewErrBuildRequest(llm.ProviderNameClaude, err)
+	}
+
 	if p.initErr != nil {
 		return nil, llm.NewErrProviderMsg(llm.ProviderNameClaude, p.initErr.Error())
 	}

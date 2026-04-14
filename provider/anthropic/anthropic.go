@@ -60,7 +60,12 @@ func (p *Provider) Models() llm.Models { return allModelsWithAliases }
 func (p *Provider) Resolve(modelID string) (llm.Model, error) {
 	return allModelsWithAliases.Resolve(modelID)
 }
-func (p *Provider) CreateStream(ctx context.Context, opts llm.Request) (llm.Stream, error) {
+func (p *Provider) CreateStream(ctx context.Context, src llm.Buildable) (llm.Stream, error) {
+	opts, err := src.BuildRequest(ctx)
+	if err != nil {
+		return nil, llm.NewErrBuildRequest(llm.ProviderNameAnthropic, err)
+	}
+
 	// Resolve aliases (e.g. "default", "fast") to real model IDs.
 	// Unknown model IDs pass through to the API unchanged.
 	if opts.Model != "" {

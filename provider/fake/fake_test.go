@@ -296,3 +296,14 @@ func Example() {
 		}
 	}
 }
+
+func TestCreateStream_AcceptsBuilder(t *testing.T) {
+	// Verify that *RequestBuilder satisfies llm.Buildable and can be passed
+	// directly to CreateStream without an explicit Build() call at the call site.
+	p := NewProvider()
+	b := llm.NewRequestBuilder().
+		Model(llm.ModelDefault).
+		User("hello")
+	_, err := p.CreateStream(context.Background(), b)
+	require.NoError(t, err)
+}

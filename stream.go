@@ -3,11 +3,11 @@ package llm
 import "context"
 
 type Streamer interface {
-	CreateStream(ctx context.Context, opts Request) (Stream, error)
+	CreateStream(ctx context.Context, src Buildable) (Stream, error)
 }
 
-type StreamFunc func(ctx context.Context, opts Request) (Stream, error)
+type StreamFunc func(ctx context.Context, src Buildable) (Stream, error)
 
-func (f StreamFunc) CreateStream(ctx context.Context, opts Request) (Stream, error) {
-	return f(ctx, opts)
+func (f StreamFunc) CreateStream(ctx context.Context, src Buildable) (Stream, error) {
+	return f(ctx, src)
 }

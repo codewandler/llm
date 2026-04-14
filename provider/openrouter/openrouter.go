@@ -124,7 +124,12 @@ func (p *Provider) FetchModels(ctx context.Context) ([]llm.Model, error) {
 	return models, nil
 }
 
-func (p *Provider) CreateStream(ctx context.Context, opts llm.Request) (llm.Stream, error) {
+func (p *Provider) CreateStream(ctx context.Context, src llm.Buildable) (llm.Stream, error) {
+	opts, err := src.BuildRequest(ctx)
+	if err != nil {
+		return nil, llm.NewErrBuildRequest(llm.ProviderNameOpenRouter, err)
+	}
+
 	requestedModel := opts.Model // save before normalisation
 	opts.Model = p.normalizeRequestModel(opts.Model)
 	if err := opts.Validate(); err != nil {

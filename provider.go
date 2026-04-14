@@ -30,8 +30,8 @@ func (p *baseProvider) Resolve(modelID string) (Model, error) {
 }
 func (p *baseProvider) Name() string   { return p.name }
 func (p *baseProvider) Models() Models { return p.modelsProvider.Models() }
-func (p *baseProvider) CreateStream(ctx context.Context, opts Request) (Stream, error) {
-	return p.streamer.CreateStream(ctx, opts)
+func (p *baseProvider) CreateStream(ctx context.Context, src Buildable) (Stream, error) {
+	return p.streamer.CreateStream(ctx, src)
 }
 
 type ProviderOpt interface {
@@ -79,7 +79,7 @@ func NewProvider(name string, opts ...ProviderOpt) Provider {
 	}
 
 	if p.streamer == nil {
-		p.streamer = StreamFunc(func(ctx context.Context, opts Request) (Stream, error) {
+		p.streamer = StreamFunc(func(ctx context.Context, src Buildable) (Stream, error) {
 			return nil, fmt.Errorf("no streamer configured for provider %q", p.name+"")
 		})
 	}

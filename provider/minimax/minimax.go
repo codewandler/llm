@@ -83,7 +83,12 @@ func (p *Provider) Resolve(model string) (llm.Model, error) {
 	return p.Models().Resolve(model)
 }
 
-func (p *Provider) CreateStream(ctx context.Context, opts llm.Request) (llm.Stream, error) {
+func (p *Provider) CreateStream(ctx context.Context, src llm.Buildable) (llm.Stream, error) {
+	opts, err := src.BuildRequest(ctx)
+	if err != nil {
+		return nil, llm.NewErrBuildRequest(providerName, err)
+	}
+
 	// Resolve aliases (e.g. "default", "fast", "minimax") to real model IDs.
 	// Unknown model IDs pass through to the API unchanged.
 	if opts.Model != "" {
