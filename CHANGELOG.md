@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+---
+
+## [v0.36.0] — 2026-04-14
+
 ### Added
 
 - `llmcli infer` — five new flags: `--temperature`, `--top-p`, `--top-k`,
@@ -14,12 +18,24 @@
   `ToolChoiceAuto`), allowing providers to apply their own defaults.
 - `MarshalText`/`UnmarshalText` on `ThinkingMode`, `Effort`, and
   `OutputFormat` for direct use with `pflag.TextVar`.
+- Interleaved thinking enabled by default across Anthropic, MiniMax,
+  OpenRouter, and Bedrock providers; Bedrock now serialises thinking blocks
+  on assistant messages via `ContentBlockMemberReasoningContent` (previously
+  silently dropped); `BetaInterleavedThinking` constant extracted.
 
 ### Changed
 
 - `llmcli infer` flag pipeline simplified: `inferSpec` / `buildInferSpec`
   removed; cobra writes typed values directly into `inferOpts` via
   `f.TextVar`, eliminating an intermediate stringly-typed layer.
+- `ToolChoiceRequired` now silently downgrades to `ToolChoiceAuto` when
+  thinking is enabled, matching the existing behaviour of `ToolChoiceTool`
+  (was returning an error).
+
+### Bug Fixes
+
+- Claude provider now routes retriable HTTP errors through the router
+  failover path instead of failing immediately.
 
 ---
 
