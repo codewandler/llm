@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+---
+
+## [v0.37.0] — 2026-04-14
+
 ### Added
 
 - `RequestBuilder` — fluent builder for `llm.Request` with message
