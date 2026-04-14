@@ -2,6 +2,7 @@
 
 **Design**: `.agents/plans/DESIGN-20260413-interleaved-thinking.md`
 **Estimated total time**: ~25 minutes
+**Baseline**: clean working tree at `98ac174` (all prior refactors committed)
 
 ---
 
@@ -10,7 +11,7 @@
 **Files modified**: `provider/anthropic/message.go`
 **Estimated time**: 3 minutes
 
-**Code to write** — replace lines 154-169:
+**Code to write** — replace lines 154-169 (the `case llm.RoleAssistant:` body, up to but not including `mm := Message{...}` on line 170):
 
 ```go
 		case llm.RoleAssistant:
@@ -103,7 +104,7 @@ go test ./provider/anthropic/... -run TestBuildRequest_AssistantWithBlocks -v
 **Files modified**: `provider/anthropic/anthropic.go`
 **Estimated time**: 2 minutes
 
-**Code to write** — add after line 132 (`req.Header.Set("Anthropic-Version", ...)`):
+**Code to write** — add after line 132 (`req.Header.Set("Anthropic-Version", anthropicVersion)`):
 
 ```go
 	req.Header.Set("Anthropic-Beta", "interleaved-thinking-2025-05-14")
@@ -142,7 +143,9 @@ go test ./provider/anthropic/... -run TestNewAPIRequestHeaders -v
 **Files modified**: `provider/minimax/minimax.go`
 **Estimated time**: 2 minutes
 
-**Code to write** — add after line 153 (`req.Header.Set("Anthropic-Version", ...)`):
+**Context from `9970a92`**: MiniMax's Anthropic-compatible endpoint does not accept the `thinking` JSON field (the `adjustThinkingForMiniMax` function strips it). However, the `Anthropic-Beta` HTTP header is a standard HTTP header — unknown HTTP headers are ignored by any well-behaved server. MiniMax M2+ models always interleave thinking natively, so the header is strictly a no-op but harmless.
+
+**Code to write** — add after line 184 (`req.Header.Set("Anthropic-Version", anthropicVersion)`):
 
 ```go
 	req.Header.Set("Anthropic-Beta", "interleaved-thinking-2025-05-14")
@@ -163,7 +166,7 @@ Note: `TestNewAPIRequestHeaders` in `minimax_test.go` must be updated to assert 
 **Files modified**: `provider/minimax/minimax_test.go`
 **Estimated time**: 2 minutes
 
-**Code to write** — add assertion after line 57 (`assert.Equal(t, "application/json", req.Header.Get("Accept"))`):
+**Code to write** — add assertion after line 60 (`assert.Equal(t, "application/json", req.Header.Get("Accept"))`):
 
 ```go
 	assert.Equal(t, "interleaved-thinking-2025-05-14", req.Header.Get("Anthropic-Beta"))
@@ -181,7 +184,7 @@ go test ./provider/minimax/... -run TestNewAPIRequestHeaders -v
 **Files modified**: `provider/bedrock/bedrock.go`
 **Estimated time**: 5 minutes
 
-**Code to write** — replace lines 406-430 (the `case msg.RoleAssistant:` block):
+**Code to write** — replace lines 406-430 (the `case msg.RoleAssistant:` block). Keep the cache point logic at the end:
 
 ```go
 		case msg.RoleAssistant:
@@ -238,7 +241,7 @@ go test ./provider/bedrock/... -v
 **Files modified**: `provider/bedrock/bedrock.go`
 **Estimated time**: 2 minutes
 
-**Code to write** — add new block after the `reasoning_config` block (after line 579, before the `if len(additionalFields) > 0` check):
+**Code to write** — add new block after the `reasoning_config` block (after line 579), before the `// Set additional fields if any were collected` comment:
 
 ```go
 	// Enable interleaved thinking beta for Claude models.
@@ -264,12 +267,14 @@ go test ./provider/bedrock/... -v
 **Files modified**: `provider/bedrock/bedrock_test.go`
 **Estimated time**: 5 minutes
 
-**Code to write** — two new tests:
+**Code to write** — two new tests. `buildRequest` is unexported but callable from tests in the same package. It takes `llm.Request` and returns `(*bedrockruntime.ConverseStreamInput, error)`.
+
+New imports needed: `"github.com/codewandler/llm"`, `"github.com/codewandler/llm/msg"`, `"github.com/codewandler/llm/tool"`, `"github.com/aws/aws-sdk-go-v2/service/bedrockruntime/types"`.
 
 ```go
 func TestBuildRequest_AssistantInterleavedThinking(t *testing.T) {
-	// Verify assistant messages with interleaved thinking parts
-	// serialize in the correct order with reasoning content blocks.
+	t.Parallel()
+
 	tr := msg.Assistant(
 		msg.Thinking("Plan search", "sig-1"),
 		msg.ToolCall{ID: "tc1", Name: "search", Args: tool.Args{"q": "go"}},
@@ -277,8 +282,7 @@ func TestBuildRequest_AssistantInterleavedThinking(t *testing.T) {
 		msg.Text("Here are the results"),
 	).Build()
 
-	// Build a request with these messages
-	input, err := buildTestRequest(t, llm.Request{
+	input, err := buildRequest(llm.Request{
 		Model:    "us.anthropic.claude-sonnet-4-20250514-v1:0",
 		Messages: llm.Messages{llm.User("find it"), tr},
 		Thinking: llm.ThinkingOn,
@@ -286,7 +290,6 @@ func TestBuildRequest_AssistantInterleavedThinking(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Check the assistant message content blocks
 	require.Len(t, input.Messages, 2) // user + assistant
 	assistant := input.Messages[1]
 	require.Len(t, assistant.Content, 4)
@@ -309,9 +312,9 @@ func TestBuildRequest_AssistantInterleavedThinking(t *testing.T) {
 }
 
 func TestBuildRequest_AnthropicBetaHeader(t *testing.T) {
-	// Verify the anthropic_beta field is set in additional request fields
-	// for Claude models.
-	input, err := buildTestRequest(t, llm.Request{
+	t.Parallel()
+
+	input, err := buildRequest(llm.Request{
 		Model:    "us.anthropic.claude-sonnet-4-20250514-v1:0",
 		Messages: llm.Messages{llm.User("hello")},
 	})
@@ -319,9 +322,12 @@ func TestBuildRequest_AnthropicBetaHeader(t *testing.T) {
 
 	require.NotNil(t, input.AdditionalModelRequestFields)
 
-	var fields map[string]any
-	err = input.AdditionalModelRequestFields.UnmarshalSmithyDocument(&fields)
+	// Round-trip through JSON to inspect the document contents
+	docBytes, err := input.AdditionalModelRequestFields.MarshalSmithyDocument()
 	require.NoError(t, err)
+
+	var fields map[string]any
+	require.NoError(t, json.Unmarshal(docBytes, &fields))
 
 	beta, ok := fields["anthropic_beta"]
 	require.True(t, ok, "anthropic_beta must be present")
@@ -332,7 +338,7 @@ func TestBuildRequest_AnthropicBetaHeader(t *testing.T) {
 }
 ```
 
-Note: A `buildTestRequest` helper may need to be created (or use existing test infrastructure). Check `bedrock_test.go` for the existing pattern.
+Note: Uses `MarshalSmithyDocument()` → `json.Unmarshal` to inspect the document. If the SDK document type doesn't have `MarshalSmithyDocument`, use `json.Marshal` on the document directly — verify at implementation time.
 
 **Verification**:
 ```bash
@@ -347,7 +353,7 @@ go test ./provider/bedrock/... -run TestBuildRequest_AnthropicBetaHeader -v
 **Files modified**: `provider/openrouter/openrouter.go`
 **Estimated time**: 3 minutes
 
-**Code to write** — replace lines 320-351 (the `case msg.RoleAssistant:` block):
+**Code to write** — replace lines 338-370 (the `case msg.RoleAssistant:` block, up to and including `r.Messages = append(r.Messages, mp)`):
 
 ```go
 		case msg.RoleAssistant:

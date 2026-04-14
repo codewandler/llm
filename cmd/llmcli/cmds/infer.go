@@ -16,18 +16,12 @@ import (
 
 // NewInferCmd returns the infer command.
 func NewInferCmd(root *RootFlags) *cobra.Command {
-	var model string
-	var system string
-	var verbose bool
-	var thinking string
-	var effort string
-	var demoTools bool
-	var maxTokens int
+	var opts inferOpts
 
 	cmd := &cobra.Command{
 		Use:   "infer <message>",
-		Short: "Send a message to Claude and stream the response",
-		Long: `Send a message to Claude using stored OAuth credentials.
+		Short: "Send a message to an LLM and stream the response",
+		Long: `Send a message using stored OAuth credentials.
 
 Uses all stored credential accounts, trying each in alphabetical order
 until one succeeds (useful for rate limit fallback).
@@ -39,24 +33,89 @@ Examples:
   llmcli infer --thinking off "Quick answer"				# disable thinking
   llmcli infer -m powerful "Write a poem about Go"		# Most capable (opus)
   llmcli infer -s "You are a pirate" "Hello"				# Add system prompt
-  llmcli infer --max-tokens 512 "Short answer please"		# Limit output length`,
+  llmcli infer --max-tokens 512 "Short answer please"		# Limit output length
+  llmcli infer --temperature 0.2 "Precise answer"			# Low randomness
+  llmcli infer --tool-choice none --demo-tools "List facts"	# Tools available but not forced
+  llmcli infer --output-format json "Return a JSON object"	# Constrain to JSON output`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runInfer(cmd.Context(), args[0], model, system, thinking, effort, verbose, demoTools, maxTokens, root)
+			opts.UserMsg = args[0]
+			return runInfer(cmd.Context(), opts, root)
 		},
 	}
 
-	cmd.Flags().StringVarP(&model, "model", "m", "fast", "Model to use (fast, default, powerful, codex, or full path)")
-	cmd.Flags().StringVarP(&system, "system", "s", "", "System prompt to prepend")
-	cmd.Flags().StringVar(&thinking, "thinking", "", "Thinking mode: auto, on, off (default: auto)")
-	cmd.Flags().StringVar(&effort, "effort", "", "Effort level: low, medium, high, max (default: provider decides)")
-	cmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "Show usage statistics")
-	cmd.Flags().BoolVar(&demoTools, "demo-tools", false, "Enable demo tool loop (add_fact + complete_turn) and default persona")
-	cmd.Flags().IntVar(&maxTokens, "max-tokens", 8_000, "Maximum tokens to generate")
+	f := cmd.Flags()
+	f.StringVarP(&opts.Model, "model", "m", "fast", "Model alias or full path")
+	f.StringVarP(&opts.System, "system", "s", "", "System prompt")
+	f.BoolVarP(&opts.Verbose, "verbose", "v", false, "Verbose output")
+	f.BoolVar(&opts.DemoTools, "demo-tools", false, "Enable demo tool loop (add_fact + complete_turn)")
+	f.IntVar(&opts.MaxTokens, "max-tokens", 8_000, "Max tokens to generate")
+	f.Float64Var(&opts.Temperature, "temperature", 0, "Sampling temperature 0.0\u20132.0 (0 = provider default)")
+	f.Float64Var(&opts.TopP, "top-p", 0, "Nucleus sampling 0.0\u20131.0 (0 = provider default)")
+	f.IntVar(&opts.TopK, "top-k", 0, "Top-K limit (0 = provider default)")
+	f.TextVar(&opts.Thinking, "thinking", llm.ThinkingMode(""), "Thinking mode: auto, on, off")
+	f.TextVar(&opts.Effort, "effort", llm.Effort(""), "Effort: low, medium, high, max")
+	f.TextVar(&opts.ToolChoice, "tool-choice", llm.ToolChoiceFlag{}, "Tool selection: auto, none, required, tool:<name>")
+	f.TextVar(&opts.OutputFormat, "output-format", llm.OutputFormat(""), "Output format: text, json")
+
 	return cmd
 }
 
-func runInfer(ctx context.Context, userMsg, model, system, thinking, effort string, verbose bool, demoTools bool, maxTokens int, root *RootFlags) error {
+type inferOpts struct {
+	// Populated from the positional argument, not a flag.
+	UserMsg string
+
+	// Flags — cobra writes directly via the appropriate Var methods.
+	Model        string
+	System       string
+	Verbose      bool
+	DemoTools    bool
+	MaxTokens    int
+	Temperature  float64
+	TopP         float64
+	TopK         int
+	Thinking     llm.ThinkingMode   // f.TextVar
+	Effort       llm.Effort         // f.TextVar
+	ToolChoice   llm.ToolChoiceFlag // f.TextVar; nil Value = "not specified"
+	OutputFormat llm.OutputFormat   // f.TextVar
+
+	// Populated by runInfer when DemoTools is true, not from flags.
+	demoToolHandlers []tool.NamedHandler
+}
+
+func (o inferOpts) buildMessages() llm.Messages {
+	cacheHint := &llm.CacheHint{Enabled: true, TTL: "1h"}
+
+	system := o.System
+	if system == "" && o.DemoTools {
+		system = defaultDemoSystemPrompt
+	}
+
+	msgs := make(llm.Messages, 0, 2)
+	if system != "" {
+		m := msg.System(system).Build()
+		m.CacheHint = cacheHint
+		msgs = append(msgs, m)
+	}
+	m := msg.User(o.UserMsg).Build()
+	m.CacheHint = cacheHint
+	return append(msgs, m)
+}
+
+// resolveToolChoice returns the effective tool choice for the request.
+// When --demo-tools is active and --tool-choice was not set, defaults to
+// ToolChoiceRequired. An explicit --tool-choice flag always takes precedence.
+func (o inferOpts) resolveToolChoice() llm.ToolChoice {
+	if o.ToolChoice.Value != nil {
+		return o.ToolChoice.Value
+	}
+	if o.DemoTools {
+		return llm.ToolChoiceRequired{}
+	}
+	return nil
+}
+
+func runInfer(ctx context.Context, opts inferOpts, root *RootFlags) error {
 	httpClient, logHandler := root.BuildHTTPClient()
 	concreteProvider, err := createProvider(ctx, httpClient, root.BuildLLMOptions(logHandler)...)
 	if err != nil {
@@ -64,26 +123,40 @@ func runInfer(ctx context.Context, userMsg, model, system, thinking, effort stri
 	}
 	var provider llm.Provider = concreteProvider
 
-	spec := buildInferSpec(userMsg, model, system, thinking, effort, demoTools)
+	// Messages
+	msgs := opts.buildMessages()
+
+	// Tool definitions + handlers (demo-tools only)
+	var tools []tool.Definition
+	toolChoice := opts.resolveToolChoice()
+	if opts.DemoTools {
+		tools, opts.demoToolHandlers = buildDemoTools()
+	}
 
 	req := llm.Request{
-		Model:      spec.Model,
-		Messages:   spec.Messages,
-		Effort:     spec.Effort,
-		Thinking:   spec.Thinking,
-		ToolChoice: spec.ToolChoice,
-		Tools:      spec.Tools,
-		MaxTokens:  maxTokens,
+		Model:        opts.Model,
+		Messages:     msgs,
+		Effort:       opts.Effort,
+		Thinking:     opts.Thinking,
+		ToolChoice:   toolChoice,
+		Tools:        tools,
+		MaxTokens:    opts.MaxTokens,
+		Temperature:  opts.Temperature,
+		TopP:         opts.TopP,
+		TopK:         opts.TopK,
+		OutputFormat: opts.OutputFormat,
 	}
+
+	verbose := opts.Verbose
 
 	// --- Token estimate (verbose only) ---
 	var tokenEstimate *tokencount.TokenCount
 	if verbose {
 		if tc, ok := provider.(tokencount.TokenCounter); ok {
 			est, err := tc.CountTokens(ctx, tokencount.TokenCountRequest{
-				Model:    spec.Model,
-				Messages: spec.Messages,
-				Tools:    spec.Tools,
+				Model:    opts.Model,
+				Messages: msgs,
+				Tools:    tools,
 			})
 			if err == nil {
 				tokenEstimate = est
@@ -140,8 +213,8 @@ func runInfer(ctx context.Context, userMsg, model, system, thinking, effort stri
 			}
 		}))
 
-	if len(spec.ToolHandlers) > 0 {
-		proc = proc.HandleTool(spec.ToolHandlers...)
+	if len(opts.demoToolHandlers) > 0 {
+		proc = proc.HandleTool(opts.demoToolHandlers...)
 	}
 
 	proc = proc.
@@ -504,16 +577,6 @@ func printFields(fields []kvField) {
 	}
 }
 
-type inferSpec struct {
-	Model        string
-	Messages     llm.Messages
-	Effort       llm.Effort
-	Thinking     llm.ThinkingMode
-	ToolChoice   llm.ToolChoice
-	Tools        []tool.Definition
-	ToolHandlers []tool.NamedHandler
-}
-
 type addFactParams struct {
 	Fact string `json:"fact"`
 }
@@ -529,47 +592,19 @@ type defaultToolResult struct {
 
 const defaultDemoSystemPrompt = "You are Tessa. Before you do anything -> Introduce yourself! You must complete by calling `complete_turn` tool. This can happen together with adding facts"
 
-func buildInferSpec(userMsg, model, system, thinking, effort string, demoTools bool) inferSpec {
-	msgs := make(llm.Messages, 0, 2)
-	cacheHint := &llm.CacheHint{Enabled: true, TTL: "1h"}
-
-	if system != "" {
-		sysMsg := msg.System(system).Build()
-		sysMsg.CacheHint = cacheHint
-		msgs = append(msgs, sysMsg)
-	} else if demoTools {
-		sysMsg := msg.System(defaultDemoSystemPrompt).Build()
-		sysMsg.CacheHint = cacheHint
-		msgs = append(msgs, sysMsg)
-	}
-	userMsg2 := msg.User(userMsg).Build()
-	userMsg2.CacheHint = cacheHint
-	msgs = append(msgs, userMsg2)
-
-	spec := inferSpec{
-		Model:    model,
-		Messages: msgs,
-		Effort:   llm.Effort(effort),
-		Thinking: llm.ThinkingMode(thinking),
-	}
-
-	if !demoTools {
-		return spec
-	}
-
-	spec.Tools = tool.NewToolSet(
+func buildDemoTools() ([]tool.Definition, []tool.NamedHandler) {
+	defs := tool.NewToolSet(
 		tool.NewSpec[addFactParams]("add_fact", "Store a single fact"),
-		tool.NewSpec[completeTurnParams]("complete_turn", "Complete the current turn."),
+		tool.NewSpec[completeTurnParams]("complete_turn", "Complete the current turn"),
 	).Definitions()
-	spec.ToolChoice = llm.ToolChoiceRequired{}
-	spec.ToolHandlers = []tool.NamedHandler{
-		tool.NewHandler("complete_turn", func(ctx context.Context, in completeTurnParams) (*defaultToolResult, error) {
+
+	handlers := []tool.NamedHandler{
+		tool.NewHandler("complete_turn", func(_ context.Context, in completeTurnParams) (*defaultToolResult, error) {
 			return &defaultToolResult{Message: "Turn complete", Success: in.Success}, nil
 		}),
-		tool.NewHandler("add_fact", func(ctx context.Context, in addFactParams) (*defaultToolResult, error) {
+		tool.NewHandler("add_fact", func(_ context.Context, in addFactParams) (*defaultToolResult, error) {
 			return &defaultToolResult{Message: fmt.Sprintf("Fact added: %s", in.Fact), Success: true}, nil
 		}),
 	}
-
-	return spec
+	return defs, handlers
 }

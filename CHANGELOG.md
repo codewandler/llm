@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+### Added
+
+- `llmcli infer` — five new flags: `--temperature`, `--top-p`, `--top-k`,
+  `--output-format` (text|json), and `--tool-choice`
+  (auto|none|required|tool:\<name\>).
+- `ParseToolChoice(s string) (ToolChoice, error)` — package-level parser
+  in `llm`; replaces the private `parseToolChoice` that lived in `infer.go`.
+- `ToolChoiceFlag` — `pflag`-compatible `TextMarshaler/Unmarshaler` wrapper
+  for `ToolChoice`; zero value means "not specified" (distinct from
+  `ToolChoiceAuto`), allowing providers to apply their own defaults.
+- `MarshalText`/`UnmarshalText` on `ThinkingMode`, `Effort`, and
+  `OutputFormat` for direct use with `pflag.TextVar`.
+
+### Changed
+
+- `llmcli infer` flag pipeline simplified: `inferSpec` / `buildInferSpec`
+  removed; cobra writes typed values directly into `inferOpts` via
+  `f.TextVar`, eliminating an intermediate stringly-typed layer.
+
 ---
 
 ## [v0.35.0] — 2026-04-14
