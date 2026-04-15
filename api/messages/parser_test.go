@@ -57,6 +57,77 @@ func TestParser_ThinkingBlock_AccumulatedAndComplete(t *testing.T) {
 	assert.Equal(t, "sig123", evt.Signature)
 }
 
+// TestParser_ThinkingBlock_DisplayOmitted verifies the event sequence produced
+// when display:"omitted" is set on the ThinkingConfig.
+//
+// Per the Anthropic docs, when display is "omitted":
+//   - No thinking_delta events are emitted (thinking text is never sent)
+//   - One signature_delta arrives carrying the encrypted full thinking
+//   - Text streaming begins immediately after content_block_stop
+//
+// The parser must still emit a ThinkingCompleteEvent (with empty Thinking but
+// non-empty Signature) so the caller can pass it back in multi-turn calls.
+func TestParser_ThinkingBlock_DisplayOmitted(t *testing.T) {
+	h := handler()
+	h(messages.EventContentBlockStart, []byte(`{"index":0,"content_block":{"type":"thinking","thinking":"","signature":""}}`))
+	// No thinking_delta — that’s the whole point of display:"omitted".
+	h(messages.EventContentBlockDelta, []byte(`{"index":0,"delta":{"type":"signature_delta","signature":"EosnCkYICxIM..."}}`))
+
+	result := h(messages.EventContentBlockStop, []byte(`{"index":0}`))
+	require.NoError(t, result.Err)
+
+	evt, ok := result.Event.(*messages.ThinkingCompleteEvent)
+	require.True(t, ok, "expected *ThinkingCompleteEvent, got %T", result.Event)
+	assert.Empty(t, evt.Thinking, "display:omitted → thinking text is never sent")
+	assert.Equal(t, "EosnCkYICxIM...", evt.Signature,
+		"signature must be preserved for multi-turn replay")
+}
+
+// TestParser_RedactedThinkingBlock verifies that redacted_thinking blocks
+// (used by OpenRouter when routing through non-native Anthropic models) are
+// handled correctly.
+//
+// The Anthropic API sends:
+//
+//	content_block_start  {"type":"redacted_thinking","data":"<encrypted blob>"}
+//	content_block_stop
+//
+// No content_block_delta events follow. The encrypted blob is stored as
+// the signature of the completed ThinkingCompleteEvent so it can be
+// preserved and replayed in subsequent turns.
+func TestParser_RedactedThinkingBlock(t *testing.T) {
+	h := handler()
+	h(messages.EventContentBlockStart, []byte(`{"index":0,"content_block":{"type":"redacted_thinking","data":"gAAAA/encrypted+blob+here=="}}`))
+	// No deltas — the content was already in content_block_start.
+
+	result := h(messages.EventContentBlockStop, []byte(`{"index":0}`))
+	require.NoError(t, result.Err)
+
+	evt, ok := result.Event.(*messages.ThinkingCompleteEvent)
+	require.True(t, ok, "expected *ThinkingCompleteEvent, got %T", result.Event)
+	assert.Empty(t, evt.Thinking, "redacted thinking has no visible text")
+	assert.Equal(t, "gAAAA/encrypted+blob+here==", evt.Signature,
+		"encrypted blob must be preserved in Signature for replay")
+	assert.Equal(t, 0, evt.Index)
+}
+
+// TestParser_RedactedThinkingBlock_DoesNotInterferWithOtherBlocks verifies
+// that a redacted_thinking block at index 0 does not bleed into a text block
+// at index 1.
+func TestParser_RedactedThinkingBlock_DoesNotInterferWithOtherBlocks(t *testing.T) {
+	h := handler()
+	h(messages.EventContentBlockStart, []byte(`{"index":0,"content_block":{"type":"redacted_thinking","data":"secret"}}`))
+	h(messages.EventContentBlockStop, []byte(`{"index":0}`))
+
+	h(messages.EventContentBlockStart, []byte(`{"index":1,"content_block":{"type":"text"}}`))
+	h(messages.EventContentBlockDelta, []byte(`{"index":1,"delta":{"type":"text_delta","text":"hello"}}`))
+
+	result := h(messages.EventContentBlockStop, []byte(`{"index":1}`))
+	require.NoError(t, result.Err)
+	evt := result.Event.(*messages.TextCompleteEvent)
+	assert.Equal(t, "hello", evt.Text)
+}
+
 func TestParser_ToolBlock_AccumulatedAndComplete(t *testing.T) {
 	h := handler()
 	h(messages.EventContentBlockStart, []byte(`{"index":1,"content_block":{"type":"tool_use","id":"toolu_1","name":"search"}}`))

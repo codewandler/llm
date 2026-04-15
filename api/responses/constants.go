@@ -38,6 +38,8 @@ const (
 	EventReasoningDeltaRaw    = "response.reasoning.delta"
 	EventReasoningDone        = "response.reasoning.done"
 	EventReasoningSummaryDone = "response.reasoning_summary_text.done"
+	EventReasoningTextDelta   = "response.reasoning_text.delta"  // actual thinking tokens (e.g. Claude via OpenRouter)
+	EventReasoningTextDone    = "response.reasoning_text.done"   // no-op: complete thinking text
 	EventResponseQueued       = "response.queued"
 	EventRateLimitsUpdated    = "rate_limits.updated"
 )

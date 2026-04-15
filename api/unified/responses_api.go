@@ -244,8 +244,14 @@ func EventFromResponses(ev any) (StreamEvent, bool, error) {
 			tokens := usage.TokenItems{
 				{Kind: usage.KindInput, Count: u.InputTokens},
 				{Kind: usage.KindOutput, Count: u.OutputTokens},
-			}.NonZero()
-			out.Usage = &Usage{Tokens: tokens}
+			}
+			if u.InputTokensDetails != nil && u.InputTokensDetails.CachedTokens > 0 {
+				tokens = append(tokens, usage.TokenItem{Kind: usage.KindCacheRead, Count: u.InputTokensDetails.CachedTokens})
+			}
+			if u.OutputTokensDetails != nil && u.OutputTokensDetails.ReasoningTokens > 0 {
+				tokens = append(tokens, usage.TokenItem{Kind: usage.KindReasoning, Count: u.OutputTokensDetails.ReasoningTokens})
+			}
+			out.Usage = &Usage{Tokens: tokens.NonZero()}
 		}
 		return out, false, nil
 

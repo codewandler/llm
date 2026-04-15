@@ -21,8 +21,20 @@ type Request struct {
 }
 
 type ThinkingConfig struct {
-	Type         string `json:"type"`
-	BudgetTokens int    `json:"budget_tokens,omitempty"`
+	// Type is "enabled", "adaptive", or "disabled".
+	Type string `json:"type"`
+
+	// BudgetTokens is the max thinking token budget (for type: "enabled").
+	// Must be less than max_tokens.
+	BudgetTokens int `json:"budget_tokens,omitempty"`
+
+	// Display controls how thinking content appears in the response.
+	// "summarized" (Claude 4 default): thinking blocks contain a readable summary.
+	// "omitted": thinking field is empty; only signature returned; no thinking_delta
+	//   events during streaming → lower time-to-first-text-token.
+	// If empty, the API uses the model default.
+	// Ref: https://docs.anthropic.com/en/docs/build-with-claude/extended-thinking#controlling-thinking-display
+	Display string `json:"display,omitempty"`
 }
 
 type OutputConfig struct {
@@ -127,6 +139,7 @@ type StartBlockView struct {
 	Type string `json:"type"`
 	ID   string `json:"id,omitempty"`
 	Name string `json:"name,omitempty"`
+	Data string `json:"data,omitempty"` // populated for redacted_thinking blocks
 }
 
 // SSE: content_block_delta

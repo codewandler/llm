@@ -46,12 +46,23 @@ func TestParser_TextDelta(t *testing.T) {
 }
 
 func TestParser_ReasoningDelta(t *testing.T) {
-	h := handler()
-	result := h(responses.EventReasoningDelta,
-		[]byte(`{"output_index":0,"delta":"hmm..."}`))
-	require.NoError(t, result.Err)
-	evt := result.Event.(*responses.ReasoningDeltaEvent)
-	assert.Equal(t, "hmm...", evt.Delta)
+	tests := []struct {
+		name      string
+		eventName string
+	}{
+		{"reasoning_summary_text.delta (OpenAI o3)", responses.EventReasoningDelta},
+		{"reasoning_text.delta (Claude via OpenRouter)", responses.EventReasoningTextDelta},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h := handler()
+			result := h(tt.eventName, []byte(`{"output_index":0,"delta":"hmm..."}`))
+			require.NoError(t, result.Err)
+			evt, ok := result.Event.(*responses.ReasoningDeltaEvent)
+			require.True(t, ok, "expected *ReasoningDeltaEvent, got %T", result.Event)
+			assert.Equal(t, "hmm...", evt.Delta)
+		})
+	}
 }
 
 func TestParser_ToolCall_ArgAccumulationAndComplete(t *testing.T) {
@@ -173,6 +184,96 @@ func TestParser_UnknownEvent_NoOp(t *testing.T) {
 	assert.Nil(t, result.Event)
 	assert.NoError(t, result.Err)
 	assert.False(t, result.Done)
+}
+
+// TestParser_UnnamedSSE_TypeInJSON verifies that when the SSE event name is
+// empty (OpenRouter-style unnamed SSE), the parser correctly extracts the
+// event type from the JSON "type" field and routes accordingly.
+func TestParser_UnnamedSSE_TypeInJSON(t *testing.T) {
+	tests := []struct {
+		name    string
+		data    string
+		check   func(t *testing.T, r apicore.StreamResult)
+	}{
+		{
+			name: "response.created",
+			data: `{"type":"response.created","response":{"id":"resp_01","model":"gpt-4o"}}`,
+			check: func(t *testing.T, r apicore.StreamResult) {
+				require.NoError(t, r.Err)
+				assert.False(t, r.Done)
+				evt, ok := r.Event.(*responses.ResponseCreatedEvent)
+				require.True(t, ok, "expected *ResponseCreatedEvent, got %T", r.Event)
+				assert.Equal(t, "resp_01", evt.Response.ID)
+				assert.Equal(t, "gpt-4o", evt.Response.Model)
+			},
+		},
+		{
+			name: "response.output_text.delta",
+			data: `{"type":"response.output_text.delta","output_index":0,"delta":"hello"}`,
+			check: func(t *testing.T, r apicore.StreamResult) {
+				require.NoError(t, r.Err)
+				evt, ok := r.Event.(*responses.TextDeltaEvent)
+				require.True(t, ok, "expected *TextDeltaEvent, got %T", r.Event)
+				assert.Equal(t, "hello", evt.Delta)
+			},
+		},
+		{
+			name: "response.reasoning_summary_text.delta",
+			data: `{"type":"response.reasoning_summary_text.delta","output_index":0,"delta":"thinking..."}`,
+			check: func(t *testing.T, r apicore.StreamResult) {
+				require.NoError(t, r.Err)
+				evt, ok := r.Event.(*responses.ReasoningDeltaEvent)
+				require.True(t, ok, "expected *ReasoningDeltaEvent, got %T", r.Event)
+				assert.Equal(t, "thinking...", evt.Delta)
+			},
+		},
+		{
+			name: "response.reasoning_text.delta (Claude-via-OpenRouter)",
+			data: `{"type":"response.reasoning_text.delta","output_index":0,"delta":"17 × 19 = 323"}`,
+			check: func(t *testing.T, r apicore.StreamResult) {
+				require.NoError(t, r.Err)
+				evt, ok := r.Event.(*responses.ReasoningDeltaEvent)
+				require.True(t, ok, "expected *ReasoningDeltaEvent, got %T", r.Event)
+				assert.Equal(t, "17 × 19 = 323", evt.Delta)
+			},
+		},
+		{
+			name: "response.completed",
+			data: `{"type":"response.completed","response":{"id":"r1","model":"gpt-4o","status":"completed","usage":{"input_tokens":5,"output_tokens":3}}}`,
+			check: func(t *testing.T, r apicore.StreamResult) {
+				require.NoError(t, r.Err)
+				assert.True(t, r.Done)
+				evt, ok := r.Event.(*responses.ResponseCompletedEvent)
+				require.True(t, ok)
+				assert.Equal(t, 5, evt.Response.Usage.InputTokens)
+			},
+		},
+		{
+			name: "response.in_progress (no-op)",
+			data: `{"type":"response.in_progress","response":{"id":"r1"}}`,
+			check: func(t *testing.T, r apicore.StreamResult) {
+				assert.Nil(t, r.Event)
+				assert.NoError(t, r.Err)
+				assert.False(t, r.Done)
+			},
+		},
+		{
+			name: "no type field → no-op",
+			data: `{"sequence_number":99}`,
+			check: func(t *testing.T, r apicore.StreamResult) {
+				assert.Nil(t, r.Event)
+				assert.NoError(t, r.Err)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h := handler() // fresh handler per sub-test
+			result := h("", []byte(tt.data))
+			tt.check(t, result)
+		})
+	}
 }
 
 func TestParser_IsolatedAcrossStreams(t *testing.T) {

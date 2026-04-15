@@ -91,13 +91,3 @@ func (p *Provider) streamMessages(
 	}()
 }
 
-// singleResponseTransport is an http.RoundTripper that returns a pre-built
-// *http.Response exactly once. Used to feed an already-received response body
-// into a messages.Client without making a second HTTP call.
-type singleResponseTransport struct {
-	resp *http.Response
-}
-
-func (t *singleResponseTransport) RoundTrip(_ *http.Request) (*http.Response, error) {
-	return t.resp, nil
-}

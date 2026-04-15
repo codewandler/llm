@@ -6,9 +6,6 @@ import (
 
 	"github.com/codewandler/llm"
 	"github.com/codewandler/llm/api/apicore"
-	"github.com/codewandler/llm/api/completions"
-	"github.com/codewandler/llm/api/messages"
-	"github.com/codewandler/llm/api/responses"
 	"github.com/codewandler/llm/usage"
 )
 
@@ -335,8 +332,3 @@ func StreamResponses(
 	pub.Completed(llm.CompletedEvent{StopReason: stopReason})
 }
 
-// Ensure StreamHandle type aliases are consistent with expected usage.
-var _ *apicore.StreamHandle = (*apicore.StreamHandle)(nil)
-var _ *messages.Client = (*messages.Client)(nil)
-var _ *completions.Client = (*completions.Client)(nil)
-var _ *responses.Client = (*responses.Client)(nil)

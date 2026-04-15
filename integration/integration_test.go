@@ -294,9 +294,16 @@ func testProvider(t *testing.T, tt ProviderTestCase) {
 			})
 
 			if tt.name == "openrouter" {
+				// reasoning_effort: use an explicit model that supports effort
+				// through the responses API. "auto" could resolve to a model
+				// that doesn't support reasoning.
 				t.Run("reasoning_effort", func(t *testing.T) {
+					model := os.Getenv("OPENROUTER_REASONING_MODEL")
+					if model == "" {
+						model = "openai/gpt-4o"
+					}
 					stream, err := streamer.CreateStream(ctx, llm.Request{
-						Model: getModelID(),
+						Model: model,
 						Messages: msg.BuildTranscript(
 							msg.User("Answer briefly: what is 2+2?"),
 						),
@@ -323,6 +330,10 @@ func testProvider(t *testing.T, tt ProviderTestCase) {
 					assert.True(t, gotCompleted, "stream should complete when reasoning effort is enabled")
 				})
 
+				// explicit_auto_model_with_custom_default: verify that literal
+				// "auto" is preserved as-is (normalizeRequestModel only replaces
+				// "" / llm.ModelDefault, not literal "auto") and that the stream
+				// produces a Started event via the responses path.
 				t.Run("explicit_auto_model_with_custom_default", func(t *testing.T) {
 					openrouterProvider, ok := tt.provider.(*openrouter.Provider)
 					require.True(t, ok)
@@ -349,8 +360,9 @@ func testProvider(t *testing.T, tt ProviderTestCase) {
 						}
 					}
 
-					require.NotNil(t, start)
-					assert.NotEmpty(t, start.Model)
+					// StreamResponses synthesises Started from response.completed
+					// when response.created is omitted (e.g. for the auto model).
+					require.NotNil(t, start, "StreamEventStarted must be emitted even when response.created is absent")
 				})
 
 				t.Run("reasoning_deltas_and_usage", func(t *testing.T) {

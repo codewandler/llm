@@ -14,6 +14,13 @@ type ModelCaps struct {
 
 	// SupportsMaxEffort: model accepts effort = "max" (subset of SupportsEffort).
 	SupportsMaxEffort bool
+
+	// DefaultThinkingDisplay controls the display field on ThinkingConfig.
+	// When empty, the field is omitted and the API uses its model default
+	// ("summarized" for Claude 4 models).
+	// Set to messages.ThinkingDisplayOmitted for lower TTFT in pipelines
+	// that don’t surface thinking content to users.
+	DefaultThinkingDisplay string
 }
 
 // ModelCapsFunc resolves capabilities for a given model ID.

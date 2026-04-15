@@ -9,31 +9,29 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestOrRespBuildRequest_Basic(t *testing.T) {
+func TestBuildOpenRouterResponsesBodyUnified_Basic(t *testing.T) {
 	opts := llm.Request{
 		Model:    "openai/gpt-5.4",
 		Messages: llm.Messages{llm.User("hello")},
 	}
-	body, err := orRespBuildRequest(opts)
+	body, err := buildOpenRouterResponsesBodyUnified(opts)
 	require.NoError(t, err)
 
 	var req map[string]any
 	require.NoError(t, json.Unmarshal(body, &req))
 
 	assert.Equal(t, "openai/gpt-5.4", req["model"],
-		"model must not strip the openai/ prefix — OpenRouter uses full IDs")
+		"model must preserve the openai/ prefix — OpenRouter uses full IDs")
 	assert.Equal(t, true, req["stream"])
 	assert.NotNil(t, req["input"], "input array must be present")
 }
 
-func TestOrRespBuildRequest_NoPromptCacheRetention(t *testing.T) {
-	// orRespBuildRequest never sets prompt_cache_retention (OpenRouter doesn't
-	// support it) so any request must produce a body without the field.
+func TestBuildOpenRouterResponsesBodyUnified_NoPromptCacheRetention(t *testing.T) {
 	opts := llm.Request{
 		Model:    "openai/gpt-5.4",
 		Messages: llm.Messages{llm.User("hi")},
 	}
-	body, err := orRespBuildRequest(opts)
+	body, err := buildOpenRouterResponsesBodyUnified(opts)
 	require.NoError(t, err)
 
 	var req map[string]any

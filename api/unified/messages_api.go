@@ -77,9 +77,9 @@ func RequestToMessages(r Request, opts ...MessagesOption) (*messages.Request, er
 	if r.Thinking == llm.ThinkingOff {
 		out.Thinking = &messages.ThinkingConfig{Type: "disabled"}
 	} else if caps.SupportsAdaptiveThinking {
-		out.Thinking = &messages.ThinkingConfig{Type: "adaptive"}
+		out.Thinking = &messages.ThinkingConfig{Type: "adaptive", Display: caps.DefaultThinkingDisplay}
 	} else {
-		out.Thinking = &messages.ThinkingConfig{Type: "enabled", BudgetTokens: effortToBudget(r.Effort)}
+		out.Thinking = &messages.ThinkingConfig{Type: "enabled", BudgetTokens: effortToBudget(r.Effort), Display: caps.DefaultThinkingDisplay}
 	}
 
 	if out.Thinking != nil && out.Thinking.Type != "disabled" {

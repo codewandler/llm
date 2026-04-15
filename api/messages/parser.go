@@ -50,6 +50,15 @@ func NewParser() apicore.ParserFactory {
 						activeText[evt.Index] = &textAccum{}
 					case BlockTypeThinking:
 						activeThinking[evt.Index] = &thinkingAccum{}
+					case BlockTypeRedactedThinking:
+						// Redacted thinking: the encrypted blob is in block.Data.
+						// No content_block_delta events follow — the complete
+						// (opaque) content arrives here. Register as a completed
+						// thinking accum so content_block_stop emits ThinkingCompleteEvent
+						// with an empty visible text but the encrypted signature.
+						a := &thinkingAccum{}
+						a.signature.WriteString(block.Data)
+						activeThinking[evt.Index] = a
 					case BlockTypeToolUse:
 						activeTools[evt.Index] = &toolAccum{id: block.ID, name: block.Name}
 					case BlockTypeServerToolUse, BlockTypeWebSearchToolResult:

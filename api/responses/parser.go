@@ -17,11 +17,26 @@ type toolAccum struct {
 }
 
 // NewParser returns a ParserFactory for the OpenAI Responses API.
+//
+// It handles both named SSE (OpenAI spec: `event: response.created\ndata: ...`)
+// and unnamed SSE (OpenRouter style: `data: {"type":"response.created",...}`).
+// When the SSE event name is empty, the event type is extracted from the
+// "type" field in the JSON payload.
 func NewParser() apicore.ParserFactory {
 	return func() apicore.EventHandler {
 		activeTools := make(map[int]*toolAccum) // keyed by output_index
 
 		return func(name string, data []byte) apicore.StreamResult {
+			// Normalise unnamed SSE (OpenRouter): extract "type" from JSON.
+			if name == "" {
+				var envelope struct {
+					Type string `json:"type"`
+				}
+				if json.Unmarshal(data, &envelope) == nil && envelope.Type != "" {
+					name = envelope.Type
+				}
+			}
+
 			switch name {
 			case EventResponseCreated:
 				var evt ResponseCreatedEvent
@@ -43,7 +58,7 @@ func NewParser() apicore.ParserFactory {
 				}
 				return apicore.StreamResult{Event: &evt}
 
-			case EventReasoningDelta:
+			case EventReasoningDelta, EventReasoningTextDelta:
 				var evt ReasoningDeltaEvent
 				if err := json.Unmarshal(data, &evt); err != nil {
 					return apicore.StreamResult{Err: fmt.Errorf("parse %s: %w", name, err)}
@@ -130,6 +145,7 @@ func NewParser() apicore.ParserFactory {
 				EventReasoningDeltaRaw,
 				EventReasoningDone,
 				EventReasoningSummaryDone,
+				EventReasoningTextDone,
 				EventResponseQueued,
 				EventRateLimitsUpdated:
 				// Explicit known no-op events.

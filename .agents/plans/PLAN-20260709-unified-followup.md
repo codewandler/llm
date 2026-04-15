@@ -1,214 +1,283 @@
 # Plan: api/unified — Follow-up Work
 
 **Date**: 2025-07-09
+**Updated**: 2025-07-09
 **Status**: Active
-**Scope**: Complete `api/unified` package, integrate it into providers, and remove legacy duplication.
+**Scope**: Complete `api/unified` package, integrate it into all providers, and remove legacy duplication.
 
 ---
 
 ## What Was Done (Completed)
 
-### Phase 1 — Design Alignment
-- Cleaned `DESIGN-api-extraction.md`, `DESIGN-api-unified.md`, and `PLAN-20260415-unified.md` to consistently reference `api/unified` (not the retired `api/adapt` concept).
+### Phase 1 — Design Alignment ✅
+- Cleaned `DESIGN-api-extraction.md`, `DESIGN-api-unified.md`, and `PLAN-20260415-unified.md`
+  to consistently reference `api/unified` (not the retired `api/adapt` concept).
 - Produced `api/README.md` describing the four-layer architecture.
-- Verified no stale `api/adapt` references remain in active planning docs.
 
-### Phase 2 — `api/unified` Package Scaffold (TDD)
-New package with 7 source files and 2 test files:
+### Phase 2 — `api/unified` Package (request layer) ✅
+- `types_request.go` — canonical `Request`, `Message`, `Part`, `Tool`, `ToolCall`, etc.
+- `types_extensions.go` — `RequestExtras`
+- `validate.go` — `Request.Validate()`
+- `llm_bridge.go` — `RequestFromLLM` / `RequestToLLM`
+- `messages_api.go` — `RequestToMessages` / `RequestFromMessages`
+- `completions_api.go` — `RequestToCompletions` / `RequestFromCompletions`
+- `responses_api.go` — `RequestToResponses` / `RequestFromResponses`
+- `model_caps.go` — `ModelCaps`, `ModelCapsFunc`, `DefaultAnthropicModelCaps`, `WithModelCaps`
 
-| File | What it does |
-|------|-------------|
-| `doc.go` | Package-level godoc |
-| `types_request.go` | Canonical request schema: `Request`, `Message`, `Part`, `Tool`, `ToolCall`, etc. |
-| `types_extensions.go` | `RequestExtras` (protocol-specific stashes for extras) |
-| `types_event.go` | Canonical event schema: `StreamEvent`, `Delta`, `Started`, `Usage`, `Completed`, `StreamError` |
-| `validate.go` | `Request.Validate()` — minimal model/messages invariants |
-| `llm_bridge.go` | `RequestFromLLM` / `RequestToLLM` (canonical ↔ llm.Request) |
-| `messages_api.go` | `RequestToMessages` / `RequestFromMessages` / `EventFromMessages` |
-| `completions_api.go` | `RequestToCompletions` / `RequestFromCompletions` / `EventFromCompletions` |
-| `responses_api.go` | `RequestToResponses` / `RequestFromResponses` / `EventFromResponses` |
-| `publisher_bridge.go` | `Publish(pub, ev)` — canonical event → `llm.Publisher` |
-| `request_bridge_test.go` | Validate / FromLLM / ToMessages / ToCompletions / ToResponses |
-| `event_bridge_test.go` | EventFrom{Messages,Completions,Responses} + Publish |
+### Phase 3 — `api/unified` Package (event layer) ✅
+- `types_event.go` — canonical `StreamEvent`, `Delta`, `Started`, `Usage`, `Completed`, `StreamError`
+- `publisher_bridge.go` — `Publish(pub, ev)` → `llm.Publisher`
+- `EventFromMessages` — with `mapMessagesStopReason`; `MessageStartEvent` emits input/cache tokens,
+  `MessageDeltaEvent` emits output tokens + stop reason
+- `EventFromCompletions` — with `mapOpenAIFinishReason`
+- `EventFromResponses`
 
-### Phase 3 — Parity Tests + Provider Build Hookup
-New test files proving unified path produces identical wire JSON to legacy path:
+### Phase 4 — Stream helpers ✅
+- `stream_helpers.go` — `StreamMessages` / `StreamCompletions` / `StreamResponses`
+- `StreamContext` — carries provider, model, upstream provider, cost calculator, rate limits
+- Combined usage record emitted at end-of-stream
+- Model resolution emits `ModelResolvedEvent` automatically
+- Rate limits forwarded into `Started.Extra` and usage record `Extras`
 
-| Test file | Validates |
-|-----------|----------|
-| `provider/anthropic/unified_request_test.go` | `RequestToMessages` parity with `anthropic.BuildRequest` |
-| `provider/anthropic/unified_event_test.go` | `EventFromMessages` + `Publish` pipeline parity |
-| `provider/minimax/unified_request_test.go` | MiniMax thinking-omit parity |
-| `provider/minimax/unified_event_test.go` | MiniMax messages event pipeline |
-| `provider/openai/unified_request.go` | `buildCompletionsBodyUnified` / `buildResponsesBodyUnified` helpers |
-| `provider/openai/unified_request_test.go` | Completions + Responses parity with `ccBuildRequest` / `respBuildRequest` |
-| `provider/openai/unified_event_test.go` | Full completions + responses event pipelines via unified |
-| `provider/openrouter/unified_request.go` | Messages + Responses unified body builders |
-| `provider/openrouter/unified_messages_test.go` | Messages body parity |
-| `provider/openrouter/unified_integration_test.go` | Responses body via live `CreateStream` path |
-| `provider/openrouter/unified_event_test.go` | `EventFromResponses` contracts + `StopReason` mapping |
-| `provider/ollama/unified_event_test.go` | Completions event pipeline (compatible path) |
-| `provider/ollama/unified_request_test.go` | Parity test (see: known divergence below) |
+### Phase 5 — Provider migration (partial) ✅
+Request path fully on unified; event path mixed:
 
-**Actual wire paths migrated** (production code):
-- `provider/openai/api_completions.go` → uses `buildCompletionsBodyUnified`
-- `provider/openai/api_responses.go` → uses `buildResponsesBodyUnified`
-- `provider/openrouter/api_messages.go` → uses `buildOpenRouterMessagesBodyUnified`
-- `provider/openrouter/api_responses.go` → uses `buildOpenRouterResponsesBodyUnified`
+| Provider | Request path | Event path |
+|----------|-------------|------------|
+| `provider/anthropic` | ✅ unified | ✅ `StreamMessages` |
+| `provider/minimax` | ✅ unified | ✅ `StreamMessages` |
+| `provider/openrouter` (messages) | ✅ unified | ✅ `StreamMessages` |
+| `provider/openrouter` (responses) | ✅ unified | ❌ still `openai.RespParseStream` |
+| `provider/openai` (completions) | ✅ unified | ❌ still `ccParseStream` |
+| `provider/openai` (responses) | ✅ unified | ❌ still `RespParseStream` |
+| `provider/anthropic/claude` | ❌ still `anthropic.BuildRequest` | ❌ still `anthropic.ParseStreamWith` |
+| `provider/ollama` | ❌ legacy dialect | ✅ unified event path (experimental test) |
 
 ---
 
-## Test Status
+## Current Test Status
 
 | Package | Status | Notes |
 |---------|--------|-------|
-| `api/unified` | ✅ pass (race) | All 11 tests green |
-| `api/messages` | ✅ pass | Unchanged |
-| `api/completions` | ✅ pass | Unchanged |
-| `api/responses` | ✅ pass | Unchanged |
-| `api/apicore` | ✅ pass | Unchanged |
-| `provider/anthropic` | ✅ pass | All existing + new unified tests |
-| `provider/minimax` | ✅ pass | All existing + new unified tests |
-| `provider/openrouter` | ✅ pass | All existing + new unified tests |
-| `provider/ollama` | ⚠️ **1 failing** | `TestBuildRequestUnified_Parity` — intended divergence (see below) |
-| `provider/openai` | ⚠️ **2 failing** | `TestMapEffortAndThinking_UnknownModel` (pre-existing, unrelated); `TestCodexAuth_Stream_ChatCompletions` (external API rate-limit) |
+| `api/unified` | ✅ pass (race) | All tests green |
+| `api/messages` | ✅ pass | |
+| `api/completions` | ✅ pass | |
+| `api/responses` | ✅ pass | |
+| `api/apicore` | ✅ pass | |
+| `provider/anthropic` | ✅ pass | |
+| `provider/anthropic/claude` | ✅ pass | (event path not yet migrated, passing legacy tests) |
+| `provider/minimax` | ✅ pass | |
+| `provider/openrouter` | ✅ pass | |
+| `provider/ollama` | ✅ pass | |
+| `provider/openai` | ⚠️ 2 failing | Both pre-existing, unrelated to unified work — see §Known Issues |
 
 ---
 
-## Known Shortcomings / Sacrifices Made
+## Known Issues (not introduced by unified work)
 
-### 1. Ollama unified parity test is incorrect
-`TestBuildRequestUnified_Parity` in `provider/ollama` compares Ollama's legacy wire format (`num_predict`, `format: "json"`, no `stream_options`) against `RequestToCompletions` output, which produces standard OpenAI Chat Completions format (`max_tokens`, `response_format`, `stream_options`). These are **intentionally different** — Ollama uses a proprietary dialect of the Chat Completions JSON schema. The test was written incorrectly and is currently failing.
+### KI-1: `TestMapEffortAndThinking_UnknownModel` (provider/openai)
+An in-flight change to `provider/openai/models.go` (dockermr integration) changed
+`mapEffortAndThinking` to return nil for unknown models. The test expects an error.
+Not ours to fix; tracked in dockermr plan.
 
-**Fix needed**: Ollama requires its own `RequestToOllamaCompletions` variant (or a completions option/transform) that emits the Ollama wire dialect. The parity test should compare against the unified-path output, not the legacy output. Alternatively, the test should document the expected Ollama-specific fields and validate them independently.
-
-### 2. `EventFromMessages` for `MessageDeltaEvent` emits empty `Usage`
-The messages protocol `message_delta` carries the actual `stop_reason` and `output_tokens`, but `EventFromMessages` currently returns an empty `Usage{}` struct for this event. The stop reason and token counts are not extracted. This means providers still using `EventFromMessages` alone will produce incomplete usage records.
-
-**Fix needed**: `EventFromMessages` should extract `StopReason` from `MessageDeltaEvent.Delta.StopReason` and set the `Completed` field (or a combined event). Token counts from `MessageDeltaEvent.Usage` should populate the `Usage.Tokens` field.
-
-### 3. No `RequestFromLLM` enrichment for OpenAI models (`enrichOpts`)
-The OpenAI provider applies `enrichOpts` (reasoning effort mapping, Codex strip, cache-retention set) before building the wire request. `buildCompletionsBodyUnified` / `buildResponsesBodyUnified` call `RequestFromLLM` directly, bypassing `enrichOpts`. This means the parity tests pass only because the test inputs are pre-enriched. In production, providers still call `enrichOpts` separately before these functions, so the pipeline is correct — but the enrichment is not yet inside unified.
-
-**Fix needed**: Decide whether enrichment belongs in `unified.RequestFromLLM` (generic) or stays provider-specific (correct). Document clearly. Currently it works because providers enrich before calling unified, but it's implicit.
-
-### 4. `Publish()` does not forward `ProviderName`, `Model`, `RequestID` from context
-When a provider builds a `StreamEvent.Usage`, they typically set `Provider`, `Model`, `RequestID`. Currently `EventFromCompletions` and `EventFromResponses` set an empty `Usage{}` — the `Provider` and other dims are never populated. `Publish` faithfully forwards what it gets, which will be empty strings in usage records emitted via unified.
-
-**Fix needed**: Event converters should accept contextual metadata (or providers should enrich the returned `Usage` struct before calling `Publish`).
-
-### 5. `isEffortSupportedByAnthropicModel` is embedded in `api/unified`
-Model-capability detection (`isAdaptiveThinkingSupportedByAnthropicModel`, `isEffortSupportedByAnthropicModel`, `isMaxEffortSupportedByAnthropicModel`) lives in `api/unified/messages_api.go`. This is a violation of the dependency direction — `api/unified` should not embed model catalog knowledge. It currently duplicates (slightly different) logic from `provider/anthropic/request.go`.
-
-**Fix needed**: Extract model capabilities into a shared `modelinfo` package (or into `api/unified` as an explicit callable that providers can override/inject), not hard-coded string checks.
-
-### 6. `MessageStartEvent` on completions is conflated with started+delta
-`EventFromCompletions` returns a single `StreamEvent` with both `.Started` and `.Delta` set if the first chunk carries both an ID and content. `Publish` then emits both a `started` and a `delta` event from one `StreamEvent`. This is correct behavior, but subtle and worth documenting explicitly.
-
-### 7. Ollama event pipeline test uses Chat Completions parser, not native Ollama NDJSON
-`TestUnifiedCompletionsEventPipeline_OllamaCompatible` feeds OpenAI-format SSE through `completions.Client` to test the unified event pipeline in the Ollama context. Ollama's actual stream is NDJSON, not SSE with OpenAI format. The test validates the unified pipeline works but does not validate actual Ollama stream parsing.
-
-### 8. `TestMapEffortAndThinking_UnknownModel` regression (unrelated but visible)
-The test expects an error from `mapEffortAndThinking("unknown-model", ...)` but a pre-existing change in `provider/openai/models.go` (part of dockermr integration) changed that to return `nil`. This is not our regression — it's a separate in-flight change — but it must be resolved before merging.
+### KI-2: `TestCodexAuth_Stream_ChatCompletions` (provider/openai)
+Hits the real OpenAI API and fails with `insufficient_quota` (429).
+Not a code issue; skipped in offline CI.
 
 ---
 
-## What Is Next
+## Open Gaps
 
-### Task A — Fix Ollama wire dialect (blocker for Ollama migration)
-**Goal**: Ollama uses a proprietary Chat Completions dialect (`num_predict`, `format: "json"`, no `stream_options`). Options:
-1. Add `OllamaOption` transforms to `RequestToCompletions` that remap fields post-conversion.
-2. Create `RequestToOllamaCompletions` in `api/unified` as a dedicated converter.
-3. Keep Ollama on its legacy builder and only use unified for the event path.
+### Gap 1 — `provider/openai` event path not migrated
+`ccParseStream` (completions) and `RespParseStream` (responses) are still bespoke in-provider
+parsers. Request body already uses unified; event path does not.
 
-**Recommendation**: Option 3 for now — Ollama event path uses unified already; request path keeps legacy until an Ollama-specific completions converter is justified.
+- `ccParseStream`: ~110 lines of custom SSE parsing + tool accumulation + usage mapping
+- `RespParseStream`: ~200 lines; exported so openrouter reuses it → must be migrated together
 
-**Files**: `provider/ollama/unified_request_test.go` (fix/clarify the test intent)
+### Gap 2 — `provider/openrouter` responses event path not migrated
+`provider/openrouter/api_responses.go` still calls `openai.RespParseStream`.
+Depends on Gap 1 (can only be done once RespParseStream is replaced).
 
-### Task B — Fix `EventFromMessages` for `MessageDeltaEvent`
-Fill in the stop reason and output token count from `MessageDeltaEvent`:
-```go
-case *messages.MessageDeltaEvent:
-    idx := uint32(e.Index)
-    ev := StreamEvent{
-        Type: StreamEventCompleted,
-        Completed: &Completed{StopReason: llm.StopReason(e.Delta.StopReason)},
-        Usage: &Usage{
-            Tokens: usage.TokenItems{
-                {Kind: usage.KindOutput, Count: e.Usage.OutputTokens},
-                {Kind: usage.KindCacheCreate, Count: e.Usage.CacheCreationInputTokens},
-                {Kind: usage.KindCacheRead, Count: e.Usage.CacheReadInputTokens},
-            }.NonZero(),
-        },
-    }
-    return ev, false, nil
-```
-Add tests asserting stop reason and token counts survive through the pipeline.
+### Gap 3 — `provider/anthropic/claude` not migrated at all
+`claude/provider.go` still calls:
+- `anthropic.BuildRequest(RequestOptions{…})` → must become `unified.RequestToMessages`
+- `anthropic.ParseStreamWith` → must become `unified.StreamMessages`
+- `anthropic.DoCountTokensAPI(… anthropic.Request)` → now takes `*messages.Request`; signature
+  mismatch since we updated `DoCountTokensAPI` but `claude` still builds an `anthropic.Request`
 
-### Task C — Contextual metadata injection into `Usage` events
-Providers need to supply `Provider`, `Model`, `RequestID` when building usage records. Two options:
-1. Add `WithPublishContext(provider, model, requestID string)` option to `EventFrom*` converters.
-2. Have providers enrich the returned `Usage` after the conversion, before calling `Publish`.
+### Gap 4 — `singleResponseTransport` duplicated in 3 places
+Same struct + `RoundTrip` defined independently in:
+- `provider/anthropic/anthropic.go`
+- `provider/minimax/minimax.go`
+- `provider/openrouter/api_messages.go`
 
-Option 2 is simpler and keeps converters pure. Document the pattern in code.
+Should move to `api/apicore` as `apicore.SingleResponseTransport` (or a constructor).
 
-### Task D — Extract model capabilities out of `api/unified`
-Create `api/unified/modelcaps.go` with a clean interface:
-```go
-type ModelCaps struct {
-    SupportsAdaptiveThinking bool
-    SupportsEffort           bool
-    SupportsMaxEffort        bool
-}
+### Gap 5 — Legacy builders still alive in `provider/anthropic`
+`anthropic.BuildRequest`, `anthropic.BuildRequestBytes`, `provider/anthropic.Request`,
+and the associated internal wire types (`Message`, `TextBlock`, `ToolUseBlock`, etc.)
+are no longer used by `anthropic.go` itself. Still referenced by:
+- `claude/provider.go` (Gap 3)
+- `minimax/unified_request_test.go` (test helper — should use `api/messages` types directly)
+- `openrouter/unified_legacy_helpers_test.go` (idem)
 
-type ModelCapsResolver func(model string) ModelCaps
-```
-Inject via `MessagesOption`. Provide a default resolver that codifies the current model-string checks. This makes the package testable without hard-coded model strings.
+Removal blocked on Gap 3.
 
-### Task E — Anthropic provider stream path migration
-Replace `provider/anthropic/anthropic.go`'s internal `BuildRequest` + `ParseStreamWith` calls with the unified pipeline:
-```go
-uReq, _ := unified.RequestFromLLM(opts)
-wireReq, _ := unified.RequestToMessages(uReq)
-handle, _ := messagesClient.Stream(ctx, wireReq)
-for r := range handle.Events {
-    uEv, ignored, _ := unified.EventFromMessages(r.Event)
-    if !ignored { unified.Publish(pub, uEv) }
-}
-```
-This is the primary payoff of the unified layer — provider code becomes ~15 lines.
-**Prerequisite**: Task B must be done first (correct MessageDeltaEvent handling).
+### Gap 6 — `anthropic.ParseStreamWith` / `stream_processor.go` still alive
+`ParseStreamWith` is called only by `claude/provider.go` (Gap 3).
+`stream_processor.go` has comprehensive tests but no production caller post-migration.
+Both can be deleted once Gap 3 is done.
 
-### Task F — Minimax / OpenRouter messages path migration
-Same as Task E but for:
-- `provider/minimax/minimax.go` (currently imports `provider/anthropic` directly)
-- `provider/openrouter/api_messages.go` (already using unified request body, but stream parsing still uses `anthropic.ParseStreamWith`)
+### Gap 7 — Dead legacy builders in `provider/openai`
+`ccBuildRequest` and `respBuildRequest` are no longer called by production code.
+Only referenced by the parity tests in `unified_request_test.go`.
+Options: remove (update tests to compare against wire JSON directly) or keep as spec documentation.
 
-### Task G — Ollama stream path migration
-Replace `provider/ollama/ollama.go`'s `parseStream` (bespoke NDJSON parser) with the `api/completions` parser + unified event path. Ollama `/api/chat` produces Chat Completions-compatible NDJSON; the `completions.NewParser` can already handle it.
-**Prerequisite**: Validate this experimentally with a fixture test.
+### Gap 8 — `orRespBuildRequest` dead in `provider/openrouter`
+Same situation as Gap 7. Only referenced from `unified_legacy_helpers_test.go`.
 
-### Task H — Legacy builder deprecation
-Once Tasks E–G are done, mark `anthropic.BuildRequest`, `anthropic.ParseStreamWith`, and the per-provider duplicate request builders with deprecation comments. Do not delete yet — they're used by tests and OpenRouter until fully migrated.
+### Gap 9 — `StreamMessages` uses `singleResponseTransport` anti-pattern
+Providers do an HTTP call, get `*http.Response`, then wrap it in a fake transport and feed it
+back into `messages.Client.Stream()` to get a `StreamHandle`. This is a workaround because
+`StreamMessages` accepts a `*apicore.StreamHandle`, not a raw `io.ReadCloser`.
 
-### Task I — Commit and cleanup
-- Fix `TestBuildRequestUnified_Parity` in ollama (document intent or remove the incorrect comparison)
-- Document `TestMapEffortAndThinking_UnknownModel` as a pre-existing separate regression
-- Commit the current work: `feat(api/unified): implement event schema, protocol event converters, and publisher bridge`
-- Commit provider build hookup: `feat(providers): wire openai+openrouter request paths through api/unified`
+Cleaner design: `StreamMessages` (and `StreamCompletions`, `StreamResponses`) should accept
+an `io.ReadCloser` + `http.Header` directly, removing the roundabout fake transport.
+This is a design improvement, not a bug — current behavior is correct.
+
+### Gap 10 — Ollama request path uses legacy dialect
+Ollama's `/api/chat` uses `num_predict` / `format: "json"` instead of OpenAI-standard fields.
+`RequestToCompletions` produces standard OpenAI format and cannot be used as-is.
+Options:
+- Add `RequestToOllamaCompletions` with Ollama-specific field mapping
+- Use `WithTransform` on `completions.Client` to remap post-serialization
+- Keep legacy `buildRequest` for Ollama (current state — acceptable for now)
+
+---
+
+## OpenRouter Migration (Next Target)
+
+OpenRouter routes to multiple upstream backends. It currently has **two stream paths**:
+
+### Path A — Messages API (`/v1/messages`)
+Used for Anthropic models (e.g. `anthropic/claude-opus-4-5`).
+
+**Current state**: ✅ fully migrated.
+- Request: `buildOpenRouterMessagesBodyUnified` → `api/unified.RequestToMessages`
+- Event: `unified.StreamMessages` with `UpstreamProvider: "anthropic"`
+
+No further work needed on this path.
+
+### Path B — Responses API (`/v1/responses`)
+Used for OpenAI models (e.g. `openai/gpt-5.4`).
+
+**Current state**: ❌ event path not migrated.
+- Request: ✅ `buildOpenRouterResponsesBodyUnified` → `api/unified.RequestToResponses`
+- Event: ❌ `openai.RespParseStream(ctx, resp.Body, pub, openai.RespStreamMeta{…})`
+
+**Files involved**:
+- `provider/openrouter/api_responses.go` — `streamResponses` function
+- `provider/openai/api_responses.go` — `RespParseStream` and `RespStreamMeta` (exported, used by openrouter)
+
+**Migration plan**:
+
+1. Switch `provider/openrouter/api_responses.go::streamResponses` from `openai.RespParseStream`
+   to `unified.StreamResponses`:
+
+   ```go
+   // before
+   openai.RespParseStream(ctx, resp.Body, pub, openai.RespStreamMeta{
+       RequestedModel:   opts.Model,
+       ProviderName:     providerName,
+       UpstreamProvider: "openai",
+   })
+
+   // after
+   respClient := responses.NewClient(
+       responses.WithBaseURL(p.opts.BaseURL),
+       responses.WithHTTPClient(&http.Client{
+           Transport: &singleResponseTransport{resp: resp},
+       }),
+   )
+   wireReq := &responses.Request{Model: opts.Model, Stream: true}
+   handle, err := respClient.Stream(ctx, wireReq)
+   …
+   go func() {
+       defer pub.Close()
+       unified.StreamResponses(ctx, handle, pub, unified.StreamContext{
+           Provider:         providerName,
+           Model:            opts.Model,
+           UpstreamProvider: "openai",
+       })
+   }()
+   ```
+
+2. Once openrouter is off `RespParseStream`, check if `provider/openai` still needs it exported
+   (it does, until Gap 1 is done — `provider/openai` still calls its own `RespParseStream`).
+
+**Parity test already exists**:
+- `provider/openrouter/unified_integration_test.go` — `TestStreamResponsesUnified_RequestBodyParity`
+  validates the request body. Extend to cover event output parity.
+- Add `TestStreamResponsesUnified_EventPipeline` that feeds a canned SSE fixture and asserts
+  the same events come out as the legacy path.
+
+**Acceptance criteria**:
+- `provider/openrouter` passes all existing tests after migration.
+- `openai.RespParseStream` is no longer imported by `provider/openrouter`.
+- New test covers token counts, stop reason, model resolution for responses path.
+
+---
+
+## Task List (updated)
+
+### ✅ Done
+- Task B — `EventFromMessages` fixed (MessageDeltaEvent tokens + stop reason)
+- Task C — Usage metadata injection solved via `StreamContext`
+- Task D — Model caps extracted to `ModelCaps` / `ModelCapsFunc` / `DefaultAnthropicModelCaps`
+- Task E — Anthropic provider migrated
+- Task F — Minimax + openrouter-messages migrated
+- Task I — Committed
+
+### 🔴 Next
+- **Task OR** — OpenRouter responses event path migration (see §OpenRouter Migration above)
+
+### 🟡 High
+- **Task OI** — OpenAI event path migration (`ccParseStream` + `RespParseStream`)
+  - Prerequisite: none (can be done independently of openrouter)
+  - Approach: same `singleResponseTransport` pattern as anthropic/minimax
+  - After: `RespParseStream` can be un-exported; openrouter already off it (after Task OR)
+
+### 🟠 Medium
+- **Task CL** — `provider/anthropic/claude` migration
+  - Blocks: removal of `anthropic.BuildRequest` + `ParseStreamWith`
+  - Note: `DoCountTokensAPI` already updated to take `*messages.Request`; must update
+    `claude/provider.go::buildRequest` to return `*messages.Request` instead of `anthropic.Request`
+- **Task G** — Ollama stream path migration (NDJSON → `completions.Client` + `StreamCompletions`)
+  - Prerequisite: fixture test validating `completions.NewParser` handles Ollama NDJSON
+
+### 🟢 Later (cleanup, no behavior change)
+- **Task S4** — Deduplicate `singleResponseTransport` → `apicore.SingleResponseTransport`
+- **Task S5** — Remove `anthropic.BuildRequest` + `ParseStreamWith` + `stream_processor.go`
+  (blocked on Task CL)
+- **Task S6** — Remove `orRespBuildRequest` from openrouter (legacy test helper)
+- **Task S7** — Remove `ccBuildRequest` + `respBuildRequest` from openai (or keep as spec docs)
+- **Task S8** — Redesign `StreamMessages` to accept `io.ReadCloser` + `http.Header` directly
+  (removes fake transport pattern; non-breaking API change)
+- **Task A** — Ollama request path (`RequestToOllamaCompletions` or keep legacy)
 
 ---
 
 ## Priority Order
 
-| Priority | Task | Effort | Risk |
-|----------|------|--------|------|
-| 🔴 Commit now | Task I | 1h | Low |
-| 🔴 Fix | Task B (`MessageDeltaEvent`) | 1h | Low |
-| 🟡 High | Task E (anthropic migration) | 3h | Medium |
-| 🟡 High | Task F (minimax/openrouter migration) | 2h | Medium |
-| 🟠 Medium | Task C (usage metadata) | 1h | Low |
-| 🟠 Medium | Task A (ollama wire dialect) | 2h | Low |
-| 🟠 Medium | Task G (ollama stream migration) | 2h | Medium |
-| 🟢 Later | Task D (model caps resolver) | 2h | Low |
-| 🟢 Later | Task H (legacy deprecation) | 1h | Low |
+| Priority | Task | Effort | Depends on |
+|----------|------|--------|-----------|
+| 🔴 Next | **Task OR** — openrouter responses event | S | — |
+| 🟡 High | **Task OI** — openai event path | M | — |
+| 🟠 Medium | **Task CL** — claude provider | M | — |
+| 🟠 Medium | **Task G** — ollama stream | M | fixture test |
+| 🟢 Later | **Task S4** — dedup `singleResponseTransport` | S | — |
+| 🟢 Later | **Task S5** — remove anthropic legacy | S | CL |
+| 🟢 Later | **Task S6/S7** — remove dead builders | S | OR + OI |
+| 🟢 Later | **Task S8** — stream helper redesign | L | OR + OI + CL |
+| 🟢 Later | **Task A** — ollama request dialect | M | — |

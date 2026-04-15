@@ -53,6 +53,7 @@ const (
 	BlockTypeText                = "text"
 	BlockTypeToolUse             = "tool_use"
 	BlockTypeThinking            = "thinking"
+	BlockTypeRedactedThinking    = "redacted_thinking" // encrypted thinking blob; no deltas follow
 	BlockTypeServerToolUse       = "server_tool_use"
 	BlockTypeWebSearchToolResult = "web_search_tool_result"
 )
@@ -82,4 +83,20 @@ const (
 	ThinkingDisabled ThinkingMode = iota
 	ThinkingEnabled
 	ThinkingAdaptive
+)
+
+// ThinkingDisplay controls how thinking content is returned in API responses.
+// Ref: https://docs.anthropic.com/en/docs/build-with-claude/extended-thinking#controlling-thinking-display
+const (
+	// ThinkingDisplaySummarized is the default for Claude 4 models.
+	// Thinking blocks contain a summary of Claude's reasoning.
+	// You are billed for the full thinking tokens, not the summary.
+	ThinkingDisplaySummarized = "summarized"
+
+	// ThinkingDisplayOmitted returns thinking blocks with an empty thinking
+	// field. Only the signature is returned (for multi-turn continuity).
+	// No thinking_delta events are emitted during streaming, so text
+	// begins streaming sooner (lower time-to-first-text-token).
+	// You are still billed for the full thinking tokens.
+	ThinkingDisplayOmitted = "omitted"
 )
