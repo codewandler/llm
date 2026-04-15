@@ -396,7 +396,7 @@ func TestWithoutOllama_SuppressesAutoDetection(t *testing.T) {
 		ProviderClaude: true, ProviderAnthropic: true, ProviderBedrock: true,
 		ProviderOpenAI: true, ProviderOpenRouter: true, ProviderMiniMax: true,
 		ProviderChatGPT: true,
-		ProviderOllama: true, // ← what WithoutOllama() sets in the disabled map
+		ProviderOllama:  true, // ← what WithoutOllama() sets in the disabled map
 	})
 
 	require.Empty(t, providers, "WithoutOllama() must prevent Ollama detection even with OLLAMA_HOST set")
@@ -419,7 +419,7 @@ func TestWithoutChatGPT_SuppressesAutoDetection(t *testing.T) {
 	providers := detectProviders(nil, nil, map[string]bool{
 		ProviderClaude: true, ProviderAnthropic: true, ProviderBedrock: true,
 		ProviderOpenAI: true, ProviderOpenRouter: true, ProviderMiniMax: true,
-		ProviderOllama: true,
+		ProviderOllama:  true,
 		ProviderChatGPT: true, // ← what WithoutChatGPT() sets in the disabled map
 	})
 

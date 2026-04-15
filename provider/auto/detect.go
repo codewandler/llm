@@ -8,10 +8,11 @@ import (
 	"github.com/codewandler/llm/provider/anthropic"
 	"github.com/codewandler/llm/provider/anthropic/claude"
 	"github.com/codewandler/llm/provider/bedrock"
+	"github.com/codewandler/llm/provider/dockermr"
 	"github.com/codewandler/llm/provider/minimax"
+	"github.com/codewandler/llm/provider/ollama"
 	"github.com/codewandler/llm/provider/openai"
 	"github.com/codewandler/llm/provider/openrouter"
-	"github.com/codewandler/llm/provider/ollama"
 )
 
 // detectProviders returns provider entries for all auto-detectable providers.
@@ -166,6 +167,33 @@ func detectProviders(httpClient *http.Client, llmOpts []llm.Option, disabled map
 				},
 				modelAliases: openai.CodexModelAliases,
 				hasAliases:   true,
+			})
+		}
+	}
+
+	// 9. Docker Model Runner — detected when localhost:12434 responds to a
+	// model listing request. This is the last provider in the detection order
+	// because local inference is a fallback for offline/cost-sensitive use;
+	// cloud providers (Claude, Bedrock, OpenAI, etc.) are preferred when available.
+	if !disabled[ProviderDockerMR] {
+		// Resolve the shared transport so the probe respects any proxy or TLS
+		// settings without inheriting the full http.Client timeout.
+		var sharedTransport http.RoundTripper
+		if httpClient != nil {
+			sharedTransport = httpClient.Transport
+		}
+		if dockermr.Available(sharedTransport) {
+			providers = append(providers, providerEntry{
+				name:         ProviderDockerMR,
+				providerType: ProviderDockerMR,
+				factory: func(opts ...llm.Option) llm.Provider {
+					if httpClient != nil {
+						opts = append(opts, llm.WithHTTPClient(httpClient))
+					}
+					return dockermr.New(opts...)
+				},
+				modelAliases: nil,
+				hasAliases:   false,
 			})
 		}
 	}

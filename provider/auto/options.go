@@ -7,6 +7,7 @@ import (
 	"github.com/codewandler/llm/provider/anthropic"
 	"github.com/codewandler/llm/provider/anthropic/claude"
 	"github.com/codewandler/llm/provider/bedrock"
+	"github.com/codewandler/llm/provider/dockermr"
 	"github.com/codewandler/llm/provider/ollama"
 	"github.com/codewandler/llm/provider/openai"
 	"github.com/codewandler/llm/provider/openrouter"
@@ -349,4 +350,52 @@ func WithoutOllama() Option {
 // a duplicate chatgpt-2 instance alongside the auto-detected one.
 func WithoutChatGPT() Option {
 	return WithoutProvider(ProviderChatGPT)
+}
+
+// WithDockerModelRunner adds the Docker Model Runner provider explicitly,
+// bypassing auto-detection. This is useful when DMR is running on a
+// non-default address (e.g. inside a Docker container) or when
+// WithoutAutoDetect() is in effect.
+//
+// The variadic opts are forwarded to dockermr.New(), so any llm.Option is
+// accepted — for example llm.WithBaseURL(dockermr.ContainerBaseURL) to target
+// the Docker Desktop container endpoint.
+//
+// Example:
+//
+//	// Default address (localhost:12434):
+//	r, _ := auto.New(ctx, auto.WithDockerModelRunner())
+//
+//	// Inside a Docker Desktop container:
+//	r, _ := auto.New(ctx,
+//	    auto.WithDockerModelRunner(llm.WithBaseURL(dockermr.ContainerBaseURL)),
+//	)
+func WithDockerModelRunner(opts ...llm.Option) Option {
+	return func(c *config) {
+		httpClient := c.httpClient
+		c.providers = append(c.providers, providerEntry{
+			name:         ProviderDockerMR,
+			providerType: ProviderDockerMR,
+			factory: func(extraOpts ...llm.Option) llm.Provider {
+				// Caller-supplied opts take precedence; shared httpClient is
+				// appended last so it does not override an explicit WithHTTPClient
+				// passed by the caller.
+				allOpts := append(opts, extraOpts...)
+				if httpClient != nil {
+					allOpts = append(allOpts, llm.WithHTTPClient(httpClient))
+				}
+				return dockermr.New(allOpts...)
+			},
+			modelAliases: nil,
+			hasAliases:   false,
+		})
+	}
+}
+
+// WithoutDockerMR is a convenience shorthand for WithoutProvider(ProviderDockerMR).
+// It prevents Docker Model Runner from being auto-detected even when
+// localhost:12434 is reachable. Useful in CI environments where the port may
+// be open for unrelated reasons.
+func WithoutDockerMR() Option {
+	return WithoutProvider(ProviderDockerMR)
 }

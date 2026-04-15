@@ -11,6 +11,7 @@ const (
 	ProviderAnthropic  = "anthropic"
 	ProviderMiniMax    = "minimax"
 	ProviderOllama     = "ollama"
+	ProviderDockerMR   = "dockermr"
 )
 
 // Environment variable names.
