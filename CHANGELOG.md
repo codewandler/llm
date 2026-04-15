@@ -27,6 +27,10 @@
   distinguish the billing name (`openrouter`) from the upstream backend
   (`anthropic`) in `StreamStartedEvent.Provider`.
 
+
+### Changed
+
+- `cmd/miniagent` has moved to a dedicated public repository: https://github.com/codewandler/miniagent
 ### Fixed
 
 - `provider/ollama`: `*Provider` did not implement `llm.Provider` — `Models()`
