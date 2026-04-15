@@ -3,7 +3,7 @@
 > **Design ref**: `.agents/plans/DESIGN-api-extraction.md`
 > **Depends on**: nothing (first)
 > **Blocks**: `PLAN-20260415-messages.md`, `PLAN-20260415-completions.md`, `PLAN-20260415-responses.md`
-> **Estimated total**: ~33 min
+> **Estimated total**: ~35 min
 
 ---
 
@@ -51,13 +51,137 @@ go build ./api/apicore/...
 
 ---
 
-## Task 2: Write client.go (complete)
+## Task 2: Write sse.go
+
+**Files created**: `api/apicore/sse.go`
+**Estimated time**: 2 min
+
+The SSE scanner is copied from `internal/sse` into this package as **unexported** helpers,
+making `api/apicore` self-contained with no dependency on `internal/`. The logic is
+identical to `internal/sse/lines.go`; only the names change:
+
+| `internal/sse` | `api/apicore` |
+|---|---|
+| `Event` (exported struct) | `sseEvent` (unexported struct) |
+| `Event.Name` / `Event.Data` | `sseEvent.name` / `sseEvent.data` |
+| `ForEachDataLine` (exported func) | `forEachDataLine` (unexported func) |
+
+Do **not** delete `internal/sse` — it is still used by the existing providers until their
+own migration phases.
+
+```go
+// api/apicore/sse.go
+package apicore
+
+import (
+	"bufio"
+	"context"
+	"io"
+	"strings"
+	"sync"
+)
+
+// sseEvent is one SSE payload with its optional event name.
+type sseEvent struct {
+	name string
+	data string
+}
+
+// scanResult carries one raw line from the background scanner goroutine.
+type scanResult struct {
+	line string
+	err  error // non-nil on scanner error
+}
+
+// forEachDataLine scans an SSE stream and invokes fn for each data event.
+//
+// It supports both plain `data: ...` streams and named events using
+// `event: ...` followed by `data: ...`.
+//
+// For closable readers, context cancellation and early termination close the
+// reader to unblock any in-flight Read and wait for the scanner goroutine to exit.
+func forEachDataLine(ctx context.Context, r io.Reader, fn func(sseEvent) bool) error {
+	lines := make(chan scanResult, 16)
+	scannerDone := make(chan struct{})
+
+	var closeReader func()
+	if closer, ok := r.(io.Closer); ok {
+		var once sync.Once
+		closeReader = func() {
+			once.Do(func() { _ = closer.Close() })
+		}
+	} else {
+		closeReader = func() {}
+	}
+
+	go func() {
+		defer close(scannerDone)
+		scanner := bufio.NewScanner(r)
+		scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+		for scanner.Scan() {
+			lines <- scanResult{line: scanner.Text()}
+		}
+		if err := scanner.Err(); err != nil {
+			lines <- scanResult{err: err}
+		}
+		close(lines)
+	}()
+
+	var pendingName string
+	stop := func(err error) error {
+		closeReader()
+		<-scannerDone
+		return err
+	}
+
+	for {
+		select {
+		case <-ctx.Done():
+			return stop(ctx.Err())
+		case res, ok := <-lines:
+			if !ok {
+				if ctx.Err() != nil {
+					return ctx.Err()
+				}
+				return nil // scanner finished cleanly
+			}
+			if res.err != nil {
+				if ctx.Err() != nil {
+					return ctx.Err()
+				}
+				return res.err
+			}
+			line := res.line
+			switch {
+			case strings.HasPrefix(line, "event:"):
+				pendingName = strings.TrimSpace(strings.TrimPrefix(line, "event:"))
+			case strings.HasPrefix(line, "data:"):
+				data := strings.TrimPrefix(line, "data:")
+				data = strings.TrimPrefix(data, " ")
+				if !fn(sseEvent{name: pendingName, data: data}) {
+					return stop(nil)
+				}
+				pendingName = ""
+			}
+		}
+	}
+}
+```
+
+**Verification**:
+```bash
+go build ./api/apicore/...
+```
+
+---
+
+## Task 3: Write client.go (complete)
 
 **Files created**: `api/apicore/client.go`
 **Estimated time**: 8 min
 
-> Note: Tasks 2 and 3 from the previous plan are merged here. Write the entire
-> file in one go — do not split across multiple edits.
+> The SSE scanner used here (`forEachDataLine`, `sseEvent`) is defined in
+> `api/apicore/sse.go` — same package, no import needed.
 
 ```go
 // api/apicore/client.go
@@ -72,8 +196,6 @@ import (
 	"log/slog"
 	"net/http"
 	"time"
-
-	"github.com/codewandler/llm/internal/sse"
 )
 
 // Client[Req] is a generic HTTP+SSE streaming client. Req is the wire request
@@ -270,8 +392,8 @@ func (c *Client[Req]) Stream(ctx context.Context, req *Req) (*StreamHandle, erro
 
 	// 9. Error check
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		defer resp.Body.Close()
 		errBody, _ := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
 		if c.errParser != nil {
 			return nil, c.errParser(resp.StatusCode, errBody)
 		}
@@ -290,13 +412,13 @@ func (c *Client[Req]) Stream(ctx context.Context, req *Req) (*StreamHandle, erro
 		var eventCount int
 		streamStart := time.Now()
 
-		scanErr := sse.ForEachDataLine(ctx, resp.Body, func(ev sse.Event) bool {
-			result := handler(ev.Name, []byte(ev.Data))
+		scanErr := forEachDataLine(ctx, resp.Body, func(ev sseEvent) bool {
+			result := handler(ev.name, []byte(ev.data))
 
 			if c.logger != nil {
 				c.logger.DebugContext(ctx, "SSE event",
-					slog.String("event_name", ev.Name),
-					slog.Int("data_size", len(ev.Data)),
+					slog.String("event_name", ev.name),
+					slog.Int("data_size", len(ev.data)),
 				)
 			}
 
@@ -308,7 +430,7 @@ func (c *Client[Req]) Stream(ctx context.Context, req *Req) (*StreamHandle, erro
 
 			// ParseHook may inject additional events (e.g. rate-limit metadata).
 			if c.parseHook != nil {
-				if extra := c.parseHook(req, ev.Name, []byte(ev.Data)); extra != nil {
+				if extra := c.parseHook(req, ev.name, []byte(ev.data)); extra != nil {
 					ch <- StreamResult{Event: extra}
 				}
 			}
@@ -344,7 +466,7 @@ go build ./api/apicore/...
 
 ---
 
-## Task 3: Write options.go
+## Task 4: Write options.go
 
 **Files created**: `api/apicore/options.go`
 **Estimated time**: 3 min
@@ -410,7 +532,7 @@ go build ./api/apicore/...
 
 ---
 
-## Task 4: Write retry.go
+## Task 5: Write retry.go
 
 **Files created**: `api/apicore/retry.go`
 **Estimated time**: 5 min
@@ -422,6 +544,7 @@ go build ./api/apicore/...
 package apicore
 
 import (
+	"io"
 	"log/slog"
 	"math"
 	"math/rand"
@@ -490,9 +613,11 @@ func (t *retryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 				)
 			}
 
+			timer := time.NewTimer(backoff)
 			select {
-			case <-time.After(backoff):
+			case <-timer.C:
 			case <-req.Context().Done():
+				timer.Stop()
 				return resp, req.Context().Err()
 			}
 
@@ -513,10 +638,11 @@ func (t *retryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 		if !t.isRetryable(resp.StatusCode) || attempt == t.cfg.MaxRetries {
 			return resp, nil
 		}
-		// Drain and close before retrying to free the connection.
+		// Drain body before closing so the connection can be reused.
+		_, _ = io.Copy(io.Discard, resp.Body)
 		_ = resp.Body.Close()
 	}
-	return resp, err
+	return resp, nil // err is always nil here; transport errors return early above
 }
 
 func (t *retryTransport) isRetryable(status int) bool {
@@ -560,7 +686,7 @@ go build ./api/apicore/...
 
 ---
 
-## Task 5: Write adapter.go
+## Task 6: Write adapter.go
 
 **Files created**: `api/apicore/adapter.go`
 **Estimated time**: 2 min
@@ -582,7 +708,7 @@ type AdapterConfig struct {
 }
 
 // Provider returns the effective provider name for errors and records.
-func (c *AdapterConfig) Provider() string {
+func (c AdapterConfig) Provider() string {
 	if c.ProviderName != "" {
 		return c.ProviderName
 	}
@@ -590,7 +716,7 @@ func (c *AdapterConfig) Provider() string {
 }
 
 // Upstream returns the effective upstream provider for StreamStartedEvent.
-func (c *AdapterConfig) Upstream() string {
+func (c AdapterConfig) Upstream() string {
 	if c.UpstreamProvider != "" {
 		return c.UpstreamProvider
 	}
@@ -625,7 +751,7 @@ go build ./api/apicore/...
 
 ---
 
-## Task 6: Write testing.go
+## Task 7: Write testing.go
 
 **Files created**: `api/apicore/testing.go`
 **Estimated time**: 2 min
@@ -695,7 +821,7 @@ go build ./api/apicore/...
 
 ---
 
-## Task 7: Write client_test.go
+## Task 8: Write client_test.go
 
 **Files created**: `api/apicore/client_test.go`
 **Estimated time**: 5 min
@@ -712,6 +838,7 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/codewandler/llm/api/apicore"
 	"github.com/stretchr/testify/assert"
@@ -874,7 +1001,7 @@ func TestClient_Stream_StaticAndDynamicHeadersMerge(t *testing.T) {
 	assert.Equal(t, "dyn-val", gotHeaders.Get("X-Dynamic"))
 }
 
-func TestClient_Stream_WithLogger_DoesNotPanic(t *testing.T) {
+func TestClient_Stream_WithLogger_DeliversEvents(t *testing.T) {
 	transport := apicore.FixedSSEResponse(200, sseBody("data: hello", "", "data: [DONE]", ""))
 	logger := slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelDebug}))
 	c := apicore.NewClient[testReq](func() apicore.EventHandler {
@@ -898,6 +1025,84 @@ func TestClient_Stream_WithLogger_DoesNotPanic(t *testing.T) {
 	}
 	assert.Equal(t, []any{"hello"}, events)
 }
+
+func TestClient_Stream_NamedEvents(t *testing.T) {
+	body := sseBody(
+		"event: message_start",
+		"data: {\"id\":\"msg_1\"}",
+		"",
+		"event: content_block_delta",
+		"data: {\"text\":\"hello\"}",
+		"",
+		"event: message_stop",
+		"data: {}",
+		"",
+	)
+	transport := apicore.FixedSSEResponse(200, body)
+	type event struct{ name, data string }
+	c := apicore.NewClient[testReq](func() apicore.EventHandler {
+		return func(name string, data []byte) apicore.StreamResult {
+			if name == "message_stop" {
+				return apicore.StreamResult{Event: event{name, string(data)}, Done: true}
+			}
+			if name != "" {
+				return apicore.StreamResult{Event: event{name, string(data)}}
+			}
+			return apicore.StreamResult{}
+		}
+	}, apicore.WithHTTPClient[testReq](&http.Client{Transport: transport}))
+
+	handle, err := c.Stream(context.Background(), &testReq{})
+	require.NoError(t, err)
+
+	var received []event
+	for result := range handle.Events {
+		if e, ok := result.Event.(event); ok {
+			received = append(received, e)
+		}
+	}
+	require.Len(t, received, 3)
+	assert.Equal(t, "message_start", received[0].name)
+	assert.Equal(t, "content_block_delta", received[1].name)
+	assert.Equal(t, "message_stop", received[2].name)
+}
+
+func TestClient_Stream_ContextCancelled_ChannelCloses(t *testing.T) {
+	pr, pw := io.Pipe()
+	defer pw.Close()
+
+	transport := apicore.RoundTripFunc(func(r *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: 200,
+			Header:     http.Header{"Content-Type": {"text/event-stream"}},
+			Body:       pr,
+		}, nil
+	})
+	ctx, cancel := context.WithCancel(context.Background())
+	c := apicore.NewClient[testReq](func() apicore.EventHandler {
+		return func(name string, data []byte) apicore.StreamResult {
+			return apicore.StreamResult{Event: string(data)}
+		}
+	}, apicore.WithHTTPClient[testReq](&http.Client{Transport: transport}))
+
+	handle, err := c.Stream(ctx, &testReq{})
+	require.NoError(t, err)
+
+	cancel() // signal cancellation; forEachDataLine will close the pipe reader
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for range handle.Events {}
+	}()
+
+	select {
+	case <-done:
+		// handle.Events closed cleanly after context cancellation
+	case <-time.After(2 * time.Second):
+		t.Fatal("handle.Events did not close after context cancellation")
+	}
+}
 ```
 
 **Verification**:
@@ -907,7 +1112,7 @@ go test ./api/apicore/... -v -count=1
 
 ---
 
-## Task 8: Write retry_test.go
+## Task 9: Write retry_test.go
 
 **Files created**: `api/apicore/retry_test.go`
 **Estimated time**: 4 min

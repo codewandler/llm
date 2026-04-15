@@ -34,11 +34,11 @@ built on a shared generic client:
 
 ```
 api/
-├── apicore/          # Generic client infrastructure (no protocol knowledge)
+├── apicore/          # Generic client infrastructure (no protocol knowledge, no internal/ deps)
 │   ├── client.go     # Client[Req] — generic HTTP+SSE client
 │   ├── options.go    # ClientOption[Req], WithBaseURL, WithHeader, etc.
-│   ├── stream.go     # StreamResult, StreamHandle, ParserFactory, EventHandler, ParseHook
 │   ├── constants.go  # Shared HTTP constants, retryable status codes
+│   ├── sse.go        # forEachDataLine, sseEvent — SSE scanner (unexported; copied from internal/sse)
 │   ├── retry.go      # RetryTransport, RetryConfig (composable RoundTripper)
 │   ├── adapter.go    # AdapterConfig, AdapterOption (shared identity)
 │   └── testing.go    # Test helpers: RoundTripFunc, FixedSSEResponse, NewTestHandle
@@ -203,7 +203,7 @@ func (c *Client[Req]) Stream(ctx context.Context, req *Req) (*StreamHandle, erro
     //    - non-2xx: read body, return ErrorParser(status, body) or *HTTPError
     // 10. Create EventHandler from ParserFactory (fresh state per stream)
     // 11. Start background goroutine:
-    //     a. SSE scanning (via internal/sse)
+    //     a. SSE scanning (via forEachDataLine — defined in apicore/sse.go)
     //     b. For each SSE event:
     //        - Call EventHandler(name, data) → emit StreamResult
     //        - Call ParseHook(req, name, data) → if non-nil, emit standalone StreamResult
@@ -219,7 +219,7 @@ func (c *Client[Req]) Stream(ctx context.Context, req *Req) (*StreamHandle, erro
 - Structured logging (`*slog.Logger`)
 - Response hook invocation (header extraction point)
 - HTTP error handling (status check + error parsing)
-- SSE scanning (`internal/sse`)
+- SSE scanning (`apicore/sse.go` — self-contained, no `internal/` dependency)
 - ParseHook integration
 - Channel creation, goroutine lifecycle, body cleanup
 
@@ -235,14 +235,17 @@ func (c *Client[Req]) Stream(ctx context.Context, req *Req) (*StreamHandle, erro
 
 ### Protocol Packages: Thin Wrappers + Types + Parsers
 
-Each `api/<protocol>` package provides:
-1. **Wire types** — request/response structs matching the API spec
-2. **ParserFactory** — returns a stateful `EventHandler` per stream
-3. **ErrorParser** — converts protocol-specific HTTP error bodies
-4. **`NewClient`** — convenience constructor with protocol defaults
-5. **Option aliases** — hide the generic type parameter for clean call sites
-6. **Adapter** — bridges native events ↔ `llm.Publisher` (protocol-specific)
-7. **Convert** — `llm.Request` → wire request (protocol-specific)
+Each `api/<protocol>` package provides (no `llm` import):
+1. **Wire types** — request/response structs matching the API spec (`types.go`)
+2. **ParserFactory** — returns a stateful `EventHandler` per stream (`parser.go`)
+3. **ErrorParser** — converts protocol-specific HTTP error bodies (`client.go`)
+4. **`NewClient`** — convenience constructor with protocol defaults (`client.go`)
+5. **Option aliases** — hide the generic type parameter for clean call sites (`client.go`)
+
+**`api/adapt`** is a separate package that provides (imports `llm`):
+6. **Adapter** — bridges native events ↔ `llm.Publisher` (`<proto>_api.go`)
+7. **Convert** — `llm.Request` → wire request (`<proto>_api.go`)
+8. **Streamer interface** — for test injection (`<proto>_api.go`)
 
 ```go
 package messages
@@ -334,7 +337,7 @@ The generic type parameter is completely hidden from callers.
 | Structured logging (`slog`) | `NewClient` convenience ctor | `StopReason` mapping |
 | ResponseHook invocation | Option aliases (hide generics) | `llm.ProviderRequestFromHTTP` |
 | HTTP error handling | | `msg.Text`, `msg.Thinking` |
-| SSE scanning (`internal/sse`) | | `sortmap.NewSortedMap` |
+| SSE scanning (`apicore/sse.go`) | | `sortmap.NewSortedMap` |
 | ParseHook integration | | |
 | Channel + goroutine lifecycle | | |
 | RetryTransport (composable) | | |
@@ -342,29 +345,33 @@ The generic type parameter is completely hidden from callers.
 ### Three Layers (revised)
 
 ```
-┌──────────────────────────────────────────────────────────┐
-│  Layer 1: Wire Types                (per-protocol)       │
-│  Pure structs matching the API specification.            │
-│  No llm dependency. JSON-serializable.                   │
-│  api/<protocol>/types.go                                 │
-├──────────────────────────────────────────────────────────┤
-│  Layer 2: Generic Client + Parser   (shared + per-proto) │
-│  apicore.Client[Req] handles HTTP, headers, transforms.  │
-│  Per-protocol parser function injected at construction.   │
-│  No llm dependency.                                      │
-│  api/apicore/ + api/<protocol>/parser.go                  │
-├──────────────────────────────────────────────────────────┤
-│  Layer 3: Adapter                   (per-protocol)       │
-│  Converts llm.Request → wire Request.                    │
-│  Maps native events → llm.Publisher calls.               │
-│  api/<protocol>/adapter.go + convert.go                   │
-└──────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────┐
+│  Layer 1: Wire Types              (per-protocol, no llm import)│
+│  Pure structs matching the API specification.                  │
+│  No llm dependency. JSON-serializable.                         │
+│  api/<protocol>/types.go                                       │
+├────────────────────────────────────────────────────────────────┤
+│  Layer 2: Generic Client + Parser  (shared + per-proto, no llm)│
+│  apicore.Client[Req] handles HTTP, headers, transforms.        │
+│  Per-protocol parser injected at construction.                 │
+│  api/apicore/ + api/<protocol>/{parser,client,constants}.go    │
+├────────────────────────────────────────────────────────────────┤
+│  Layer 3: Adapt                    (llm domain — one package)  │
+│  THE ONLY layer that imports github.com/codewandler/llm.       │
+│  Converts llm.Request → wire Request.                          │
+│  Maps native events → llm.Publisher calls.                     │
+│  api/adapt/{messages,completions,responses}_api.go             │
+└────────────────────────────────────────────────────────────────┘
 ```
 
-**Layer 1 + 2** are usable standalone — a consumer can call the Anthropic Messages API
-without importing `llm` at all. This is the "native client" use case.
+**Layers 1 + 2** have **no `github.com/codewandler/llm` import**. They are usable
+standalone — a consumer can speak the Anthropic Messages API without the llm package.
+This eliminates all lateral provider imports and makes the wire clients reusable
+outside this repository.
 
-**Layer 3** is what our providers use. The adapter bridges native events → `llm.Publisher`.
+**Layer 3 (`api/adapt`)** is the single place that imports `llm`, `tool`, `usage`,
+`msg`, and `sortmap`. Our providers compose an adapter and call `StreamTo()`.
+Nothing outside `api/adapt` touches `llm.Publisher` or `llm.Request`.
 
 ---
 
@@ -632,8 +639,9 @@ msgClient := messages.NewClient(
 )
 ```
 
-The adapter handles hook events with the same type switch:
+The adapt-layer adapter handles hook events with the same type switch:
 ```go
+// api/adapt/messages_api.go
 for result := range handle.Events {
     switch evt := result.Event.(type) {
     case *messages.MessageStartEvent:
@@ -643,7 +651,7 @@ for result := range handle.Events {
     case *messages.MessageStopEvent:
         a.handleStop(evt, pub)
 
-    // Provider-specific events from ParseHook:
+    // Provider-specific events injected by ParseHook (e.g. OpenRouter cost):
     case *OpenRouterUsage:
         a.reportedCost = evt.Cost
     }
@@ -1306,7 +1314,7 @@ Total: ~240 lines of bespoke wire code replaced by `api/completions`.
 ## Dependency Graph (after extraction)
 
 ```
-api/apicore/           ← depends on: internal/sse (no llm or usage dependency!)
+api/apicore/           ← depends on: nothing (self-contained — no llm, no internal/)
 api/messages/          ← depends on: api/apicore, llm (adapter only)
 api/completions/       ← depends on: api/apicore, llm (adapter only)
 api/responses/         ← depends on: api/apicore, llm (adapter only)
@@ -1800,8 +1808,12 @@ They verify the full pipeline: client → parser → adapter → llm events.
 
 ## Open Questions
 
-1. **`internal/sse`** stays where it is. Go allows same-module access to `internal/`
-   packages. `api/apicore` imports `internal/sse` — no move needed.
+1. **`internal/sse`** — the SSE scanner is copied (not moved) into `api/apicore/sse.go`
+   as unexported helpers (`forEachDataLine`, `sseEvent`), making `api/apicore` fully
+   self-contained with zero dependency on `internal/`. `internal/sse` is left in place
+   for the four existing providers (`anthropic`, `openai`, `openrouter`, `ollama`) that
+   still use it directly; it is deleted in the final migration phase once all providers
+   have been migrated to the new api packages.
 
 2. **Iterator vs channel for stream events?** Go 1.23 has `iter.Seq`. Worth
    evaluating but channels are consistent with the rest of the codebase.
