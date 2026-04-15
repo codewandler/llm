@@ -12,6 +12,7 @@ import (
 	"github.com/codewandler/llm/provider/anthropic"
 	"github.com/codewandler/llm/provider/anthropic/claude"
 	"github.com/codewandler/llm/provider/bedrock"
+	"github.com/codewandler/llm/provider/dockermr"
 	"github.com/codewandler/llm/provider/ollama"
 )
 
@@ -145,6 +146,7 @@ func TestDetectProviders_CodexLocalDetected(t *testing.T) {
 		ProviderOpenRouter: true,
 		ProviderMiniMax:    true,
 		ProviderOllama:     true,
+		ProviderDockerMR: true,
 	})
 
 	require.Len(t, providers, 1)
@@ -164,6 +166,7 @@ func TestDetectProviders_CodexLocalNotDetected_NoFile(t *testing.T) {
 		ProviderOpenRouter: true,
 		ProviderMiniMax:    true,
 		ProviderOllama:     true,
+		ProviderDockerMR: true,
 	})
 
 	require.Empty(t, providers)
@@ -181,6 +184,7 @@ func TestDetectProviders_OllamaDetected_EnvVar(t *testing.T) {
 		ProviderOpenRouter: true,
 		ProviderMiniMax:    true,
 		ProviderChatGPT:    true,
+		ProviderDockerMR: true,
 	})
 
 	require.Len(t, providers, 1)
@@ -203,6 +207,7 @@ func TestDetectProviders_OllamaNotDetected_NoEnvVar(t *testing.T) {
 		ProviderOpenRouter: true,
 		ProviderMiniMax:    true,
 		ProviderChatGPT:    true,
+		ProviderDockerMR: true,
 	})
 
 	require.Empty(t, providers)
@@ -397,6 +402,7 @@ func TestWithoutOllama_SuppressesAutoDetection(t *testing.T) {
 		ProviderOpenAI: true, ProviderOpenRouter: true, ProviderMiniMax: true,
 		ProviderChatGPT: true,
 		ProviderOllama:  true, // ← what WithoutOllama() sets in the disabled map
+		ProviderDockerMR: true,
 	})
 
 	require.Empty(t, providers, "WithoutOllama() must prevent Ollama detection even with OLLAMA_HOST set")
@@ -421,7 +427,58 @@ func TestWithoutChatGPT_SuppressesAutoDetection(t *testing.T) {
 		ProviderOpenAI: true, ProviderOpenRouter: true, ProviderMiniMax: true,
 		ProviderOllama:  true,
 		ProviderChatGPT: true, // ← what WithoutChatGPT() sets in the disabled map
+		ProviderDockerMR: true,
 	})
 
 	require.Empty(t, providers, "WithoutChatGPT() must prevent Codex detection even with auth.json present")
+}
+
+// TestDetectProviders_DockerMRDetected verifies that Docker Model Runner is
+// included in the detected provider list when its default endpoint
+// (localhost:12434) responds successfully. If DMR is not running the test is
+// skipped so CI pipelines without Docker Desktop still pass.
+func TestDetectProviders_DockerMRDetected(t *testing.T) {
+	if !dockermr.Available(nil) {
+		t.Skip("Docker Model Runner is not reachable on localhost:12434; skipping detection test")
+	}
+	// Disable every other provider so the slice length is predictable.
+	t.Setenv(ollama.EnvOllamaHost, "")
+	t.Setenv("HOME", t.TempDir()) // no .codex/auth.json
+
+	providers := detectProviders(nil, nil, map[string]bool{
+		ProviderClaude:     true,
+		ProviderAnthropic:  true,
+		ProviderBedrock:    true,
+		ProviderOpenAI:     true,
+		ProviderOpenRouter: true,
+		ProviderMiniMax:    true,
+		ProviderOllama:     true,
+		ProviderChatGPT:    true,
+		// ProviderDockerMR intentionally NOT disabled
+	})
+
+	require.Len(t, providers, 1)
+	assert.Equal(t, ProviderDockerMR, providers[0].name)
+	assert.Equal(t, ProviderDockerMR, providers[0].providerType)
+}
+
+// TestWithoutDockerMR_SuppressesAutoDetection verifies that adding
+// ProviderDockerMR to the disabled map (i.e. what WithoutDockerMR() does)
+// prevents DMR from being included even when the endpoint is reachable.
+func TestWithoutDockerMR_SuppressesAutoDetection(t *testing.T) {
+	if !dockermr.Available(nil) {
+		t.Skip("Docker Model Runner is not reachable on localhost:12434; skipping suppression test")
+	}
+	t.Setenv(ollama.EnvOllamaHost, "")
+	t.Setenv("HOME", t.TempDir())
+
+	providers := detectProviders(nil, nil, map[string]bool{
+		ProviderClaude: true, ProviderAnthropic: true, ProviderBedrock: true,
+		ProviderOpenAI: true, ProviderOpenRouter: true, ProviderMiniMax: true,
+		ProviderOllama:   true,
+		ProviderChatGPT:  true,
+		ProviderDockerMR: true, // ← what WithoutDockerMR() sets in the disabled map
+	})
+
+	require.Empty(t, providers, "WithoutDockerMR() must prevent DMR detection even when reachable")
 }
