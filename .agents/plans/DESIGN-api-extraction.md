@@ -2,6 +2,11 @@
 
 > **Scope**: Extract wire-protocol clients into reusable packages.
 > **Out of scope**: Model registry, offerings, smart routing (see DESIGN-model-registry.md).
+
+> **Status update (superseded bridge layer)**: The bridge-layer direction has moved
+> from `api/adapt` to `api/unified` (see `DESIGN-api-unified.md`).
+> Sections below that still mention `api/adapt` are historical context from the
+> extraction phase; execution planning should follow the unified design/plan.
 > **Out of scope**: Bedrock (proprietary AWS SDK protocol).
 
 ---
@@ -61,10 +66,14 @@ api/
 │   ├── parser.go     # (no llm dependency)
 │   └── client.go
 │
-└── adapt/            # Bridges wire API types ↔ llm domain (only layer with llm import)
-    ├── messages_api.go     # MessagesRequestFromLLM, MessagesAdapter, MessagesStreamer
-    ├── completions_api.go  # CompletionsRequestFromLLM, CompletionsAdapter, CompletionsStreamer
-    └── responses_api.go    # ResponsesRequestFromLLM, ResponsesAdapter, ResponsesStreamer
+└── unified/          # Canonical schema + domain bridges (llm-facing layer)
+    ├── types_request.go    # canonical Request/Message/Part schema
+    ├── types_event.go      # canonical StreamEvent/Delta/Usage schema
+    ├── messages_api.go     # unified <-> messages + stream conversion
+    ├── completions_api.go  # unified <-> completions + stream conversion
+    ├── responses_api.go    # unified <-> responses + stream conversion
+    ├── llm_bridge.go       # llm.Request <-> unified.Request
+    └── publisher_bridge.go # unified.StreamEvent -> llm.Publisher
 ```
 
 ---
@@ -242,10 +251,10 @@ Each `api/<protocol>` package provides (no `llm` import):
 4. **`NewClient`** — convenience constructor with protocol defaults (`client.go`)
 5. **Option aliases** — hide the generic type parameter for clean call sites (`client.go`)
 
-**`api/adapt`** is a separate package that provides (imports `llm`):
-6. **Adapter** — bridges native events ↔ `llm.Publisher` (`<proto>_api.go`)
-7. **Convert** — `llm.Request` → wire request (`<proto>_api.go`)
-8. **Streamer interface** — for test injection (`<proto>_api.go`)
+**`api/unified`** is the canonical bridge package that provides:
+6. **Canonical schema** — normalized request/event types (`types_request.go`, `types_event.go`)
+7. **Conversion hub** — `llm.Request` ↔ `unified.Request` ↔ wire requests (`*_api.go`, `llm_bridge.go`)
+8. **Publisher bridge** — unified stream events → `llm.Publisher` (`publisher_bridge.go`)
 
 ```go
 package messages
@@ -328,17 +337,17 @@ The generic type parameter is completely hidden from callers.
 
 ### What's Shared vs. Protocol-Specific
 
-| `apicore` (shared, no llm import) | `messages` / `completions` / `responses` (no llm import) | `adapt` (llm import only here) |
+| `apicore` (shared, no llm import) | `messages` / `completions` / `responses` (no llm import) | `unified` (canonical + llm bridge) |
 |---|---|---|
-| HTTP request building | Wire types (Request, SSE events) | `llm.Request` → wire `Request` |
-| Header merging (static + dynamic) | Stateful SSE `EventHandler` | Wire events → `llm.Publisher` calls |
-| TransformFunc application | `ErrorParser` (HTTP errors) | `usage.Record` construction |
-| JSON serialization | Default path + headers | `tool.NewToolCall` mapping |
-| Structured logging (`slog`) | `NewClient` convenience ctor | `StopReason` mapping |
-| ResponseHook invocation | Option aliases (hide generics) | `llm.ProviderRequestFromHTTP` |
-| HTTP error handling | | `msg.Text`, `msg.Thinking` |
-| SSE scanning (`apicore/sse.go`) | | `sortmap.NewSortedMap` |
-| ParseHook integration | | |
+| HTTP request building | Wire types (Request, SSE events) | `llm.Request` ↔ `unified.Request` |
+| Header merging (static + dynamic) | Stateful SSE `EventHandler` | unified ↔ wire request conversion |
+| TransformFunc application | `ErrorParser` (HTTP errors) | wire events → unified events |
+| JSON serialization | Default path + headers | unified events → `llm.Publisher` |
+| Structured logging (`slog`) | `NewClient` convenience ctor | `usage.Record` construction |
+| ResponseHook invocation | Option aliases (hide generics) | `StopReason` mapping |
+| HTTP error handling | | `tool.NewToolCall` mapping |
+| SSE scanning (`apicore/sse.go`) | | `msg.Text`, `msg.Thinking` mapping |
+| ParseHook integration | | `sortmap.NewSortedMap` usage |
 | Channel + goroutine lifecycle | | |
 | RetryTransport (composable) | | |
 
@@ -356,11 +365,11 @@ The generic type parameter is completely hidden from callers.
 │  Per-protocol parser injected at construction.                 │
 │  api/apicore/ + api/<protocol>/{parser,client,constants}.go    │
 ├────────────────────────────────────────────────────────────────┤
-│  Layer 3: Adapt                    (llm domain — one package)  │
-│  THE ONLY layer that imports github.com/codewandler/llm.       │
-│  Converts llm.Request → wire Request.                          │
-│  Maps native events → llm.Publisher calls.                     │
-│  api/adapt/{messages,completions,responses}_api.go             │
+│  Layer 3: Unified                  (canonical + llm bridge)     │
+│  Canonical interchange schema + conversion hub.                │
+│  Converts llm.Request ↔ unified ↔ wire Request.                │
+│  Maps native events → unified events → llm.Publisher.          │
+│  api/unified/{messages,completions,responses}_api.go           │
 └────────────────────────────────────────────────────────────────┘
 ```
 
@@ -369,10 +378,14 @@ standalone — a consumer can speak the Anthropic Messages API without the llm p
 This eliminates all lateral provider imports and makes the wire clients reusable
 outside this repository.
 
-**Layer 3 (`api/adapt`)** is the single place that imports `llm`, `tool`, `usage`,
-`msg`, and `sortmap`. Our providers compose an adapter and call `StreamTo()`.
-Nothing outside `api/adapt` touches `llm.Publisher` or `llm.Request`.
+**Layer 3 (`api/unified`)** is the canonical schema + bridge layer. Providers remain
+thin orchestrators: resolve options, call protocol client, convert through unified,
+and publish llm events. `api/messages|completions|responses` stay pure wire layers.
 
+
+> **Migration note (superseding old adapt plan)**: the old `api/adapt` plan is retired.
+> All llm-facing conversion work is now tracked under `DESIGN-api-unified.md` and
+> `PLAN-20260415-unified.md`.
 ---
 
 ## Layer 1: Wire Types
@@ -639,22 +652,30 @@ msgClient := messages.NewClient(
 )
 ```
 
-The adapt-layer adapter handles hook events with the same type switch:
+The unified bridge handles hook events and standard conversion in one loop:
 ```go
-// api/adapt/messages_api.go
+// api/unified/messages_api.go
 for result := range handle.Events {
-    switch evt := result.Event.(type) {
-    case *messages.MessageStartEvent:
-        a.handleStart(evt, pub)
-    case *messages.ContentBlockDeltaEvent:
-        a.handleDelta(evt, pub)
-    case *messages.MessageStopEvent:
-        a.handleStop(evt, pub)
-
-    // Provider-specific events injected by ParseHook (e.g. OpenRouter cost):
-    case *OpenRouterUsage:
-        a.reportedCost = evt.Cost
+    if result.Err != nil {
+        pub.Error(result.Err)
+        return
     }
+
+    // Provider-specific events injected by ParseHook (e.g. OpenRouter cost)
+    if usage, ok := result.Event.(*OpenRouterUsage); ok {
+        reportedCost = usage.Cost
+        continue
+    }
+
+    uEv, ignored, err := unified.EventFromMessages(result.Event)
+    if err != nil {
+        pub.Error(err)
+        return
+    }
+    if ignored {
+        continue
+    }
+    _ = unified.Publish(pub, uEv)
 }
 ```
 
@@ -877,9 +898,9 @@ client := messages.NewClient(
 )
 ```
 
-The adapter also has access to response headers via `StreamHandle.Headers`
-for anything needed during event processing (e.g. including `request-id`
-in usage records).
+The unified bridge/provider flow also has access to response headers via
+`StreamHandle.Headers` for anything needed during event processing
+(e.g. including `request-id` in usage records).
 
 **This no-magic-values rule applies everywhere:**
 - Request header names → `Header*` constants
@@ -975,151 +996,49 @@ logging independent of the client.
 
 ---
 
-## Layer 3: Adapter (Bridge to `llm`)
+## Layer 3: Unified Bridge (Canonical + `llm` Publisher)
 
-The adapter is the **only place** that imports `github.com/codewandler/llm`.
-All `llm.Publisher` event publishing — `Started`, `Delta`, `ToolCall`, `Completed`,
-`UsageRecord`, `RequestEvent`, `Error` — happens here.
+`api/unified` is the **only llm-facing bridge layer**.
 
-### Shared Adapter Config
+- Protocol packages stay pure wire/client/parser layers (`api/messages|completions|responses`).
+- Providers stay thin orchestrators.
+- Normalization and publish mapping live in one place.
 
-Common adapter settings (provider identity) are shared in `apicore` to avoid
-duplication. Cost calculation stays protocol-specific since each adapter builds
-usage records differently.
+Provider flow:
 
 ```go
-// apicore/adapter.go
+// 1) Build user request
+opts, err := src.BuildRequest(ctx)
 
-// AdapterConfig holds identity settings shared across all protocol adapters.
-type AdapterConfig struct {
-    ProviderName     string
-    UpstreamProvider string
-}
+// 2) Normalize through unified
+uReq, err := unified.RequestFromLLM(opts)
+wireReq, err := unified.RequestToResponses(uReq) // or Messages/Completions
 
-type AdapterOption func(*AdapterConfig)
+// 3) Call wire client
+handle, err := responsesClient.Stream(ctx, wireReq)
 
-func WithProviderName(name string) AdapterOption     { ... }
-func WithUpstreamProvider(name string) AdapterOption  { ... }
-```
-
-Protocol-specific adapters embed `AdapterConfig` and add their own options
-(cost calculator, thinking mode, cache retention, etc.).
-
-### Creation Pattern
-
-`NewAdapter` is a **standalone function**, not a method on `Client`.
-(Go doesn't allow adding methods to type aliases, and `Client` is an alias
-for `apicore.Client[Request]`.)
-
-```go
-// api/adapt/messages_api.go
-
-// MessagesStreamer sends a streaming request and returns native typed events.
-// *messages.Client implements this. Tests can provide a fake.
-type MessagesStreamer interface {
-    Stream(ctx context.Context, req *messages.Request) (*apicore.StreamHandle, error)
-}
-
-type MessagesAdapter struct {
-    sender   MessagesStreamer
-    cfg      apicore.AdapterConfig
-    convOpts []MessagesConvertOption
-}
-
-// NewMessagesAdapter creates a Messages API adapter.
-// Accepts Streamer (typically *messages.Client, but any implementation works for testing).
-func NewMessagesAdapter(sender MessagesStreamer, base []apicore.AdapterOption, opts ...MessagesConvertOption) *MessagesAdapter {
-    cfg := apicore.ApplyAdapterOptions(base...)
-    a := &MessagesAdapter{sender: sender, cfg: cfg, convOpts: opts}
-    return a
-}
-```
-
-Provider usage:
-```go
-// Provider creates client once, then creates adapter from it:
-adapter := adapt.NewMessagesAdapter(client,
-    []apicore.AdapterOption{
-        apicore.WithProviderName("anthropic"),
-    },
-    adapt.MessagesWithThinking(messages.ThinkingAdaptive, 0),
-)
-
-// Provider's CreateStream delegates to the adapter:
-func (p *Provider) CreateStream(ctx context.Context, src llm.Buildable) (llm.Stream, error) {
-    opts, err := src.BuildRequest(ctx)
-    ...
-    pub, ch := llm.NewEventPublisher()
-    go func() { p.adapter.StreamTo(ctx, opts, pub) }()
-    return ch, nil
-}
-```
-
-### `StreamTo` — The Main Entry Point
-
-```go
-// StreamTo converts an llm.Request to a wire request, sends it via the client,
-// and publishes llm events to the publisher. Blocks until the stream ends.
-// Takes ownership of pub and calls pub.Close() when done.
-func (a *MessagesAdapter) StreamTo(ctx context.Context, req llm.Request, pub llm.Publisher) error {
-    defer pub.Close()
-
-    // 1. Convert llm.Request → wire Request (inside api/adapt)
-    wireReq, err := MessagesRequestFromLLM(req, a.convOpts...)
-
-    // 2. Send via sender, get native event stream + HTTP metadata
-    handle, err := a.sender.Stream(ctx, wireReq)
-
-    // 3. Publish RequestEvent (before processing any response events)
-    pub.Publish(&llm.RequestEvent{
-        OriginalRequest: req,
-        ProviderRequest: llm.ProviderRequestFromHTTP(handle.Request, ...),
-        ResolvedApiType: llm.ApiTypeAnthropicMessages,
-    })
-
-    // 4. Process native events → llm events (tool accumulation, usage, etc.)
-    for result := range handle.Events {
-        a.processEvent(result, pub, handle.Headers)
+// 4) Convert wire events -> unified events -> llm publisher
+for result := range handle.Events {
+    if result.Err != nil {
+        pub.Error(result.Err)
+        return
     }
-
-    return nil
+    uEv, ignored, err := unified.EventFromResponses(result.Event)
+    if err != nil {
+        pub.Error(err)
+        return
+    }
+    if ignored {
+        continue
+    }
+    _ = unified.Publish(pub, uEv)
 }
 ```
 
-### `api/adapt/<proto>_api.go` — `llm.Request` → Wire Request
-
-```go
-// api/adapt/messages_api.go
-
-type MessagesConvertOption func(*messagesConvertConfig)
-
-func MessagesWithThinking(mode messages.ThinkingMode, budget int) MessagesConvertOption
-func MessagesWithOutputEffort(effort string) MessagesConvertOption
-func MessagesWithUserID(id string) MessagesConvertOption
-func MessagesWithCacheLastSystem() MessagesConvertOption
-
-// MessagesRequestFromLLM converts an llm.Request to a Messages API Request.
-func MessagesRequestFromLLM(req llm.Request, opts ...MessagesConvertOption) (*messages.Request, error) { ... }
-```
-
-**Model-specific logic**: Today, `BuildRequest` calls `isAdaptiveThinkingSupported(model)`
-to decide thinking mode. This is model knowledge that doesn't belong in the API package.
-
-The provider passes the decision as an option:
-
-```go
-// In provider/anthropic — provider knows its models:
-wireReq, err := messages.RequestFromLLM(opts,
-    messages.ConvertThinkingMode(messages.ThinkingAdaptive),
-    messages.ConvertOutputEffort("medium"),
-)
-```
-
-> **NOTE**: `api/messages/` may temporarily contain helpers like
-> `DefaultThinkingMode(model string) ThinkingMode` as a migration aid. These
-> are explicitly marked for removal when `model.Registry` ships.
+This keeps provider behavior stable while eliminating duplicated per-provider mapping code.
 
 ---
+
 
 ## OpenRouter: Standard APIs, Not Proprietary Completions
 
@@ -1203,7 +1122,8 @@ may not be present in the SSE stream — if not, it's available via the
 
 The `ParseHook` mechanism handles both cases cleanly:
 - If cost/usage data appears in SSE events, the provider's `ParseHook` extracts it
-  into a typed event emitted on the stream. The adapter handles it in its type switch.
+  into a typed event emitted on the stream. The unified bridge path handles it
+  before or alongside canonical event conversion.
 - If cost is only available post-request, the provider queries it separately
   and correlates via the generation/request ID from `StreamStartedEvent`.
 - Providers without special cost reporting simply don't configure a hook.
@@ -1268,14 +1188,14 @@ Total: ~240 lines of bespoke wire code replaced by `api/completions`.
 | Source file | What moves | Target |
 |---|---|---|
 | `request.go` | `Request`, `ThinkingConfig`, `ToolDefinition`, `OutputConfig`, `Metadata` | `types.go` |
-| `request.go` | `BuildRequest()`, `BuildRequestBytes()` → becomes `MessagesRequestFromLLM()` | `api/adapt/messages_api.go` |
+| `request.go` | `BuildRequest()`, `BuildRequestBytes()` → unified request conversion | `api/unified/messages_api.go` |
 | `request.go` | `isAdaptiveThinkingSupported()`, `isEffortSupported()` | temp helper (marked for removal) |
 | `message.go` | `Message`, `MessageContent`, `TextBlock`, `ToolUseBlock`, etc. | `types.go` |
-| `message.go` | `convertMessages()` | `api/adapt/messages_api.go` |
-| `cache.go` | `CacheControl`, `buildCacheControl()` | `types.go` / `api/adapt/messages_api.go` |
+| `message.go` | `convertMessages()` | `api/unified/llm_bridge.go` + `api/unified/messages_api.go` |
+| `cache.go` | `CacheControl`, `buildCacheControl()` | `types.go` / `api/unified/messages_api.go` |
 | `event.go` | All SSE event structs | `types.go` |
-| `stream_processor.go` | SSE parsing logic → parser; llm event mapping → adapter | `parser.go` + `api/adapt/messages_api.go` |
-| `stream.go` | `ParseStream()`, `ParseStreamWith()` → replaced by `Client.Stream()` + `MessagesAdapter.StreamTo()` | `client.go` + `api/adapt/messages_api.go` |
+| `stream_processor.go` | SSE parsing logic → parser; llm event mapping → unified event bridge | `parser.go` + `api/unified/messages_api.go` |
+| `stream.go` | `ParseStream()`, `ParseStreamWith()` → replaced by `Client.Stream()` + unified publish path | `client.go` + `api/unified/messages_api.go` |
 | `anthropic.go` | `AnthropicVersion`, `BetaInterleavedThinking` constants + all header name constants | `constants.go` |
 | `count_tokens_api.go` | Stays in `provider/anthropic/` (provider-specific endpoint) | — |
 
@@ -1284,30 +1204,30 @@ Total: ~240 lines of bespoke wire code replaced by `api/completions`.
 | Source file | What moves | Target |
 |---|---|---|
 | `api_completions.go` | `ccRequest` → `Request`, `ccMessagePayload` → `Message`, etc. | `types.go` |
-| `api_completions.go` | `ccBuildRequest()` → `CompletionsRequestFromLLM()` | `api/adapt/completions_api.go` |
+| `api_completions.go` | `ccBuildRequest()` → unified request conversion | `api/unified/completions_api.go` |
 | `api_completions.go` | `ccStreamChunk` → `StreamChunk`, `ccParseStream()` | `types.go` + `parser.go` |
-| `api_completions.go` | `ccEmitToolCalls()` → adapter | `api/adapt/completions_api.go` |
-| `usage.go` | `buildUsageTokenItems()` | `api/adapt/completions_api.go` (usage building is adapter concern) |
+| `api_completions.go` | `ccEmitToolCalls()` → unified event bridge | `api/unified/completions_api.go` |
+| `usage.go` | `buildUsageTokenItems()` | `api/unified/publisher_bridge.go` (usage publish mapping) |
 
 ### From `provider/openai/` → `api/responses/`
 
 | Source file | What moves | Target |
 |---|---|---|
 | `api_responses.go` | `respRequest` → `Request`, `respInput` → `Input`, etc. | `types.go` |
-| `api_responses.go` | `respBuildRequest()` → `ResponsesRequestFromLLM()` | `api/adapt/responses_api.go` |
+| `api_responses.go` | `respBuildRequest()` → unified request conversion | `api/unified/responses_api.go` |
 | `api_responses.go` | All `resp*` SSE event types | `types.go` |
-| `api_responses.go` | `RespParseStream()`, `respHandleEvent()` | `parser.go` + `api/adapt/responses_api.go` |
+| `api_responses.go` | `RespParseStream()`, `respHandleEvent()` | `parser.go` + `api/unified/responses_api.go` |
 
 ### What stays in `provider/<name>/`
 
 | Provider | Keeps |
 |---|---|
-| `provider/anthropic/` | `Provider`, `Models()`, `Resolve()`, `CreateStream()`, `CountTokensAPI()`, model-specific decisions → creates `api/messages.Client` + `adapt.MessagesAdapter` |
-| `provider/openai/` | `Provider`, model registry (`models.go`), `enrichOpts()`, API dispatch (completions vs responses), Codex logic → creates `api/completions` + `api/responses` clients + `adapt` adapters |
-| `provider/openrouter/` | `Provider`, `selectAPI()` (simplified: messages vs responses), model normalization, native client for credits/models/generations → creates `api/messages` + `api/responses` clients + `adapt` adapters |
-| `provider/minimax/` | `Provider`, `adjustThinkingForMiniMax()` (now a `WithTransform`) → creates `api/messages.Client` + `adapt.MessagesAdapter` |
+| `provider/anthropic/` | `Provider`, `Models()`, `Resolve()`, `CreateStream()`, `CountTokensAPI()`, model-specific decisions → uses `api/messages` + `api/unified` bridge functions |
+| `provider/openai/` | `Provider`, model registry (`models.go`), `enrichOpts()`, API dispatch (completions vs responses), Codex logic → uses `api/completions` + `api/responses` + `api/unified` |
+| `provider/openrouter/` | `Provider`, `selectAPI()` (simplified: messages vs responses), model normalization, native client for credits/models/generations → uses `api/messages` + `api/responses` + `api/unified` |
+| `provider/minimax/` | `Provider`, `adjustThinkingForMiniMax()` (now a `WithTransform`) → uses `api/messages` + `api/unified` |
 | `provider/dockermr/` | Unchanged — wraps `provider/openai` (no direct wire-level calls) |
-| `provider/ollama/` | `Provider`, `Models()`, `FetchModels()` (`/api/tags`), `Available()`, `CountTokens()` → creates `api/completions.Client` + `adapt.CompletionsAdapter`, deletes ~240 lines of bespoke wire code |
+| `provider/ollama/` | `Provider`, `Models()`, `FetchModels()` (`/api/tags`), `Available()`, `CountTokens()` → uses `api/completions` + `api/unified` bridge functions |
 | `provider/bedrock/` | Unchanged — uses AWS SDK, proprietary protocol |
 
 ---
@@ -1319,13 +1239,13 @@ api/apicore/           ← depends on: nothing (self-contained — no llm, no in
 api/messages/          ← depends on: api/apicore
 api/completions/       ← depends on: api/apicore
 api/responses/         ← depends on: api/apicore
-api/adapt/             ← depends on: llm, api/messages, api/completions, api/responses
+api/unified/           ← depends on: llm, api/messages, api/completions, api/responses
 
-provider/anthropic/    ← depends on: llm, api/messages, api/adapt
-provider/openai/       ← depends on: llm, api/completions, api/responses, api/adapt
-provider/openrouter/   ← depends on: llm, api/responses, api/messages, api/adapt
-provider/minimax/      ← depends on: llm, api/messages, api/adapt
-provider/ollama/       ← depends on: llm, api/completions, api/adapt
+provider/anthropic/    ← depends on: llm, api/messages, api/unified
+provider/openai/       ← depends on: llm, api/completions, api/responses, api/unified
+provider/openrouter/   ← depends on: llm, api/responses, api/messages, api/unified
+provider/minimax/      ← depends on: llm, api/messages, api/unified
+provider/ollama/       ← depends on: llm, api/completions, api/unified
 provider/dockermr/     ← depends on: llm, provider/openai  (unchanged, wraps provider)
 provider/bedrock/      ← depends on: llm  (unchanged, AWS SDK)
 ```
@@ -1340,15 +1260,15 @@ provider/bedrock/      ← depends on: llm  (unchanged, AWS SDK)
 |---|---|
 | OpenRouter duplicates Chat Completions request builder (475 lines) | Deleted — uses `api/responses` instead |
 | OpenRouter duplicates Chat Completions stream parser (170 lines) | Deleted — uses `api/responses` instead |
-| OpenRouter duplicates Responses request builder (84 lines) | Uses `responsesapi.RequestFromLLM()` |
-| OpenRouter duplicates Responses types (`orRespRequest`, etc.) | Uses `responsesapi.Request` + `WithTransform` |
-| MiniMax imports `provider/anthropic.BuildRequest` | Imports `messagesapi.RequestFromLLM()` |
-| MiniMax imports `provider/anthropic.ParseStreamWith` | Uses `messagesapi.NewAdapter(client).StreamTo()` |
-| OpenRouter imports `provider/anthropic.ParseStreamWith` | Uses `messagesapi.NewAdapter(client).StreamTo()` |
-| OpenRouter imports `provider/openai.RespParseStream` | Uses `responsesapi.NewAdapter(client).StreamTo()` |
+| OpenRouter duplicates Responses request builder (84 lines) | Uses `api/unified.RequestToResponses()` |
+| OpenRouter duplicates Responses types (`orRespRequest`, etc.) | Uses `api/responses.Request` + unified conversion path |
+| MiniMax imports `provider/anthropic.BuildRequest` | Uses `api/unified.RequestToMessages()` |
+| MiniMax imports `provider/anthropic.ParseStreamWith` | Uses `api/messages` parser + `api/unified.Publish()` |
+| OpenRouter imports `provider/anthropic.ParseStreamWith` | Uses `api/messages` parser + `api/unified.EventFromMessages()` |
+| OpenRouter imports `provider/openai.RespParseStream` | Uses `api/responses` parser + `api/unified.EventFromResponses()` |
 | `mapOpenAIFinishReason()` duplicated across providers | Defined once in relevant `api/` package |
-| Ollama has bespoke `/api/chat` request builder (~80 lines) | Uses `completionsapi.RequestFromLLM()` |
-| Ollama has bespoke NDJSON stream parser (~100 lines) | Uses `completionsapi.NewAdapter(client).StreamTo()` |
+| Ollama has bespoke `/api/chat` request builder (~80 lines) | Uses `api/unified.RequestToCompletions()` |
+| Ollama has bespoke NDJSON stream parser (~100 lines) | Uses `api/completions` parser + `api/unified.Publish()` |
 
 ---
 
@@ -1442,7 +1362,7 @@ func FixedSSEResponse(statusCode int, sseBody string) RoundTripFunc {
 }
 
 // NewTestHandle creates a StreamHandle from canned events.
-// Use for adapter tests that bypass HTTP entirely.
+// Use for unified bridge/provider tests that bypass HTTP entirely.
 func NewTestHandle(events ...StreamResult) *StreamHandle {
     ch := make(chan StreamResult, len(events))
     for _, e := range events {
@@ -1658,153 +1578,117 @@ Tests per parser:
 - Malformed JSON → graceful error, not panic
 - Unknown event types → ignored or logged
 
-### Layer 3a: Convert (`llm.Request` → Wire Request) — Pure Function Tests
+### Layer 3a: Unified request conversion tests (pure functions)
 
 ```go
-func TestRequestFromLLM_ThinkingAdaptive(t *testing.T) {
+func TestRequestFromLLM_ToMessages_ThinkingAdaptive(t *testing.T) {
     llmReq := llm.Request{
         Model:    "claude-sonnet-4-5",
         Messages: []llm.Message{{Role: "user", Content: "Hello"}},
     }
 
-    wireReq, err := messages.RequestFromLLM(llmReq,
-        messages.ConvertThinkingMode(messages.ThinkingAdaptive),
-    )
+    uReq, err := unified.RequestFromLLM(llmReq)
     require.NoError(t, err)
-    assert.Equal(t, "adaptive", wireReq.Thinking.Type)
+
+    wireReq, err := unified.RequestToMessages(uReq)
+    require.NoError(t, err)
+
     assert.Equal(t, "claude-sonnet-4-5", wireReq.Model)
     assert.True(t, wireReq.Stream)
 }
 ```
 
 Tests:
-- Each ConvertOption produces correct wire fields
-- Message conversion (user, assistant, tool results, system)
-- Tool definitions → wire tool format
-- Cache control placement
-- Edge cases: empty messages, no tools, no system prompt
+- `llm.Request -> unified.Request` field mapping
+- unified -> wire conversion for messages/completions/responses
+- tool definitions + tool choice mapping
+- cache hints and protocol extras preservation
+- edge cases: empty tools, mixed message roles, system placement
 
-### Layer 3b: Adapter — Fake Streamer, No HTTP
+### Layer 3b: Unified event conversion + publish tests (no HTTP)
 
-The adapter accepts `Streamer` (interface). Tests provide a fake
-that returns canned `StreamHandle` via `apicore.NewTestHandle`:
+Use canned native events and verify:
+1) `EventFrom<Protocol>` output
+2) `Publish(pub, unifiedEvent)` behavior
 
 ```go
-type fakeStreamer struct {
-    handle *apicore.StreamHandle
-    err    error
-    // captured for assertion:
-    gotReq *messages.Request
-}
-
-func (f *fakeStreamer) Stream(ctx context.Context, req *messages.Request) (*apicore.StreamHandle, error) {
-    f.gotReq = req
-    return f.handle, f.err
-}
-
-func TestAdapter_StreamTo_TextDeltas(t *testing.T) {
-    fake := &fakeStreamer{
-        handle: apicore.NewTestHandle(
-            apicore.StreamResult{Event: &messages.MessageStartEvent{
-                Message: messages.MessageStart{Model: "claude-sonnet-4-5"},
-            }},
-            apicore.StreamResult{Event: &messages.ContentBlockDeltaEvent{
-                Delta: messages.Delta{Type: "text_delta", Text: "Hello"},
-            }},
-            apicore.StreamResult{Event: &messages.MessageStopEvent{}, Done: true},
-        ),
+func TestEventFromMessages_AndPublish_TextDelta(t *testing.T) {
+    native := &messages.ContentBlockDeltaEvent{
+        Delta: messages.Delta{Type: "text_delta", Text: "Hello"},
     }
 
-    adapter := messages.NewAdapter(fake,
-        []apicore.AdapterOption{apicore.WithProviderName("test")},
-    )
+    uEv, ignored, err := unified.EventFromMessages(native)
+    require.NoError(t, err)
+    require.False(t, ignored)
 
-    pub := llmtest.NewRecordingPublisher() // from llmtest package
-    err := adapter.StreamTo(ctx, llmReq, pub)
+    pub := llmtest.NewRecordingPublisher()
+    err = unified.Publish(pub, uEv)
     require.NoError(t, err)
 
-    // Verify llm events were published correctly
-    require.Len(t, pub.Events, 3) // Started + Delta + Completed
-    assert.Equal(t, llm.EventTypeStart, pub.Events[0].Type)
-    assert.Equal(t, "Hello", pub.Events[1].Delta.Text)
+    require.NotEmpty(t, pub.Events)
+    // assert expected llm delta event shape...
 }
-
-func TestAdapter_StreamTo_ToolCalls(t *testing.T) { ... }
-func TestAdapter_StreamTo_ErrorEvent(t *testing.T) { ... }
-func TestAdapter_StreamTo_UsageRecord(t *testing.T) { ... }
-func TestAdapter_StreamTo_ParseHookEvent(t *testing.T) { ... }
 ```
 
 Tests:
-- Text deltas → correct `llm.Publisher` events
-- Tool calls → correct tool call events
-- Error events → error published
-- Usage/cost calculation → usage record published
-- RequestEvent published before stream events
-- ParseHook events (e.g. `*OpenRouterUsage`) handled correctly
-- Stream error (HTTP failure) → error published, pub closed
-- Context cancellation → graceful shutdown
+- text/reasoning/tool deltas map correctly
+- usage + completion map correctly
+- known no-op events are ignored explicitly
+- unknown events preserve raw metadata in extras when available
+- publish mapping parity with current provider-visible behavior
 
 ### Integration Tests (full stack, per provider)
 
-Test the complete path through a `RoundTripFunc` with recorded SSE fixtures:
+Use `apicore.FixedSSEResponse` and recorded SSE fixtures:
 
 ```go
-func TestAnthropicProvider_FullStream(t *testing.T) {
-    sseFixture := loadFixture(t, "testdata/anthropic_stream.sse")
+func TestOpenAIProvider_FullStreamViaUnified(t *testing.T) {
+    fixture := loadFixture(t, "testdata/openai_responses_stream.sse")
 
-    client := messages.NewClient(
-        messages.WithBaseURL("https://fake.api"),
-        messages.WithHTTPClient(&http.Client{
-            Transport: apicore.FixedSSEResponse(200, sseFixture),
+    client := responses.NewClient(
+        responses.WithBaseURL("https://fake.api"),
+        responses.WithHTTPClient(&http.Client{
+            Transport: apicore.FixedSSEResponse(200, fixture),
         }),
     )
 
-    adapter := messages.NewAdapter(client,
-        []apicore.AdapterOption{apicore.WithProviderName("anthropic")},
-        messages.WithThinkingMode(messages.ThinkingAdaptive),
-    )
-
-    pub := llmtest.NewRecordingPublisher()
-    err := adapter.StreamTo(ctx, llmReq, pub)
-    require.NoError(t, err)
-
-    // Verify complete event sequence against golden expectations
-    assert.Equal(t, llm.EventTypeStart, pub.Events[0].Type)
-    // ... verify text, tool calls, usage, etc.
+    // provider flow:
+    // llm request -> unified request -> wire request -> client stream
+    // wire events -> unified events -> unified.Publish -> llm events
+    _ = client
 }
 ```
 
-These use real SSE recordings from each API (stored in `testdata/`).
-They verify the full pipeline: client → parser → adapter → llm events.
+These verify the effective pipeline used by providers:
+`provider -> unified conversion -> wire client -> parser -> unified event bridge -> llm events`.
 
 ### Provider Tests (unchanged)
 
 - Existing `provider/<name>/*_test.go` continue to pass
-- They now exercise: provider → adapter → client → parser
-- Migration is verified by test continuity, not rewrite
+- They validate external behavior stability while internals migrate to unified
+- Migration confidence comes from parity at provider boundaries
 
 ### Test Pyramid Summary
 
 ```
-                    ┌───────────────────────┐
-                    │  Provider tests     │  Existing tests, unchanged
-                    │  (integration)      │  Full stack via RoundTripper
-                    ├───────────────────────┤
-                ┌───┤  Adapter tests       ├───┐
-                │   │  (fake Streamer)     │   │  No HTTP, canned events
-                │   ├───────────────────────┤   │
-            ┌───┤   │  Convert tests       │   ├───┐
-            │   │   │  (pure functions)    │   │   │  No HTTP, no channels
-            │   │   ├───────────────────────┤   │   │
-        ┌───┤   │   │  Parser tests        │   │   ├───┐
-        │   │   │   │  (pure functions)    │   │   │   │  (name, data) → result
-        │   │   │   ├───────────────────────┤   │   │   │
-    ┌───┤   │   │   │  apicore tests       │   │   │   ├───┐
-    │   │   │   │   │  (RoundTripper)      │   │   │   │   │  HTTP mocked
-    │   │   │   │   ├───────────────────────┤   │   │   │   │
-    │   │   │   │   │  Wire type tests     │   │   │   │   │  Pure JSON
-    └───┴───┴───┴───└───────────────────────┘───┴───┴───┴───┘
+                    ┌───────────────────────────┐
+                    │  Provider tests           │  Existing tests, unchanged
+                    │  (integration)            │  Full stack via RoundTripper
+                    ├───────────────────────────┤
+                ┌───┤  Unified bridge tests    ├───┐
+                │   │  (canned wire events)    │   │  No HTTP, conversion+publish
+                │   ├───────────────────────────┤   │
+            ┌───┤   │  Unified request tests   │   ├───┐
+            │   │   │  (pure functions)        │   │   │  No HTTP, no channels
+            │   │   ├───────────────────────────┤   │   │
+        ┌───┤   │   │  Parser tests            │   │   ├───┐
+        │   │   │   │  (pure functions)        │   │   │   │  (name, data) → result
+        │   │   │   ├───────────────────────────┤   │   │   │
+    ┌───┤   │   │   │  apicore tests           │   │   │   ├───┐
+    │   │   │   │   │  (RoundTripper)          │   │   │   │   │  HTTP mocked
+    │   │   │   │   ├───────────────────────────┤   │   │   │   │
+    │   │   │   │   │  Wire type tests         │   │   │   │   │  Pure JSON
+    └───┴───┴───┴───└───────────────────────────┘───┴───┴───┴───┘
 ```
 
 | Layer | What's tested | Test seam | Mocking needed |
@@ -1812,8 +1696,8 @@ They verify the full pipeline: client → parser → adapter → llm events.
 | Wire types | JSON conformance | None (pure structs) | None |
 | Parser (EventHandler) | `(name, data) → StreamResult` | None (pure function) | None |
 | apicore.Client | HTTP + SSE + hooks + errors | `http.RoundTripper` | `RoundTripFunc` |
-| Convert | `llm.Request → *wire.Request` | None (pure function) | None |
-| Adapter | native events → `llm.Publisher` | `Streamer` interface | `fakeStreamer` + `NewTestHandle` |
+| Unified request conversion | `llm.Request ↔ unified ↔ *wire.Request` | None (pure functions) | None |
+| Unified event bridge | wire/native events → unified events → `llm.Publisher` | canned events + recording publisher | None |
 | Provider | Full pipeline | `http.RoundTripper` | `FixedSSEResponse` + SSE fixtures |
 
 ---
@@ -1833,6 +1717,7 @@ They verify the full pipeline: client → parser → adapter → llm events.
 3. **Phase ordering**: Phases 2 and 3 (responses vs completions) could be swapped.
    Responses is higher-impact (used by both openai and openrouter).
 
-4. **Adapter location resolved**: adapters and conversion logic are centralized in
-   `api/adapt/` (`messages_api.go`, `completions_api.go`, `responses_api.go`).
-   Protocol packages remain pure wire/client/parser layers with no `llm` import.
+4. **Bridge location resolved**: canonical conversion and publish mapping are centralized in
+   `api/unified/` (`messages_api.go`, `completions_api.go`, `responses_api.go`,
+   `llm_bridge.go`, `publisher_bridge.go`). Protocol packages remain pure wire/client/parser
+   layers with no `llm` import.
