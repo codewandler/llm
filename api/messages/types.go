@@ -14,6 +14,7 @@ type Request struct {
 	ToolChoice   any              `json:"tool_choice,omitempty"`
 	Thinking     *ThinkingConfig  `json:"thinking,omitempty"`
 	Metadata     *Metadata        `json:"metadata,omitempty"`
+	CacheControl *CacheControl    `json:"cache_control,omitempty"`
 	TopK         int              `json:"top_k,omitempty"`
 	TopP         float64          `json:"top_p,omitempty"`
 	OutputConfig *OutputConfig    `json:"output_config,omitempty"`
@@ -64,23 +65,26 @@ type ImageSource struct {
 }
 
 type ToolUseBlock struct {
-	Type  string          `json:"type"`
-	ID    string          `json:"id"`
-	Name  string          `json:"name"`
-	Input json.RawMessage `json:"input"`
+	Type         string          `json:"type"`
+	ID           string          `json:"id"`
+	Name         string          `json:"name"`
+	Input        json.RawMessage `json:"input"`
+	CacheControl *CacheControl   `json:"cache_control,omitempty"`
 }
 
 type ToolResultBlock struct {
-	Type      string `json:"type"`
-	ToolUseID string `json:"tool_use_id"`
-	Content   string `json:"content"`
-	IsError   bool   `json:"is_error,omitempty"`
+	Type         string        `json:"type"`
+	ToolUseID    string        `json:"tool_use_id"`
+	Content      string        `json:"content"`
+	IsError      bool          `json:"is_error,omitempty"`
+	CacheControl *CacheControl `json:"cache_control,omitempty"`
 }
 
 type ThinkingBlock struct {
-	Type      string `json:"type"`
-	Thinking  string `json:"thinking"`
-	Signature string `json:"signature,omitempty"`
+	Type         string        `json:"type"`
+	Thinking     string        `json:"thinking"`
+	Signature    string        `json:"signature,omitempty"`
+	CacheControl *CacheControl `json:"cache_control,omitempty"`
 }
 
 type ToolDefinition struct {

@@ -7,19 +7,21 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+
+	"github.com/codewandler/llm/api/messages"
 )
 
 // countTokensRequest is the request body for /v1/messages/count_tokens.
 // It mirrors the Messages API Request but omits stream/max_tokens since
 // the count endpoint doesn't need them.
 type countTokensRequest struct {
-	Model        string           `json:"model"`
-	Messages     []Message        `json:"messages"`
-	System       SystemBlocks     `json:"system,omitempty"`
-	Tools        []ToolDefinition `json:"tools,omitempty"`
-	ToolChoice   any              `json:"tool_choice,omitempty"`
-	Thinking     *ThinkingConfig  `json:"thinking,omitempty"`
-	CacheControl *CacheControl    `json:"cache_control,omitempty"`
+	Model        string                    `json:"model"`
+	Messages     []messages.Message        `json:"messages"`
+	System       messages.SystemBlocks     `json:"system,omitempty"`
+	Tools        []messages.ToolDefinition `json:"tools,omitempty"`
+	ToolChoice   any                       `json:"tool_choice,omitempty"`
+	Thinking     *messages.ThinkingConfig  `json:"thinking,omitempty"`
+	CacheControl *messages.CacheControl    `json:"cache_control,omitempty"`
 }
 
 // countTokensResponse is the response from /v1/messages/count_tokens.
@@ -33,7 +35,7 @@ type countTokensResponse struct {
 //
 // The returned count is exact (not a heuristic approximation). It includes
 // tool definitions, system prompts, images, PDFs, and thinking blocks.
-func (p *Provider) CountTokensAPI(ctx context.Context, apiReq Request) (int, error) {
+func (p *Provider) CountTokensAPI(ctx context.Context, apiReq *messages.Request) (int, error) {
 	apiKey, err := p.opts.ResolveAPIKey(ctx)
 	if err != nil {
 		return 0, fmt.Errorf("anthropic: count_tokens: %w", err)
@@ -53,7 +55,7 @@ func DoCountTokensAPI(
 	client *http.Client,
 	baseURL, apiKey string,
 	extraHeaders map[string]string,
-	apiReq Request,
+	apiReq *messages.Request,
 ) (int, error) {
 	countReq := countTokensRequest{
 		Model:        apiReq.Model,

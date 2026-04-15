@@ -21,7 +21,7 @@ func (p *Provider) streamResponses(
 ) {
 	startTime := time.Now()
 
-	body, err := orRespBuildRequest(opts)
+	body, err := buildOpenRouterResponsesBodyUnified(opts)
 	if err != nil {
 		pub.Error(llm.NewErrBuildRequest(providerName, err))
 		pub.Close()
@@ -86,18 +86,18 @@ func orUseResponsesAPI(bare string) bool { return openai.UseResponsesAPI(bare) }
 // OpenRouter does not expose that knob.
 // TODO: consolidate with openai.respBuildRequest when the openai package exports it.
 type orRespRequest struct {
-	Model           string         `json:"model"`
-	Input           []orRespInput  `json:"input"`
-	Instructions    string         `json:"instructions,omitempty"`
-	Tools           []orRespTool   `json:"tools,omitempty"`
-	ToolChoice      any            `json:"tool_choice,omitempty"`
-	Reasoning       *orRespReason  `json:"reasoning,omitempty"`
-	MaxOutputTokens int            `json:"max_output_tokens,omitempty"`
-	Temperature     float64        `json:"temperature,omitempty"`
-	TopP            float64        `json:"top_p,omitempty"`
-	TopK            int            `json:"top_k,omitempty"`
-	ResponseFormat  *orRespFormat  `json:"response_format,omitempty"`
-	Stream          bool           `json:"stream"`
+	Model           string        `json:"model"`
+	Input           []orRespInput `json:"input"`
+	Instructions    string        `json:"instructions,omitempty"`
+	Tools           []orRespTool  `json:"tools,omitempty"`
+	ToolChoice      any           `json:"tool_choice,omitempty"`
+	Reasoning       *orRespReason `json:"reasoning,omitempty"`
+	MaxOutputTokens int           `json:"max_output_tokens,omitempty"`
+	Temperature     float64       `json:"temperature,omitempty"`
+	TopP            float64       `json:"top_p,omitempty"`
+	TopK            int           `json:"top_k,omitempty"`
+	ResponseFormat  *orRespFormat `json:"response_format,omitempty"`
+	Stream          bool          `json:"stream"`
 }
 
 type orRespFormat struct {

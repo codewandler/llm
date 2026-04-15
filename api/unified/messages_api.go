@@ -9,11 +9,16 @@ import (
 	"github.com/codewandler/llm/api/messages"
 	"github.com/codewandler/llm/msg"
 	"github.com/codewandler/llm/sortmap"
+	"github.com/codewandler/llm/usage"
 )
 
 // RequestToMessages converts a canonical unified request to an Anthropic
 // Messages wire request.
-func RequestToMessages(r Request, _ ...MessagesOption) (*messages.Request, error) {
+func RequestToMessages(r Request, opts ...MessagesOption) (*messages.Request, error) {
+	mopts := &messagesOptions{modelCaps: DefaultAnthropicModelCaps}
+	for _, o := range opts {
+		o(mopts)
+	}
 	if err := r.Validate(); err != nil {
 		return nil, fmt.Errorf("validate unified request: %w", err)
 	}
@@ -68,13 +73,22 @@ func RequestToMessages(r Request, _ ...MessagesOption) (*messages.Request, error
 		}
 	}
 
+	caps := mopts.modelCaps(r.Model)
 	if r.Thinking == llm.ThinkingOff {
 		out.Thinking = &messages.ThinkingConfig{Type: "disabled"}
+	} else if caps.SupportsAdaptiveThinking {
+		out.Thinking = &messages.ThinkingConfig{Type: "adaptive"}
 	} else {
 		out.Thinking = &messages.ThinkingConfig{Type: "enabled", BudgetTokens: effortToBudget(r.Effort)}
 	}
 
-	if isEffortSupportedByAnthropicModel(r.Model) {
+	if out.Thinking != nil && out.Thinking.Type != "disabled" {
+		switch r.ToolChoice.(type) {
+		case llm.ToolChoiceRequired, llm.ToolChoiceTool:
+			out.ToolChoice = map[string]string{"type": "auto"}
+		}
+	}
+	if caps.SupportsEffort {
 		if out.OutputConfig == nil {
 			out.OutputConfig = &messages.OutputConfig{}
 		}
@@ -82,7 +96,7 @@ func RequestToMessages(r Request, _ ...MessagesOption) (*messages.Request, error
 		if e.IsEmpty() {
 			e = llm.EffortMedium
 		}
-		if e == llm.EffortMax && !isMaxEffortSupportedByAnthropicModel(r.Model) {
+		if e == llm.EffortMax && !caps.SupportsMaxEffort {
 			e = llm.EffortHigh
 		}
 		out.OutputConfig.Effort = string(e)
@@ -113,10 +127,7 @@ func RequestToMessages(r Request, _ ...MessagesOption) (*messages.Request, error
 	}
 
 	if r.CacheHint != nil && r.CacheHint.Enabled && !hasPerMessageCacheHints(r.Messages) {
-		// top-level automatic cache behavior
-		if out.Metadata == nil {
-			out.Metadata = &messages.Metadata{}
-		}
+		out.CacheControl = cacheHintToMessages(r.CacheHint)
 	}
 
 	return out, nil
@@ -137,6 +148,9 @@ func RequestFromMessages(r messages.Request) (Request, error) {
 	}
 	if r.Metadata != nil {
 		u.UserID = r.Metadata.UserID
+	}
+	if r.CacheControl != nil {
+		u.CacheHint = cacheHintFromMessages(r.CacheControl)
 	}
 	if r.Thinking != nil {
 		switch r.Thinking.Type {
@@ -211,7 +225,14 @@ func messageToMessages(m Message) (*messages.Message, error) {
 
 	if h := cacheHintToMessages(m.CacheHint); h != nil {
 		if len(blocks) > 0 {
-			if tb, ok := blocks[len(blocks)-1].(*messages.TextBlock); ok {
+			switch tb := blocks[len(blocks)-1].(type) {
+			case *messages.TextBlock:
+				tb.CacheControl = h
+			case *messages.ToolUseBlock:
+				tb.CacheControl = h
+			case *messages.ToolResultBlock:
+				tb.CacheControl = h
+			case *messages.ThinkingBlock:
 				tb.CacheControl = h
 			}
 		}
@@ -298,7 +319,7 @@ func cacheHintFromMessages(cc *messages.CacheControl) *msg.CacheHint {
 	if cc == nil {
 		return nil
 	}
-	return &msg.CacheHint{Enabled: true}
+	return &msg.CacheHint{Enabled: true, TTL: msg.CacheTTL5m.String()}
 }
 
 func cacheHintFromRaw(m map[string]any) *msg.CacheHint {
@@ -307,7 +328,7 @@ func cacheHintFromRaw(m map[string]any) *msg.CacheHint {
 		return nil
 	}
 	_, _ = raw["type"].(string)
-	return &msg.CacheHint{Enabled: true}
+	return &msg.CacheHint{Enabled: true, TTL: msg.CacheTTL5m.String()}
 }
 
 func effortToBudget(e llm.Effort) int {
@@ -318,17 +339,6 @@ func effortToBudget(e llm.Effort) int {
 		return b
 	}
 	return 31999
-}
-
-func isEffortSupportedByAnthropicModel(model string) bool {
-	return strings.Contains(model, "claude-sonnet-4-6") ||
-		strings.Contains(model, "claude-opus-4-5") ||
-		strings.Contains(model, "claude-opus-4-6")
-}
-
-func isMaxEffortSupportedByAnthropicModel(model string) bool {
-	return strings.Contains(model, "claude-sonnet-4-6") ||
-		strings.Contains(model, "claude-opus-4-6")
 }
 
 func hasPerMessageCacheHints(msgs []Message) bool {
@@ -363,8 +373,93 @@ func toMap(v any) map[string]any {
 	return out
 }
 
+// EventFromMessages converts a messages native parser event into unified StreamEvent.
+// Returns ignored=true for explicit no-op events.
+func EventFromMessages(ev any) (StreamEvent, bool, error) {
+	switch e := ev.(type) {
+	case *messages.MessageStartEvent:
+		// Emit Started + partial Usage (input tokens available at message_start).
+		// Output tokens and stop reason come later in MessageDeltaEvent.
+		tokens := usage.TokenItems{
+			{Kind: usage.KindInput, Count: e.Message.Usage.InputTokens},
+			{Kind: usage.KindCacheWrite, Count: e.Message.Usage.CacheCreationInputTokens},
+			{Kind: usage.KindCacheRead, Count: e.Message.Usage.CacheReadInputTokens},
+		}.NonZero()
+		return StreamEvent{
+			Type:    StreamEventStarted,
+			Started: &Started{RequestID: e.Message.ID, Model: e.Message.Model},
+			Usage:   &Usage{Tokens: tokens},
+		}, false, nil
 
-// MessagesOption reserves future converter options.
+	case *messages.ContentBlockDeltaEvent:
+		idx := uint32(e.Index)
+		switch e.Delta.Type {
+		case messages.DeltaTypeText:
+			return StreamEvent{Type: StreamEventDelta, Delta: &Delta{Kind: llm.DeltaKindText, Index: &idx, Text: e.Delta.Text}}, false, nil
+		case messages.DeltaTypeThinking:
+			return StreamEvent{Type: StreamEventDelta, Delta: &Delta{Kind: llm.DeltaKindThinking, Index: &idx, Thinking: e.Delta.Thinking}}, false, nil
+		case messages.DeltaTypeInputJSON:
+			return StreamEvent{Type: StreamEventDelta, Delta: &Delta{Kind: llm.DeltaKindTool, Index: &idx, ToolArgs: e.Delta.PartialJSON}}, false, nil
+		case messages.DeltaTypeSignature:
+			return StreamEvent{}, true, nil
+		default:
+			return StreamEvent{Type: StreamEventUnknown, Extras: EventExtras{RawEventName: messages.EventContentBlockDelta}}, false, nil
+		}
+
+	case *messages.TextCompleteEvent:
+		return StreamEvent{Type: StreamEventContent, Content: &ContentPart{Part: msg.Text(e.Text), Index: e.Index}}, false, nil
+	case *messages.ThinkingCompleteEvent:
+		return StreamEvent{Type: StreamEventContent, Content: &ContentPart{Part: msg.Thinking(e.Thinking, e.Signature), Index: e.Index}}, false, nil
+	case *messages.ToolCompleteEvent:
+		return StreamEvent{Type: StreamEventToolCall, ToolCall: &ToolCall{ID: e.ID, Name: e.Name, Args: e.Args}}, false, nil
+
+	case *messages.MessageDeltaEvent:
+		// Emit Completed + partial Usage (output tokens available at message_delta).
+		// Input tokens were emitted earlier from MessageStartEvent.
+		tokens := usage.TokenItems{
+			{Kind: usage.KindOutput, Count: e.Usage.OutputTokens},
+		}.NonZero()
+		return StreamEvent{
+			Type:      StreamEventCompleted,
+			Completed: &Completed{StopReason: mapMessagesStopReason(e.Delta.StopReason)},
+			Usage:     &Usage{Tokens: tokens},
+		}, false, nil
+	case *messages.StreamErrorEvent:
+		return StreamEvent{Type: StreamEventError, Error: &StreamError{Err: e}}, false, nil
+
+	case *messages.PingEvent, *messages.ContentBlockStartEvent, *messages.ContentBlockStopEvent, *messages.MessageStopEvent:
+		return StreamEvent{}, true, nil
+
+	default:
+		return StreamEvent{Type: StreamEventUnknown}, false, nil
+	}
+}
+
+// mapMessagesStopReason maps an Anthropic Messages API stop_reason string to
+// the canonical llm.StopReason.
+func mapMessagesStopReason(s string) llm.StopReason {
+	switch s {
+	case "end_turn":
+		return llm.StopReasonEndTurn
+	case "tool_use":
+		return llm.StopReasonToolUse
+	case "max_tokens":
+		return llm.StopReasonMaxTokens
+	default:
+		return llm.StopReason(s)
+	}
+}
+
+// MessagesOption configures RequestToMessages conversion.
 type MessagesOption func(*messagesOptions)
 
-type messagesOptions struct{}
+type messagesOptions struct {
+	modelCaps ModelCapsFunc
+}
+
+// WithModelCaps injects a custom model capability resolver into RequestToMessages.
+// Use this when you have a live model registry that is more accurate than
+// the built-in string-matching DefaultAnthropicModelCaps.
+func WithModelCaps(fn ModelCapsFunc) MessagesOption {
+	return func(o *messagesOptions) { o.modelCaps = fn }
+}

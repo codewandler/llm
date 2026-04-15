@@ -17,18 +17,18 @@ func TestRequest_Validate(t *testing.T) {
 		wantErr string
 	}{
 		{
-			name: "missing model",
-			req: Request{Messages: []Message{{Role: RoleUser, Parts: []Part{{Type: PartTypeText, Text: "hi"}}}}},
+			name:    "missing model",
+			req:     Request{Messages: []Message{{Role: RoleUser, Parts: []Part{{Type: PartTypeText, Text: "hi"}}}}},
 			wantErr: "model is required",
 		},
 		{
-			name: "missing messages",
-			req: Request{Model: "gpt-4o"},
+			name:    "missing messages",
+			req:     Request{Model: "gpt-4o"},
 			wantErr: "messages are required",
 		},
 		{
 			name: "ok",
-			req: Request{Model: "gpt-4o", Messages: []Message{{Role: RoleUser, Parts: []Part{{Type: PartTypeText, Text: "hi"}}}}},
+			req:  Request{Model: "gpt-4o", Messages: []Message{{Role: RoleUser, Parts: []Part{{Type: PartTypeText, Text: "hi"}}}}},
 		},
 	}
 
@@ -48,11 +48,11 @@ func TestRequest_Validate(t *testing.T) {
 
 func TestRequestFromLLM_AndBack(t *testing.T) {
 	llmReq := llm.Request{
-		Model:       "claude-sonnet-4-6",
-		MaxTokens:   512,
-		Temperature: 0.2,
-		TopP:        0.9,
-		TopK:        40,
+		Model:        "claude-sonnet-4-6",
+		MaxTokens:    512,
+		Temperature:  0.2,
+		TopP:         0.9,
+		TopK:         40,
 		OutputFormat: llm.OutputFormatJSON,
 		Tools: []llmtool.Definition{{
 			Name:        "search",
@@ -103,7 +103,7 @@ func TestRequestFromLLM_AndBack(t *testing.T) {
 
 func TestRequestToMessages(t *testing.T) {
 	uReq := Request{
-		Model:        "claude-sonnet-4-6",
+		Model:        "claude-opus-4-5",
 		MaxTokens:    256,
 		Temperature:  0.1,
 		TopP:         0.8,
@@ -153,7 +153,7 @@ func TestRequestToCompletions(t *testing.T) {
 		Effort:     EffortMedium,
 		CacheHint:  &msg.CacheHint{Enabled: true, TTL: "1h"},
 		ToolChoice: llm.ToolChoiceRequired{},
-		Tools: []Tool{{Name: "search", Description: "Search", Parameters: map[string]any{"type": "object"}}},
+		Tools:      []Tool{{Name: "search", Description: "Search", Parameters: map[string]any{"type": "object"}}},
 		Messages: []Message{
 			{Role: RoleSystem, Parts: []Part{{Type: PartTypeText, Text: "sys"}}},
 			{Role: RoleUser, Parts: []Part{{Type: PartTypeText, Text: "hi"}}},

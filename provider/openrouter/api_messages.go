@@ -8,6 +8,8 @@ import (
 	"strings"
 
 	"github.com/codewandler/llm"
+	"github.com/codewandler/llm/api/messages"
+	"github.com/codewandler/llm/api/unified"
 	"github.com/codewandler/llm/provider/anthropic"
 )
 
@@ -15,16 +17,9 @@ func (p *Provider) streamMessages(
 	ctx context.Context, opts llm.Request,
 	resolvedApiType llm.ApiType, apiKey string, pub llm.Publisher,
 ) {
-	// Strip "anthropic/" prefix: OpenRouter's /v1/messages expects bare model IDs
-	// (e.g. "claude-opus-4-5", not "anthropic/claude-opus-4-5").
-	// We strip only for the wire body and ParseStreamWith; the original model ID
-	// is preserved in RequestEvent.OriginalRequest for request correlation.
 	strippedModel := strings.TrimPrefix(opts.Model, "anthropic/")
 
-	reqOpts := opts
-	reqOpts.Model = strippedModel
-
-	body, err := anthropic.BuildRequestBytes(anthropic.RequestOptions{LLMRequest: reqOpts})
+	body, err := buildOpenRouterMessagesBodyUnified(opts)
 	if err != nil {
 		pub.Error(llm.NewErrBuildRequest(providerName, err))
 		pub.Close()
@@ -69,13 +64,40 @@ func (p *Provider) streamMessages(
 		return
 	}
 
-	// ParseStreamWith spawns a goroutine internally and takes ownership of both
-	// resp.Body and pub (closes pub when parsing completes).
-	// ProviderName = "openrouter" labels all error events and usage records.
-	// UpstreamProvider = "anthropic" sets StreamStartedEvent.Provider correctly.
-	anthropic.ParseStreamWith(ctx, resp.Body, pub, anthropic.ParseOpts{
-		Model:            strippedModel,
-		ProviderName:     providerName,
-		UpstreamProvider: "anthropic",
-	})
+	// Feed the already-received response body into a messages.Client to get
+	// a properly parsed handle, then run through the unified stream pipeline.
+	// UpstreamProvider = "anthropic" so StreamStartedEvent.Provider is correct.
+	msgClient := messages.NewClient(
+		messages.WithBaseURL(p.opts.BaseURL),
+		messages.WithHTTPClient(&http.Client{
+			Transport: &singleResponseTransport{resp: resp},
+		}),
+	)
+	wireReq := &messages.Request{Model: strippedModel, Stream: true}
+	handle, err := msgClient.Stream(ctx, wireReq)
+	if err != nil {
+		pub.Error(err)
+		pub.Close()
+		return
+	}
+
+	go func() {
+		defer pub.Close()
+		unified.StreamMessages(ctx, handle, pub, unified.StreamContext{
+			Provider:         providerName,
+			Model:            strippedModel,
+			UpstreamProvider: "anthropic",
+		})
+	}()
+}
+
+// singleResponseTransport is an http.RoundTripper that returns a pre-built
+// *http.Response exactly once. Used to feed an already-received response body
+// into a messages.Client without making a second HTTP call.
+type singleResponseTransport struct {
+	resp *http.Response
+}
+
+func (t *singleResponseTransport) RoundTrip(_ *http.Request) (*http.Response, error) {
+	return t.resp, nil
 }

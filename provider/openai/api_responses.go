@@ -38,17 +38,17 @@ import (
 func (p *Provider) streamResponses(ctx context.Context, opts llm.Request) (llm.Stream, error) {
 	apiKey, err := p.opts.APIKeyFunc(ctx)
 	if err != nil {
-		return nil, llm.NewErrMissingAPIKey(llm.ProviderNameOpenAI)
+		return nil, llm.NewErrMissingAPIKey(p.Name())
 	}
 
-	body, err := respBuildRequest(opts)
+	body, err := buildResponsesBodyUnified(opts)
 	if err != nil {
-		return nil, llm.NewErrBuildRequest(llm.ProviderNameOpenAI, err)
+		return nil, llm.NewErrBuildRequest(p.Name(), err)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, "POST", p.opts.BaseURL+"/v1/responses", bytes.NewReader(body))
 	if err != nil {
-		return nil, llm.NewErrBuildRequest(llm.ProviderNameOpenAI, err)
+		return nil, llm.NewErrBuildRequest(p.Name(), err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+apiKey)
@@ -74,14 +74,14 @@ func (p *Provider) streamResponses(ctx context.Context, opts llm.Request) (llm.S
 	resp, err := p.client.Do(req)
 	if err != nil {
 		pub.Close() // discard buffered pre-request events; ch is GC'd
-		return nil, llm.NewErrRequestFailed(llm.ProviderNameOpenAI, err)
+		return nil, llm.NewErrRequestFailed(p.Name(), err)
 	}
 	if resp.StatusCode != http.StatusOK {
 		//nolint:errcheck // intentional: defer Close is only for cleanup, failure after response reading is non-fatal
 		defer resp.Body.Close()
 		errBody, _ := io.ReadAll(resp.Body)
 		pub.Close() // discard buffered pre-request events; ch is GC'd
-		return nil, llm.NewErrAPIError(llm.ProviderNameOpenAI, resp.StatusCode, string(errBody))
+		return nil, llm.NewErrAPIError(p.Name(), resp.StatusCode, string(errBody))
 	}
 
 	go RespParseStream(ctx, resp.Body, pub, RespStreamMeta{
@@ -288,10 +288,10 @@ func respBuildRequest(opts llm.Request) ([]byte, error) {
 // Parser-internal fields (unexported) are mutated during parsing and must not be set by callers.
 type RespStreamMeta struct {
 	// Caller-set:
-	RequestedModel   string       // model ID sent in the request body
-	StartTime        time.Time    // recorded at request start for latency tracking
-	ProviderName     string       // used in errors and usage records; defaults to llm.ProviderNameOpenAI
-	UpstreamProvider string       // used in StreamStartedEvent.Provider; falls back to ProviderName
+	RequestedModel   string    // model ID sent in the request body
+	StartTime        time.Time // recorded at request start for latency tracking
+	ProviderName     string    // used in errors and usage records; defaults to llm.ProviderNameOpenAI
+	UpstreamProvider string    // used in StreamStartedEvent.Provider; falls back to ProviderName
 	Logger           *slog.Logger
 
 	// Parser-internal state (set by respHandleEvent, not by callers):
@@ -596,6 +596,6 @@ func respHandleEvent(
 				msg = fmt.Sprintf("%s (code: %s)", msg, payload.Error.Code)
 			}
 		}
-		pub.Error(llm.NewErrProviderMsg(llm.ProviderNameOpenAI, msg))
+		pub.Error(llm.NewErrProviderMsg(meta.provider(), msg))
 	}
 }

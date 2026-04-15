@@ -9,6 +9,8 @@ import (
 	"strings"
 
 	"github.com/codewandler/llm"
+	"github.com/codewandler/llm/api/messages"
+	"github.com/codewandler/llm/api/unified"
 	"github.com/codewandler/llm/tokencount"
 	"github.com/codewandler/llm/usage"
 )
@@ -92,14 +94,16 @@ func (p *Provider) CreateStream(ctx context.Context, src llm.Buildable) (llm.Str
 		return nil, llm.NewErrMissingAPIKey(llm.ProviderNameAnthropic)
 	}
 
-	apiReq, err := BuildRequest(RequestOptions{
-		LLMRequest: opts,
-	})
+	uReq, err := unified.RequestFromLLM(opts)
+	if err != nil {
+		return nil, llm.NewErrBuildRequest(llm.ProviderNameAnthropic, err)
+	}
+	wireReq, err := unified.RequestToMessages(uReq)
 	if err != nil {
 		return nil, llm.NewErrBuildRequest(llm.ProviderNameAnthropic, err)
 	}
 
-	body, err := json.MarshalIndent(apiReq, "", "  ")
+	body, err := json.MarshalIndent(wireReq, "", "  ")
 	if err != nil {
 		return nil, llm.NewErrBuildRequest(llm.ProviderNameAnthropic, err)
 	}
@@ -111,22 +115,16 @@ func (p *Provider) CreateStream(ctx context.Context, src llm.Buildable) (llm.Str
 		return nil, llm.NewErrBuildRequest(llm.ProviderNameAnthropic, err)
 	}
 
-	parseOpts := ParseOpts{
-		Model:         opts.Model,
-		ProviderName:  providerName,
-		LLMRequest:    opts,
-		RequestParams: llm.ProviderRequestFromHTTP(req, body),
-	}
-
 	// Create publisher and emit RequestEvent BEFORE the HTTP call
 	// so consumers see what was requested even if the call fails.
 	pub, ch := llm.NewEventPublisher()
-	PublishRequestParams(pub, parseOpts)
+	pub.Publish(&llm.RequestEvent{
+		OriginalRequest: opts,
+		ProviderRequest: llm.ProviderRequestFromHTTP(req, body),
+		ResolvedApiType: llm.ApiTypeAnthropicMessages,
+	})
 
 	// Emit token estimates: heuristic (local BPE) + API (exact count).
-	// Both are emitted so consumers can compare drift between the two methods.
-
-	// 1. Heuristic estimate (local, no network call)
 	if est, err := p.CountTokens(ctx, tokencount.TokenCountRequest{
 		Model:    opts.Model,
 		Messages: opts.Messages,
@@ -137,8 +135,8 @@ func (p *Provider) CreateStream(ctx context.Context, src llm.Buildable) (llm.Str
 		}
 	}
 
-	// 2. API count (exact, free endpoint — adds one HTTP round-trip)
-	if apiCount, err := p.CountTokensAPI(ctx, apiReq); err == nil {
+	// API count (exact, free endpoint — adds one HTTP round-trip)
+	if apiCount, err := p.CountTokensAPI(ctx, wireReq); err == nil {
 		apiEst := &tokencount.TokenCount{InputTokens: apiCount}
 		for _, rec := range tokencount.EstimateRecords(apiEst, llm.ProviderNameAnthropic, opts.Model, "api", usage.Default()) {
 			pub.TokenEstimate(rec)
@@ -152,7 +150,7 @@ func (p *Provider) CreateStream(ctx context.Context, src llm.Buildable) (llm.Str
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		//nolint:errcheck // intentional: defer Close is only for cleanup, failure after response reading is non-fatal
+		//nolint:errcheck
 		defer resp.Body.Close()
 		errBody, _ := io.ReadAll(resp.Body)
 		apiErr := llm.NewErrAPIError(llm.ProviderNameAnthropic, resp.StatusCode, string(errBody))
@@ -165,17 +163,55 @@ func (p *Provider) CreateStream(ctx context.Context, src llm.Buildable) (llm.Str
 		return ch, nil
 	}
 
-	// Extract headers for rate-limit info (lowercase keys)
+	// Parse response headers for rate limits.
 	headers := make(map[string]string, len(resp.Header))
 	for k, v := range resp.Header {
 		if len(v) > 0 {
 			headers[strings.ToLower(k)] = v[0]
 		}
 	}
-	parseOpts.ResponseHeaders = headers
+	rateLimits := llm.ParseRateLimits(headers)
 
-	ParseStreamWith(ctx, resp.Body, pub, parseOpts)
+	// Stream the response body through the unified pipeline.
+	// We use messages.NewClient to get a properly parsed handle,
+	// feeding the already-received response body through a fake transport.
+	msgClient := messages.NewClient(
+		messages.WithBaseURL(p.opts.BaseURL),
+		messages.WithHTTPClient(&http.Client{
+			Transport: &singleResponseTransport{resp: resp},
+		}),
+	)
+	handle, err := msgClient.Stream(ctx, wireReq)
+	if err != nil {
+		pub.Error(err)
+		pub.Close()
+		return ch, nil
+	}
+
+	sctx := unified.StreamContext{
+		Provider:   providerName,
+		Model:      opts.Model,
+		CostCalc:   usage.Default(),
+		RateLimits: rateLimits,
+	}
+
+	go func() {
+		defer pub.Close()
+		unified.StreamMessages(ctx, handle, pub, sctx)
+	}()
+
 	return ch, nil
+}
+
+// singleResponseTransport is an http.RoundTripper that returns a pre-built
+// *http.Response exactly once. Used to feed an already-received response
+// body into a messages.Client without making a second HTTP call.
+type singleResponseTransport struct {
+	resp *http.Response
+}
+
+func (t *singleResponseTransport) RoundTrip(_ *http.Request) (*http.Response, error) {
+	return t.resp, nil
 }
 
 func (p *Provider) newAPIRequest(ctx context.Context, apiKey string, body []byte) (*http.Request, error) {

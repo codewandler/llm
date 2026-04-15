@@ -11,6 +11,8 @@ import (
 	"net/http"
 
 	"github.com/codewandler/llm"
+	"github.com/codewandler/llm/api/messages"
+	"github.com/codewandler/llm/api/unified"
 	"github.com/codewandler/llm/provider/anthropic"
 	"github.com/codewandler/llm/tokencount"
 	"github.com/codewandler/llm/usage"
@@ -112,9 +114,11 @@ func (p *Provider) CreateStream(ctx context.Context, src llm.Buildable) (llm.Str
 		return nil, llm.NewErrMissingAPIKey(providerName)
 	}
 
-	apiReq, err := anthropic.BuildRequest(anthropic.RequestOptions{
-		LLMRequest: opts,
-	})
+	uReq, err := unified.RequestFromLLM(opts)
+	if err != nil {
+		return nil, llm.NewErrBuildRequest(providerName, err)
+	}
+	wireReq, err := unified.RequestToMessages(uReq)
 	if err != nil {
 		return nil, llm.NewErrBuildRequest(providerName, err)
 	}
@@ -124,9 +128,9 @@ func (p *Provider) CreateStream(ctx context.Context, src llm.Buildable) (llm.Str
 	// and the model thinks by default regardless. Omit the field unconditionally
 	// so the request matches what MiniMax actually expects.
 	// Ref: https://github.com/MiniMax-AI/Mini-Agent
-	apiReq = adjustThinkingForMiniMax(apiReq)
+	wireReq.Thinking = nil
 
-	body, err := json.Marshal(apiReq)
+	body, err := json.Marshal(wireReq)
 	if err != nil {
 		return nil, llm.NewErrBuildRequest(providerName, err)
 	}
@@ -138,16 +142,13 @@ func (p *Provider) CreateStream(ctx context.Context, src llm.Buildable) (llm.Str
 		return nil, llm.NewErrBuildRequest(providerName, err)
 	}
 
-	parseOpts := anthropic.ParseOpts{
-		Model:         opts.Model,
-		ProviderName:  providerName,
-		LLMRequest:    opts,
-		RequestParams: llm.ProviderRequestFromHTTP(req, body),
-	}
-
 	// Create publisher and emit RequestEvent BEFORE the HTTP call.
 	pub, ch := llm.NewEventPublisher()
-	anthropic.PublishRequestParams(pub, parseOpts)
+	pub.Publish(&llm.RequestEvent{
+		OriginalRequest: opts,
+		ProviderRequest: llm.ProviderRequestFromHTTP(req, body),
+		ResolvedApiType: llm.ApiTypeAnthropicMessages,
+	})
 
 	// Emit token estimates (primary + per-segment breakdown)
 	if est, err := p.CountTokens(ctx, tokencount.TokenCountRequest{
@@ -165,7 +166,7 @@ func (p *Provider) CreateStream(ctx context.Context, src llm.Buildable) (llm.Str
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		//nolint:errcheck // intentional: defer Close is only for cleanup, failure after response reading is non-fatal
+		//nolint:errcheck
 		defer resp.Body.Close()
 		errBody, _ := io.ReadAll(resp.Body)
 		apiErr := llm.NewErrAPIError(providerName, resp.StatusCode, string(errBody))
@@ -178,7 +179,28 @@ func (p *Provider) CreateStream(ctx context.Context, src llm.Buildable) (llm.Str
 		return ch, nil
 	}
 
-	anthropic.ParseStreamWith(ctx, resp.Body, pub, parseOpts)
+	msgClient := messages.NewClient(
+		messages.WithBaseURL(p.opts.BaseURL),
+		messages.WithHTTPClient(&http.Client{
+			Transport: &singleResponseTransport{resp: resp},
+		}),
+	)
+	handle, err := msgClient.Stream(ctx, wireReq)
+	if err != nil {
+		pub.Error(err)
+		pub.Close()
+		return ch, nil
+	}
+
+	go func() {
+		defer pub.Close()
+		unified.StreamMessages(ctx, handle, pub, unified.StreamContext{
+			Provider: providerName,
+			Model:    opts.Model,
+			CostCalc: usage.Default(),
+		})
+	}()
+
 	return ch, nil
 }
 
@@ -189,9 +211,22 @@ func (p *Provider) CreateStream(ctx context.Context, src llm.Buildable) (llm.Str
 // the field is present. Sending "disabled" or any other value causes
 // unspecified behaviour, so the field is always omitted.
 // Ref: https://github.com/MiniMax-AI/Mini-Agent
+//
+// Deprecated: inline wireReq.Thinking = nil in CreateStream; kept for tests.
 func adjustThinkingForMiniMax(req anthropic.Request) anthropic.Request {
 	req.Thinking = nil
 	return req
+}
+
+// singleResponseTransport is an http.RoundTripper that returns a pre-built
+// *http.Response exactly once. Used to feed an already-received response
+// body into a messages.Client without making a second HTTP call.
+type singleResponseTransport struct {
+	resp *http.Response
+}
+
+func (t *singleResponseTransport) RoundTrip(_ *http.Request) (*http.Response, error) {
+	return t.resp, nil
 }
 
 func (p *Provider) newAPIRequest(ctx context.Context, apiKey string, body []byte) (*http.Request, error) {
