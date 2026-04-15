@@ -54,6 +54,8 @@ Examples:
 	f.IntVar(&opts.TopK, "top-k", 0, "Top-K limit (0 = provider default)")
 	f.TextVar(&opts.Thinking, "thinking", llm.ThinkingMode(""), "Thinking mode: auto, on, off")
 	f.TextVar(&opts.Effort, "effort", llm.Effort(""), "Effort: low, medium, high, max")
+	f.TextVar(&opts.ApiTypeHint, "api", llm.ApiType(""),
+		"API backend hint: auto, openai-chat, openai-responses, anthropic-messages")
 	f.TextVar(&opts.ToolChoice, "tool-choice", llm.ToolChoiceFlag{}, "Tool selection: auto, none, required, tool:<name>")
 	f.TextVar(&opts.OutputFormat, "output-format", llm.OutputFormat(""), "Output format: text, json")
 
@@ -75,6 +77,7 @@ type inferOpts struct {
 	TopK         int
 	Thinking     llm.ThinkingMode   // f.TextVar
 	Effort       llm.Effort         // f.TextVar
+	ApiTypeHint  llm.ApiType        // f.TextVar
 	ToolChoice   llm.ToolChoiceFlag // f.TextVar; nil Value = "not specified"
 	OutputFormat llm.OutputFormat   // f.TextVar
 
@@ -115,6 +118,7 @@ func runInfer(ctx context.Context, opts inferOpts, root *RootFlags) error {
 		Model(opts.Model).
 		Effort(opts.Effort).
 		Thinking(opts.Thinking).
+		ApiTypeHint(opts.ApiTypeHint).
 		MaxTokens(opts.MaxTokens).
 		Temperature(opts.Temperature).
 		TopP(opts.TopP).
@@ -428,6 +432,9 @@ func printStreamStartedEvent(ev *llm.StreamStartedEvent) {
 	if ev.RequestID != "" {
 		fields = append(fields, kvField{"request_id", ev.RequestID})
 	}
+	if ev.Provider != "" {
+		fields = append(fields, kvField{"provider", ev.Provider})
+	}
 	for k, v := range ev.Extra {
 		fields = append(fields, kvField{k, fmt.Sprint(v)})
 	}
@@ -475,7 +482,14 @@ func printRequestParamsEvent(ev *llm.RequestEvent) {
 	if req := ev.OriginalRequest; req.Model != "" {
 		fmt.Fprintln(os.Stderr)
 		fmt.Fprintf(os.Stderr, "%s── request params ──%s\n", ansiDim, ansiReset)
-		printParamMap(mapFromStruct(req, "messages", "tools"))
+		params := mapFromStruct(req, "messages", "tools")
+		if ev.ResolvedApiType != "" {
+			if params == nil {
+				params = make(map[string]any)
+			}
+			params["resolved_api_type"] = string(ev.ResolvedApiType)
+		}
+		printParamMap(params)
 	}
 
 	// --- Provider-resolved params (what was actually sent) ---

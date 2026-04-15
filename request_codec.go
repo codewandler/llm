@@ -54,3 +54,30 @@ func (f *OutputFormat) UnmarshalText(b []byte) error {
 	}
 	return fmt.Errorf("invalid output-format %q: must be text or json", v)
 }
+
+// --- ApiType codec ---
+
+// MarshalText maps the zero value (ApiTypeAuto = "") to the user-visible string "auto",
+// matching the ThinkingMode convention.
+func (t ApiType) MarshalText() ([]byte, error) {
+	if t == ApiTypeAuto {
+		return []byte("auto"), nil
+	}
+	return []byte(t), nil
+}
+
+// UnmarshalText maps "auto" → ApiTypeAuto (the zero value "").
+// An empty input is also accepted as ApiTypeAuto.
+func (t *ApiType) UnmarshalText(b []byte) error {
+	s := string(b)
+	if s == "auto" || s == "" {
+		*t = ApiTypeAuto
+		return nil
+	}
+	v := ApiType(s)
+	if !v.Valid() {
+		return fmt.Errorf("invalid api type %q; must be one of: auto, openai-chat, openai-responses, anthropic-messages", s)
+	}
+	*t = v
+	return nil
+}

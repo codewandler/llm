@@ -152,35 +152,13 @@ func (p *Provider) CreateStream(ctx context.Context, src llm.Buildable) (llm.Str
 		return nil, llm.NewErrMissingAPIKey(llm.ProviderNameOpenRouter)
 	}
 
-	body, err := buildRequest(opts)
-	if err != nil {
-		return nil, llm.NewErrBuildRequest(llm.ProviderNameOpenRouter, err)
-	}
-
-	// Build http.Request first so URL, method, and headers are available for
-	// the RequestEvent. The request is fully constructed here but not yet sent.
-	httpReq, err := http.NewRequestWithContext(ctx, "POST", p.opts.BaseURL+"/v1/chat/completions", bytes.NewReader(body))
-	if err != nil {
-		return nil, llm.NewErrBuildRequest(llm.ProviderNameOpenRouter, err)
-	}
-	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("Authorization", "Bearer "+apiKey)
-
-	// Create publisher and emit RequestEvent BEFORE the HTTP call.
 	pub, ch := llm.NewEventPublisher()
 
-	// Emit model resolution when the client-side normalisation changed the name
-	// (e.g. "" or ModelDefault → "auto").
 	if opts.Model != requestedModel {
 		pub.ModelResolved(providerName, requestedModel, opts.Model)
 	}
 
-	pub.Publish(&llm.RequestEvent{
-		OriginalRequest: opts,
-		ProviderRequest: llm.ProviderRequestFromHTTP(httpReq, body),
-	})
-
-	// Emit pre-request token estimates (primary + per-segment breakdown).
+	// Token estimates are path-independent; emit before dispatch.
 	if est, err := p.CountTokens(ctx, tokencount.TokenCountRequest{
 		Model:    opts.Model,
 		Messages: opts.Messages,
@@ -191,28 +169,66 @@ func (p *Provider) CreateStream(ctx context.Context, src llm.Buildable) (llm.Str
 		}
 	}
 
-	resp, err := p.client.Do(httpReq)
+	backend, resolvedApiType := selectAPI(opts.Model, opts.ApiTypeHint)
+	switch backend {
+	case orResponses:
+		go p.streamResponses(ctx, opts, resolvedApiType, apiKey, pub)
+	case orMessages:
+		go p.streamMessages(ctx, opts, resolvedApiType, apiKey, pub)
+	default:
+		go p.streamCompletions(ctx, opts, resolvedApiType, apiKey, pub)
+	}
+	return ch, nil
+}
+
+func (p *Provider) streamCompletions(
+	ctx context.Context, opts llm.Request,
+	resolvedApiType llm.ApiType, apiKey string, pub llm.Publisher,
+) {
+	body, err := buildRequest(opts)
 	if err != nil {
+		pub.Error(llm.NewErrBuildRequest(providerName, err))
 		pub.Close()
-		return nil, llm.NewErrRequestFailed(llm.ProviderNameOpenRouter, err)
+		return
 	}
 
+	httpReq, err := http.NewRequestWithContext(ctx, "POST",
+		p.opts.BaseURL+"/v1/chat/completions", bytes.NewReader(body))
+	if err != nil {
+		pub.Error(llm.NewErrBuildRequest(providerName, err))
+		pub.Close()
+		return
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("Authorization", "Bearer "+apiKey)
+
+	pub.Publish(&llm.RequestEvent{
+		OriginalRequest: opts,
+		ProviderRequest: llm.ProviderRequestFromHTTP(httpReq, body),
+		ResolvedApiType: resolvedApiType,
+	})
+
+	resp, err := p.client.Do(httpReq)
+	if err != nil {
+		pub.Error(llm.NewErrRequestFailed(providerName, err))
+		pub.Close()
+		return
+	}
 	if resp.StatusCode != http.StatusOK {
-		//nolint:errcheck // intentional: defer Close is only for cleanup, failure after response reading is non-fatal
+		//nolint:errcheck
 		defer resp.Body.Close()
 		errBody, _ := io.ReadAll(resp.Body)
-		apiErr := llm.NewErrAPIError(llm.ProviderNameOpenRouter, resp.StatusCode, string(errBody))
+		apiErr := llm.NewErrAPIError(providerName, resp.StatusCode, string(errBody))
 		if llm.IsRetriableHTTPStatus(resp.StatusCode) {
 			pub.Close()
-			return nil, apiErr
+			return
 		}
 		pub.Error(apiErr)
 		pub.Close()
-		return ch, nil
+		return
 	}
 
 	go parseStream(ctx, resp.Body, pub, opts.Model, p.opts.Logger)
-	return ch, nil
 }
 
 func (p *Provider) normalizeRequestModel(model string) string {
@@ -222,6 +238,56 @@ func (p *Provider) normalizeRequestModel(model string) string {
 	default:
 		return model
 	}
+}
+
+// --- API dispatch ---
+
+type orAPIBackend int
+
+const (
+	orChatCompletions orAPIBackend = iota
+	orResponses
+	orMessages
+)
+
+// selectAPI resolves the effective API backend and the concrete ApiType to
+// record on RequestEvent.ResolvedApiType.
+//
+// Auto-dispatch rules (ApiTypeHint == ""):
+//   - openai/* models requiring Responses API  →  orResponses
+//   - openai/* other                           →  orChatCompletions
+//   - anthropic/*                              →  orMessages
+//   - everything else                          →  orChatCompletions
+func selectAPI(model string, hint llm.ApiType) (orAPIBackend, llm.ApiType) {
+	switch hint {
+	case llm.ApiTypeOpenAIResponses:
+		return orResponses, llm.ApiTypeOpenAIResponses
+	case llm.ApiTypeAnthropicMessages:
+		return orMessages, llm.ApiTypeAnthropicMessages
+	case llm.ApiTypeOpenAIChatCompletion:
+		return orChatCompletions, llm.ApiTypeOpenAIChatCompletion
+	}
+	// Auto: infer from model prefix.
+	if bare, ok := strings.CutPrefix(model, "openai/"); ok {
+		if orUseResponsesAPI(bare) {
+			return orResponses, llm.ApiTypeOpenAIResponses
+		}
+		return orChatCompletions, llm.ApiTypeOpenAIChatCompletion
+	}
+	if strings.HasPrefix(model, "anthropic/") {
+		return orMessages, llm.ApiTypeAnthropicMessages
+	}
+	return orChatCompletions, llm.ApiTypeOpenAIChatCompletion
+}
+
+// upstreamProviderFromModel extracts the provider prefix from an OpenRouter
+// model ID (e.g. "anthropic/claude-opus-4-5" → "anthropic").
+// Returns providerName ("openrouter") as fallback when the ID has no slash.
+func upstreamProviderFromModel(model string) string {
+	if i := strings.IndexByte(model, '/'); i > 0 {
+		return model[:i]
+	}
+	return providerName
 }
 
 // --- Request building ---
@@ -566,6 +632,7 @@ func parseStream(ctx context.Context, body io.ReadCloser, pub llm.Publisher, req
 			pub.Started(llm.StreamStartedEvent{
 				Model:     chunk.Model,
 				RequestID: chunk.ID,
+				Provider:  upstreamProviderFromModel(chunk.Model),
 			})
 		}
 

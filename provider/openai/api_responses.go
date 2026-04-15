@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -52,19 +53,13 @@ func (p *Provider) streamResponses(ctx context.Context, opts llm.Request) (llm.S
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+apiKey)
 
-	startTime := time.Now()
-	resp, err := p.client.Do(req)
-	if err != nil {
-		return nil, llm.NewErrRequestFailed(llm.ProviderNameOpenAI, err)
-	}
-	if resp.StatusCode != http.StatusOK {
-		//nolint:errcheck // intentional: defer Close is only for cleanup, failure after response reading is non-fatal
-		defer resp.Body.Close()
-		errBody, _ := io.ReadAll(resp.Body)
-		return nil, llm.NewErrAPIError(llm.ProviderNameOpenAI, resp.StatusCode, string(errBody))
-	}
-
 	pub, ch := llm.NewEventPublisher()
+
+	pub.Publish(&llm.RequestEvent{
+		OriginalRequest: opts,
+		ProviderRequest: llm.ProviderRequestFromHTTP(req, body),
+		ResolvedApiType: llm.ApiTypeOpenAIResponses,
+	})
 
 	// Emit token estimates (primary + per-segment breakdown)
 	if est, err := p.CountTokens(ctx, tokencount.TokenCountRequest{
@@ -75,11 +70,25 @@ func (p *Provider) streamResponses(ctx context.Context, opts llm.Request) (llm.S
 		}
 	}
 
-	go respParseStream(ctx, resp.Body, pub, respStreamMeta{
-		requestedModel: opts.Model,
-		startTime:      startTime,
-		providerName:   p.Name(),
-		logger:         p.opts.Logger,
+	startTime := time.Now()
+	resp, err := p.client.Do(req)
+	if err != nil {
+		pub.Close() // discard buffered pre-request events; ch is GC'd
+		return nil, llm.NewErrRequestFailed(llm.ProviderNameOpenAI, err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		//nolint:errcheck // intentional: defer Close is only for cleanup, failure after response reading is non-fatal
+		defer resp.Body.Close()
+		errBody, _ := io.ReadAll(resp.Body)
+		pub.Close() // discard buffered pre-request events; ch is GC'd
+		return nil, llm.NewErrAPIError(llm.ProviderNameOpenAI, resp.StatusCode, string(errBody))
+	}
+
+	go RespParseStream(ctx, resp.Body, pub, RespStreamMeta{
+		RequestedModel: opts.Model,
+		StartTime:      startTime,
+		ProviderName:   p.Name(),
+		Logger:         p.opts.Logger,
 	})
 	return ch, nil
 }
@@ -272,9 +281,37 @@ func respBuildRequest(opts llm.Request) ([]byte, error) {
 
 // --- SSE stream parsing ---
 
-// respStreamMeta is an alias for ccStreamMeta (defined in api_completions.go).
-// Both parsers share the same per-request metadata shape.
-type respStreamMeta = ccStreamMeta
+// RespStreamMeta holds per-request metadata for the Responses API SSE parser.
+// Exported so provider/openrouter can reuse RespParseStream.
+//
+// Caller-set fields (exported) are provided when calling RespParseStream.
+// Parser-internal fields (unexported) are mutated during parsing and must not be set by callers.
+type RespStreamMeta struct {
+	// Caller-set:
+	RequestedModel   string       // model ID sent in the request body
+	StartTime        time.Time    // recorded at request start for latency tracking
+	ProviderName     string       // used in errors and usage records; defaults to llm.ProviderNameOpenAI
+	UpstreamProvider string       // used in StreamStartedEvent.Provider; falls back to ProviderName
+	Logger           *slog.Logger
+
+	// Parser-internal state (set by respHandleEvent, not by callers):
+	responseID    string
+	responseModel string
+}
+
+func (m *RespStreamMeta) provider() string {
+	if m.ProviderName != "" {
+		return m.ProviderName
+	}
+	return llm.ProviderNameOpenAI
+}
+
+func (m *RespStreamMeta) upstreamProvider() string {
+	if m.UpstreamProvider != "" {
+		return m.UpstreamProvider
+	}
+	return m.provider()
+}
 
 // The Responses API emits these SSE event types (in the "event:" line):
 //
@@ -353,7 +390,9 @@ type respToolAccum struct {
 	argBuf strings.Builder
 }
 
-func respParseStream(ctx context.Context, body io.ReadCloser, pub llm.Publisher, meta respStreamMeta) {
+// RespParseStream reads a Responses API SSE body and publishes events.
+// Exported so provider/openrouter can reuse this parser for its /v1/responses path.
+func RespParseStream(ctx context.Context, body io.ReadCloser, pub llm.Publisher, meta RespStreamMeta) {
 	defer pub.Close()
 
 	activeTools := make(map[int]*respToolAccum)
@@ -366,10 +405,10 @@ func respParseStream(ctx context.Context, body io.ReadCloser, pub llm.Publisher,
 	})
 	if err != nil {
 		if ctx.Err() != nil {
-			pub.Error(llm.NewErrContextCancelled(llm.ProviderNameOpenAI, err))
+			pub.Error(llm.NewErrContextCancelled(meta.provider(), err))
 			return
 		}
-		pub.Error(llm.NewErrStreamRead(llm.ProviderNameOpenAI, err))
+		pub.Error(llm.NewErrStreamRead(meta.provider(), err))
 	}
 }
 
@@ -379,7 +418,7 @@ func respHandleEvent(
 	hadToolCalls *bool,
 	activeTools map[int]*respToolAccum,
 	pub llm.Publisher,
-	meta *respStreamMeta,
+	meta *RespStreamMeta,
 ) {
 	switch eventName {
 	case "response.created":
@@ -401,6 +440,7 @@ func respHandleEvent(
 				pub.Started(llm.StreamStartedEvent{
 					Model:     meta.responseModel,
 					RequestID: meta.responseID,
+					Provider:  meta.upstreamProvider(),
 				})
 			}
 			pub.Delta(llm.ThinkingDelta(ev.Delta).WithIndex(uint32(ev.OutputIndex)))
@@ -419,6 +459,7 @@ func respHandleEvent(
 			pub.Started(llm.StreamStartedEvent{
 				Model:     meta.responseModel,
 				RequestID: meta.responseID,
+				Provider:  meta.upstreamProvider(),
 			})
 		}
 		pub.Delta(llm.TextDelta(ev.Delta).WithIndex(uint32(ev.OutputIndex)))
@@ -434,6 +475,7 @@ func respHandleEvent(
 				pub.Started(llm.StreamStartedEvent{
 					Model:     meta.responseModel,
 					RequestID: meta.responseID,
+					Provider:  meta.upstreamProvider(),
 				})
 			}
 			activeTools[ev.OutputIndex] = &respToolAccum{
@@ -498,6 +540,7 @@ func respHandleEvent(
 			pub.Started(llm.StreamStartedEvent{
 				Model:     ev.Response.Model,
 				RequestID: ev.Response.ID,
+				Provider:  meta.upstreamProvider(),
 			})
 		}
 
@@ -511,13 +554,13 @@ func respHandleEvent(
 			if u.OutputTokensDetails != nil {
 				reasoningTok = u.OutputTokensDetails.ReasoningTokens
 			}
-			items := buildUsageTokenItems(u.InputTokens, u.OutputTokens, cached, reasoningTok, meta.logger, meta.provider(), meta.requestedModel)
+			items := buildUsageTokenItems(u.InputTokens, u.OutputTokens, cached, reasoningTok, meta.Logger, meta.provider(), meta.RequestedModel)
 			rec := usage.Record{
-				Dims:       usage.Dims{Provider: meta.provider(), Model: meta.requestedModel, RequestID: meta.responseID},
+				Dims:       usage.Dims{Provider: meta.provider(), Model: meta.RequestedModel, RequestID: meta.responseID},
 				Tokens:     items,
 				RecordedAt: time.Now(),
 			}
-			if cost, ok := usage.Default().Calculate(meta.provider(), meta.requestedModel, items); ok {
+			if cost, ok := usage.Default().Calculate(meta.provider(), meta.RequestedModel, items); ok {
 				rec.Cost = cost
 			}
 			usageRec = &rec

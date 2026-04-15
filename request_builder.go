@@ -92,6 +92,18 @@ func (b *RequestBuilder) OutputFormat(format OutputFormat) *RequestBuilder {
 	return b
 }
 
+// ApiTypeHint sets the preferred wire protocol. The provider honours it when
+// supported; falls back to its default otherwise.
+func (b *RequestBuilder) ApiTypeHint(t ApiType) *RequestBuilder {
+	b.req.ApiTypeHint = t
+	return b
+}
+
+// WithApiTypeHint sets Request.ApiTypeHint.
+func WithApiTypeHint(t ApiType) RequestOption {
+	return func(r *Request) { r.ApiTypeHint = t }
+}
+
 // TopK sets the top-k parameter for sampling.
 func (b *RequestBuilder) TopK(k int) *RequestBuilder {
 	b.req.TopK = k

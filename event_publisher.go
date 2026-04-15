@@ -53,6 +53,8 @@ func (s *eventPub) Started(started StreamStartedEvent) {
 	s.Publish(&StreamStartedEvent{
 		RequestID: started.RequestID,
 		Model:     started.Model,
+		Provider:  started.Provider,
+		Extra:     started.Extra,
 	})
 }
 func (s *eventPub) Debug(msg string, data any) {

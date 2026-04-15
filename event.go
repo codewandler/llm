@@ -83,6 +83,12 @@ type (
 		// e.g., "claude-haiku-4-5-20251001". May be empty if the API doesn't echo the model back.
 		Model string `json:"model,omitempty"`
 
+		// Provider is the upstream provider that served the request.
+		// For direct providers this equals the provider name.
+		// For routing providers such as OpenRouter it is the actual backend
+		// extracted from the response (e.g. "anthropic", "openai", "meta-llama").
+		Provider string `json:"provider,omitempty"`
+
 		// Extra holds provider-specific data such as rate-limit headers.
 		Extra map[string]any `json:"extra,omitempty"`
 	}
@@ -163,6 +169,11 @@ type (
 	RequestEvent struct {
 		OriginalRequest Request         `json:"original_request"`
 		ProviderRequest ProviderRequest `json:"provider_request"`
+
+		// ResolvedApiType is the wire protocol actually used for this request.
+		// Always a concrete value (never ApiTypeAuto). Set by the provider before
+		// the HTTP call is made.
+		ResolvedApiType ApiType `json:"resolved_api_type,omitempty"`
 	}
 )
 

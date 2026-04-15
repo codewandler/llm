@@ -46,19 +46,13 @@ func (p *Provider) streamCompletions(ctx context.Context, opts llm.Request) (llm
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+apiKey)
 
-	startTime := time.Now()
-	resp, err := p.client.Do(req)
-	if err != nil {
-		return nil, llm.NewErrRequestFailed(llm.ProviderNameOpenAI, err)
-	}
-	if resp.StatusCode != http.StatusOK {
-		//nolint:errcheck // intentional: defer Close is only for cleanup, failure after response reading is non-fatal
-		defer resp.Body.Close()
-		errBody, _ := io.ReadAll(resp.Body)
-		return nil, llm.NewErrAPIError(llm.ProviderNameOpenAI, resp.StatusCode, string(errBody))
-	}
-
 	pub, ch := llm.NewEventPublisher()
+
+	pub.Publish(&llm.RequestEvent{
+		OriginalRequest: opts,
+		ProviderRequest: llm.ProviderRequestFromHTTP(req, body),
+		ResolvedApiType: llm.ApiTypeOpenAIChatCompletion,
+	})
 
 	// Emit token estimates (primary + per-segment breakdown)
 	if est, err := p.CountTokens(ctx, tokencount.TokenCountRequest{
@@ -67,6 +61,20 @@ func (p *Provider) streamCompletions(ctx context.Context, opts llm.Request) (llm
 		for _, rec := range tokencount.EstimateRecords(est, p.Name(), opts.Model, "heuristic", usage.Default()) {
 			pub.TokenEstimate(rec)
 		}
+	}
+
+	startTime := time.Now()
+	resp, err := p.client.Do(req)
+	if err != nil {
+		pub.Close() // discard buffered pre-request events; ch is GC'd
+		return nil, llm.NewErrRequestFailed(llm.ProviderNameOpenAI, err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		//nolint:errcheck // intentional: defer Close is only for cleanup, failure after response reading is non-fatal
+		defer resp.Body.Close()
+		errBody, _ := io.ReadAll(resp.Body)
+		pub.Close() // discard buffered pre-request events; ch is GC'd
+		return nil, llm.NewErrAPIError(llm.ProviderNameOpenAI, resp.StatusCode, string(errBody))
 	}
 
 	go ccParseStream(ctx, resp.Body, pub, ccStreamMeta{
@@ -351,6 +359,7 @@ func ccParseStream(ctx context.Context, body io.ReadCloser, pub llm.Publisher, m
 			pub.Started(llm.StreamStartedEvent{
 				Model:     chunk.Model,
 				RequestID: chunk.ID,
+				Provider:  meta.provider(),
 			})
 		}
 
@@ -402,10 +411,10 @@ func ccParseStream(ctx context.Context, body io.ReadCloser, pub llm.Publisher, m
 	})
 	if err != nil {
 		if ctx.Err() != nil {
-			pub.Error(llm.NewErrContextCancelled(llm.ProviderNameOpenAI, err))
+			pub.Error(llm.NewErrContextCancelled(meta.provider(), err))
 			return
 		}
-		pub.Error(llm.NewErrStreamRead(llm.ProviderNameOpenAI, err))
+		pub.Error(llm.NewErrStreamRead(meta.provider(), err))
 	}
 }
 

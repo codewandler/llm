@@ -12,12 +12,28 @@
   `Models()` now lazy-fetches the live installed model list (3 s timeout,
   curated fallback); `Resolve()` passes through any model ID so arbitrary
   locally-installed models can be addressed without being in the curated list.
+- `Request.ApiTypeHint` (`ApiType`) — wire-protocol selector: `openai-chat`,
+  `openai-responses`, `anthropic-messages`, or `auto` (default). Exposed as
+  `--api` flag in `llmcli infer`.
+- `StreamStartedEvent.Provider` — upstream provider that served the request
+  (e.g. `anthropic` when routed through OpenRouter). Populated by all providers.
+- `RequestEvent.ResolvedApiType` — concrete wire protocol used for the request;
+  always set before the HTTP call and visible in `llmcli infer -v` output.
+- `provider/openrouter`: dispatches to Chat Completions, OpenAI Responses API,
+  or Anthropic Messages based on model prefix or `ApiTypeHint`. Reuses
+  `openai.RespParseStream` and `openai.RespStreamMeta` (now exported) for the
+  Responses path, and a new `streamMessages` method for the Anthropic path.
+- `ParseOpts.UpstreamProvider` in `provider/anthropic` — lets routing providers
+  distinguish the billing name (`openrouter`) from the upstream backend
+  (`anthropic`) in `StreamStartedEvent.Provider`.
 
 ### Fixed
 
 - `provider/ollama`: `*Provider` did not implement `llm.Provider` — `Models()`
   returned the wrong type (`[]llm.Model` instead of `llm.Models`) and
   `Resolve()` was missing entirely.
+- `event_publisher.go`: `Extra` field of `StreamStartedEvent` was silently
+  dropped when forwarded through `pub.Started()`. Now preserved.
 
 - `cmd/miniagent` — minimal agentic CLI that runs an autonomous
   LLM→bash→LLM loop. Supports one-shot and interactive REPL modes.

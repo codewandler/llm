@@ -675,3 +675,53 @@ func TestBuildRequest_AssistantInterleavedThinkingOrder(t *testing.T) {
 	require.Len(t, toolCalls, 1)
 	assert.Equal(t, "tc1", toolCalls[0].(map[string]any)["id"])
 }
+
+func TestSelectAPI(t *testing.T) {
+	tests := []struct {
+		model    string
+		hint     llm.ApiType
+		wantBack orAPIBackend
+		wantType llm.ApiType
+	}{
+		// Explicit hints override auto-dispatch for any model
+		{"any", llm.ApiTypeOpenAIResponses, orResponses, llm.ApiTypeOpenAIResponses},
+		{"any", llm.ApiTypeAnthropicMessages, orMessages, llm.ApiTypeAnthropicMessages},
+		{"any", llm.ApiTypeOpenAIChatCompletion, orChatCompletions, llm.ApiTypeOpenAIChatCompletion},
+		// Auto: openai codex and gpt-5.4-series → Responses
+		{"openai/gpt-5.3-codex", llm.ApiTypeAuto, orResponses, llm.ApiTypeOpenAIResponses},
+		{"openai/gpt-5.4", llm.ApiTypeAuto, orResponses, llm.ApiTypeOpenAIResponses},
+		{"openai/gpt-5.4-mini", llm.ApiTypeAuto, orResponses, llm.ApiTypeOpenAIResponses},
+		{"openai/gpt-5.4-pro", llm.ApiTypeAuto, orResponses, llm.ApiTypeOpenAIResponses},
+		// Auto: other openai → Chat Completions
+		{"openai/gpt-4o", llm.ApiTypeAuto, orChatCompletions, llm.ApiTypeOpenAIChatCompletion},
+		{"openai/gpt-4-turbo", llm.ApiTypeAuto, orChatCompletions, llm.ApiTypeOpenAIChatCompletion},
+		// Auto: anthropic/* → Messages
+		{"anthropic/claude-opus-4-5", llm.ApiTypeAuto, orMessages, llm.ApiTypeAnthropicMessages},
+		{"anthropic/claude-haiku-4-5", llm.ApiTypeAuto, orMessages, llm.ApiTypeAnthropicMessages},
+		// Auto: unknown prefix → Chat Completions
+		{"meta/llama-4-maverick", llm.ApiTypeAuto, orChatCompletions, llm.ApiTypeOpenAIChatCompletion},
+		{"auto", llm.ApiTypeAuto, orChatCompletions, llm.ApiTypeOpenAIChatCompletion},
+	}
+	for _, tc := range tests {
+		t.Run(tc.model+"/hint="+string(tc.hint), func(t *testing.T) {
+			gotBack, gotType := selectAPI(tc.model, tc.hint)
+			assert.Equal(t, tc.wantBack, gotBack, "backend")
+			assert.Equal(t, tc.wantType, gotType, "resolved ApiType")
+		})
+	}
+}
+
+func TestUpstreamProviderFromModel(t *testing.T) {
+	tests := []struct{ model, want string }{
+		{"anthropic/claude-opus-4-5", "anthropic"},
+		{"openai/gpt-4o", "openai"},
+		{"meta-llama/llama-4-maverick", "meta-llama"},
+		{"auto", providerName},   // no slash → "openrouter"
+		{"gpt-4o", providerName}, // no slash → "openrouter"
+	}
+	for _, tc := range tests {
+		t.Run(tc.model, func(t *testing.T) {
+			assert.Equal(t, tc.want, upstreamProviderFromModel(tc.model))
+		})
+	}
+}

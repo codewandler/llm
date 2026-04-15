@@ -25,6 +25,14 @@ func testMeta(model string) ccStreamMeta {
 	}
 }
 
+// testRespMeta returns a RespStreamMeta for testing.
+func testRespMeta(model string) RespStreamMeta {
+	return RespStreamMeta{
+		RequestedModel: model,
+		StartTime:      time.Now(),
+	}
+}
+
 // --- Unit tests for ccBuildRequest ---
 
 func TestBuildRequest_Basic(t *testing.T) {
@@ -1150,7 +1158,7 @@ event: response.completed
 data: {"response":{"id":"resp_123","model":"gpt-5.1-codex","usage":{"input_tokens":10,"output_tokens":2}}}
 `
 	pub, ch := llm.NewEventPublisher()
-	go respParseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), pub, testMeta("gpt-5.1-codex"))
+	go RespParseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), pub, testRespMeta("gpt-5.1-codex"))
 
 	var deltas []string
 	var gotDone bool
@@ -1192,7 +1200,7 @@ event: response.completed
 data: {"response":{"id":"resp_123","model":"gpt-5.1-codex","usage":{"input_tokens":50,"output_tokens":20}}}
 `
 	pub, ch := llm.NewEventPublisher()
-	go respParseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), pub, testMeta("gpt-5.1-codex"))
+	go RespParseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), pub, testRespMeta("gpt-5.1-codex"))
 
 	var toolCalls []*llm.ToolCallEvent
 	for event := range ch {
@@ -1219,7 +1227,7 @@ event: response.completed
 data: {"response":{"id":"resp_123","model":"gpt-5.1-codex","usage":{"input_tokens":100,"output_tokens":50,"input_tokens_details":{"cached_tokens":80},"output_tokens_details":{"reasoning_tokens":30}}}}
 `
 	pub, ch := llm.NewEventPublisher()
-	go respParseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), pub, testMeta("gpt-5.1-codex"))
+	go RespParseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), pub, testRespMeta("gpt-5.1-codex"))
 
 	var usageRec *usage.Record
 	for event := range ch {
@@ -1248,7 +1256,7 @@ event: response.completed
 data: {"response":{"id":"resp_123","model":"gpt-5.1-codex","usage":{"input_tokens":1000,"output_tokens":500}}}
 `
 	pub, ch := llm.NewEventPublisher()
-	go respParseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), pub, testMeta("gpt-5.1-codex"))
+	go RespParseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), pub, testRespMeta("gpt-5.1-codex"))
 
 	var usageRec2 *usage.Record
 	for event := range ch {
@@ -1270,7 +1278,7 @@ func TestRespParseStream_Error(t *testing.T) {
 data: {"error":{"message":"Rate limit exceeded","code":"rate_limit_exceeded"}}
 `
 	pub, ch := llm.NewEventPublisher()
-	go respParseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), pub, testMeta("gpt-5.1-codex"))
+	go RespParseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), pub, testRespMeta("gpt-5.1-codex"))
 
 	var gotError bool
 	var errMsg string
@@ -1295,7 +1303,7 @@ event: response.completed
 data: {"response":{"id":"resp_abc123","model":"gpt-5.1-codex","usage":{"input_tokens":10,"output_tokens":5}}}
 `
 	pub, ch := llm.NewEventPublisher()
-	go respParseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), pub, testMeta("gpt-5.1-codex"))
+	go RespParseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), pub, testRespMeta("gpt-5.1-codex"))
 
 	var start *llm.StreamStartedEvent
 	for event := range ch {
@@ -1415,7 +1423,7 @@ event: response.completed
 data: {"response":{"id":"resp_123","model":"gpt-5.1-codex","status":"incomplete","incomplete_details":{"reason":"max_output_tokens"},"usage":{"input_tokens":10,"output_tokens":5}}}
 `
 	pub, ch := llm.NewEventPublisher()
-	go respParseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), pub, testMeta("gpt-5.1-codex"))
+	go RespParseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), pub, testRespMeta("gpt-5.1-codex"))
 
 	var stopReason llm.StopReason
 	for event := range ch {
@@ -1435,7 +1443,7 @@ event: response.completed
 data: {"response":{"id":"resp_456","model":"gpt-5.1-codex","status":"incomplete","incomplete_details":{"reason":"content_filter"},"usage":{"input_tokens":10,"output_tokens":0}}}
 `
 	pub, ch := llm.NewEventPublisher()
-	go respParseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), pub, testMeta("gpt-5.1-codex"))
+	go RespParseStream(context.Background(), io.NopCloser(strings.NewReader(sseData)), pub, testRespMeta("gpt-5.1-codex"))
 
 	var stopReason llm.StopReason
 	for event := range ch {

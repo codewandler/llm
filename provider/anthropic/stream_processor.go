@@ -140,9 +140,14 @@ func (p *streamProcessor) onMessageStart(evt MessageStartEvent) {
 		p.pub.ModelResolved(p.meta.ProviderName, p.meta.Model, evt.Message.Model)
 	}
 
+	provider := p.meta.UpstreamProvider
+	if provider == "" {
+		provider = p.meta.ProviderName
+	}
 	p.pub.Started(llm.StreamStartedEvent{
 		Model:     evt.Message.Model,
 		RequestID: evt.Message.ID,
+		Provider:  provider,
 		Extra:     extra,
 	})
 }

@@ -101,6 +101,33 @@ const (
 	OutputFormatJSON OutputFormat = "json"
 )
 
+// ApiType identifies a wire protocol for LLM API requests.
+// Used as a hint on Request.ApiTypeHint and as the resolved value on RequestEvent.ResolvedApiType.
+type ApiType string
+
+const (
+	// ApiTypeAuto is the zero value. The provider selects the best API.
+	ApiTypeAuto ApiType = ""
+	// ApiTypeOpenAIChatCompletion selects the OpenAI Chat Completions API (/v1/chat/completions).
+	ApiTypeOpenAIChatCompletion ApiType = "openai-chat"
+	// ApiTypeOpenAIResponses selects the OpenAI Responses API (/v1/responses).
+	// Required for models that use the phase field (gpt-5.3-codex, gpt-5.4-*).
+	ApiTypeOpenAIResponses ApiType = "openai-responses"
+	// ApiTypeAnthropicMessages selects the Anthropic Messages API (/v1/messages).
+	// Provides native cache_control, thinking blocks, and anthropic-beta headers.
+	ApiTypeAnthropicMessages ApiType = "anthropic-messages"
+)
+
+// Valid returns true if t is a known constant or the zero value (auto).
+func (t ApiType) Valid() bool {
+	switch t {
+	case ApiTypeAuto, ApiTypeOpenAIChatCompletion, ApiTypeOpenAIResponses, ApiTypeAnthropicMessages:
+		return true
+	default:
+		return false
+	}
+}
+
 type StreamRequest = Request
 
 // Request configures a provider CreateStream call.
@@ -149,6 +176,11 @@ type Request struct {
 	// CacheHint is a top-level prompt caching hint. Behaviour is provider-specific:
 	// Anthropic auto mode, Bedrock trailing cachePoint, OpenAI extended retention.
 	CacheHint *CacheHint `json:"cache_hint,omitempty"`
+
+	// ApiTypeHint expresses a preferred wire protocol. Providers honour it when
+	// they support the requested API; otherwise they fall back to their default.
+	// The actual API used is always reported in RequestEvent.ResolvedApiType.
+	ApiTypeHint ApiType `json:"api_type_hint,omitempty"`
 }
 
 // Validate checks that the options are valid.
@@ -166,6 +198,10 @@ func (o Request) Validate() error {
 	// Validate Thinking
 	if !o.Thinking.Valid() {
 		return fmt.Errorf("invalid Thinking %q", o.Thinking)
+	}
+
+	if !o.ApiTypeHint.Valid() {
+		return fmt.Errorf("invalid ApiTypeHint %q; valid values: auto, openai-chat, openai-responses, anthropic-messages", o.ApiTypeHint)
 	}
 
 	// Validate Tools

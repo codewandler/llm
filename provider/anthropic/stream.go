@@ -17,6 +17,12 @@ type ParseOpts struct {
 	// (e.g. "anthropic", "claude", "minimax").
 	ProviderName string
 
+	// UpstreamProvider is used in StreamStartedEvent.Provider.
+	// When empty, falls back to ProviderName.
+	// Set for routing providers where billing provider ≠ upstream backend
+	// (e.g. OpenRouter billing = "openrouter", upstream = "anthropic").
+	UpstreamProvider string
+
 	// ResponseHeaders contains HTTP response headers, used to extract rate-limit info.
 	// Keys should be lowercase header names.
 	ResponseHeaders map[string]string
@@ -56,12 +62,14 @@ func ParseStreamWith(ctx context.Context, body io.ReadCloser, pub llm.Publisher,
 	}()
 }
 
-// PublishRequestParams emits a RequestEvent at the start of every stream.
-// Exported so that providers using ParseStreamWith can call it before the HTTP request.
+// PublishRequestParams emits a RequestEvent. Always sets ResolvedApiType to
+// ApiTypeAnthropicMessages: this function is only called by providers using
+// the Anthropic Messages wire format (anthropic direct, claude, minimax).
 func PublishRequestParams(pub llm.Publisher, opts ParseOpts) {
 	pub.Publish(&llm.RequestEvent{
 		OriginalRequest: opts.LLMRequest,
 		ProviderRequest: opts.RequestParams,
+		ResolvedApiType: llm.ApiTypeAnthropicMessages,
 	})
 }
 

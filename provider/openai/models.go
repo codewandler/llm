@@ -241,6 +241,11 @@ func useResponsesAPI(model string) bool {
 	return info.Category == categoryCodex || info.UseResponsesAPI
 }
 
+// UseResponsesAPI reports whether the given model requires the OpenAI
+// Responses API (/v1/responses). Exported for use by providers that route
+// through the OpenAI wire format (e.g. OpenRouter).
+func UseResponsesAPI(model string) bool { return useResponsesAPI(model) }
+
 // getModelInfo returns the model info for the given model ID.
 // Returns ErrUnknownModel if the model is not in the registry.
 func getModelInfo(model string) (modelInfo, error) {

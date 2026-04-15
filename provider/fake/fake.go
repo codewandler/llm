@@ -69,6 +69,7 @@ func (f *Provider) CreateStream(_ context.Context, _ llm.Buildable) (llm.Stream,
 		pub.Started(llm.StreamStartedEvent{
 			Model:     "fake-model-v1",
 			RequestID: "fake-req-123",
+			Provider:  "fake",
 		})
 
 		if !f.called {

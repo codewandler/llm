@@ -75,6 +75,16 @@ func findError(envelopes []llm.Envelope) error {
 	return nil
 }
 
+// findStarted returns the first StreamStartedEvent envelope, or nil.
+func findStarted(envelopes []llm.Envelope) *llm.StreamStartedEvent {
+	for _, env := range envelopes {
+		if ev, ok := env.Data.(*llm.StreamStartedEvent); ok {
+			return ev
+		}
+	}
+	return nil
+}
+
 func TestProcessor_TextDeltaFlow(t *testing.T) {
 	h := newHarness(ParseOpts{Model: "claude-sonnet-4-5", ProviderName: providerName})
 
@@ -214,4 +224,40 @@ func TestProcessor_StopReasonMapping(t *testing.T) {
 			assert.Equal(t, tc.want, mapAnthropicStopReason(tc.raw))
 		})
 	}
+}
+
+func TestProcessor_Provider_FallsBackToProviderName(t *testing.T) {
+	h := newHarness(ParseOpts{
+		Model:        "claude-sonnet-4-5",
+		ProviderName: "myrouter",
+		// UpstreamProvider intentionally not set
+	})
+	envelopes := h.Send(
+		MessageStartEvent{Message: MessageStartPayload{
+			ID: "msg_01", Model: "claude-sonnet-4-5",
+			Usage: MessageUsage{InputTokens: 5},
+		}},
+	)
+	started := findStarted(envelopes)
+	require.NotNil(t, started, "StreamStartedEvent must be emitted")
+	assert.Equal(t, "myrouter", started.Provider,
+		"Provider should fall back to ProviderName when UpstreamProvider is empty")
+}
+
+func TestProcessor_Provider_UpstreamOverridesProviderName(t *testing.T) {
+	h := newHarness(ParseOpts{
+		Model:            "claude-sonnet-4-5",
+		ProviderName:     "openrouter",
+		UpstreamProvider: "anthropic",
+	})
+	envelopes := h.Send(
+		MessageStartEvent{Message: MessageStartPayload{
+			ID: "msg_02", Model: "claude-sonnet-4-5",
+			Usage: MessageUsage{InputTokens: 5},
+		}},
+	)
+	started := findStarted(envelopes)
+	require.NotNil(t, started, "StreamStartedEvent must be emitted")
+	assert.Equal(t, "anthropic", started.Provider,
+		"UpstreamProvider must override ProviderName in StreamStartedEvent.Provider")
 }

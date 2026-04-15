@@ -156,3 +156,48 @@ func TestToolChoiceFlag_UnmarshalText_Invalid(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "invalid tool-choice")
 }
+
+func TestApiType_TextRoundtrip(t *testing.T) {
+	// This file is package llm (internal), so types are unqualified.
+	tests := []struct {
+		input   string
+		want    ApiType
+		wantStr string
+	}{
+		{"auto", ApiTypeAuto, "auto"},
+		{"", ApiTypeAuto, "auto"},            // empty → auto
+		{"openai-chat", ApiTypeOpenAIChatCompletion, "openai-chat"},
+		{"openai-responses", ApiTypeOpenAIResponses, "openai-responses"},
+		{"anthropic-messages", ApiTypeAnthropicMessages, "anthropic-messages"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			var a ApiType
+			require.NoError(t, a.UnmarshalText([]byte(tt.input)))
+			assert.Equal(t, tt.want, a)
+
+			b, err := a.MarshalText()
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantStr, string(b))
+		})
+	}
+}
+
+func TestApiType_UnmarshalText_Invalid(t *testing.T) {
+	var a ApiType
+	err := a.UnmarshalText([]byte("bogus"))
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid api type")
+}
+
+func TestRequest_Validate_ApiTypeHint(t *testing.T) {
+	// Valid hint: validation passes
+	r := Request{Model: "m", ApiTypeHint: ApiTypeOpenAIResponses}
+	require.NoError(t, r.Validate())
+
+	// Unknown hint: validation fails with ApiTypeHint in message
+	r2 := Request{Model: "m", ApiTypeHint: ApiType("not-a-valid-type")}
+	err2 := r2.Validate()
+	require.Error(t, err2)
+	assert.Contains(t, err2.Error(), "ApiTypeHint")
+}
