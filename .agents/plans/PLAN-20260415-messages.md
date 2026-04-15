@@ -1,23 +1,78 @@
 # PLAN: api/messages — Anthropic Messages API
 
 > **Design ref**: `.agents/plans/DESIGN-api-extraction.md`
-> **Depends on**: `PLAN-20260415-apicore.md` (must be complete first)
+> **Depends on**: `PLAN-20260415-apicore.md` (complete first)
+> **Blocks**: `PLAN-20260415-adapt.md` (Task 1 — `messages_api.go`)
 > **API reference**: https://docs.anthropic.com/en/api/messages
 > **Streaming reference**: https://docs.anthropic.com/en/api/messages-streaming
 > **Rate-limit headers**: https://docs.anthropic.com/en/api/rate-limits
 > **Beta headers**: https://docs.anthropic.com/en/api/beta-headers
-> **Estimated total**: ~22 min
-> **Note**: convert/adapter logic has moved to `PLAN-20260415-adapt.md`
+> **Estimated total**: ~40 min
+> **Note**: convert/adapter logic lives in `PLAN-20260415-adapt.md`.
+
+---
+
+## What this package owns
+
+`api/messages` is a **wire layer** (no `github.com/codewandler/llm` import).
+
+| File | Responsibility |
+|------|----------------|
+| `constants.go` | Event names, header names, API versions, block/delta constants |
+| `types.go` | Request + streaming wire structs |
+| `parser.go` | Stateful EventHandler factory (text/tool/thinking accumulation) |
+| `client.go` | NewClient, option aliases, auth helper, HTTP error parser |
+| `testdata/` | Representative SSE fixtures |
+| `parser_test.go` | Unit + fixture replay parser tests |
+| `integration_test.go` | Optional live integration + raw-event drift visibility |
+
+---
+
+## Event coverage matrix (from streaming docs)
+
+### Top-level SSE event names
+
+| SSE event | Action |
+|-----------|--------|
+| `message_start` | parse → `MessageStartEvent` |
+| `content_block_start` | parse → `ContentBlockStartEvent`; init accumulator for block types that stream deltas |
+| `content_block_delta` | parse → `ContentBlockDeltaEvent`; append to accumulator by `index` |
+| `content_block_stop` | parse index; emit synthesized complete event if accumulator exists; otherwise emit `ContentBlockStopEvent` |
+| `message_delta` | parse → `MessageDeltaEvent` |
+| `message_stop` | parse → `MessageStopEvent`, `Done: true` |
+| `ping` | explicit known non-actionable event (`PingEvent`) |
+| `error` | parse → `StreamErrorEvent`, `Err` + `Done: true` |
+| unknown future | `default` no-op, reserved for forward compatibility |
+
+### `content_block_start.content_block.type`
+
+| Block type | Parser behavior |
+|------------|-----------------|
+| `text` | initialize text accumulator |
+| `tool_use` | initialize tool accumulator with id/name |
+| `thinking` | initialize thinking accumulator |
+| `server_tool_use` | known non-accumulating block: emit start + stop only |
+| `web_search_tool_result` | known non-accumulating block: emit start + stop only |
+| unknown future | emit start + stop, no accumulator |
+
+### `content_block_delta.delta.type`
+
+| Delta type | Parser behavior |
+|------------|-----------------|
+| `text_delta` | append text fragment |
+| `input_json_delta` | append tool argument JSON fragment |
+| `thinking_delta` | append thinking fragment |
+| `signature_delta` | append thinking signature fragment |
+| unknown future | explicit no-op (do not fail stream) |
 
 ---
 
 ## Task 1: Create constants.go
 
-**Files created**: `api/messages/constants.go`
-**Estimated time**: 2 min
+**Files created**: `api/messages/constants.go`  
+**Estimated time**: 3 min
 
 ```go
-// api/messages/constants.go
 package messages
 
 // Request headers.
@@ -55,7 +110,7 @@ const (
 	HeaderRequestID                = "request-id"
 )
 
-// SSE event names emitted by the Anthropic streaming API.
+// SSE event names emitted by the Anthropic Messages streaming API.
 // Ref: https://docs.anthropic.com/en/api/messages-streaming#event-types
 const (
 	EventMessageStart      = "message_start"
@@ -68,6 +123,30 @@ const (
 	EventPing              = "ping"
 )
 
+// Content block types (content_block_start.content_block.type).
+const (
+	BlockTypeText                = "text"
+	BlockTypeToolUse             = "tool_use"
+	BlockTypeThinking            = "thinking"
+	BlockTypeServerToolUse       = "server_tool_use"
+	BlockTypeWebSearchToolResult = "web_search_tool_result"
+)
+
+// Delta types (content_block_delta.delta.type).
+const (
+	DeltaTypeText      = "text_delta"
+	DeltaTypeInputJSON = "input_json_delta"
+	DeltaTypeThinking  = "thinking_delta"
+	DeltaTypeSignature = "signature_delta"
+)
+
+// Stop reasons (message_delta.delta.stop_reason).
+const (
+	StopReasonEndTurn = "end_turn"
+	StopReasonToolUse = "tool_use"
+	StopReasonMaxTok  = "max_tokens"
+)
+
 // Default path for the Messages API.
 const DefaultPath = "/v1/messages"
 
@@ -75,9 +154,9 @@ const DefaultPath = "/v1/messages"
 type ThinkingMode int
 
 const (
-	ThinkingDisabled ThinkingMode = iota // omit thinking field
-	ThinkingEnabled                      // type: "enabled", BudgetTokens required
-	ThinkingAdaptive                     // type: "adaptive", model selects budget
+	ThinkingDisabled ThinkingMode = iota
+	ThinkingEnabled
+	ThinkingAdaptive
 )
 ```
 
@@ -88,18 +167,15 @@ go build ./api/messages/...
 
 ---
 
-## Task 2: Create types.go — request structs
+## Task 2: Create types.go
 
-**Files created**: `api/messages/types.go`
-**Estimated time**: 5 min
+**Files created**: `api/messages/types.go`  
+**Estimated time**: 6 min
 
 ```go
-// api/messages/types.go
 package messages
 
 import "encoding/json"
-
-// ── Request ──────────────────────────────────────────────────────────────────
 
 // Request is the wire body for POST /v1/messages.
 // Ref: https://docs.anthropic.com/en/api/messages#body
@@ -118,84 +194,70 @@ type Request struct {
 	OutputConfig *OutputConfig    `json:"output_config,omitempty"`
 }
 
-// ThinkingConfig controls extended thinking.
-// Type is "enabled", "adaptive", or "disabled".
 type ThinkingConfig struct {
 	Type         string `json:"type"`
 	BudgetTokens int    `json:"budget_tokens,omitempty"`
 }
 
-// OutputConfig controls format and effort of model output.
 type OutputConfig struct {
 	Format *JSONOutputFormat `json:"format,omitempty"`
-	Effort string            `json:"effort,omitempty"` // "low", "medium", "high"
+	Effort string            `json:"effort,omitempty"`
 }
 
-// JSONOutputFormat requests JSON output.
 type JSONOutputFormat struct {
-	Type   string `json:"type"`             // "json"
+	Type   string `json:"type"`
 	Schema any    `json:"schema,omitempty"`
 }
 
-// Metadata passes optional user-level metadata.
 type Metadata struct {
 	UserID string `json:"user_id,omitempty"`
 }
 
-// SystemBlocks is a slice of TextBlocks used as the system prompt.
 type SystemBlocks []*TextBlock
 
-// Message is one turn in the conversation.
 type Message struct {
-	Role    string `json:"role"` // "user" or "assistant"
-	Content any    `json:"content"` // string or []any (polymorphic content blocks)
+	Role    string `json:"role"`
+	Content any    `json:"content"`
 }
 
-// TextBlock is a text content block.
 type TextBlock struct {
-	Type         string        `json:"type"` // "text"
+	Type         string        `json:"type"`
 	Text         string        `json:"text"`
 	CacheControl *CacheControl `json:"cache_control,omitempty"`
 }
 
-// ImageBlock is an image content block.
 type ImageBlock struct {
-	Type   string      `json:"type"` // "image"
+	Type   string      `json:"type"`
 	Source ImageSource `json:"source"`
 }
 
-// ImageSource describes the image source.
 type ImageSource struct {
-	Type      string `json:"type"`                 // "base64" or "url"
-	MediaType string `json:"media_type,omitempty"` // "image/jpeg", "image/png", etc.
+	Type      string `json:"type"`
+	MediaType string `json:"media_type,omitempty"`
 	Data      string `json:"data,omitempty"`
 	URL       string `json:"url,omitempty"`
 }
 
-// ToolUseBlock is a tool call in an assistant message.
 type ToolUseBlock struct {
-	Type  string          `json:"type"` // "tool_use"
+	Type  string          `json:"type"`
 	ID    string          `json:"id"`
 	Name  string          `json:"name"`
 	Input json.RawMessage `json:"input"`
 }
 
-// ToolResultBlock is a tool result in a user message.
 type ToolResultBlock struct {
-	Type      string `json:"type"`        // "tool_result"
+	Type      string `json:"type"`
 	ToolUseID string `json:"tool_use_id"`
 	Content   string `json:"content"`
 	IsError   bool   `json:"is_error,omitempty"`
 }
 
-// ThinkingBlock is a thinking block in an assistant message.
 type ThinkingBlock struct {
-	Type      string `json:"type"`      // "thinking"
+	Type      string `json:"type"`
 	Thinking  string `json:"thinking"`
 	Signature string `json:"signature,omitempty"`
 }
 
-// ToolDefinition describes a tool the model may call.
 type ToolDefinition struct {
 	Name         string        `json:"name"`
 	Description  string        `json:"description"`
@@ -203,52 +265,48 @@ type ToolDefinition struct {
 	CacheControl *CacheControl `json:"cache_control,omitempty"`
 }
 
-// CacheControl enables prompt caching on a content block.
 type CacheControl struct {
-	Type string `json:"type"` // "ephemeral"
+	Type string `json:"type"`
 }
 
-// ── SSE events ───────────────────────────────────────────────────────────────
-// Ref: https://docs.anthropic.com/en/api/messages-streaming
-
-// MessageStartEvent is emitted first, carrying the response ID and input token counts.
+// SSE: message_start
 type MessageStartEvent struct {
 	Message MessageStartPayload `json:"message"`
 }
 
-// MessageStartPayload is the payload of MessageStartEvent.
 type MessageStartPayload struct {
 	ID    string       `json:"id"`
 	Model string       `json:"model"`
 	Usage MessageUsage `json:"usage"`
 }
 
-// MessageUsage carries token counts from the message_start event.
 type MessageUsage struct {
 	InputTokens              int `json:"input_tokens"`
 	CacheCreationInputTokens int `json:"cache_creation_input_tokens"`
 	CacheReadInputTokens     int `json:"cache_read_input_tokens"`
 }
 
-// ContentBlockStartEvent marks the beginning of a content block.
+// SSE: content_block_start
 type ContentBlockStartEvent struct {
-	Index        int    `json:"index"`
-	ContentBlock struct {
-		Type string `json:"type"` // "text", "tool_use", "thinking"
-		ID   string `json:"id,omitempty"`
-		Name string `json:"name,omitempty"`
-	} `json:"content_block"`
+	Index        int             `json:"index"`
+	ContentBlock json.RawMessage `json:"content_block"`
 }
 
-// ContentBlockDeltaEvent carries an incremental delta within a content block.
+// StartBlockView is an optional helper for callers/tests that need typed views
+// over ContentBlockStartEvent.ContentBlock.
+type StartBlockView struct {
+	Type string `json:"type"`
+	ID   string `json:"id,omitempty"`
+	Name string `json:"name,omitempty"`
+}
+
+// SSE: content_block_delta
 type ContentBlockDeltaEvent struct {
 	Index int   `json:"index"`
 	Delta Delta `json:"delta"`
 }
 
-// Delta is the delta payload in ContentBlockDeltaEvent.
 type Delta struct {
-	// Type: "text_delta", "input_json_delta", "thinking_delta", "signature_delta"
 	Type        string `json:"type"`
 	Text        string `json:"text,omitempty"`
 	PartialJSON string `json:"partial_json,omitempty"`
@@ -256,48 +314,44 @@ type Delta struct {
 	Signature   string `json:"signature,omitempty"`
 }
 
-// ContentBlockStopEvent signals the end of a content block.
-// Not emitted to callers directly — superseded by the richer complete events below.
+// SSE: content_block_stop
 type ContentBlockStopEvent struct {
 	Index int `json:"index"`
 }
 
-// TextCompleteEvent is synthesised by the parser on content_block_stop for text blocks.
-// Carries the fully accumulated text and its block index.
+// Parser-synthesized completion events (from content_block_stop)
 type TextCompleteEvent struct {
 	Index int
 	Text  string
 }
 
-// ThinkingCompleteEvent is synthesised by the parser on content_block_stop for thinking blocks.
 type ThinkingCompleteEvent struct {
 	Index     int
 	Thinking  string
 	Signature string
 }
 
-// ToolCompleteEvent is synthesised by the parser on content_block_stop for tool_use blocks.
 type ToolCompleteEvent struct {
 	Index int
 	ID    string
 	Name  string
-	Args  map[string]any // JSON-decoded input
+	Args  map[string]any
 }
 
-// MessageDeltaEvent carries the stop reason and final output token count.
+// SSE: message_delta
 type MessageDeltaEvent struct {
 	Delta struct {
-		StopReason string `json:"stop_reason"` // "end_turn", "tool_use", "max_tokens"
+		StopReason string `json:"stop_reason"`
 	} `json:"delta"`
 	Usage struct {
 		OutputTokens int `json:"output_tokens"`
 	} `json:"usage"`
 }
 
-// MessageStopEvent signals stream completion. No payload.
+// SSE: message_stop
 type MessageStopEvent struct{}
 
-// StreamErrorEvent is a protocol-level error from the API.
+// SSE: error
 type StreamErrorEvent struct {
 	Error struct {
 		Type    string `json:"type"`
@@ -305,7 +359,11 @@ type StreamErrorEvent struct {
 	} `json:"error"`
 }
 
-// PingEvent is a keepalive. No meaningful payload.
+func (e *StreamErrorEvent) Error() string {
+	return "messages stream error " + e.Error.Type + ": " + e.Error.Message
+}
+
+// SSE: ping
 type PingEvent struct{}
 ```
 
@@ -318,15 +376,10 @@ go build ./api/messages/...
 
 ## Task 3: Create parser.go
 
-**Files created**: `api/messages/parser.go`
-**Estimated time**: 5 min
-
-The parser routes on the SSE event **name** (`ev.Name`), which Anthropic sets to the
-same string as the JSON `"type"` field. It maintains all accumulator state internally
-so the adapter is stateless.
+**Files created**: `api/messages/parser.go`  
+**Estimated time**: 7 min
 
 ```go
-// api/messages/parser.go
 package messages
 
 import (
@@ -337,9 +390,7 @@ import (
 	"github.com/codewandler/llm/api/apicore"
 )
 
-type textAccum struct {
-	buf strings.Builder
-}
+type textAccum struct{ buf strings.Builder }
 
 type thinkingAccum struct {
 	thinking  strings.Builder
@@ -352,14 +403,11 @@ type toolAccum struct {
 	argBuf strings.Builder
 }
 
-// NewParser returns a ParserFactory for the Anthropic Messages API.
-// Each call to the factory creates a fresh, isolated closure with its own
-// accumulator state — safe for concurrent streams.
 func NewParser() apicore.ParserFactory {
 	return func() apicore.EventHandler {
-		activeText     := make(map[int]*textAccum)
+		activeText := make(map[int]*textAccum)
 		activeThinking := make(map[int]*thinkingAccum)
-		activeTools    := make(map[int]*toolAccum)
+		activeTools := make(map[int]*toolAccum)
 
 		return func(name string, data []byte) apicore.StreamResult {
 			switch name {
@@ -375,13 +423,20 @@ func NewParser() apicore.ParserFactory {
 				if err := json.Unmarshal(data, &evt); err != nil {
 					return apicore.StreamResult{Err: fmt.Errorf("parse content_block_start: %w", err)}
 				}
-				switch evt.ContentBlock.Type {
-				case "text":
-					activeText[evt.Index] = &textAccum{}
-				case "thinking":
-					activeThinking[evt.Index] = &thinkingAccum{}
-				case "tool_use":
-					activeTools[evt.Index] = &toolAccum{id: evt.ContentBlock.ID, name: evt.ContentBlock.Name}
+
+				// Decode type/id/name view for accumulator init.
+				var block StartBlockView
+				if err := json.Unmarshal(evt.ContentBlock, &block); err == nil {
+					switch block.Type {
+					case BlockTypeText:
+						activeText[evt.Index] = &textAccum{}
+					case BlockTypeThinking:
+						activeThinking[evt.Index] = &thinkingAccum{}
+					case BlockTypeToolUse:
+						activeTools[evt.Index] = &toolAccum{id: block.ID, name: block.Name}
+					case BlockTypeServerToolUse, BlockTypeWebSearchToolResult:
+						// Known non-accumulating block types.
+					}
 				}
 				return apicore.StreamResult{Event: &evt}
 
@@ -390,34 +445,35 @@ func NewParser() apicore.ParserFactory {
 				if err := json.Unmarshal(data, &evt); err != nil {
 					return apicore.StreamResult{Err: fmt.Errorf("parse content_block_delta: %w", err)}
 				}
+
 				switch evt.Delta.Type {
-				case "text_delta":
+				case DeltaTypeText:
 					if a := activeText[evt.Index]; a != nil {
 						a.buf.WriteString(evt.Delta.Text)
 					}
-				case "thinking_delta":
+				case DeltaTypeThinking:
 					if a := activeThinking[evt.Index]; a != nil {
 						a.thinking.WriteString(evt.Delta.Thinking)
 					}
-				case "signature_delta":
+				case DeltaTypeSignature:
 					if a := activeThinking[evt.Index]; a != nil {
 						a.signature.WriteString(evt.Delta.Signature)
 					}
-				case "input_json_delta":
+				case DeltaTypeInputJSON:
 					if a := activeTools[evt.Index]; a != nil {
 						a.argBuf.WriteString(evt.Delta.PartialJSON)
 					}
+				default:
+					// Unknown future delta subtype: explicit no-op.
 				}
 				return apicore.StreamResult{Event: &evt}
 
 			case EventContentBlockStop:
-				var raw struct {
-					Index int `json:"index"`
-				}
-				if err := json.Unmarshal(data, &raw); err != nil {
+				var evt ContentBlockStopEvent
+				if err := json.Unmarshal(data, &evt); err != nil {
 					return apicore.StreamResult{Err: fmt.Errorf("parse content_block_stop: %w", err)}
 				}
-				idx := raw.Index
+				idx := evt.Index
 
 				if a, ok := activeText[idx]; ok {
 					delete(activeText, idx)
@@ -426,9 +482,7 @@ func NewParser() apicore.ParserFactory {
 				if a, ok := activeThinking[idx]; ok {
 					delete(activeThinking, idx)
 					return apicore.StreamResult{Event: &ThinkingCompleteEvent{
-						Index:     idx,
-						Thinking:  a.thinking.String(),
-						Signature: a.signature.String(),
+						Index: idx, Thinking: a.thinking.String(), Signature: a.signature.String(),
 					}}
 				}
 				if a, ok := activeTools[idx]; ok {
@@ -437,15 +491,12 @@ func NewParser() apicore.ParserFactory {
 					if a.argBuf.Len() > 0 {
 						_ = json.Unmarshal([]byte(a.argBuf.String()), &args)
 					}
-					return apicore.StreamResult{Event: &ToolCompleteEvent{
-						Index: idx,
-						ID:    a.id,
-						Name:  a.name,
-						Args:  args,
-					}}
+					return apicore.StreamResult{Event: &ToolCompleteEvent{Index: idx, ID: a.id, Name: a.name, Args: args}}
 				}
-				// Unknown block type — no-op
-				return apicore.StreamResult{}
+
+				// Known non-accumulating block stop (server_tool_use, web_search_tool_result)
+				// or unknown block type: keep stop observable.
+				return apicore.StreamResult{Event: &evt}
 
 			case EventMessageDelta:
 				var evt MessageDeltaEvent
@@ -454,24 +505,21 @@ func NewParser() apicore.ParserFactory {
 				}
 				return apicore.StreamResult{Event: &evt}
 
+			case EventPing:
+				return apicore.StreamResult{Event: &PingEvent{}}
+
 			case EventMessageStop:
 				return apicore.StreamResult{Event: &MessageStopEvent{}, Done: true}
 
 			case EventError:
 				var evt StreamErrorEvent
 				if err := json.Unmarshal(data, &evt); err != nil {
-					return apicore.StreamResult{Err: fmt.Errorf("parse error event: %w", err)}
+					return apicore.StreamResult{Err: fmt.Errorf("parse error event: %w", err), Done: true}
 				}
-				return apicore.StreamResult{
-					Err:  fmt.Errorf("stream error %s: %s", evt.Error.Type, evt.Error.Message),
-					Done: true,
-				}
-
-			case EventPing:
-				return apicore.StreamResult{Event: &PingEvent{}}
+				return apicore.StreamResult{Err: &evt, Done: true}
 
 			default:
-				// Forward-compatible: silently ignore unknown events.
+				// Forward-compatible unknown event.
 				return apicore.StreamResult{}
 			}
 		}
@@ -484,16 +532,18 @@ func NewParser() apicore.ParserFactory {
 go build ./api/messages/...
 ```
 
+---
+
 ## Task 4: Create client.go
 
-**Files created**: `api/messages/client.go`
+**Files created**: `api/messages/client.go`  
 **Estimated time**: 3 min
 
 ```go
-// api/messages/client.go
 package messages
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -501,14 +551,11 @@ import (
 	"github.com/codewandler/llm/api/apicore"
 )
 
-// Type aliases so callers write messages.Client, not apicore.Client[messages.Request].
 type (
 	Client       = apicore.Client[Request]
 	ClientOption = apicore.ClientOption[Request]
 )
 
-// Re-export option constructors with the type parameter locked to Request.
-// Callers: messages.WithBaseURL("...") instead of apicore.WithBaseURL[messages.Request]("...")
 var (
 	WithBaseURL      = apicore.WithBaseURL[Request]
 	WithPath         = apicore.WithPath[Request]
@@ -519,10 +566,9 @@ var (
 	WithParseHook    = apicore.WithParseHook[Request]
 	WithResponseHook = apicore.WithResponseHook[Request]
 	WithErrorParser  = apicore.WithErrorParser[Request]
+	WithLogger       = apicore.WithLogger[Request]
 )
 
-// NewClient creates a Messages API client.
-// Caller must supply at least WithBaseURL and WithHeaderFunc (for auth).
 func NewClient(opts ...ClientOption) *Client {
 	defaults := []ClientOption{
 		WithPath(DefaultPath),
@@ -532,8 +578,6 @@ func NewClient(opts ...ClientOption) *Client {
 	return apicore.NewClient[Request](NewParser(), append(defaults, opts...)...)
 }
 
-// parseAPIError converts an Anthropic HTTP error body to a typed error.
-// Ref: https://docs.anthropic.com/en/api/errors
 func parseAPIError(statusCode int, body []byte) error {
 	var resp struct {
 		Type  string `json:"type"`
@@ -542,25 +586,14 @@ func parseAPIError(statusCode int, body []byte) error {
 			Message string `json:"message"`
 		} `json:"error"`
 	}
-	if err := json.Unmarshal(body, &resp); err != nil {
+	if err := json.Unmarshal(body, &resp); err != nil || resp.Error.Message == "" {
 		return &apicore.HTTPError{StatusCode: statusCode, Body: body}
 	}
-	return fmt.Errorf("%s: %s (HTTP %d)",
-		resp.Error.Type, resp.Error.Message, statusCode)
-}
-
-// AuthHeaderFunc returns a HeaderFunc that sets x-api-key.
-func AuthHeaderFunc(apiKey string) apicore.HeaderFunc[Request] {
-	return func(_ interface{ Done() <-chan struct{} }, _ *Request) (http.Header, error) {
-		return http.Header{HeaderAPIKey: {apiKey}}, nil
+	if resp.Error.Type != "" {
+		return fmt.Errorf("%s: %s (HTTP %d)", resp.Error.Type, resp.Error.Message, statusCode)
 	}
+	return fmt.Errorf("%s (HTTP %d)", resp.Error.Message, statusCode)
 }
-```
-
-**Note**: `AuthHeaderFunc` signature needs the `context.Context` — correct it:
-
-```go
-import "context"
 
 func AuthHeaderFunc(apiKey string) apicore.HeaderFunc[Request] {
 	return func(_ context.Context, _ *Request) (http.Header, error) {
@@ -574,148 +607,142 @@ func AuthHeaderFunc(apiKey string) apicore.HeaderFunc[Request] {
 go build ./api/messages/...
 ```
 
-## Task 5: Write parser_test.go
+---
 
-**Files created**: `api/messages/parser_test.go`
-**Estimated time**: 5 min
+## Task 5: Add fixtures
+
+**Files created**:
+- `api/messages/testdata/text_stream.sse`
+- `api/messages/testdata/tool_stream.sse`
+- `api/messages/testdata/thinking_stream.sse`
+- `api/messages/testdata/error_stream.sse`
+- `api/messages/testdata/web_search_stream.sse`
+
+**Estimated time**: 4 min
+
+Include at least one fixture with:
+- `server_tool_use` block type
+- `web_search_tool_result` block type
+
+so parser behavior for known non-accumulating block types is exercised.
+
+**Verification**:
+```bash
+ls api/messages/testdata/
+```
+
+---
+
+## Task 6: Write parser_test.go
+
+**Files created**: `api/messages/parser_test.go`  
+**Estimated time**: 7 min
+
+Coverage requirements:
+
+1. Actionable events:
+- `message_start`
+- `content_block_start`
+- `content_block_delta` (`text_delta`, `thinking_delta`, `signature_delta`, `input_json_delta`)
+- `content_block_stop` with synthesized events (`TextCompleteEvent`, `ThinkingCompleteEvent`, `ToolCompleteEvent`)
+- `message_delta`
+- `message_stop`
+- `error`
+
+2. Known non-actionable explicit event:
+- `ping`
+
+3. Known non-accumulating block types:
+- `server_tool_use` and `web_search_tool_result` should emit start + stop events (no synthesized completion event)
+
+4. Unknown future fallback:
+- unknown event name returns no-op
+- unknown delta subtype returns no-op inside delta-switch without failing stream
+
+5. Per-stream isolation:
+- two handlers from one factory must not share accumulators
+
+6. Fixture replay tests with `apicore.FixedSSEResponse`
+
+**Verification**:
+```bash
+go test ./api/messages/... -v -count=1 -run "TestParser|TestFixture"
+```
+
+---
+
+## Task 7: Optional live integration (OpenRouter Messages)
+
+**Files created**: `api/messages/integration_test.go`  
+**Estimated time**: 7 min
+
+Purpose:
+- live end-to-end check (HTTP + SSE + parser + typed events)
+- raw-event drift visibility via `WithParseHook`
+
+Required env vars:
+- `OPENROUTER_API_KEY`
+- `OPENROUTER_MESSAGES_MODEL` (explicit, no default to avoid accidental cost)
+
+Optional strict mode:
+- `MESSAGES_STRICT_EVENTS=1` (fail on unknown unhandled raw event names)
+
+Pattern:
 
 ```go
-// api/messages/parser_test.go
-package messages_test
-
-import (
-	"testing"
-
-	"github.com/codewandler/llm/api/apicore"
-	"github.com/codewandler/llm/api/messages"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
+rawCounts := map[string]int{}
+client := messages.NewClient(
+	messages.WithBaseURL("https://openrouter.ai/api"),
+	messages.WithHeaderFunc(messages.AuthHeaderFunc(apiKey)),
+	messages.WithHeader("HTTP-Referer", "https://github.com/codewandler/llm"),
+	messages.WithHeader("X-Title", "llm-integration-test"),
+	messages.WithParseHook(func(_ *messages.Request, eventName string, _ []byte) any {
+		if eventName != "" {
+			rawCounts[eventName]++
+		}
+		return nil
+	}),
 )
 
-func makeHandler() apicore.EventHandler {
-	return messages.NewParser()()
-}
-
-func TestParser_MessageStart(t *testing.T) {
-	h := makeHandler()
-	data := []byte(`{"message":{"id":"msg_01","model":"claude-3-5-haiku-20241022","usage":{"input_tokens":10}}}`)
-	result := h(messages.EventMessageStart, data)
-	require.NoError(t, result.Err)
-	evt, ok := result.Event.(*messages.MessageStartEvent)
-	require.True(t, ok)
-	assert.Equal(t, "msg_01", evt.Message.ID)
-	assert.Equal(t, 10, evt.Message.Usage.InputTokens)
-}
-
-func TestParser_TextBlock_AccumulatedAndComplete(t *testing.T) {
-	h := makeHandler()
-
-	// content_block_start (text)
-	h(messages.EventContentBlockStart, []byte(`{"index":0,"content_block":{"type":"text"}}`))
-
-	// two deltas
-	h(messages.EventContentBlockDelta, []byte(`{"index":0,"delta":{"type":"text_delta","text":"hello "}}`))
-	h(messages.EventContentBlockDelta, []byte(`{"index":0,"delta":{"type":"text_delta","text":"world"}}`))
-
-	// stop → expect TextCompleteEvent
-	result := h(messages.EventContentBlockStop, []byte(`{"index":0}`))
-	require.NoError(t, result.Err)
-	evt, ok := result.Event.(*messages.TextCompleteEvent)
-	require.True(t, ok, "expected *TextCompleteEvent, got %T", result.Event)
-	assert.Equal(t, "hello world", evt.Text)
-	assert.Equal(t, 0, evt.Index)
-}
-
-func TestParser_ToolBlock_AccumulatedAndComplete(t *testing.T) {
-	h := makeHandler()
-
-	h(messages.EventContentBlockStart, []byte(`{"index":1,"content_block":{"type":"tool_use","id":"toolu_01","name":"get_weather"}}`))
-	h(messages.EventContentBlockDelta, []byte(`{"index":1,"delta":{"type":"input_json_delta","partial_json":"{\"city\":\"Berlin"}}`))
-	h(messages.EventContentBlockDelta, []byte(`{"index":1,"delta":{"type":"input_json_delta","partial_json":"\"}}"`))
-
-	result := h(messages.EventContentBlockStop, []byte(`{"index":1}`))
-	require.NoError(t, result.Err)
-	evt, ok := result.Event.(*messages.ToolCompleteEvent)
-	require.True(t, ok)
-	assert.Equal(t, "toolu_01", evt.ID)
-	assert.Equal(t, "get_weather", evt.Name)
-	assert.Equal(t, map[string]any{"city": "Berlin"}, evt.Args)
-}
-
-func TestParser_ThinkingBlock(t *testing.T) {
-	h := makeHandler()
-	h(messages.EventContentBlockStart, []byte(`{"index":0,"content_block":{"type":"thinking"}}`))
-	h(messages.EventContentBlockDelta, []byte(`{"index":0,"delta":{"type":"thinking_delta","thinking":"Let me think..."}}`))
-	h(messages.EventContentBlockDelta, []byte(`{"index":0,"delta":{"type":"signature_delta","signature":"sig123"}}`))
-
-	result := h(messages.EventContentBlockStop, []byte(`{"index":0}`))
-	evt, ok := result.Event.(*messages.ThinkingCompleteEvent)
-	require.True(t, ok)
-	assert.Equal(t, "Let me think...", evt.Thinking)
-	assert.Equal(t, "sig123", evt.Signature)
-}
-
-func TestParser_MessageStop_SetsDone(t *testing.T) {
-	h := makeHandler()
-	result := h(messages.EventMessageStop, []byte(`{}`))
-	assert.True(t, result.Done)
-	assert.IsType(t, &messages.MessageStopEvent{}, result.Event)
-}
-
-func TestParser_ErrorEvent_ReturnsDoneAndErr(t *testing.T) {
-	h := makeHandler()
-	result := h(messages.EventError, []byte(`{"error":{"type":"overloaded_error","message":"overloaded"}}`))
-	assert.True(t, result.Done)
-	require.Error(t, result.Err)
-	assert.Contains(t, result.Err.Error(), "overloaded")
-}
-
-func TestParser_UnknownEvent_NoOp(t *testing.T) {
-	h := makeHandler()
-	result := h("future.event", []byte(`{"data":"x"}`))
-	assert.Nil(t, result.Event)
-	assert.NoError(t, result.Err)
-	assert.False(t, result.Done)
-}
-
-func TestParser_IsolatedAcrossStreams(t *testing.T) {
-	// Two handlers must NOT share accumulator state
-	factory := messages.NewParser()
-	h1 := factory()
-	h2 := factory()
-
-	// h1 starts a text block
-	h1(messages.EventContentBlockStart, []byte(`{"index":0,"content_block":{"type":"text"}}`))
-	h1(messages.EventContentBlockDelta, []byte(`{"index":0,"delta":{"type":"text_delta","text":"h1 text"}}`))
-
-	// h2 starts a different text block
-	h2(messages.EventContentBlockStart, []byte(`{"index":0,"content_block":{"type":"text"}}`))
-	h2(messages.EventContentBlockDelta, []byte(`{"index":0,"delta":{"type":"text_delta","text":"h2 text"}}`))
-
-	r1 := h1(messages.EventContentBlockStop, []byte(`{"index":0}`))
-	r2 := h2(messages.EventContentBlockStop, []byte(`{"index":0}`))
-
-	e1 := r1.Event.(*messages.TextCompleteEvent)
-	e2 := r2.Event.(*messages.TextCompleteEvent)
-	assert.Equal(t, "h1 text", e1.Text)
-	assert.Equal(t, "h2 text", e2.Text)
-}
+// After stream collection:
+// - compare rawCounts against handled + known-no-op event sets
+// - log unknown unhandled names
+// - if MESSAGES_STRICT_EVENTS=1, fail test on unknowns
 ```
 
 **Verification**:
 ```bash
-go test ./api/messages/... -v -run TestParser -count=1
+OPENROUTER_API_KEY=$OPENROUTER_API_KEY \
+OPENROUTER_MESSAGES_MODEL=$OPENROUTER_MESSAGES_MODEL \
+MESSAGES_STRICT_EVENTS=1 \
+go test ./api/messages/... -v -run TestIntegration -count=1
 ```
-
 
 ---
 
 ## Phase completion check
 
 ```bash
+# Build
 go build ./api/messages/...
+
+# Unit + fixture tests
+go test ./api/messages/... -v -count=1
+
+# Race detector
 go test ./api/messages/... -race -count=1
+
+# Vet
 go vet ./api/messages/...
+
+# Wire-layer import boundary (must print nothing)
+grep -r '"github.com/codewandler/llm' api/messages/ --include="*.go" | grep -v '_test.go'
+
+# Optional live integration (explicit model only)
+OPENROUTER_API_KEY=$OPENROUTER_API_KEY \
+OPENROUTER_MESSAGES_MODEL=$OPENROUTER_MESSAGES_MODEL \
+MESSAGES_STRICT_EVENTS=1 \
+go test ./api/messages/... -v -run TestIntegration -count=1
 ```
 
-All tests must pass. Convert/adapter work continues in `PLAN-20260415-adapt.md`.
+All tests must pass. Adapt-layer implementation continues in `PLAN-20260415-adapt.md`.
