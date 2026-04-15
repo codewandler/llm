@@ -7,6 +7,7 @@ import (
 	"github.com/codewandler/llm/provider/anthropic"
 	"github.com/codewandler/llm/provider/anthropic/claude"
 	"github.com/codewandler/llm/provider/bedrock"
+	"github.com/codewandler/llm/provider/ollama"
 	"github.com/codewandler/llm/provider/openai"
 	"github.com/codewandler/llm/provider/openrouter"
 	"github.com/codewandler/llm/provider/router"
@@ -300,4 +301,52 @@ func WithGlobalAliases(aliases map[string][]string) Option {
 			c.globalAliases[alias] = targets
 		}
 	}
+}
+
+// WithOllama adds the Ollama local provider.
+// The base URL is read from OLLAMA_HOST if set, otherwise http://localhost:11434.
+//
+// Auto-detection already covers Ollama running on the default port, so the
+// primary use cases for this explicit option are:
+//   - Forcing a specific URL without setting OLLAMA_HOST in the environment.
+//   - Ensuring Ollama is present even when WithoutAutoDetect() is in effect.
+//   - Providing fine-grained control when OLLAMA_HOST is set and you want to
+//     avoid the auto-detected instance (use WithoutAutoDetect or WithoutOllama).
+//
+// If OLLAMA_HOST is set and auto-detection is active, calling WithOllama() will
+// register a second Ollama instance alongside the auto-detected one. Pass
+// WithoutAutoDetect() or WithoutOllama() to avoid duplication.
+func WithOllama() Option {
+	return func(c *config) {
+		baseURL := ollama.BaseURL()
+		httpClient := c.httpClient
+		c.providers = append(c.providers, providerEntry{
+			name:         ProviderOllama,
+			providerType: ProviderOllama,
+			factory: func(opts ...llm.Option) llm.Provider {
+				opts = append(opts, llm.WithBaseURL(baseURL))
+				if httpClient != nil {
+					opts = append(opts, llm.WithHTTPClient(httpClient))
+				}
+				return ollama.New(opts...)
+			},
+			modelAliases: nil,
+			hasAliases:   false,
+		})
+	}
+}
+
+// WithoutOllama is a convenience shorthand for WithoutProvider(ProviderOllama).
+// It prevents Ollama from being auto-detected even when OLLAMA_HOST is set
+// or the local server is reachable on the default port.
+func WithoutOllama() Option {
+	return WithoutProvider(ProviderOllama)
+}
+
+// WithoutChatGPT is a convenience shorthand for WithoutProvider(ProviderChatGPT).
+// It prevents ChatGPT/Codex from being auto-detected even when ~/.codex/auth.json
+// is present. Useful when calling WithCodexLocal() explicitly to avoid registering
+// a duplicate chatgpt-2 instance alongside the auto-detected one.
+func WithoutChatGPT() Option {
+	return WithoutProvider(ProviderChatGPT)
 }

@@ -12,6 +12,7 @@ import (
 	"github.com/codewandler/llm/provider/anthropic"
 	"github.com/codewandler/llm/provider/anthropic/claude"
 	"github.com/codewandler/llm/provider/bedrock"
+	"github.com/codewandler/llm/provider/ollama"
 )
 
 // mockTokenStore implements claude.TokenStore for testing.
@@ -125,9 +126,7 @@ func TestNew_NoProviders(t *testing.T) {
 	require.Error(t, err)
 }
 
-func TestDetectProviders_DoesNotAutoDetectCodexLocal(t *testing.T) {
-	// Create a synthetic ~/.codex/auth.json that would previously trigger
-	// automatic Codex provider registration.
+func TestDetectProviders_CodexLocalDetected(t *testing.T) {
 	home := t.TempDir()
 	require.NoError(t, os.MkdirAll(filepath.Join(home, ".codex"), 0o755))
 	require.NoError(t, os.WriteFile(
@@ -135,22 +134,78 @@ func TestDetectProviders_DoesNotAutoDetectCodexLocal(t *testing.T) {
 		[]byte(`{"auth_mode":"chatgpt","tokens":{"access_token":"synthetic-access-token","account_id":"test-account"}}`),
 		0o600,
 	))
-
 	t.Setenv("HOME", home)
-	t.Setenv(EnvOpenAIKey, "test-openai-key")
+	t.Setenv(ollama.EnvOllamaHost, "") // prevent Ollama from firing
 
 	providers := detectProviders(nil, nil, map[string]bool{
 		ProviderClaude:     true,
 		ProviderAnthropic:  true,
 		ProviderBedrock:    true,
+		ProviderOpenAI:     true,
 		ProviderOpenRouter: true,
 		ProviderMiniMax:    true,
+		ProviderOllama:     true,
 	})
 
-	// Only the regular openai provider should be detected; codex is opt-in only.
 	require.Len(t, providers, 1)
-	assert.Equal(t, ProviderOpenAI, providers[0].name)
-	assert.Equal(t, ProviderOpenAI, providers[0].providerType)
+	assert.Equal(t, ProviderChatGPT, providers[0].name)
+	assert.Equal(t, ProviderChatGPT, providers[0].providerType)
+}
+
+func TestDetectProviders_CodexLocalNotDetected_NoFile(t *testing.T) {
+	t.Setenv("HOME", t.TempDir()) // empty — no .codex/auth.json
+	t.Setenv(ollama.EnvOllamaHost, "")
+
+	providers := detectProviders(nil, nil, map[string]bool{
+		ProviderClaude:     true,
+		ProviderAnthropic:  true,
+		ProviderBedrock:    true,
+		ProviderOpenAI:     true,
+		ProviderOpenRouter: true,
+		ProviderMiniMax:    true,
+		ProviderOllama:     true,
+	})
+
+	require.Empty(t, providers)
+}
+
+func TestDetectProviders_OllamaDetected_EnvVar(t *testing.T) {
+	t.Setenv(ollama.EnvOllamaHost, "http://localhost:11434")
+	t.Setenv("HOME", t.TempDir()) // no .codex/auth.json
+
+	providers := detectProviders(nil, nil, map[string]bool{
+		ProviderClaude:     true,
+		ProviderAnthropic:  true,
+		ProviderBedrock:    true,
+		ProviderOpenAI:     true,
+		ProviderOpenRouter: true,
+		ProviderMiniMax:    true,
+		ProviderChatGPT:    true,
+	})
+
+	require.Len(t, providers, 1)
+	assert.Equal(t, ProviderOllama, providers[0].name)
+	assert.Equal(t, ProviderOllama, providers[0].providerType)
+}
+
+func TestDetectProviders_OllamaNotDetected_NoEnvVar(t *testing.T) {
+	t.Setenv(ollama.EnvOllamaHost, "")
+	if ollama.Available() {
+		t.Skip("Ollama is running on localhost:11434; skip 'not detected' assertion")
+	}
+	t.Setenv("HOME", t.TempDir())
+
+	providers := detectProviders(nil, nil, map[string]bool{
+		ProviderClaude:     true,
+		ProviderAnthropic:  true,
+		ProviderBedrock:    true,
+		ProviderOpenAI:     true,
+		ProviderOpenRouter: true,
+		ProviderMiniMax:    true,
+		ProviderChatGPT:    true,
+	})
+
+	require.Empty(t, providers)
 }
 
 func TestWithCodexLocal_UsesChatGPTPrefix(t *testing.T) {
@@ -275,6 +330,10 @@ func TestModelAliasesForProvider(t *testing.T) {
 	// Should NOT have general-purpose GPT or o-series aliases
 	_, hasFlagship := chatgptAliases["flagship"]
 	assert.False(t, hasFlagship, "chatgpt aliases must not include flagship (non-codex model)")
+
+	// Ollama falls through to the default: return nil branch.
+	ollamaAliases := modelAliasesForProvider(ProviderOllama)
+	assert.Nil(t, ollamaAliases, "ollama has no shorthand aliases")
 }
 
 func TestConstants(t *testing.T) {
@@ -285,6 +344,7 @@ func TestConstants(t *testing.T) {
 	assert.NotEmpty(t, ProviderOpenAI)
 	assert.NotEmpty(t, ProviderOpenRouter)
 	assert.NotEmpty(t, ProviderAnthropic)
+	assert.NotEmpty(t, ProviderOllama)
 
 	// ChatGPT and OpenAI must be distinct to avoid routing clashes
 	assert.NotEqual(t, ProviderChatGPT, ProviderOpenAI)
@@ -306,4 +366,62 @@ func TestConstants(t *testing.T) {
 	assert.NotEmpty(t, bedrock.ModelOpusLatest)
 	assert.NotEmpty(t, bedrock.ModelSonnetLatest)
 	assert.NotEmpty(t, bedrock.ModelHaikuLatest)
+}
+
+// --- Tests for WithOllama(), WithoutOllama(), WithoutChatGPT() ---
+
+// TestWithOllama_RegistersProvider verifies that WithOllama() adds Ollama
+// to the aggregate provider even when OLLAMA_HOST is not set and auto-detection
+// is disabled. The curated model list is the expected fallback when Ollama is
+// not reachable.
+func TestWithOllama_RegistersProvider(t *testing.T) {
+	ctx := context.Background()
+	t.Setenv(ollama.EnvOllamaHost, "") // no env var — proves explicit opt-in works
+
+	p, err := New(ctx, WithoutAutoDetect(), WithOllama())
+	require.NoError(t, err)
+	require.NotNil(t, p)
+	// Ollama must have contributed models (live or curated fallback).
+	assert.NotEmpty(t, p.Models(), "WithOllama() must register at least the curated model list")
+}
+
+// TestWithoutOllama_SuppressesAutoDetection verifies that the disabled map entry
+// added by WithoutOllama() prevents Ollama from being detected even when
+// OLLAMA_HOST is set.
+func TestWithoutOllama_SuppressesAutoDetection(t *testing.T) {
+	t.Setenv(ollama.EnvOllamaHost, "http://localhost:11434")
+	t.Setenv("HOME", t.TempDir())
+
+	providers := detectProviders(nil, nil, map[string]bool{
+		ProviderClaude: true, ProviderAnthropic: true, ProviderBedrock: true,
+		ProviderOpenAI: true, ProviderOpenRouter: true, ProviderMiniMax: true,
+		ProviderChatGPT: true,
+		ProviderOllama: true, // ← what WithoutOllama() sets in the disabled map
+	})
+
+	require.Empty(t, providers, "WithoutOllama() must prevent Ollama detection even with OLLAMA_HOST set")
+}
+
+// TestWithoutChatGPT_SuppressesAutoDetection verifies that the disabled map entry
+// added by WithoutChatGPT() prevents ChatGPT/Codex from being detected even when
+// ~/.codex/auth.json is present.
+func TestWithoutChatGPT_SuppressesAutoDetection(t *testing.T) {
+	home := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(home, ".codex"), 0o755))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(home, ".codex", "auth.json"),
+		[]byte(`{"auth_mode":"chatgpt","tokens":{"access_token":"synthetic-access-token","account_id":"test-account"}}`),
+		0o600,
+	))
+	t.Setenv("HOME", home)
+	t.Setenv(ollama.EnvOllamaHost, "")
+
+	providers := detectProviders(nil, nil, map[string]bool{
+		ProviderClaude: true, ProviderAnthropic: true, ProviderBedrock: true,
+		ProviderOpenAI: true, ProviderOpenRouter: true, ProviderMiniMax: true,
+		ProviderOllama: true,
+		ProviderChatGPT: true, // ← what WithoutChatGPT() sets in the disabled map
+	})
+
+	require.Empty(t, providers, "WithoutChatGPT() must prevent Codex detection even with auth.json present")
 }

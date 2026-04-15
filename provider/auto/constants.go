@@ -10,6 +10,7 @@ const (
 	ProviderOpenRouter = "openrouter"
 	ProviderAnthropic  = "anthropic"
 	ProviderMiniMax    = "minimax"
+	ProviderOllama     = "ollama"
 )
 
 // Environment variable names.

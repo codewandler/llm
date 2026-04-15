@@ -22,6 +22,9 @@ const defaultName = "auto"
 //   - AWS Bedrock (if AWS_ACCESS_KEY_ID, AWS_PROFILE, or container credentials are set)
 //   - OpenAI (if OPENAI_API_KEY or OPENAI_KEY is set)
 //   - OpenRouter (if OPENROUTER_API_KEY is set)
+//   - MiniMax (if MINIMAX_API_KEY is set)
+//   - Ollama (if OLLAMA_HOST is set)
+//   - ChatGPT/Codex (if ~/.codex/auth.json is present)
 //
 // With explicit options, you can configure specific providers:
 //
@@ -30,6 +33,8 @@ const defaultName = "auto"
 //	    auto.WithClaude(tokenStore),  // Claude accounts from store
 //	    auto.WithClaudeLocal(),       // Claude local credentials
 //	    auto.WithBedrock(),           // AWS Bedrock
+//	    auto.WithOllama(),            // Ollama (default or OLLAMA_HOST port)
+//	    auto.WithCodexLocal(),        // ChatGPT/Codex via ~/.codex/auth.json
 //	)
 func New(ctx context.Context, opts ...Option) (*router.Provider, error) {
 	cfg := &config{

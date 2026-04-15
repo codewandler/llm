@@ -4,6 +4,21 @@
 
 ### Added
 
+- `provider/auto`: auto-detect Ollama when `OLLAMA_HOST` is set or
+  `localhost:11434` responds to a probe; auto-detect ChatGPT/Codex when
+  `~/.codex/auth.json` is present. New options: `WithOllama()`,
+  `WithoutOllama()`, `WithoutChatGPT()`.
+- `provider/ollama`: `Available()` and `BaseURL()` helpers for detection;
+  `Models()` now lazy-fetches the live installed model list (3 s timeout,
+  curated fallback); `Resolve()` passes through any model ID so arbitrary
+  locally-installed models can be addressed without being in the curated list.
+
+### Fixed
+
+- `provider/ollama`: `*Provider` did not implement `llm.Provider` — `Models()`
+  returned the wrong type (`[]llm.Model` instead of `llm.Models`) and
+  `Resolve()` was missing entirely.
+
 - `cmd/miniagent` — minimal agentic CLI that runs an autonomous
   LLM→bash→LLM loop. Supports one-shot and interactive REPL modes.
   Streams tokens live, displays per-step/turn/session usage and cost.

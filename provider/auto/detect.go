@@ -11,6 +11,7 @@ import (
 	"github.com/codewandler/llm/provider/minimax"
 	"github.com/codewandler/llm/provider/openai"
 	"github.com/codewandler/llm/provider/openrouter"
+	"github.com/codewandler/llm/provider/ollama"
 )
 
 // detectProviders returns provider entries for all auto-detectable providers.
@@ -126,6 +127,47 @@ func detectProviders(httpClient *http.Client, llmOpts []llm.Option, disabled map
 			modelAliases: minimax.ModelAliases,
 			hasAliases:   true,
 		})
+	}
+
+	// 7. Ollama — detected when OLLAMA_HOST is set or localhost:11434 is reachable.
+	if !disabled[ProviderOllama] && ollama.Available() {
+		baseURL := ollama.BaseURL()
+		providers = append(providers, providerEntry{
+			name:         ProviderOllama,
+			providerType: ProviderOllama,
+			factory: func(opts ...llm.Option) llm.Provider {
+				opts = append(opts, llm.WithBaseURL(baseURL))
+				if httpClient != nil {
+					opts = append(opts, llm.WithHTTPClient(httpClient))
+				}
+				return ollama.New(opts...)
+			},
+			modelAliases: nil,
+			hasAliases:   false,
+		})
+	}
+
+	// 8. ChatGPT/Codex — detected when ~/.codex/auth.json is present and readable.
+	// auth is loaded eagerly so the factory closure captures a valid *CodexAuth,
+	// mirroring the WithCodexLocal() pattern.
+	if !disabled[ProviderChatGPT] && openai.CodexLocalAvailable() {
+		if auth, err := openai.LoadCodexAuth(); err == nil {
+			providers = append(providers, providerEntry{
+				name:         ProviderChatGPT,
+				providerType: ProviderChatGPT,
+				factory: func(opts ...llm.Option) llm.Provider {
+					// opts (llmOpts) are intentionally not forwarded: CodexAuth
+					// manages its own OAuth transport and does not accept llm.Option.
+					var base http.RoundTripper
+					if httpClient != nil {
+						base = httpClient.Transport
+					}
+					return auth.NewProvider(base)
+				},
+				modelAliases: openai.CodexModelAliases,
+				hasAliases:   true,
+			})
+		}
 	}
 
 	return providers

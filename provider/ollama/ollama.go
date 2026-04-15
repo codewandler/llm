@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/codewandler/llm"
@@ -49,9 +50,12 @@ const (
 
 // Provider implements the Ollama (local) LLM backend.
 type Provider struct {
-	opts         *llm.Options
-	defaultModel string
-	client       *http.Client
+	opts          *llm.Options
+	defaultModel  string
+	client        *http.Client
+	// lazy model list — populated on first Models() call
+	modelOnce     sync.Once
+	fetchedModels llm.Models
 }
 
 // DefaultOptions returns the default options for Ollama.
@@ -107,23 +111,55 @@ func (*Provider) CostCalculator() usage.CostCalculator {
 	})
 }
 
-// Models returns a curated list of tested models that are known to work
-// with streaming, tool calling, and conversations.
-// These models are verified to be compatible with all features.
-func (p *Provider) Models() []llm.Model {
-	return []llm.Model{
-		{ID: ModelGLM47Flash, Name: "GLM-4.7 Flash", Provider: "ollama"},
-		{ID: ModelMinistral38B, Name: "Ministral 3 8B", Provider: "ollama"},
-		{ID: ModelRNJ1, Name: "RNJ-1", Provider: "ollama"},
-		{ID: ModelFunctionGemma, Name: "FunctionGemma", Provider: "ollama"},
-		{ID: ModelDevstralSmall2, Name: "Devstral Small 2", Provider: "ollama"},
-		{ID: ModelNemotron3Nano30, Name: "Nemotron 3 Nano 30B", Provider: "ollama"},
-		{ID: ModelLlama321B, Name: "Llama 3.2 1B", Provider: "ollama"},
-		{ID: ModelQwen317B, Name: "Qwen 3 1.7B", Provider: "ollama"},
-		{ID: ModelQwen306B, Name: "Qwen 3 0.6B", Provider: "ollama"},
-		{ID: ModelGranite31MoE1B, Name: "Granite 3.1 MoE 1B", Provider: "ollama"},
-		{ID: ModelQwen2505B, Name: "Qwen 2.5 0.5B", Provider: "ollama"},
+// Models returns the list of models currently installed in Ollama.
+// On the first call it fetches the live list from the Ollama API
+// (3 s timeout); on failure it falls back to the curated list of
+// well-tested models.
+func (p *Provider) Models() llm.Models {
+	p.modelOnce.Do(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		models, err := p.FetchModels(ctx)
+		if err == nil && len(models) > 0 {
+			p.fetchedModels = llm.Models(models)
+		}
+	})
+	if p.fetchedModels != nil {
+		return p.fetchedModels
 	}
+	return p.curatedModels()
+}
+
+// curatedModels returns a static list of tested models that are known to work
+// with streaming, tool calling, and conversations. Used as a fallback when the
+// live list cannot be fetched.
+func (p *Provider) curatedModels() llm.Models {
+	providerName := p.Name()
+	return llm.Models{
+		{ID: ModelGLM47Flash, Name: "GLM-4.7 Flash", Provider: providerName},
+		{ID: ModelMinistral38B, Name: "Ministral 3 8B", Provider: providerName},
+		{ID: ModelRNJ1, Name: "RNJ-1", Provider: providerName},
+		{ID: ModelFunctionGemma, Name: "FunctionGemma", Provider: providerName},
+		{ID: ModelDevstralSmall2, Name: "Devstral Small 2", Provider: providerName},
+		{ID: ModelNemotron3Nano30, Name: "Nemotron 3 Nano 30B", Provider: providerName},
+		{ID: ModelLlama321B, Name: "Llama 3.2 1B", Provider: providerName},
+		{ID: ModelQwen317B, Name: "Qwen 3 1.7B", Provider: providerName},
+		{ID: ModelQwen306B, Name: "Qwen 3 0.6B", Provider: providerName},
+		{ID: ModelGranite31MoE1B, Name: "Granite 3.1 MoE 1B", Provider: providerName},
+		{ID: ModelQwen2505B, Name: "Qwen 2.5 0.5B", Provider: providerName},
+	}
+}
+
+// Resolve returns the model matching modelID.
+// It searches the live/curated model list first; if not found it returns a
+// synthetic Model so that any locally-installed Ollama model can be addressed
+// by ID without needing to be in the curated list.
+func (p *Provider) Resolve(modelID string) (llm.Model, error) {
+	if m, err := p.Models().Resolve(modelID); err == nil {
+		return m, nil
+	}
+	// Pass through — Ollama serves any locally-installed model.
+	return llm.Model{ID: modelID, Name: modelID, Provider: p.Name()}, nil
 }
 
 // FetchModels retrieves the list of currently installed models from Ollama.
@@ -156,11 +192,12 @@ func (p *Provider) FetchModels(ctx context.Context) ([]llm.Model, error) {
 	}
 
 	models := make([]llm.Model, len(result.Models))
+	providerName := p.Name()
 	for i, m := range result.Models {
 		models[i] = llm.Model{
 			ID:       m.Name,
 			Name:     m.Name,
-			Provider: "ollama",
+			Provider: providerName,
 		}
 	}
 	return models, nil
@@ -292,6 +329,7 @@ func (p *Provider) CreateStream(ctx context.Context, src llm.Buildable) (llm.Str
 		RequestedModel: opts.Model,
 		ResolvedModel:  opts.Model,
 		StartTime:      startTime,
+		ProviderName:   p.Name(),
 	}
 	pub, ch := llm.NewEventPublisher()
 
@@ -439,6 +477,7 @@ type streamMeta struct {
 	RequestedModel string
 	ResolvedModel  string
 	StartTime      time.Time
+	ProviderName   string // used in StreamStartedEvent.Provider
 }
 
 type streamChunk struct {
@@ -489,7 +528,7 @@ func parseStream(ctx context.Context, body io.ReadCloser, pub llm.Publisher, met
 
 		if !startEmitted {
 			startEmitted = true
-			pub.Started(llm.StreamStartedEvent{})
+			pub.Started(llm.StreamStartedEvent{Provider: meta.ProviderName})
 		}
 
 		if chunk.Message.Content != "" {
