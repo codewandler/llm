@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/codewandler/llm"
+	"github.com/codewandler/llm/api/messages"
 	"github.com/codewandler/llm/msg"
 	"github.com/codewandler/llm/tokencount"
 	"github.com/codewandler/llm/usage"
@@ -127,6 +128,7 @@ func TestClientStream_CompletionsFlow(t *testing.T) {
 		sawUsage         bool
 		sawCompleted     bool
 		startedProvider  string
+		tokenEstimate    *usage.Record
 		usageRecord      *usage.Record
 	)
 
@@ -139,6 +141,9 @@ func TestClientStream_CompletionsFlow(t *testing.T) {
 			assert.Equal(t, "real-model", mr.Resolved)
 		case llm.StreamEventTokenEstimate:
 			sawTokenEstimate = true
+			te := ev.Data.(*llm.TokenEstimateEvent)
+			tmp := te.Estimate
+			tokenEstimate = &tmp
 		case llm.StreamEventRequest:
 			sawRequest = true
 		case llm.StreamEventStarted:
@@ -177,6 +182,10 @@ func TestClientStream_CompletionsFlow(t *testing.T) {
 	require.True(t, sawUsage)
 	require.True(t, sawCompleted)
 	assert.Equal(t, "openai", startedProvider)
+	if assert.NotNil(t, tokenEstimate) {
+		assert.False(t, tokenEstimate.Cost.IsZero())
+		assert.InDelta(t, 0.42, tokenEstimate.Cost.Total, 1e-9)
+	}
 
 	if assert.NotNil(t, usageRecord) {
 		if assert.Equal(t, "calculated", usageRecord.Cost.Source) {
@@ -247,12 +256,24 @@ func TestClientStream_ErrorParser(t *testing.T) {
 	}
 
 	client := New(cfg, llm.WithBaseURL(server.URL))
-	_, err := client.Stream(context.Background(), llm.Request{
+	stream, err := client.Stream(context.Background(), llm.Request{
 		Model:    "m",
 		Messages: llm.Messages{llm.User("hi")},
 	})
 	require.Error(t, err)
 	assert.EqualError(t, err, "custom 429 {\"error\":\"quota\"}\n")
+	require.NotNil(t, stream)
+
+	var sawRequest bool
+	for ev := range stream {
+		if ev.Type == llm.StreamEventRequest {
+			sawRequest = true
+		}
+		if ev.Type == llm.StreamEventError {
+			t.Fatalf("unexpected stream error event: %#v", ev.Data)
+		}
+	}
+	assert.True(t, sawRequest)
 }
 
 func TestClientStream_APIHintResolver(t *testing.T) {
@@ -341,4 +362,61 @@ func TestClientStream_MutateRequestMessages(t *testing.T) {
 	assert.Equal(t, "2023-06-01", capturedHeaders.Get("Anthropic-Version"))
 	require.NotNil(t, capturedBody)
 	assert.Equal(t, "claude", capturedBody["model"])
+}
+
+func TestClientStream_TransformWireRequestUpdatesRequestEventBody(t *testing.T) {
+	t.Parallel()
+
+	var gotBody map[string]any
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer r.Body.Close()
+		bodyBytes, err := io.ReadAll(r.Body)
+		require.NoError(t, err)
+		require.NoError(t, json.Unmarshal(bodyBytes, &gotBody))
+
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = io.WriteString(w,
+			"event: message_start\ndata: {\"message\":{\"id\":\"m1\",\"model\":\"claude\",\"usage\":{\"input_tokens\":1}}}\n\n"+
+				"event: message_stop\ndata: {\"type\":\"message_stop\"}\n\n",
+		)
+	}))
+	defer server.Close()
+
+	client := New(Config{
+		ProviderName: "test",
+		BaseURL:      server.URL,
+		APIHint:      llm.ApiTypeAnthropicMessages,
+		TransformWireRequest: func(api llm.ApiType, wire any) (any, error) {
+			msgReq, ok := wire.(*messages.Request)
+			if !ok {
+				return nil, fmt.Errorf("unexpected payload %T", wire)
+			}
+			msgReq.Thinking = nil
+			return msgReq, nil
+		},
+	}, llm.WithBaseURL(server.URL))
+
+	stream, err := client.Stream(context.Background(), llm.Request{
+		Model:    "claude",
+		Messages: msg.BuildTranscript(msg.User("hi")),
+		Thinking: llm.ThinkingOn,
+	})
+	require.NoError(t, err)
+
+	var requestBody map[string]any
+	for ev := range stream {
+		if ev.Type == llm.StreamEventRequest {
+			reqEv := ev.Data.(*llm.RequestEvent)
+			require.NoError(t, json.Unmarshal(reqEv.ProviderRequest.Body, &requestBody))
+		}
+	}
+
+	require.NotNil(t, gotBody)
+	require.NotNil(t, requestBody)
+	_, gotThinking := gotBody["thinking"]
+	_, reqThinking := requestBody["thinking"]
+	assert.False(t, gotThinking)
+	assert.False(t, reqThinking)
+	assert.Equal(t, gotBody, requestBody)
 }

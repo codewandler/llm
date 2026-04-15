@@ -72,6 +72,12 @@ type Config struct {
 	// use the mutated request's Model.
 	PreprocessRequest func(req llm.Request) (llm.Request, string, error)
 
+	// TransformWireRequest mutates the typed API payload after unified
+	// conversion but before JSON marshaling. Use this to make provider-specific
+	// wire adjustments while keeping the emitted RequestEvent body in sync with
+	// the actual on-wire request body.
+	TransformWireRequest func(api llm.ApiType, wire any) (any, error)
+
 	costCalculatorSet bool
 }
 
@@ -190,5 +196,12 @@ func WithCostTargetResolver(fn func(llm.Request) (provider string, model string)
 func WithPreprocessRequest(fn func(llm.Request) (llm.Request, string, error)) Option {
 	return func(cfg *Config) {
 		cfg.PreprocessRequest = fn
+	}
+}
+
+// WithWireRequestTransformer mutates the typed API payload before marshaling.
+func WithWireRequestTransformer(fn func(llm.ApiType, any) (any, error)) Option {
+	return func(cfg *Config) {
+		cfg.TransformWireRequest = fn
 	}
 }

@@ -21,4 +21,3 @@ var ModelAliases = map[string]string{
 	"minimax:2.1":  ModelM21,
 	"minimax:2":    ModelM2,
 }
-

@@ -3,6 +3,10 @@ package minimax
 import (
 	"context"
 	"encoding/json"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -41,24 +45,6 @@ func TestProviderModels_HaveCorrectIDs(t *testing.T) {
 		delete(expectedIDs, m.ID)
 	}
 	assert.Empty(t, expectedIDs, "missing expected models")
-}
-
-func TestNewAPIRequestHeaders(t *testing.T) {
-	t.Parallel()
-
-	p := New(WithLLMOpts(llm.WithBaseURL("https://api.test"), llm.WithAPIKey("test-key")))
-
-	body := []byte(`{"ok":true}`)
-	req, err := p.newAPIRequest(context.Background(), "token-123", body)
-	require.NoError(t, err)
-
-	assert.Equal(t, "https://api.test/v1/messages", req.URL.String())
-	assert.Equal(t, "token-123", req.Header.Get("x-api-key"))
-	assert.Equal(t, "Bearer token-123", req.Header.Get("Authorization"))
-	assert.Equal(t, anthropic.AnthropicVersion, req.Header.Get("Anthropic-Version"))
-	assert.Equal(t, "application/json", req.Header.Get("Content-Type"))
-	assert.Equal(t, "application/json", req.Header.Get("Accept"))
-	assert.Equal(t, anthropic.BetaInterleavedThinking, req.Header.Get("Anthropic-Beta"))
 }
 
 func TestNew_DefaultOptions(t *testing.T) {
@@ -135,47 +121,114 @@ func TestResolve_Aliases(t *testing.T) {
 	}
 }
 
-func TestAdjustThinkingForMiniMax(t *testing.T) {
+func TestCreateStream_RequestHeadersAndBody(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
-		name  string
-		input anthropic.Request
-	}{
-		{"disabled is nil'd", anthropic.Request{Thinking: &anthropic.ThinkingConfig{Type: "disabled"}}},
-		{"enabled is nil'd", anthropic.Request{Thinking: &anthropic.ThinkingConfig{Type: "enabled", BudgetTokens: 16000}}},
-		{"adaptive is nil'd", anthropic.Request{Thinking: &anthropic.ThinkingConfig{Type: "adaptive"}}},
-		{"nil stays nil", anthropic.Request{Thinking: nil}},
+	var (
+		gotPath     string
+		gotHeaders  http.Header
+		gotBody     map[string]any
+		requestBody map[string]any
+		estimate    *llm.TokenEstimateEvent
+	)
+
+	sseBody := strings.Join([]string{
+		"event: message_start",
+		`data: {"message":{"id":"msg_1","model":"MiniMax-M2.7","usage":{"input_tokens":1}}}`,
+		"",
+		"event: message_stop",
+		`data: {"type":"message_stop"}`,
+		"",
+	}, "\n")
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer r.Body.Close()
+		gotPath = r.URL.Path
+		gotHeaders = r.Header.Clone()
+		bodyBytes, err := io.ReadAll(r.Body)
+		require.NoError(t, err)
+		require.NoError(t, json.Unmarshal(bodyBytes, &gotBody))
+
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = io.WriteString(w, sseBody)
+	}))
+	defer server.Close()
+
+	p := New(WithLLMOpts(llm.WithBaseURL(server.URL), llm.WithAPIKey("test-key")))
+
+	stream, err := p.CreateStream(context.Background(), llm.Request{
+		Model:    llm.ModelDefault,
+		Messages: llm.Messages{llm.User("hello")},
+		Thinking: llm.ThinkingOff,
+	})
+	require.NoError(t, err)
+	for ev := range stream {
+		switch ev.Type {
+		case llm.StreamEventRequest:
+			reqEv := ev.Data.(*llm.RequestEvent)
+			require.NoError(t, json.Unmarshal(reqEv.ProviderRequest.Body, &requestBody))
+		case llm.StreamEventTokenEstimate:
+			te := ev.Data.(*llm.TokenEstimateEvent)
+			if len(te.Estimate.Dims.Labels) == 0 {
+				estimate = te
+			}
+		}
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := adjustThinkingForMiniMax(tt.input)
-			assert.Nil(t, result.Thinking, "thinking must always be omitted for MiniMax")
-		})
+	assert.Equal(t, "/v1/messages", gotPath)
+	assert.Equal(t, "Bearer test-key", gotHeaders.Get("Authorization"))
+	assert.Equal(t, "test-key", gotHeaders.Get("x-api-key"))
+	assert.Equal(t, anthropic.AnthropicVersion, gotHeaders.Get("Anthropic-Version"))
+	assert.Equal(t, anthropic.BetaInterleavedThinking, gotHeaders.Get("Anthropic-Beta"))
+	assert.Equal(t, "application/json", gotHeaders.Get("Content-Type"))
+	assert.Equal(t, "application/json", gotHeaders.Get("Accept"))
+
+	require.NotNil(t, gotBody)
+	require.NotNil(t, requestBody)
+	assert.Equal(t, ModelM27, gotBody["model"])
+	assert.Equal(t, true, gotBody["stream"])
+	_, hasThinking := gotBody["thinking"]
+	assert.False(t, hasThinking, "thinking field must be omitted")
+	_, requestHasThinking := requestBody["thinking"]
+	assert.False(t, requestHasThinking, "request event body must also omit thinking")
+	assert.Equal(t, gotBody, requestBody)
+	if assert.NotNil(t, estimate) {
+		assert.False(t, estimate.Estimate.Cost.IsZero())
 	}
 }
 
-func TestBuildRequest_ThinkingOff_WireFormat(t *testing.T) {
+func TestCreateStream_APIErrorReturnsErrorAndInspectableStream(t *testing.T) {
 	t.Parallel()
 
-	apiReq, err := anthropic.BuildRequest(anthropic.RequestOptions{
-		LLMRequest: llm.Request{
-			Model:    ModelM27,
-			Messages: llm.Messages{llm.User("hi")},
-			Thinking: llm.ThinkingOff,
-		},
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer r.Body.Close()
+		http.Error(w, `{"type":"error","error":{"type":"authentication_error","message":"bad key"}}`, http.StatusUnauthorized)
+	}))
+	defer server.Close()
+
+	p := New(WithLLMOpts(llm.WithBaseURL(server.URL), llm.WithAPIKey("test-key")))
+
+	stream, err := p.CreateStream(context.Background(), llm.Request{
+		Model:    ModelM27,
+		Messages: llm.Messages{llm.User("hello")},
 	})
-	require.NoError(t, err)
+	require.Error(t, err)
+	require.NotNil(t, stream)
+	assert.ErrorIs(t, err, llm.ErrAPIError)
 
-	apiReq = adjustThinkingForMiniMax(apiReq)
+	var (
+		sawRequest bool
+		sawError   bool
+	)
+	for ev := range stream {
+		switch ev.Type {
+		case llm.StreamEventRequest:
+			sawRequest = true
+		case llm.StreamEventError:
+			sawError = true
+		}
+	}
 
-	body, err := json.Marshal(apiReq)
-	require.NoError(t, err)
-
-	var m map[string]any
-	require.NoError(t, json.Unmarshal(body, &m))
-
-	_, hasThinking := m["thinking"]
-	assert.False(t, hasThinking, "thinking field must be absent from MiniMax wire format")
+	assert.True(t, sawRequest, "request event should still be inspectable")
+	assert.False(t, sawError, "pre-stream API failures should return error, not emit stream error")
 }

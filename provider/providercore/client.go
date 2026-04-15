@@ -96,7 +96,7 @@ func (c *Client) Stream(ctx context.Context, src llm.Buildable) (llm.Stream, err
 		}
 	}
 
-	wireBody, bodyBytes, err := buildWireRequest(req, apiHint)
+	wireBody, bodyBytes, err := c.buildWireRequest(req, apiHint)
 	if err != nil {
 		return nil, llm.NewErrBuildRequest(c.cfg.ProviderName, err)
 	}
@@ -127,17 +127,9 @@ func (c *Client) Stream(ctx context.Context, src llm.Buildable) (llm.Stream, err
 	}
 
 	if resp.StatusCode/100 != 2 {
-		defer resp.Body.Close()
-		errBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-		var apiErr error
-		if c.cfg.ErrorParser != nil {
-			apiErr = c.cfg.ErrorParser(resp.StatusCode, errBody)
-		}
-		if apiErr == nil {
-			apiErr = llm.NewErrAPIError(c.cfg.ProviderName, resp.StatusCode, string(errBody))
-		}
+		apiErr := c.buildAPIError(resp)
 		pub.Close()
-		return nil, apiErr
+		return ch, apiErr
 	}
 
 	rateLimits := parseRateLimits(resp, c.cfg.RateLimitParser)
@@ -184,10 +176,24 @@ func (c *Client) Stream(ctx context.Context, src llm.Buildable) (llm.Stream, err
 }
 
 // buildWireRequest converts the unified request into the API-specific payload.
-func buildWireRequest(req llm.Request, api llm.ApiType) (any, []byte, error) {
+func (c *Client) buildWireRequest(req llm.Request, api llm.ApiType) (any, []byte, error) {
 	uReq, err := unified.RequestFromLLM(req)
 	if err != nil {
 		return nil, nil, fmt.Errorf("request from llm: %w", err)
+	}
+
+	marshalWire := func(wire any, marshalErrPrefix string) (any, []byte, error) {
+		if c.cfg.TransformWireRequest != nil {
+			wire, err = c.cfg.TransformWireRequest(api, wire)
+			if err != nil {
+				return nil, nil, err
+			}
+		}
+		body, err := json.Marshal(wire)
+		if err != nil {
+			return nil, nil, fmt.Errorf("%s: %w", marshalErrPrefix, err)
+		}
+		return wire, body, nil
 	}
 
 	switch api {
@@ -196,31 +202,19 @@ func buildWireRequest(req llm.Request, api llm.ApiType) (any, []byte, error) {
 		if err != nil {
 			return nil, nil, fmt.Errorf("request to completions: %w", err)
 		}
-		body, err := json.Marshal(wire)
-		if err != nil {
-			return nil, nil, fmt.Errorf("marshal completions request: %w", err)
-		}
-		return wire, body, nil
+		return marshalWire(wire, "marshal completions request")
 	case llm.ApiTypeAnthropicMessages:
 		wire, err := unified.RequestToMessages(uReq)
 		if err != nil {
 			return nil, nil, fmt.Errorf("request to messages: %w", err)
 		}
-		body, err := json.Marshal(wire)
-		if err != nil {
-			return nil, nil, fmt.Errorf("marshal messages request: %w", err)
-		}
-		return wire, body, nil
+		return marshalWire(wire, "marshal messages request")
 	case llm.ApiTypeOpenAIResponses:
 		wire, err := unified.RequestToResponses(uReq)
 		if err != nil {
 			return nil, nil, fmt.Errorf("request to responses: %w", err)
 		}
-		body, err := json.Marshal(wire)
-		if err != nil {
-			return nil, nil, fmt.Errorf("marshal responses request: %w", err)
-		}
-		return wire, body, nil
+		return marshalWire(wire, "marshal responses request")
 	default:
 		return nil, nil, fmt.Errorf("unsupported api hint %s", api)
 	}
@@ -347,10 +341,23 @@ func (c *Client) emitTokenEstimates(ctx context.Context, pub llm.Publisher, req 
 		return
 	}
 
-	records := tokencount.EstimateRecords(count, c.cfg.ProviderName, req.Model, "heuristic", nil)
+	records := tokencount.EstimateRecords(count, c.cfg.ProviderName, req.Model, "heuristic", c.cfg.CostCalculator)
 	for _, rec := range records {
 		pub.TokenEstimate(rec)
 	}
+}
+
+func (c *Client) buildAPIError(resp *http.Response) error {
+	// Centralize HTTP error parsing so future retry/response policies can inspect
+	// the response metadata in one place without changing the request flow.
+	defer resp.Body.Close()
+	errBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if c.cfg.ErrorParser != nil {
+		if apiErr := c.cfg.ErrorParser(resp.StatusCode, errBody); apiErr != nil {
+			return apiErr
+		}
+	}
+	return llm.NewErrAPIError(c.cfg.ProviderName, resp.StatusCode, string(errBody))
 }
 
 func applyDefaults(cfg *Config) {
