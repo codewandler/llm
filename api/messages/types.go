@@ -174,10 +174,11 @@ type ThinkingCompleteEvent struct {
 }
 
 type ToolCompleteEvent struct {
-	Index int
-	ID    string
-	Name  string
-	Args  map[string]any
+	Index    int
+	ID       string
+	Name     string
+	RawInput string
+	Args     map[string]any
 }
 
 // SSE: message_delta

@@ -8,12 +8,11 @@ import (
 	"github.com/codewandler/llm/api/completions"
 	"github.com/codewandler/llm/msg"
 	"github.com/codewandler/llm/sortmap"
-	"github.com/codewandler/llm/usage"
 )
 
-// RequestToCompletions converts a canonical unified request to a Chat
+// BuildCompletionsRequest converts a canonical unified request to a Chat
 // Completions wire request.
-func RequestToCompletions(r Request, _ ...CompletionsOption) (*completions.Request, error) {
+func BuildCompletionsRequest(r Request, _ ...CompletionsOption) (*completions.Request, error) {
 	if err := r.Validate(); err != nil {
 		return nil, fmt.Errorf("validate unified request: %w", err)
 	}
@@ -197,6 +196,10 @@ func RequestFromCompletions(r completions.Request) (Request, error) {
 	return u, nil
 }
 
+type CompletionsOption func(*completionsOptions)
+
+type completionsOptions struct{}
+
 func toolChoiceFromCompletions(v any) llm.ToolChoice {
 	switch t := v.(type) {
 	case nil:
@@ -220,83 +223,4 @@ func toolChoiceFromCompletions(v any) llm.ToolChoice {
 		}
 	}
 	return nil
-}
-
-func contentString(v any) string {
-	if s, ok := v.(string); ok {
-		return s
-	}
-	return ""
-}
-func mapOpenAIFinishReason(s string) llm.StopReason {
-	switch s {
-	case completions.FinishReasonStop:
-		return llm.StopReasonEndTurn
-	case completions.FinishReasonToolCalls:
-		return llm.StopReasonToolUse
-	case completions.FinishReasonLength:
-		return llm.StopReasonMaxTokens
-	case completions.FinishReasonContentFilter:
-		return llm.StopReasonContentFilter
-	default:
-		return llm.StopReason(s)
-	}
-}
-
-// CompletionsOption reserves future converter options.
-type CompletionsOption func(*completionsOptions)
-
-type completionsOptions struct{}
-
-// EventFromCompletions converts a completions native parser event into unified StreamEvent.
-// Returns ignored=true for explicit no-op events.
-func EventFromCompletions(ev any) (StreamEvent, bool, error) {
-	chunk, ok := ev.(*completions.Chunk)
-	if !ok {
-		return StreamEvent{Type: StreamEventUnknown}, false, nil
-	}
-
-	out := StreamEvent{}
-	if chunk.ID != "" || chunk.Model != "" {
-		out.Type = StreamEventStarted
-		out.Started = &Started{RequestID: chunk.ID, Model: chunk.Model}
-	}
-
-	if chunk.Usage != nil {
-		tokens := usage.TokenItems{
-			{Kind: usage.KindInput, Count: chunk.Usage.PromptTokens},
-			{Kind: usage.KindOutput, Count: chunk.Usage.CompletionTokens},
-		}.NonZero()
-		out.Type = StreamEventUsage
-		out.Usage = &Usage{Tokens: tokens}
-	}
-
-	if len(chunk.Choices) > 0 {
-		choice := chunk.Choices[0]
-		if choice.Delta.Content != "" {
-			out.Type = StreamEventDelta
-			out.Delta = &Delta{Kind: llm.DeltaKindText, Text: choice.Delta.Content}
-		}
-		if len(choice.Delta.ToolCalls) > 0 {
-			tc := choice.Delta.ToolCalls[0]
-			idx := uint32(tc.Index)
-			out.Type = StreamEventDelta
-			out.Delta = &Delta{
-				Kind:     llm.DeltaKindTool,
-				Index:    &idx,
-				ToolID:   tc.ID,
-				ToolName: tc.Function.Name,
-				ToolArgs: tc.Function.Arguments,
-			}
-		}
-		if choice.FinishReason != nil {
-			out.Type = StreamEventCompleted
-			out.Completed = &Completed{StopReason: mapOpenAIFinishReason(*choice.FinishReason)}
-		}
-	}
-
-	if out.Started == nil && out.Delta == nil && out.Usage == nil && out.Completed == nil {
-		return StreamEvent{}, true, nil
-	}
-	return out, false, nil
 }

@@ -33,7 +33,7 @@ func TestBuildRequestUnified_Parity(t *testing.T) {
 
 	uReq, err := unified.RequestFromLLM(opts)
 	require.NoError(t, err)
-	wireReq, err := unified.RequestToMessages(uReq)
+	wireReq, err := unified.BuildMessagesRequest(uReq)
 	require.NoError(t, err)
 	unifiedBody, err := json.Marshal(wireReq)
 	require.NoError(t, err)

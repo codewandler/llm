@@ -162,11 +162,11 @@ func (c *Client) Stream(ctx context.Context, src llm.Buildable) (llm.Stream, err
 		defer pub.Close()
 		switch apiHint {
 		case llm.ApiTypeOpenAIChatCompletion:
-			unified.StreamCompletions(ctx, streamHandle, pub, streamCtx)
+			unified.ForwardCompletions(ctx, streamHandle, pub, streamCtx)
 		case llm.ApiTypeAnthropicMessages:
-			unified.StreamMessages(ctx, streamHandle, pub, streamCtx)
+			unified.ForwardMessages(ctx, streamHandle, pub, streamCtx)
 		case llm.ApiTypeOpenAIResponses:
-			unified.StreamResponses(ctx, streamHandle, pub, streamCtx)
+			unified.ForwardResponses(ctx, streamHandle, pub, streamCtx)
 		default:
 			pub.Error(fmt.Errorf("%s: unsupported API hint %s", c.cfg.ProviderName, apiHint))
 		}
@@ -198,19 +198,19 @@ func (c *Client) buildWireRequest(req llm.Request, api llm.ApiType) (any, []byte
 
 	switch api {
 	case llm.ApiTypeOpenAIChatCompletion:
-		wire, err := unified.RequestToCompletions(uReq)
+		wire, err := unified.BuildCompletionsRequest(uReq)
 		if err != nil {
 			return nil, nil, fmt.Errorf("request to completions: %w", err)
 		}
 		return marshalWire(wire, "marshal completions request")
 	case llm.ApiTypeAnthropicMessages:
-		wire, err := unified.RequestToMessages(uReq)
+		wire, err := unified.BuildMessagesRequest(uReq)
 		if err != nil {
 			return nil, nil, fmt.Errorf("request to messages: %w", err)
 		}
 		return marshalWire(wire, "marshal messages request")
 	case llm.ApiTypeOpenAIResponses:
-		wire, err := unified.RequestToResponses(uReq)
+		wire, err := unified.BuildResponsesRequest(uReq)
 		if err != nil {
 			return nil, nil, fmt.Errorf("request to responses: %w", err)
 		}

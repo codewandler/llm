@@ -18,162 +18,104 @@ func fixture(t *testing.T, name string) *http.Client {
 	t.Helper()
 	data, err := os.ReadFile(filepath.Join("testdata", name))
 	require.NoError(t, err, "missing fixture %s", name)
-	return &http.Client{
-		Transport: apicore.FixedSSEResponse(200, string(data)),
+	return &http.Client{Transport: apicore.FixedSSEResponse(200, string(data))}
+}
+
+type parserCase struct {
+	name    string
+	payload string
+	want    any
+	done    bool
+	check   func(*testing.T, any)
+}
+
+func TestParser_DocumentedEventMatrix(t *testing.T) {
+	tests := []parserCase{
+		{
+			name:    responses.EventResponseCreated,
+			payload: `{"response":{"id":"resp_01","model":"gpt-4o-mini"}}`,
+			want:    &responses.ResponseCreatedEvent{},
+			check: func(t *testing.T, ev any) {
+				e := ev.(*responses.ResponseCreatedEvent)
+				assert.Equal(t, "resp_01", e.Response.ID)
+				assert.Equal(t, "gpt-4o-mini", e.Response.Model)
+			},
+		},
+		{name: responses.EventResponseInProgress, payload: `{"response":{"id":"resp_01","status":"in_progress"}}`, want: &responses.ResponseInProgressEvent{}},
+		{name: responses.EventResponseCompleted, payload: `{"response":{"id":"resp_01","model":"gpt-4o-mini","status":"completed","usage":{"input_tokens":10,"output_tokens":5}}}`, want: &responses.ResponseCompletedEvent{}, done: true},
+		{name: responses.EventResponseFailed, payload: `{"response":{"id":"resp_01","status":"failed","error":{"code":"server_error","message":"boom"}}}`, want: &responses.ResponseFailedEvent{}, done: true},
+		{name: responses.EventResponseIncomplete, payload: `{"response":{"id":"resp_01","status":"incomplete","incomplete_details":{"reason":"max_output_tokens"}}}`, want: &responses.ResponseIncompleteEvent{}, done: true},
+		{name: responses.EventResponseQueued, payload: `{"response":{"id":"resp_01","status":"queued"}}`, want: &responses.ResponseQueuedEvent{}},
+		{name: responses.EventOutputItemAdded, payload: `{"output_index":0,"item":{"id":"msg_1","type":"message","status":"in_progress","role":"assistant"}}`, want: &responses.OutputItemAddedEvent{}},
+		{name: responses.EventOutputItemDone, payload: `{"output_index":0,"item":{"id":"msg_1","type":"message","status":"completed","role":"assistant"}}`, want: &responses.OutputItemDoneEvent{}},
+		{name: responses.EventContentPartAdded, payload: `{"item_id":"msg_1","output_index":0,"content_index":0,"part":{"type":"output_text","text":"hello","annotations":[]}}`, want: &responses.ContentPartAddedEvent{}},
+		{name: responses.EventContentPartDone, payload: `{"item_id":"msg_1","output_index":0,"content_index":0,"part":{"type":"output_text","text":"hello","annotations":[]}}`, want: &responses.ContentPartDoneEvent{}},
+		{name: responses.EventOutputTextDelta, payload: `{"item_id":"msg_1","output_index":0,"content_index":0,"delta":"hel","sequence_number":1}`, want: &responses.OutputTextDeltaEvent{}},
+		{name: responses.EventOutputTextDone, payload: `{"item_id":"msg_1","output_index":0,"content_index":0,"text":"hello","sequence_number":2}`, want: &responses.OutputTextDoneEvent{}},
+		{name: responses.EventOutputTextAnnotationAdded, payload: `{"item_id":"msg_1","output_index":0,"content_index":0,"annotation_index":0,"annotation":{"type":"file_citation","file_id":"file_1","filename":"a.txt","index":0}}`, want: &responses.OutputTextAnnotationAddedEvent{}},
+		{name: responses.EventRefusalDelta, payload: `{"item_id":"msg_1","output_index":0,"content_index":0,"delta":"can't do that"}`, want: &responses.RefusalDeltaEvent{}},
+		{name: responses.EventRefusalDone, payload: `{"item_id":"msg_1","output_index":0,"content_index":0,"refusal":"can't do that"}`, want: &responses.RefusalDoneEvent{}},
+		{name: responses.EventFunctionCallArgumentsDelta, payload: `{"item_id":"call_1","output_index":0,"delta":"{\"city\":"}`, want: &responses.FunctionCallArgumentsDeltaEvent{}},
+		{name: responses.EventFunctionCallArgumentsDone, payload: `{"item_id":"call_1","name":"get_weather","output_index":0,"arguments":"{\"city\":\"Berlin\"}"}`, want: &responses.FunctionCallArgumentsDoneEvent{}},
+		{name: responses.EventFileSearchCallInProgress, payload: `{"item_id":"fs_1","output_index":0}`, want: &responses.FileSearchCallInProgressEvent{}},
+		{name: responses.EventFileSearchCallSearching, payload: `{"item_id":"fs_1","output_index":0}`, want: &responses.FileSearchCallSearchingEvent{}},
+		{name: responses.EventFileSearchCallCompleted, payload: `{"item_id":"fs_1","output_index":0}`, want: &responses.FileSearchCallCompletedEvent{}},
+		{name: responses.EventWebSearchCallInProgress, payload: `{"item_id":"ws_1","output_index":0}`, want: &responses.WebSearchCallInProgressEvent{}},
+		{name: responses.EventWebSearchCallSearching, payload: `{"item_id":"ws_1","output_index":0}`, want: &responses.WebSearchCallSearchingEvent{}},
+		{name: responses.EventWebSearchCallCompleted, payload: `{"item_id":"ws_1","output_index":0}`, want: &responses.WebSearchCallCompletedEvent{}},
+		{name: responses.EventReasoningSummaryPartAdded, payload: `{"item_id":"rs_1","output_index":0,"summary_index":0,"part":{"type":"summary_text","text":"step one"}}`, want: &responses.ReasoningSummaryPartAddedEvent{}},
+		{name: responses.EventReasoningSummaryPartDone, payload: `{"item_id":"rs_1","output_index":0,"summary_index":0,"part":{"type":"summary_text","text":"step one"}}`, want: &responses.ReasoningSummaryPartDoneEvent{}},
+		{name: responses.EventReasoningSummaryTextDelta, payload: `{"item_id":"rs_1","output_index":0,"delta":"think"}`, want: &responses.ReasoningSummaryTextDeltaEvent{}},
+		{name: responses.EventReasoningSummaryTextDone, payload: `{"item_id":"rs_1","output_index":0,"text":"thinking"}`, want: &responses.ReasoningSummaryTextDoneEvent{}},
+		{name: responses.EventReasoningTextDelta, payload: `{"item_id":"rs_1","output_index":0,"delta":"hidden"}`, want: &responses.ReasoningTextDeltaEvent{}},
+		{name: responses.EventReasoningTextDone, payload: `{"item_id":"rs_1","output_index":0,"text":"hidden chain"}`, want: &responses.ReasoningTextDoneEvent{}},
+		{name: responses.EventImageGenerationCallCompleted, payload: `{"item_id":"img_1","output_index":0}`, want: &responses.ImageGenerationCallCompletedEvent{}},
+		{name: responses.EventImageGenerationCallGenerating, payload: `{"item_id":"img_1","output_index":0}`, want: &responses.ImageGenerationCallGeneratingEvent{}},
+		{name: responses.EventImageGenerationCallInProgress, payload: `{"item_id":"img_1","output_index":0}`, want: &responses.ImageGenerationCallInProgressEvent{}},
+		{name: responses.EventImageGenerationCallPartialImage, payload: `{"item_id":"img_1","output_index":0,"partial_image_index":0,"partial_image_b64":"abcd"}`, want: &responses.ImageGenerationCallPartialImageEvent{}},
+		{name: responses.EventMCPCallArgumentsDelta, payload: `{"item_id":"mcp_1","output_index":0,"delta":"{"}`, want: &responses.MCPCallArgumentsDeltaEvent{}},
+		{name: responses.EventMCPCallArgumentsDone, payload: `{"item_id":"mcp_1","output_index":0,"arguments":"{\"x\":1}"}`, want: &responses.MCPCallArgumentsDoneEvent{}},
+		{name: responses.EventMCPCallCompleted, payload: `{"item_id":"mcp_1","output_index":0}`, want: &responses.MCPCallCompletedEvent{}},
+		{name: responses.EventMCPCallFailed, payload: `{"item_id":"mcp_1","output_index":0}`, want: &responses.MCPCallFailedEvent{}},
+		{name: responses.EventMCPCallInProgress, payload: `{"item_id":"mcp_1","output_index":0}`, want: &responses.MCPCallInProgressEvent{}},
+		{name: responses.EventMCPListToolsCompleted, payload: `{"item_id":"mcp_ls_1","output_index":0}`, want: &responses.MCPListToolsCompletedEvent{}},
+		{name: responses.EventMCPListToolsFailed, payload: `{"item_id":"mcp_ls_1","output_index":0}`, want: &responses.MCPListToolsFailedEvent{}},
+		{name: responses.EventMCPListToolsInProgress, payload: `{"item_id":"mcp_ls_1","output_index":0}`, want: &responses.MCPListToolsInProgressEvent{}},
+		{name: responses.EventCodeInterpreterCallInProgress, payload: `{"item_id":"ci_1","output_index":0}`, want: &responses.CodeInterpreterCallInProgressEvent{}},
+		{name: responses.EventCodeInterpreterCallInterpreting, payload: `{"item_id":"ci_1","output_index":0}`, want: &responses.CodeInterpreterCallInterpretingEvent{}},
+		{name: responses.EventCodeInterpreterCallCompleted, payload: `{"item_id":"ci_1","output_index":0}`, want: &responses.CodeInterpreterCallCompletedEvent{}},
+		{name: responses.EventCodeInterpreterCallCodeDelta, payload: `{"item_id":"ci_1","output_index":0,"delta":"print("}`, want: &responses.CodeInterpreterCallCodeDeltaEvent{}},
+		{name: responses.EventCodeInterpreterCallCodeDone, payload: `{"item_id":"ci_1","output_index":0,"code":"print(42)"}`, want: &responses.CodeInterpreterCallCodeDoneEvent{}},
+		{name: responses.EventCustomToolCallInputDelta, payload: `{"item_id":"ct_1","output_index":0,"delta":"partial"}`, want: &responses.CustomToolCallInputDeltaEvent{}},
+		{name: responses.EventCustomToolCallInputDone, payload: `{"item_id":"ct_1","output_index":0,"input":"complete"}`, want: &responses.CustomToolCallInputDoneEvent{}},
+		{name: responses.EventAPIError, payload: `{"code":"rate_limit_exceeded","message":"slow down","param":null}`, done: true},
+		{name: responses.EventAudioTranscriptDone, payload: `{"response_id":"resp_01"}`, want: &responses.AudioTranscriptDoneEvent{}},
+		{name: responses.EventAudioTranscriptDelta, payload: `{"response_id":"resp_01","delta":"hello"}`, want: &responses.AudioTranscriptDeltaEvent{}},
+		{name: responses.EventAudioDone, payload: `{"response_id":"resp_01"}`, want: &responses.AudioDoneEvent{}},
+		{name: responses.EventAudioDelta, payload: `{"response_id":"resp_01","delta":"YmFzZTY0"}`, want: &responses.AudioDeltaEvent{}},
 	}
-}
 
-func TestParser_ResponseCreated(t *testing.T) {
+	require.Len(t, tests, len(responses.DocumentedStreamEvents))
+
 	h := handler()
-	result := h(responses.EventResponseCreated,
-		[]byte(`{"response":{"id":"resp_01","model":"gpt-4o-mini"}}`))
-	require.NoError(t, result.Err)
-	assert.False(t, result.Done)
-	evt := result.Event.(*responses.ResponseCreatedEvent)
-	assert.Equal(t, "resp_01", evt.Response.ID)
-	assert.Equal(t, "gpt-4o-mini", evt.Response.Model)
-}
-
-func TestParser_TextDelta(t *testing.T) {
-	h := handler()
-	result := h(responses.EventOutputTextDelta,
-		[]byte(`{"output_index":0,"delta":"hello"}`))
-	require.NoError(t, result.Err)
-	assert.False(t, result.Done)
-	evt := result.Event.(*responses.TextDeltaEvent)
-	assert.Equal(t, "hello", evt.Delta)
-	assert.Equal(t, 0, evt.OutputIndex)
-}
-
-func TestParser_ReasoningDelta(t *testing.T) {
-	tests := []struct {
-		name      string
-		eventName string
-	}{
-		{"reasoning_summary_text.delta (OpenAI o3)", responses.EventReasoningDelta},
-		{"reasoning_text.delta (Claude via OpenRouter)", responses.EventReasoningTextDelta},
-	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := handler()
-			result := h(tt.eventName, []byte(`{"output_index":0,"delta":"hmm..."}`))
+			result := h(tt.name, []byte(tt.payload))
+			assert.Equal(t, tt.done, result.Done)
+			if tt.name == responses.EventAPIError {
+				require.Error(t, result.Err)
+				assert.Contains(t, result.Err.Error(), "rate_limit_exceeded")
+				assert.Contains(t, result.Err.Error(), "slow down")
+				return
+			}
+
 			require.NoError(t, result.Err)
-			evt, ok := result.Event.(*responses.ReasoningDeltaEvent)
-			require.True(t, ok, "expected *ReasoningDeltaEvent, got %T", result.Event)
-			assert.Equal(t, "hmm...", evt.Delta)
-		})
-	}
-}
-
-func TestParser_ToolCall_ArgAccumulationAndComplete(t *testing.T) {
-	h := handler()
-
-	h(responses.EventOutputItemAdded,
-		[]byte(`{"output_index":0,"item":{"type":"function_call","id":"item_1","call_id":"call_abc","name":"search"}}`))
-
-	h(responses.EventFuncArgsDelta, []byte(`{"output_index":0,"delta":"{\"q\":"}`))
-	h(responses.EventFuncArgsDelta, []byte(`{"output_index":0,"delta":"\"golang\"}"}`))
-
-	result := h(responses.EventOutputItemDone,
-		[]byte(`{"output_index":0,"item":{"type":"function_call","id":"item_1","call_id":"call_abc","name":"search","arguments":""}}`))
-	require.NoError(t, result.Err)
-	evt, ok := result.Event.(*responses.ToolCompleteEvent)
-	require.True(t, ok, "expected *ToolCompleteEvent, got %T", result.Event)
-	assert.Equal(t, "call_abc", evt.ID)
-	assert.Equal(t, "search", evt.Name)
-	assert.Equal(t, map[string]any{"q": "golang"}, evt.Args)
-}
-
-func TestParser_ToolCall_UsesArgumentsFieldWhenAccumulatorEmpty(t *testing.T) {
-	h := handler()
-	h(responses.EventOutputItemAdded,
-		[]byte(`{"output_index":0,"item":{"type":"function_call","id":"i1","call_id":"c1","name":"fn"}}`))
-	result := h(responses.EventOutputItemDone,
-		[]byte(`{"output_index":0,"item":{"type":"function_call","id":"i1","call_id":"c1","name":"fn","arguments":"{\"x\":1}"}}`))
-	evt := result.Event.(*responses.ToolCompleteEvent)
-	assert.Equal(t, map[string]any{"x": float64(1)}, evt.Args)
-}
-
-func TestParser_ToolCall_FallsBackToAccumulatorForIDName(t *testing.T) {
-	h := handler()
-	h(responses.EventOutputItemAdded,
-		[]byte(`{"output_index":0,"item":{"type":"function_call","id":"i1","call_id":"the_id","name":"the_fn"}}`))
-	result := h(responses.EventOutputItemDone,
-		[]byte(`{"output_index":0,"item":{"type":"function_call","id":"i1","call_id":"","name":"","arguments":"{\"k\":\"v\"}"}}`))
-	evt := result.Event.(*responses.ToolCompleteEvent)
-	assert.Equal(t, "the_id", evt.ID)
-	assert.Equal(t, "the_fn", evt.Name)
-}
-
-func TestParser_ResponseCompleted_IncompleteMaxTokens(t *testing.T) {
-	h := handler()
-	result := h(responses.EventResponseCompleted,
-		[]byte(`{"response":{"id":"r1","model":"m","status":"incomplete","incomplete_details":{"reason":"max_output_tokens"},"usage":{"input_tokens":10,"output_tokens":100}}}`),
-	)
-	assert.True(t, result.Done)
-	require.NoError(t, result.Err)
-	evt := result.Event.(*responses.ResponseCompletedEvent)
-	assert.Equal(t, responses.StatusIncomplete, evt.Response.Status)
-	require.NotNil(t, evt.Response.IncompleteDetails)
-	assert.Equal(t, responses.ReasonMaxOutputTokens, evt.Response.IncompleteDetails.Reason)
-}
-
-func TestParser_ResponseCompleted_SetsDoneAndUsage(t *testing.T) {
-	h := handler()
-	result := h(responses.EventResponseCompleted,
-		[]byte(`{"response":{"id":"r1","model":"gpt-4o-mini","status":"completed","usage":{"input_tokens":10,"output_tokens":5}}}`))
-	assert.True(t, result.Done)
-	require.NoError(t, result.Err)
-	evt := result.Event.(*responses.ResponseCompletedEvent)
-	assert.Equal(t, responses.StatusCompleted, evt.Response.Status)
-	require.NotNil(t, evt.Response.Usage)
-	assert.Equal(t, 10, evt.Response.Usage.InputTokens)
-	assert.Equal(t, 5, evt.Response.Usage.OutputTokens)
-}
-
-func TestParser_ResponseFailed_SetsDone(t *testing.T) {
-	h := handler()
-	result := h(responses.EventResponseFailed,
-		[]byte(`{"response":{"id":"r1","model":"m","status":"failed","error":{"code":"server_error","message":"internal error"}}}`))
-	assert.True(t, result.Done)
-	require.NoError(t, result.Err)
-	evt := result.Event.(*responses.ResponseCompletedEvent)
-	assert.Equal(t, responses.StatusFailed, evt.Response.Status)
-	require.NotNil(t, evt.Response.Error)
-	assert.Equal(t, "server_error", evt.Response.Error.Code)
-}
-
-func TestParser_APIError_ReturnsDoneAndErr(t *testing.T) {
-	h := handler()
-	result := h(responses.EventAPIError,
-		[]byte(`{"error":{"message":"rate limit","code":"rate_limit_exceeded"}}`))
-	assert.True(t, result.Done)
-	require.Error(t, result.Err)
-	assert.Contains(t, result.Err.Error(), "rate_limit_exceeded")
-	assert.Contains(t, result.Err.Error(), "rate limit")
-}
-
-func TestParser_KnownNoOpEvent_NoOp(t *testing.T) {
-	h := handler()
-	tests := []string{
-		responses.EventResponseInProgress,
-		responses.EventContentPartAdded,
-		responses.EventContentPartDone,
-		responses.EventOutputTextDone,
-		responses.EventOutputTextAnnotation,
-		responses.EventFuncArgsDone,
-		responses.EventReasoningDeltaRaw,
-		responses.EventReasoningDone,
-		responses.EventReasoningSummaryDone,
-		responses.EventResponseQueued,
-		responses.EventRateLimitsUpdated,
-	}
-	for _, name := range tests {
-		t.Run(name, func(t *testing.T) {
-			result := h(name, []byte(`{"some":"data"}`))
-			assert.Nil(t, result.Event)
-			assert.NoError(t, result.Err)
-			assert.False(t, result.Done)
+			require.NotNil(t, result.Event)
+			require.IsType(t, tt.want, result.Event)
+			assertEventTypeField(t, result.Event, tt.name)
+			if tt.check != nil {
+				tt.check(t, result.Event)
+			}
 		})
 	}
 }
@@ -186,119 +128,35 @@ func TestParser_UnknownEvent_NoOp(t *testing.T) {
 	assert.False(t, result.Done)
 }
 
-// TestParser_UnnamedSSE_TypeInJSON verifies that when the SSE event name is
-// empty (OpenRouter-style unnamed SSE), the parser correctly extracts the
-// event type from the JSON "type" field and routes accordingly.
 func TestParser_UnnamedSSE_TypeInJSON(t *testing.T) {
 	tests := []struct {
-		name    string
-		data    string
-		check   func(t *testing.T, r apicore.StreamResult)
+		name string
+		data string
+		want any
+		done bool
 	}{
-		{
-			name: "response.created",
-			data: `{"type":"response.created","response":{"id":"resp_01","model":"gpt-4o"}}`,
-			check: func(t *testing.T, r apicore.StreamResult) {
-				require.NoError(t, r.Err)
-				assert.False(t, r.Done)
-				evt, ok := r.Event.(*responses.ResponseCreatedEvent)
-				require.True(t, ok, "expected *ResponseCreatedEvent, got %T", r.Event)
-				assert.Equal(t, "resp_01", evt.Response.ID)
-				assert.Equal(t, "gpt-4o", evt.Response.Model)
-			},
-		},
-		{
-			name: "response.output_text.delta",
-			data: `{"type":"response.output_text.delta","output_index":0,"delta":"hello"}`,
-			check: func(t *testing.T, r apicore.StreamResult) {
-				require.NoError(t, r.Err)
-				evt, ok := r.Event.(*responses.TextDeltaEvent)
-				require.True(t, ok, "expected *TextDeltaEvent, got %T", r.Event)
-				assert.Equal(t, "hello", evt.Delta)
-			},
-		},
-		{
-			name: "response.reasoning_summary_text.delta",
-			data: `{"type":"response.reasoning_summary_text.delta","output_index":0,"delta":"thinking..."}`,
-			check: func(t *testing.T, r apicore.StreamResult) {
-				require.NoError(t, r.Err)
-				evt, ok := r.Event.(*responses.ReasoningDeltaEvent)
-				require.True(t, ok, "expected *ReasoningDeltaEvent, got %T", r.Event)
-				assert.Equal(t, "thinking...", evt.Delta)
-			},
-		},
-		{
-			name: "response.reasoning_text.delta (Claude-via-OpenRouter)",
-			data: `{"type":"response.reasoning_text.delta","output_index":0,"delta":"17 × 19 = 323"}`,
-			check: func(t *testing.T, r apicore.StreamResult) {
-				require.NoError(t, r.Err)
-				evt, ok := r.Event.(*responses.ReasoningDeltaEvent)
-				require.True(t, ok, "expected *ReasoningDeltaEvent, got %T", r.Event)
-				assert.Equal(t, "17 × 19 = 323", evt.Delta)
-			},
-		},
-		{
-			name: "response.completed",
-			data: `{"type":"response.completed","response":{"id":"r1","model":"gpt-4o","status":"completed","usage":{"input_tokens":5,"output_tokens":3}}}`,
-			check: func(t *testing.T, r apicore.StreamResult) {
-				require.NoError(t, r.Err)
-				assert.True(t, r.Done)
-				evt, ok := r.Event.(*responses.ResponseCompletedEvent)
-				require.True(t, ok)
-				assert.Equal(t, 5, evt.Response.Usage.InputTokens)
-			},
-		},
-		{
-			name: "response.in_progress (no-op)",
-			data: `{"type":"response.in_progress","response":{"id":"r1"}}`,
-			check: func(t *testing.T, r apicore.StreamResult) {
-				assert.Nil(t, r.Event)
-				assert.NoError(t, r.Err)
-				assert.False(t, r.Done)
-			},
-		},
-		{
-			name: "no type field → no-op",
-			data: `{"sequence_number":99}`,
-			check: func(t *testing.T, r apicore.StreamResult) {
-				assert.Nil(t, r.Event)
-				assert.NoError(t, r.Err)
-			},
-		},
+		{name: responses.EventResponseCreated, data: `{"type":"response.created","response":{"id":"resp_01","model":"gpt-4o"}}`, want: &responses.ResponseCreatedEvent{}},
+		{name: responses.EventOutputTextDelta, data: `{"type":"response.output_text.delta","item_id":"msg_1","output_index":0,"content_index":0,"delta":"hello"}`, want: &responses.OutputTextDeltaEvent{}},
+		{name: responses.EventReasoningTextDelta, data: `{"type":"response.reasoning_text.delta","item_id":"rs_1","output_index":0,"delta":"17 × 19 = 323"}`, want: &responses.ReasoningTextDeltaEvent{}},
+		{name: responses.EventResponseCompleted, data: `{"type":"response.completed","response":{"id":"r1","model":"gpt-4o","status":"completed","usage":{"input_tokens":5,"output_tokens":3}}}`, want: &responses.ResponseCompletedEvent{}, done: true},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := handler() // fresh handler per sub-test
-			result := h("", []byte(tt.data))
-			tt.check(t, result)
+			result := handler()("", []byte(tt.data))
+			require.NoError(t, result.Err)
+			require.IsType(t, tt.want, result.Event)
+			assert.Equal(t, tt.done, result.Done)
+			assertEventTypeField(t, result.Event, tt.name)
 		})
 	}
-}
 
-func TestParser_IsolatedAcrossStreams(t *testing.T) {
-	factory := responses.NewParser()
-	h1, h2 := factory(), factory()
-
-	h1(responses.EventOutputItemAdded,
-		[]byte(`{"output_index":0,"item":{"type":"function_call","id":"i1","call_id":"c1","name":"fn1"}}`))
-	h1(responses.EventFuncArgsDelta, []byte(`{"output_index":0,"delta":"{\"a\":1}"}`))
-
-	h2(responses.EventOutputItemAdded,
-		[]byte(`{"output_index":0,"item":{"type":"function_call","id":"i2","call_id":"c2","name":"fn2"}}`))
-	h2(responses.EventFuncArgsDelta, []byte(`{"output_index":0,"delta":"{\"b\":2}"}`))
-
-	r1 := h1(responses.EventOutputItemDone,
-		[]byte(`{"output_index":0,"item":{"type":"function_call","call_id":"c1","name":"fn1","arguments":""}}`))
-	r2 := h2(responses.EventOutputItemDone,
-		[]byte(`{"output_index":0,"item":{"type":"function_call","call_id":"c2","name":"fn2","arguments":""}}`))
-
-	e1 := r1.Event.(*responses.ToolCompleteEvent)
-	e2 := r2.Event.(*responses.ToolCompleteEvent)
-	assert.Equal(t, "c1", e1.ID)
-	assert.Equal(t, "c2", e2.ID)
-	assert.Equal(t, map[string]any{"a": float64(1)}, e1.Args)
-	assert.Equal(t, map[string]any{"b": float64(2)}, e2.Args)
+	t.Run("no type field stays no-op", func(t *testing.T) {
+		result := handler()("", []byte(`{"sequence_number":99}`))
+		assert.Nil(t, result.Event)
+		assert.NoError(t, result.Err)
+		assert.False(t, result.Done)
+	})
 }
 
 func collectEvents(t *testing.T, httpClient *http.Client) []apicore.StreamResult {
@@ -307,8 +165,7 @@ func collectEvents(t *testing.T, httpClient *http.Client) []apicore.StreamResult
 		responses.WithBaseURL("https://fake.api"),
 		responses.WithHTTPClient(httpClient),
 	)
-	req := &responses.Request{Model: "test", Stream: true,
-		Input: []responses.Input{{Role: "user", Content: "ping"}}}
+	req := &responses.Request{Model: "test", Stream: true, Input: []responses.Input{{Role: "user", Content: "ping"}}}
 
 	handle, err := client.Stream(t.Context(), req)
 	require.NoError(t, err)
@@ -328,7 +185,7 @@ func TestFixture_TextStream(t *testing.T) {
 	var completed *responses.ResponseCompletedEvent
 	for _, r := range events {
 		switch ev := r.Event.(type) {
-		case *responses.TextDeltaEvent:
+		case *responses.OutputTextDeltaEvent:
 			textDeltas = append(textDeltas, ev.Delta)
 		case *responses.ResponseCompletedEvent:
 			completed = ev
@@ -337,36 +194,35 @@ func TestFixture_TextStream(t *testing.T) {
 
 	require.NotEmpty(t, textDeltas)
 	assert.Equal(t, "pong", textDeltas[0])
-
 	require.NotNil(t, completed)
 	assert.Equal(t, responses.StatusCompleted, completed.Response.Status)
 	require.NotNil(t, completed.Response.Usage)
 	assert.Equal(t, 12, completed.Response.Usage.InputTokens)
 	assert.Equal(t, 1, completed.Response.Usage.OutputTokens)
-
-	last := events[len(events)-1]
-	assert.True(t, last.Done)
+	assert.True(t, events[len(events)-1].Done)
 }
 
 func TestFixture_ToolCallStream(t *testing.T) {
 	events := collectEvents(t, fixture(t, "tool_call_stream.sse"))
 
-	var toolComplete *responses.ToolCompleteEvent
+	var itemDone *responses.OutputItemDoneEvent
 	var funcDeltas []string
 	for _, r := range events {
 		switch ev := r.Event.(type) {
-		case *responses.FuncArgsDeltaEvent:
+		case *responses.FunctionCallArgumentsDeltaEvent:
 			funcDeltas = append(funcDeltas, ev.Delta)
-		case *responses.ToolCompleteEvent:
-			toolComplete = ev
+		case *responses.OutputItemDoneEvent:
+			if ev.Item.Type == "function_call" {
+				itemDone = ev
+			}
 		}
 	}
 
 	require.NotEmpty(t, funcDeltas)
-	require.NotNil(t, toolComplete)
-	assert.Equal(t, "call_abc", toolComplete.ID)
-	assert.Equal(t, "get_weather", toolComplete.Name)
-	assert.Equal(t, map[string]any{"city": "Berlin"}, toolComplete.Args)
+	require.NotNil(t, itemDone)
+	assert.Equal(t, "call_abc", itemDone.Item.CallID)
+	assert.Equal(t, "get_weather", itemDone.Item.Name)
+	assert.Equal(t, `{"city":"Berlin"}`, itemDone.Item.Arguments)
 }
 
 func TestFixture_ReasoningStream(t *testing.T) {
@@ -375,9 +231,9 @@ func TestFixture_ReasoningStream(t *testing.T) {
 	var reasoningDeltas, textDeltas []string
 	for _, r := range events {
 		switch ev := r.Event.(type) {
-		case *responses.ReasoningDeltaEvent:
+		case *responses.ReasoningSummaryTextDeltaEvent:
 			reasoningDeltas = append(reasoningDeltas, ev.Delta)
-		case *responses.TextDeltaEvent:
+		case *responses.OutputTextDeltaEvent:
 			textDeltas = append(textDeltas, ev.Delta)
 		}
 	}
@@ -388,9 +244,15 @@ func TestFixture_ReasoningStream(t *testing.T) {
 
 func TestFixture_ErrorStream(t *testing.T) {
 	events := collectEvents(t, fixture(t, "error_stream.sse"))
-
 	require.Len(t, events, 1)
 	assert.True(t, events[0].Done)
 	require.Error(t, events[0].Err)
 	assert.Contains(t, events[0].Err.Error(), "rate_limit_exceeded")
+}
+
+func assertEventTypeField(t *testing.T, event any, want string) {
+	t.Helper()
+	te, ok := event.(interface{ EventType() string })
+	require.True(t, ok, "event %T does not expose EventType()", event)
+	assert.Equal(t, want, te.EventType())
 }

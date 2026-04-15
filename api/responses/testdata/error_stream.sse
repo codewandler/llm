@@ -1,3 +1,2 @@
 event: error
-data: {"error":{"message":"Too many requests. Please try again later.","code":"rate_limit_exceeded"}}
-
+data: {"type":"error","message":"Too many requests. Please try again later.","code":"rate_limit_exceeded"}

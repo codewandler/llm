@@ -8,12 +8,11 @@ import (
 	"github.com/codewandler/llm/api/responses"
 	"github.com/codewandler/llm/msg"
 	"github.com/codewandler/llm/sortmap"
-	"github.com/codewandler/llm/usage"
 )
 
-// RequestToResponses converts a canonical unified request to a Responses API
+// BuildResponsesRequest converts a canonical unified request to a Responses API
 // wire request.
-func RequestToResponses(r Request, _ ...ResponsesOption) (*responses.Request, error) {
+func BuildResponsesRequest(r Request, _ ...ResponsesOption) (*responses.Request, error) {
 	if err := r.Validate(); err != nil {
 		return nil, fmt.Errorf("validate unified request: %w", err)
 	}
@@ -181,6 +180,10 @@ func RequestFromResponses(r responses.Request) (Request, error) {
 	return u, nil
 }
 
+type ResponsesOption func(*responsesOptions)
+
+type responsesOptions struct{}
+
 func toolChoiceFromResponses(v any) llm.ToolChoice {
 	switch t := v.(type) {
 	case nil:
@@ -202,66 +205,4 @@ func toolChoiceFromResponses(v any) llm.ToolChoice {
 		}
 	}
 	return nil
-}
-
-// ResponsesOption reserves future converter options.
-type ResponsesOption func(*responsesOptions)
-
-type responsesOptions struct{}
-
-// EventFromResponses converts a responses native parser event into unified StreamEvent.
-// Returns ignored=true for explicit no-op events.
-func EventFromResponses(ev any) (StreamEvent, bool, error) {
-	switch e := ev.(type) {
-	case *responses.ResponseCreatedEvent:
-		return StreamEvent{Type: StreamEventStarted, Started: &Started{RequestID: e.Response.ID, Model: e.Response.Model}}, false, nil
-
-	case *responses.TextDeltaEvent:
-		idx := uint32(e.OutputIndex)
-		return StreamEvent{Type: StreamEventDelta, Delta: &Delta{Kind: llm.DeltaKindText, Index: &idx, Text: e.Delta}}, false, nil
-	case *responses.ReasoningDeltaEvent:
-		idx := uint32(e.OutputIndex)
-		return StreamEvent{Type: StreamEventDelta, Delta: &Delta{Kind: llm.DeltaKindThinking, Index: &idx, Thinking: e.Delta}}, false, nil
-	case *responses.FuncArgsDeltaEvent:
-		idx := uint32(e.OutputIndex)
-		return StreamEvent{Type: StreamEventDelta, Delta: &Delta{Kind: llm.DeltaKindTool, Index: &idx, ToolArgs: e.Delta}}, false, nil
-
-	case *responses.ToolCompleteEvent:
-		return StreamEvent{Type: StreamEventToolCall, ToolCall: &ToolCall{ID: e.ID, Name: e.Name, Args: e.Args}}, false, nil
-
-	case *responses.ResponseCompletedEvent:
-		stop := llm.StopReasonEndTurn
-		if e.Response.Status == responses.StatusIncomplete && e.Response.IncompleteDetails != nil {
-			switch e.Response.IncompleteDetails.Reason {
-			case responses.ReasonMaxOutputTokens:
-				stop = llm.StopReasonMaxTokens
-			case responses.ReasonContentFilter:
-				stop = llm.StopReasonContentFilter
-			}
-		}
-		out := StreamEvent{Type: StreamEventCompleted, Completed: &Completed{StopReason: stop}}
-		if u := e.Response.Usage; u != nil {
-			tokens := usage.TokenItems{
-				{Kind: usage.KindInput, Count: u.InputTokens},
-				{Kind: usage.KindOutput, Count: u.OutputTokens},
-			}
-			if u.InputTokensDetails != nil && u.InputTokensDetails.CachedTokens > 0 {
-				tokens = append(tokens, usage.TokenItem{Kind: usage.KindCacheRead, Count: u.InputTokensDetails.CachedTokens})
-			}
-			if u.OutputTokensDetails != nil && u.OutputTokensDetails.ReasoningTokens > 0 {
-				tokens = append(tokens, usage.TokenItem{Kind: usage.KindReasoning, Count: u.OutputTokensDetails.ReasoningTokens})
-			}
-			out.Usage = &Usage{Tokens: tokens.NonZero()}
-		}
-		return out, false, nil
-
-	case *responses.APIErrorEvent:
-		return StreamEvent{Type: StreamEventError, Error: &StreamError{Err: e}}, false, nil
-
-	case *responses.OutputItemAddedEvent, *responses.OutputItemDoneEvent:
-		return StreamEvent{}, true, nil
-
-	default:
-		return StreamEvent{Type: StreamEventUnknown}, false, nil
-	}
 }

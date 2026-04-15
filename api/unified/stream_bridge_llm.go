@@ -8,13 +8,17 @@ import (
 	"github.com/codewandler/llm/usage"
 )
 
-// Publish maps a canonical unified StreamEvent to existing llm.Publisher methods.
-func Publish(pub llm.Publisher, ev StreamEvent) error {
+// PublishToLLM maps a canonical unified StreamEvent to the current llm.Publisher
+// surface. Semantic events without a direct llm projection are preserved as
+// debug payloads instead of being silently dropped.
+func PublishToLLM(pub llm.Publisher, ev StreamEvent) error {
 	if pub == nil {
 		return fmt.Errorf("publisher is required")
 	}
+	handled := false
 
 	if ev.Started != nil {
+		handled = true
 		pub.Started(llm.StreamStartedEvent{
 			RequestID: ev.Started.RequestID,
 			Model:     ev.Started.Model,
@@ -24,6 +28,7 @@ func Publish(pub llm.Publisher, ev StreamEvent) error {
 	}
 
 	if ev.Delta != nil {
+		handled = true
 		d := &llm.DeltaEvent{Kind: ev.Delta.Kind}
 		d.Index = ev.Delta.Index
 		d.Text = ev.Delta.Text
@@ -35,14 +40,17 @@ func Publish(pub llm.Publisher, ev StreamEvent) error {
 	}
 
 	if ev.ToolCall != nil {
+		handled = true
 		pub.ToolCall(tool.NewToolCall(ev.ToolCall.ID, ev.ToolCall.Name, ev.ToolCall.Args))
 	}
 
 	if ev.Content != nil {
+		handled = true
 		pub.ContentBlock(llm.ContentPartEvent{Part: ev.Content.Part, Index: ev.Content.Index})
 	}
 
 	if ev.Usage != nil {
+		handled = true
 		rec := usage.Record{
 			Dims: usage.Dims{
 				Provider:  ev.Usage.Provider,
@@ -58,11 +66,17 @@ func Publish(pub llm.Publisher, ev StreamEvent) error {
 	}
 
 	if ev.Completed != nil {
+		handled = true
 		pub.Completed(llm.CompletedEvent{StopReason: ev.Completed.StopReason})
 	}
 
 	if ev.Error != nil && ev.Error.Err != nil {
+		handled = true
 		pub.Error(ev.Error.Err)
+	}
+
+	if !handled {
+		pub.Debug("unified.stream_event", ev)
 	}
 
 	return nil

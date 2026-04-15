@@ -9,13 +9,12 @@ import (
 	"github.com/codewandler/llm/api/messages"
 	"github.com/codewandler/llm/msg"
 	"github.com/codewandler/llm/sortmap"
-	"github.com/codewandler/llm/usage"
 )
 
-// RequestToMessages converts a canonical unified request to an Anthropic
+// BuildMessagesRequest converts a canonical unified request to an Anthropic
 // Messages wire request.
-func RequestToMessages(r Request, opts ...MessagesOption) (*messages.Request, error) {
-	mopts := &messagesOptions{modelCaps: DefaultAnthropicModelCaps}
+func BuildMessagesRequest(r Request, opts ...MessagesOption) (*messages.Request, error) {
+	mopts := &messagesOptions{modelCaps: DefaultAnthropicMessagesModelCaps}
 	for _, o := range opts {
 		o(mopts)
 	}
@@ -182,6 +181,18 @@ func RequestFromMessages(r messages.Request) (Request, error) {
 	return u, nil
 }
 
+type MessagesOption func(*messagesOptions)
+
+type messagesOptions struct {
+	modelCaps ModelCapsFunc
+}
+
+// WithMessagesModelCaps injects a custom model capability resolver into
+// BuildMessagesRequest.
+func WithMessagesModelCaps(fn ModelCapsFunc) MessagesOption {
+	return func(o *messagesOptions) { o.modelCaps = fn }
+}
+
 func messageToMessages(m Message) (*messages.Message, error) {
 	wire := &messages.Message{}
 	switch Role(m.Role) {
@@ -190,7 +201,6 @@ func messageToMessages(m Message) (*messages.Message, error) {
 	case RoleAssistant:
 		wire.Role = string(msg.RoleAssistant)
 	case RoleTool:
-		// tool results are represented as user content blocks in Anthropic wire
 		wire.Role = string(msg.RoleUser)
 	case RoleDeveloper:
 		wire.Role = string(msg.RoleUser)
@@ -348,118 +358,4 @@ func hasPerMessageCacheHints(msgs []Message) bool {
 		}
 	}
 	return false
-}
-
-func partsText(parts []Part) string {
-	var b strings.Builder
-	for _, p := range parts {
-		if p.Type == PartTypeText {
-			b.WriteString(p.Text)
-		}
-	}
-	return b.String()
-}
-
-func toMap(v any) map[string]any {
-	if v == nil {
-		return nil
-	}
-	if m, ok := v.(map[string]any); ok {
-		return m
-	}
-	raw, _ := json.Marshal(v)
-	var out map[string]any
-	_ = json.Unmarshal(raw, &out)
-	return out
-}
-
-// EventFromMessages converts a messages native parser event into unified StreamEvent.
-// Returns ignored=true for explicit no-op events.
-func EventFromMessages(ev any) (StreamEvent, bool, error) {
-	switch e := ev.(type) {
-	case *messages.MessageStartEvent:
-		// Emit Started + partial Usage (input tokens available at message_start).
-		// Output tokens and stop reason come later in MessageDeltaEvent.
-		tokens := usage.TokenItems{
-			{Kind: usage.KindInput, Count: e.Message.Usage.InputTokens},
-			{Kind: usage.KindCacheWrite, Count: e.Message.Usage.CacheCreationInputTokens},
-			{Kind: usage.KindCacheRead, Count: e.Message.Usage.CacheReadInputTokens},
-		}.NonZero()
-		return StreamEvent{
-			Type:    StreamEventStarted,
-			Started: &Started{RequestID: e.Message.ID, Model: e.Message.Model},
-			Usage:   &Usage{Tokens: tokens},
-		}, false, nil
-
-	case *messages.ContentBlockDeltaEvent:
-		idx := uint32(e.Index)
-		switch e.Delta.Type {
-		case messages.DeltaTypeText:
-			return StreamEvent{Type: StreamEventDelta, Delta: &Delta{Kind: llm.DeltaKindText, Index: &idx, Text: e.Delta.Text}}, false, nil
-		case messages.DeltaTypeThinking:
-			return StreamEvent{Type: StreamEventDelta, Delta: &Delta{Kind: llm.DeltaKindThinking, Index: &idx, Thinking: e.Delta.Thinking}}, false, nil
-		case messages.DeltaTypeInputJSON:
-			return StreamEvent{Type: StreamEventDelta, Delta: &Delta{Kind: llm.DeltaKindTool, Index: &idx, ToolArgs: e.Delta.PartialJSON}}, false, nil
-		case messages.DeltaTypeSignature:
-			return StreamEvent{}, true, nil
-		default:
-			return StreamEvent{Type: StreamEventUnknown, Extras: EventExtras{RawEventName: messages.EventContentBlockDelta}}, false, nil
-		}
-
-	case *messages.TextCompleteEvent:
-		return StreamEvent{Type: StreamEventContent, Content: &ContentPart{Part: msg.Text(e.Text), Index: e.Index}}, false, nil
-	case *messages.ThinkingCompleteEvent:
-		return StreamEvent{Type: StreamEventContent, Content: &ContentPart{Part: msg.Thinking(e.Thinking, e.Signature), Index: e.Index}}, false, nil
-	case *messages.ToolCompleteEvent:
-		return StreamEvent{Type: StreamEventToolCall, ToolCall: &ToolCall{ID: e.ID, Name: e.Name, Args: e.Args}}, false, nil
-
-	case *messages.MessageDeltaEvent:
-		// Emit Completed + partial Usage (output tokens available at message_delta).
-		// Input tokens were emitted earlier from MessageStartEvent.
-		tokens := usage.TokenItems{
-			{Kind: usage.KindOutput, Count: e.Usage.OutputTokens},
-		}.NonZero()
-		return StreamEvent{
-			Type:      StreamEventCompleted,
-			Completed: &Completed{StopReason: mapMessagesStopReason(e.Delta.StopReason)},
-			Usage:     &Usage{Tokens: tokens},
-		}, false, nil
-	case *messages.StreamErrorEvent:
-		return StreamEvent{Type: StreamEventError, Error: &StreamError{Err: e}}, false, nil
-
-	case *messages.PingEvent, *messages.ContentBlockStartEvent, *messages.ContentBlockStopEvent, *messages.MessageStopEvent:
-		return StreamEvent{}, true, nil
-
-	default:
-		return StreamEvent{Type: StreamEventUnknown}, false, nil
-	}
-}
-
-// mapMessagesStopReason maps an Anthropic Messages API stop_reason string to
-// the canonical llm.StopReason.
-func mapMessagesStopReason(s string) llm.StopReason {
-	switch s {
-	case "end_turn":
-		return llm.StopReasonEndTurn
-	case "tool_use":
-		return llm.StopReasonToolUse
-	case "max_tokens":
-		return llm.StopReasonMaxTokens
-	default:
-		return llm.StopReason(s)
-	}
-}
-
-// MessagesOption configures RequestToMessages conversion.
-type MessagesOption func(*messagesOptions)
-
-type messagesOptions struct {
-	modelCaps ModelCapsFunc
-}
-
-// WithModelCaps injects a custom model capability resolver into RequestToMessages.
-// Use this when you have a live model registry that is more accurate than
-// the built-in string-matching DefaultAnthropicModelCaps.
-func WithModelCaps(fn ModelCapsFunc) MessagesOption {
-	return func(o *messagesOptions) { o.modelCaps = fn }
 }

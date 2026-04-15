@@ -41,7 +41,7 @@ func TestUnifiedCompletionsEventPipeline_OllamaCompatible(t *testing.T) {
 				pub.Error(r.Err)
 				return
 			}
-			uEv, ignored, convErr := unified.EventFromCompletions(r.Event)
+			uEv, ignored, convErr := unified.MapCompletionsEvent(r.Event)
 			if convErr != nil {
 				pub.Error(convErr)
 				return
@@ -49,7 +49,7 @@ func TestUnifiedCompletionsEventPipeline_OllamaCompatible(t *testing.T) {
 			if ignored {
 				continue
 			}
-			if err := unified.Publish(pub, uEv); err != nil {
+			if err := unified.PublishToLLM(pub, uEv); err != nil {
 				pub.Error(err)
 				return
 			}

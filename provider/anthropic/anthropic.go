@@ -98,7 +98,7 @@ func (p *Provider) CreateStream(ctx context.Context, src llm.Buildable) (llm.Str
 	if err != nil {
 		return nil, llm.NewErrBuildRequest(llm.ProviderNameAnthropic, err)
 	}
-	wireReq, err := unified.RequestToMessages(uReq)
+	wireReq, err := unified.BuildMessagesRequest(uReq)
 	if err != nil {
 		return nil, llm.NewErrBuildRequest(llm.ProviderNameAnthropic, err)
 	}
@@ -197,7 +197,7 @@ func (p *Provider) CreateStream(ctx context.Context, src llm.Buildable) (llm.Str
 
 	go func() {
 		defer pub.Close()
-		unified.StreamMessages(ctx, handle, pub, sctx)
+		unified.ForwardMessages(ctx, handle, pub, sctx)
 	}()
 
 	return ch, nil

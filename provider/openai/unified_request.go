@@ -14,7 +14,7 @@ func buildCompletionsBodyUnified(opts llm.Request) ([]byte, error) {
 		return nil, fmt.Errorf("request from llm: %w", err)
 	}
 
-	wire, err := unified.RequestToCompletions(uReq)
+	wire, err := unified.BuildCompletionsRequest(uReq)
 	if err != nil {
 		return nil, fmt.Errorf("request to completions: %w", err)
 	}
@@ -28,7 +28,7 @@ func buildResponsesBodyUnified(opts llm.Request) ([]byte, error) {
 		return nil, fmt.Errorf("request from llm: %w", err)
 	}
 
-	wire, err := unified.RequestToResponses(uReq)
+	wire, err := unified.BuildResponsesRequest(uReq)
 	if err != nil {
 		return nil, fmt.Errorf("request to responses: %w", err)
 	}

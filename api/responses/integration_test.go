@@ -28,19 +28,7 @@ const (
 	testTitle         = "llm-integration-test"
 )
 
-var knownNoOpEvents = map[string]struct{}{
-	responses.EventResponseInProgress:   {},
-	responses.EventContentPartAdded:     {},
-	responses.EventContentPartDone:      {},
-	responses.EventOutputTextDone:       {},
-	responses.EventOutputTextAnnotation: {},
-	responses.EventFuncArgsDone:         {},
-	responses.EventReasoningDeltaRaw:    {},
-	responses.EventReasoningDone:        {},
-	responses.EventReasoningSummaryDone: {},
-	responses.EventResponseQueued:       {},
-	responses.EventRateLimitsUpdated:    {},
-}
+var knownNoOpEvents = map[string]struct{}{}
 
 func shouldSkipOpenRouterError(err error) bool {
 	if err == nil {
@@ -80,7 +68,7 @@ type streamReport struct {
 	completedEvt  *responses.ResponseCompletedEvent
 	textDeltas    []string
 	reasoningSeen int
-	toolCalls     []*responses.ToolCompleteEvent
+	toolCalls     []*responses.OutputItemDoneEvent
 	streamErrs    []error
 	rawEvents     map[string]int
 	handledEvents map[string]int
@@ -125,37 +113,138 @@ func streamAndCollect(t *testing.T, client *responses.Client, req *responses.Req
 			continue
 		}
 
+		if name := handledEventName(result.Event); name != "" {
+			report.handledEvents[name]++
+		}
+
 		switch ev := result.Event.(type) {
 		case *responses.ResponseCreatedEvent:
 			report.createdEvt = ev
-			report.handledEvents[responses.EventResponseCreated]++
-		case *responses.OutputItemAddedEvent:
-			report.handledEvents[responses.EventOutputItemAdded]++
-		case *responses.ReasoningDeltaEvent:
-			report.reasoningSeen++
-			report.handledEvents[responses.EventReasoningDelta]++
-		case *responses.TextDeltaEvent:
+		case *responses.OutputTextDeltaEvent:
 			report.textDeltas = append(report.textDeltas, ev.Delta)
-			report.handledEvents[responses.EventOutputTextDelta]++
-		case *responses.FuncArgsDeltaEvent:
-			report.handledEvents[responses.EventFuncArgsDelta]++
+		case *responses.ReasoningSummaryTextDeltaEvent, *responses.ReasoningTextDeltaEvent:
+			report.reasoningSeen++
 		case *responses.OutputItemDoneEvent:
-			report.handledEvents[responses.EventOutputItemDone]++
-		case *responses.ToolCompleteEvent:
-			report.toolCalls = append(report.toolCalls, ev)
-			// ToolCompleteEvent is synthesized from response.output_item.done.
-			report.handledEvents[responses.EventOutputItemDone]++
+			if ev.Item.Type == "function_call" {
+				report.toolCalls = append(report.toolCalls, ev)
+			}
 		case *responses.ResponseCompletedEvent:
 			report.completedEvt = ev
-			if ev.Response.Status == responses.StatusFailed {
-				report.handledEvents[responses.EventResponseFailed]++
-			} else {
-				report.handledEvents[responses.EventResponseCompleted]++
-			}
 		}
 	}
 
 	return report
+}
+
+func handledEventName(ev any) string {
+	switch ev.(type) {
+	case *responses.ResponseCreatedEvent:
+		return responses.EventResponseCreated
+	case *responses.ResponseInProgressEvent:
+		return responses.EventResponseInProgress
+	case *responses.ResponseCompletedEvent:
+		return responses.EventResponseCompleted
+	case *responses.ResponseFailedEvent:
+		return responses.EventResponseFailed
+	case *responses.ResponseIncompleteEvent:
+		return responses.EventResponseIncomplete
+	case *responses.ResponseQueuedEvent:
+		return responses.EventResponseQueued
+	case *responses.OutputItemAddedEvent:
+		return responses.EventOutputItemAdded
+	case *responses.OutputItemDoneEvent:
+		return responses.EventOutputItemDone
+	case *responses.ContentPartAddedEvent:
+		return responses.EventContentPartAdded
+	case *responses.ContentPartDoneEvent:
+		return responses.EventContentPartDone
+	case *responses.OutputTextDeltaEvent:
+		return responses.EventOutputTextDelta
+	case *responses.OutputTextDoneEvent:
+		return responses.EventOutputTextDone
+	case *responses.OutputTextAnnotationAddedEvent:
+		return responses.EventOutputTextAnnotationAdded
+	case *responses.RefusalDeltaEvent:
+		return responses.EventRefusalDelta
+	case *responses.RefusalDoneEvent:
+		return responses.EventRefusalDone
+	case *responses.FunctionCallArgumentsDeltaEvent:
+		return responses.EventFunctionCallArgumentsDelta
+	case *responses.FunctionCallArgumentsDoneEvent:
+		return responses.EventFunctionCallArgumentsDone
+	case *responses.FileSearchCallInProgressEvent:
+		return responses.EventFileSearchCallInProgress
+	case *responses.FileSearchCallSearchingEvent:
+		return responses.EventFileSearchCallSearching
+	case *responses.FileSearchCallCompletedEvent:
+		return responses.EventFileSearchCallCompleted
+	case *responses.WebSearchCallInProgressEvent:
+		return responses.EventWebSearchCallInProgress
+	case *responses.WebSearchCallSearchingEvent:
+		return responses.EventWebSearchCallSearching
+	case *responses.WebSearchCallCompletedEvent:
+		return responses.EventWebSearchCallCompleted
+	case *responses.ReasoningSummaryPartAddedEvent:
+		return responses.EventReasoningSummaryPartAdded
+	case *responses.ReasoningSummaryPartDoneEvent:
+		return responses.EventReasoningSummaryPartDone
+	case *responses.ReasoningSummaryTextDeltaEvent:
+		return responses.EventReasoningSummaryTextDelta
+	case *responses.ReasoningSummaryTextDoneEvent:
+		return responses.EventReasoningSummaryTextDone
+	case *responses.ReasoningTextDeltaEvent:
+		return responses.EventReasoningTextDelta
+	case *responses.ReasoningTextDoneEvent:
+		return responses.EventReasoningTextDone
+	case *responses.ImageGenerationCallCompletedEvent:
+		return responses.EventImageGenerationCallCompleted
+	case *responses.ImageGenerationCallGeneratingEvent:
+		return responses.EventImageGenerationCallGenerating
+	case *responses.ImageGenerationCallInProgressEvent:
+		return responses.EventImageGenerationCallInProgress
+	case *responses.ImageGenerationCallPartialImageEvent:
+		return responses.EventImageGenerationCallPartialImage
+	case *responses.MCPCallArgumentsDeltaEvent:
+		return responses.EventMCPCallArgumentsDelta
+	case *responses.MCPCallArgumentsDoneEvent:
+		return responses.EventMCPCallArgumentsDone
+	case *responses.MCPCallCompletedEvent:
+		return responses.EventMCPCallCompleted
+	case *responses.MCPCallFailedEvent:
+		return responses.EventMCPCallFailed
+	case *responses.MCPCallInProgressEvent:
+		return responses.EventMCPCallInProgress
+	case *responses.MCPListToolsCompletedEvent:
+		return responses.EventMCPListToolsCompleted
+	case *responses.MCPListToolsFailedEvent:
+		return responses.EventMCPListToolsFailed
+	case *responses.MCPListToolsInProgressEvent:
+		return responses.EventMCPListToolsInProgress
+	case *responses.CodeInterpreterCallInProgressEvent:
+		return responses.EventCodeInterpreterCallInProgress
+	case *responses.CodeInterpreterCallInterpretingEvent:
+		return responses.EventCodeInterpreterCallInterpreting
+	case *responses.CodeInterpreterCallCompletedEvent:
+		return responses.EventCodeInterpreterCallCompleted
+	case *responses.CodeInterpreterCallCodeDeltaEvent:
+		return responses.EventCodeInterpreterCallCodeDelta
+	case *responses.CodeInterpreterCallCodeDoneEvent:
+		return responses.EventCodeInterpreterCallCodeDone
+	case *responses.CustomToolCallInputDeltaEvent:
+		return responses.EventCustomToolCallInputDelta
+	case *responses.CustomToolCallInputDoneEvent:
+		return responses.EventCustomToolCallInputDone
+	case *responses.AudioTranscriptDoneEvent:
+		return responses.EventAudioTranscriptDone
+	case *responses.AudioTranscriptDeltaEvent:
+		return responses.EventAudioTranscriptDelta
+	case *responses.AudioDoneEvent:
+		return responses.EventAudioDone
+	case *responses.AudioDeltaEvent:
+		return responses.EventAudioDelta
+	default:
+		return ""
+	}
 }
 
 func logUnhandledRawEvents(t *testing.T, rawCounts, handledCounts map[string]int) {
@@ -199,9 +288,7 @@ func TestIntegration_OpenRouter_TextResponse(t *testing.T) {
 		Model:           model,
 		Stream:          true,
 		MaxOutputTokens: 16,
-		Input: []responses.Input{
-			{Role: "user", Content: "Reply with the single word: pong"},
-		},
+		Input:           []responses.Input{{Role: "user", Content: "Reply with the single word: pong"}},
 	}
 
 	report := streamAndCollect(t, client, req)
@@ -210,18 +297,14 @@ func TestIntegration_OpenRouter_TextResponse(t *testing.T) {
 	require.Empty(t, report.streamErrs)
 	require.NotNil(t, report.createdEvt)
 	assert.NotEmpty(t, report.createdEvt.Response.ID)
-
-	fullText := strings.Join(report.textDeltas, "")
-	assert.NotEmpty(t, fullText)
+	assert.NotEmpty(t, strings.Join(report.textDeltas, ""))
 
 	require.NotNil(t, report.completedEvt)
 	assert.Equal(t, responses.StatusCompleted, report.completedEvt.Response.Status)
-
 	if u := report.completedEvt.Response.Usage; u != nil {
 		assert.Positive(t, u.InputTokens)
 		assert.Positive(t, u.OutputTokens)
 	}
-
 	assert.Empty(t, report.toolCalls)
 
 	logUnhandledRawEvents(t, report.rawEvents, report.handledEvents)
@@ -251,9 +334,7 @@ func TestIntegration_OpenRouter_ToolCall(t *testing.T) {
 			},
 		}},
 		ToolChoice: "required",
-		Input: []responses.Input{
-			{Role: "user", Content: "What is the temperature in Berlin?"},
-		},
+		Input:      []responses.Input{{Role: "user", Content: "What is the temperature in Berlin?"}},
 	}
 
 	report := streamAndCollect(t, client, req)
@@ -263,10 +344,9 @@ func TestIntegration_OpenRouter_ToolCall(t *testing.T) {
 	require.NotEmpty(t, report.toolCalls)
 
 	tc := report.toolCalls[0]
-	assert.Equal(t, "get_temperature", tc.Name)
-	assert.NotEmpty(t, tc.ID)
-	city, _ := tc.Args["city"].(string)
-	assert.NotEmpty(t, city)
+	assert.Equal(t, "get_temperature", tc.Item.Name)
+	assert.NotEmpty(t, tc.Item.CallID)
+	assert.Contains(t, tc.Item.Arguments, "city")
 
 	logUnhandledRawEvents(t, report.rawEvents, report.handledEvents)
 }

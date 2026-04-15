@@ -101,7 +101,7 @@ func TestRequestFromLLM_AndBack(t *testing.T) {
 	require.Len(t, back.Tools, 1)
 }
 
-func TestRequestToMessages(t *testing.T) {
+func TestBuildMessagesRequest(t *testing.T) {
 	uReq := Request{
 		Model:        "claude-opus-4-5",
 		MaxTokens:    256,
@@ -126,7 +126,7 @@ func TestRequestToMessages(t *testing.T) {
 		},
 	}
 
-	wire, err := RequestToMessages(uReq)
+	wire, err := BuildMessagesRequest(uReq)
 	require.NoError(t, err)
 
 	assert.Equal(t, uReq.Model, wire.Model)
@@ -146,7 +146,7 @@ func TestRequestToMessages(t *testing.T) {
 	require.NotNil(t, wire.ToolChoice)
 }
 
-func TestRequestToCompletions(t *testing.T) {
+func TestBuildCompletionsRequest(t *testing.T) {
 	uReq := Request{
 		Model:      "gpt-4o",
 		MaxTokens:  128,
@@ -162,7 +162,7 @@ func TestRequestToCompletions(t *testing.T) {
 		},
 	}
 
-	wire, err := RequestToCompletions(uReq)
+	wire, err := BuildCompletionsRequest(uReq)
 	require.NoError(t, err)
 
 	assert.Equal(t, "gpt-4o", wire.Model)
@@ -174,7 +174,7 @@ func TestRequestToCompletions(t *testing.T) {
 	require.Len(t, wire.Messages, 4)
 }
 
-func TestRequestToResponses(t *testing.T) {
+func TestBuildResponsesRequest(t *testing.T) {
 	uReq := Request{
 		Model:      "gpt-5.4",
 		MaxTokens:  256,
@@ -190,7 +190,7 @@ func TestRequestToResponses(t *testing.T) {
 		},
 	}
 
-	wire, err := RequestToResponses(uReq)
+	wire, err := BuildResponsesRequest(uReq)
 	require.NoError(t, err)
 
 	assert.Equal(t, "gpt-5.4", wire.Model)

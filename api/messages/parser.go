@@ -118,7 +118,7 @@ func NewParser() apicore.ParserFactory {
 					if a.argBuf.Len() > 0 {
 						_ = json.Unmarshal([]byte(a.argBuf.String()), &args)
 					}
-					return apicore.StreamResult{Event: &ToolCompleteEvent{Index: idx, ID: a.id, Name: a.name, Args: args}}
+					return apicore.StreamResult{Event: &ToolCompleteEvent{Index: idx, ID: a.id, Name: a.name, RawInput: a.argBuf.String(), Args: args}}
 				}
 
 				// Known non-accumulating block stop (server_tool_use, web_search_tool_result)

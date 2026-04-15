@@ -50,7 +50,7 @@ func TestUnifiedMessagesEventPipeline_MiniMaxThinkingStillWorks(t *testing.T) {
 				pub.Error(r.Err)
 				return
 			}
-			uEv, ignored, convErr := unified.EventFromMessages(r.Event)
+			uEv, ignored, convErr := unified.MapMessagesEvent(r.Event)
 			if convErr != nil {
 				pub.Error(convErr)
 				return
@@ -58,7 +58,7 @@ func TestUnifiedMessagesEventPipeline_MiniMaxThinkingStillWorks(t *testing.T) {
 			if ignored {
 				continue
 			}
-			if err := unified.Publish(pub, uEv); err != nil {
+			if err := unified.PublishToLLM(pub, uEv); err != nil {
 				pub.Error(err)
 				return
 			}

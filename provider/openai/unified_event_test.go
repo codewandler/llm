@@ -42,7 +42,7 @@ func TestUnifiedCompletionsEventPipeline_Parity(t *testing.T) {
 				pub.Error(r.Err)
 				return
 			}
-			uEv, ignored, convErr := unified.EventFromCompletions(r.Event)
+			uEv, ignored, convErr := unified.MapCompletionsEvent(r.Event)
 			if convErr != nil {
 				pub.Error(convErr)
 				return
@@ -50,7 +50,7 @@ func TestUnifiedCompletionsEventPipeline_Parity(t *testing.T) {
 			if ignored {
 				continue
 			}
-			require.NoError(t, unified.Publish(pub, uEv))
+			require.NoError(t, unified.PublishToLLM(pub, uEv))
 		}
 	}()
 
@@ -101,7 +101,7 @@ func TestUnifiedResponsesEventPipeline_Parity(t *testing.T) {
 
 		h := responsesParserFromSSE(body)
 		for _, event := range h {
-			uEv, ignored, err := unified.EventFromResponses(event)
+			uEv, ignored, err := unified.MapResponsesEvent(event)
 			if err != nil {
 				pub.Error(err)
 				return
@@ -109,7 +109,7 @@ func TestUnifiedResponsesEventPipeline_Parity(t *testing.T) {
 			if ignored {
 				continue
 			}
-			if err := unified.Publish(pub, uEv); err != nil {
+			if err := unified.PublishToLLM(pub, uEv); err != nil {
 				pub.Error(err)
 				return
 			}
@@ -131,7 +131,7 @@ func responsesParserFromSSE(body io.ReadCloser) []any {
 	defer body.Close()
 	return []any{
 		&responses.ResponseCreatedEvent{},
-		&responses.TextDeltaEvent{OutputIndex: 0, Delta: "pong"},
+		&responses.OutputTextDeltaEvent{ContentRef: responses.ContentRef{OutputIndex: 0}, Delta: "pong"},
 		&responses.ResponseCompletedEvent{Response: struct {
 			ID                string `json:"id"`
 			Model             string `json:"model"`
