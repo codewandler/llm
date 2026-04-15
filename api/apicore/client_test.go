@@ -4,6 +4,7 @@ package apicore_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -274,4 +275,128 @@ func TestClient_Stream_ContextCancelled_ChannelCloses(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("handle.Events did not close after context cancellation")
 	}
+}
+
+func TestClient_Stream_TransformFunc(t *testing.T) {
+	type wireReq struct {
+		Model  string `json:"model"`
+		Stream bool   `json:"stream"`
+	}
+	var gotBody []byte
+	transport := apicore.RoundTripFunc(func(r *http.Request) (*http.Response, error) {
+		gotBody, _ = io.ReadAll(r.Body)
+		return &http.Response{
+			StatusCode: 200,
+			Header:     http.Header{"Content-Type": {"text/event-stream"}},
+			Body:       io.NopCloser(strings.NewReader("")),
+		}, nil
+	})
+	c := apicore.NewClient[testReq](func() apicore.EventHandler { return noopParser() },
+		apicore.WithHTTPClient[testReq](&http.Client{Transport: transport}),
+		apicore.WithTransform[testReq](func(req *testReq) any {
+			return wireReq{Model: req.Model, Stream: true}
+		}),
+	)
+	_, err := c.Stream(context.Background(), &testReq{Model: "claude-3"})
+	require.NoError(t, err)
+	var got wireReq
+	require.NoError(t, json.Unmarshal(gotBody, &got))
+	assert.Equal(t, "claude-3", got.Model)
+	assert.True(t, got.Stream)
+}
+
+func TestClient_Stream_ParseHook_InjectsEvents(t *testing.T) {
+	body := sseBody(
+		"data: delta",
+		"",
+		"data: [DONE]",
+		"",
+	)
+	transport := apicore.FixedSSEResponse(200, body)
+	c := apicore.NewClient[testReq](func() apicore.EventHandler {
+		return func(name string, data []byte) apicore.StreamResult {
+			if string(data) == "[DONE]" {
+				return apicore.StreamResult{Done: true}
+			}
+			return apicore.StreamResult{Event: string(data)}
+		}
+	},
+		apicore.WithHTTPClient[testReq](&http.Client{Transport: transport}),
+		apicore.WithParseHook[testReq](func(req *testReq, name string, data []byte) any {
+			return "hook:" + string(data)
+		}),
+	)
+	handle, err := c.Stream(context.Background(), &testReq{})
+	require.NoError(t, err)
+
+	var received []string
+	for result := range handle.Events {
+		if s, ok := result.Event.(string); ok {
+			received = append(received, s)
+		}
+	}
+	// Expect: handler event, then hook event for "delta" only.
+	// [DONE] must not have a hook event after it.
+	assert.Equal(t, []string{"delta", "hook:delta"}, received)
+}
+
+func TestClient_Stream_ParseHook_NotCalledAfterDone(t *testing.T) {
+	body := sseBody(
+		"data: token",
+		"",
+		"data: [DONE]",
+		"",
+	)
+	transport := apicore.FixedSSEResponse(200, body)
+	hookCalls := 0
+	c := apicore.NewClient[testReq](func() apicore.EventHandler {
+		return func(name string, data []byte) apicore.StreamResult {
+			if string(data) == "[DONE]" {
+				return apicore.StreamResult{Done: true}
+			}
+			return apicore.StreamResult{Event: string(data)}
+		}
+	},
+		apicore.WithHTTPClient[testReq](&http.Client{Transport: transport}),
+		apicore.WithParseHook[testReq](func(req *testReq, name string, data []byte) any {
+			hookCalls++
+			return nil
+		}),
+	)
+	handle, err := c.Stream(context.Background(), &testReq{})
+	require.NoError(t, err)
+	for range handle.Events {
+	}
+	// Hook must be called for "token" but NOT for "[DONE]".
+	assert.Equal(t, 1, hookCalls)
+}
+
+func TestClient_Stream_ResponseHook_CalledOnNon2xx(t *testing.T) {
+	transport := apicore.FixedSSEResponse(429, `{"error":"rate limited"}`)
+	var gotMeta apicore.ResponseMeta
+	c := apicore.NewClient[testReq](func() apicore.EventHandler { return noopParser() },
+		apicore.WithHTTPClient[testReq](&http.Client{Transport: transport}),
+		apicore.WithResponseHook[testReq](func(req *testReq, meta apicore.ResponseMeta) {
+			gotMeta = meta
+		}),
+	)
+	_, err := c.Stream(context.Background(), &testReq{})
+	require.Error(t, err) // still returns error
+	assert.Equal(t, 429, gotMeta.StatusCode)
+}
+
+func TestClient_Stream_HeaderFunc_ErrorPropagates(t *testing.T) {
+	c := apicore.NewClient[testReq](func() apicore.EventHandler { return noopParser() },
+		apicore.WithHeaderFunc[testReq](func(ctx context.Context, req *testReq) (http.Header, error) {
+			return nil, fmt.Errorf("auth: token expired")
+		}),
+	)
+	_, err := c.Stream(context.Background(), &testReq{})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "token expired")
+}
+
+func TestHTTPError_ErrorString(t *testing.T) {
+	e := &apicore.HTTPError{StatusCode: 429, Body: []byte(`{"error":"rate limited"}`)}
+	assert.Equal(t, `HTTP 429: {"error":"rate limited"}`, e.Error())
 }

@@ -11,7 +11,9 @@ import (
 	"time"
 )
 
-// RetryConfig controls RetryTransport behaviour.
+// RetryConfig controls RetryTransport behaviour. Zero values for numeric
+// fields select package defaults. Note: MaxRetries=0 means "use default
+// (2)", not "no retry" — zero is indistinguishable from unset.
 type RetryConfig struct {
 	MaxRetries        int           // default 2
 	RetryableStatuses []int         // default DefaultRetryableStatuses

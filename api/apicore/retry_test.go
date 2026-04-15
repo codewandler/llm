@@ -4,6 +4,7 @@ package apicore_test
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -133,4 +134,44 @@ func TestRetryTransport_LogsRetryAttempts(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 200, resp.StatusCode)
 	assert.Contains(t, logBuf.String(), "retrying request")
+}
+
+func TestRetryTransport_ContextCancelledDuringBackoff(t *testing.T) {
+	calls := 0
+	base := apicore.RoundTripFunc(func(r *http.Request) (*http.Response, error) {
+		calls++
+		return &http.Response{
+			StatusCode: 429,
+			Header:     make(http.Header),
+			Body:       io.NopCloser(bytes.NewReader(nil)),
+		}, nil
+	})
+	ctx, cancel := context.WithCancel(context.Background())
+	body := []byte(`{}`)
+	tr := apicore.NewRetryTransport(base, apicore.RetryConfig{
+		MaxRetries:     2,
+		InitialBackoff: 500 * time.Millisecond,
+	})
+	req, _ := http.NewRequestWithContext(ctx, "POST", "http://x", bytes.NewReader(body))
+	req.GetBody = func() (io.ReadCloser, error) { return io.NopCloser(bytes.NewReader(body)), nil }
+
+	cancel() // cancel before retry wait
+	resp, err := tr.RoundTrip(req)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, context.Canceled)
+	assert.NotNil(t, resp) // first response is returned alongside cancellation error
+	assert.Equal(t, 1, calls)
+}
+
+func TestRetryTransport_TransportErrorReturned(t *testing.T) {
+	tErr := fmt.Errorf("dial tcp: connection refused")
+	base := apicore.RoundTripFunc(func(r *http.Request) (*http.Response, error) {
+		return nil, tErr
+	})
+	tr := apicore.NewRetryTransport(base, apicore.RetryConfig{MaxRetries: 2})
+	req, _ := http.NewRequestWithContext(context.Background(), "POST", "http://x", nil)
+	resp, err := tr.RoundTrip(req)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, tErr)
+	assert.Nil(t, resp)
 }

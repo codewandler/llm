@@ -122,6 +122,7 @@ func NewClient[Req any](parser ParserFactory, opts ...ClientOption[Req]) *Client
 //  7. Log response at Info (if logger set): status, latency_ms
 //  8. Call ResponseHook(req, meta) on ALL responses (before error check)
 //  9. Check status: 2xx → stream; non-2xx → read body, return typed error
+//
 // 10. Create fresh EventHandler from ParserFactory
 // 11. Start background goroutine: SSE scan → handler → hook → channel
 // 12. Return StreamHandle
@@ -149,8 +150,8 @@ func (c *Client[Req]) Stream(ctx context.Context, req *Req) (*StreamHandle, erro
 	}
 
 	// 4. Build HTTP request; set GetBody so RetryTransport can reset the body.
-	url := c.baseURL + c.path
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(data))
+	endpoint := c.baseURL + c.path
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(data))
 	if err != nil {
 		return nil, fmt.Errorf("build HTTP request: %w", err)
 	}
@@ -175,7 +176,7 @@ func (c *Client[Req]) Stream(ctx context.Context, req *Req) (*StreamHandle, erro
 	if c.logger != nil {
 		c.logger.InfoContext(ctx, "sending request",
 			slog.String("method", http.MethodPost),
-			slog.String("url", url),
+			slog.String("url", endpoint),
 			slog.Int("content_length", len(data)),
 		)
 	}
@@ -242,8 +243,8 @@ func (c *Client[Req]) Stream(ctx context.Context, req *Req) (*StreamHandle, erro
 				eventCount++
 			}
 
-			// ParseHook may inject additional events (e.g. rate-limit metadata).
-			if c.parseHook != nil {
+			// ParseHook runs on non-terminal events only; Done marks the last item.
+			if c.parseHook != nil && !result.Done {
 				if extra := c.parseHook(req, ev.name, []byte(ev.data)); extra != nil {
 					ch <- StreamResult{Event: extra}
 				}

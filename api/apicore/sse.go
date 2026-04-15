@@ -58,6 +58,13 @@ func forEachDataLine(ctx context.Context, r io.Reader, fn func(sseEvent) bool) e
 	var pendingName string
 	stop := func(err error) error {
 		closeReader()
+		// Drain any buffered lines so the scanner goroutine is never stuck on a
+		// channel send after we've stopped reading. Without this, a full buffer
+		// combined with closeReader() unblocking scanner.Scan() could deadlock:
+		// the goroutine tries to send its next line, nobody reads, scannerDone
+		// is never closed, and <-scannerDone blocks forever.
+		for range lines {
+		}
 		<-scannerDone
 		return err
 	}
@@ -71,7 +78,7 @@ func forEachDataLine(ctx context.Context, r io.Reader, fn func(sseEvent) bool) e
 				if ctx.Err() != nil {
 					return ctx.Err()
 				}
-				return nil // scanner finished cleanly
+				return nil // scanner finished cleanly; scannerDone will close via defer
 			}
 			if res.err != nil {
 				if ctx.Err() != nil {
