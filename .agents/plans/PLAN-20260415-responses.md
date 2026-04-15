@@ -2,12 +2,12 @@
 
 > **Design ref**: `.agents/plans/DESIGN-api-extraction.md`
 > **Depends on**: `PLAN-20260415-apicore.md` (complete first)
-> **Blocks**: `PLAN-20260415-adapt.md` (Task 3 — ResponsesAdapter)
+> **Blocks**: `PLAN-20260415-unified.md` (Responses bridge tasks)
 > **API reference**: https://platform.openai.com/docs/api-reference/responses/create
 > **Streaming events**: https://platform.openai.com/docs/api-reference/responses/streaming
 > **Rate-limit headers**: https://platform.openai.com/docs/guides/rate-limits#headers
 > **Estimated total**: ~40 min
-> **Note**: convert/adapter logic lives in `PLAN-20260415-adapt.md` (`responses_api.go`)
+> **Note**: llm-facing conversion/adapter logic now lives in `PLAN-20260415-unified.md`.
 
 ---
 
@@ -1313,10 +1313,11 @@ go test ./api/responses/... -v -run TestIntegration
 
 ---
 
-## Notes for adapt/responses_api.go
+## Notes for unified responses bridge (`api/unified/responses_api.go`)
 
-These behavioural details from the existing `provider/openai/api_responses.go` must
-be replicated in `api/adapt/responses_api.go` (Task 3 of `PLAN-20260415-adapt.md`):
+These behavioural details from `provider/openai/api_responses.go` must
+be replicated in unified responses bridging (`api/unified/responses_api.go`) as
+tracked in `PLAN-20260415-unified.md`.
 
 | Detail | Implementation |
 |--------|---------------|

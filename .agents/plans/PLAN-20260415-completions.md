@@ -2,12 +2,12 @@
 
 > **Design ref**: `.agents/plans/DESIGN-api-extraction.md`
 > **Depends on**: `PLAN-20260415-apicore.md` (must be complete first)
-> **Blocks**: `PLAN-20260415-adapt.md` (Task 2 — CompletionsAdapter)
+> **Blocks**: `PLAN-20260415-unified.md` (Completions bridge tasks)
 > **API reference**: https://platform.openai.com/docs/api-reference/chat/create
 > **Streaming reference**: https://platform.openai.com/docs/api-reference/chat/streaming
 > **Rate-limit headers**: https://platform.openai.com/docs/guides/rate-limits#headers
 > **Estimated total**: ~30 min
-> **Note**: convert/adapter logic lives in `PLAN-20260415-adapt.md` (`completions_api.go`)
+> **Note**: llm-facing conversion/adapter logic now lives in `PLAN-20260415-unified.md`.
 
 ---
 
@@ -704,4 +704,4 @@ go test ./api/completions/... -race -count=1
 go vet ./api/completions/...
 ```
 
-All tests must pass. Adapter/convert work continues in `PLAN-20260415-adapt.md`.
+All tests must pass. Unified bridge implementation continues in `PLAN-20260415-unified.md`.

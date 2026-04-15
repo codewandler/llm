@@ -2,13 +2,13 @@
 
 > **Design ref**: `.agents/plans/DESIGN-api-extraction.md`
 > **Depends on**: `PLAN-20260415-apicore.md` (complete first)
-> **Blocks**: `PLAN-20260415-adapt.md` (Task 1 — `messages_api.go`)
+> **Blocks**: `PLAN-20260415-unified.md` (Messages bridge tasks)
 > **API reference**: https://docs.anthropic.com/en/api/messages
 > **Streaming reference**: https://docs.anthropic.com/en/api/messages-streaming
 > **Rate-limit headers**: https://docs.anthropic.com/en/api/rate-limits
 > **Beta headers**: https://docs.anthropic.com/en/api/beta-headers
 > **Estimated total**: ~40 min
-> **Note**: convert/adapter logic lives in `PLAN-20260415-adapt.md`.
+> **Note**: llm-facing conversion/adapter logic now lives in `PLAN-20260415-unified.md`.
 
 ---
 
@@ -745,4 +745,4 @@ MESSAGES_STRICT_EVENTS=1 \
 go test ./api/messages/... -v -run TestIntegration -count=1
 ```
 
-All tests must pass. Adapt-layer implementation continues in `PLAN-20260415-adapt.md`.
+All tests must pass. Unified bridge implementation continues in `PLAN-20260415-unified.md`.
