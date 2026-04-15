@@ -34,6 +34,9 @@
   `Resolve()` was missing entirely.
 - `event_publisher.go`: `Extra` field of `StreamStartedEvent` was silently
   dropped when forwarded through `pub.Started()`. Now preserved.
+- `cmd/miniagent`: mount `~/.claude` credentials read-only into the sandbox
+  so the agent can authenticate; strip `EXPECTED:` directive lines from
+  benchmark task content before passing to the agent.
 
 - `cmd/miniagent` — minimal agentic CLI that runs an autonomous
   LLM→bash→LLM loop. Supports one-shot and interactive REPL modes.
