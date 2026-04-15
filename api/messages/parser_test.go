@@ -90,6 +90,16 @@ func TestParser_UnknownDeltaSubtype_NoFail(t *testing.T) {
 	assert.True(t, ok)
 }
 
+func TestParser_WebSearchResultBlock_StopIsObservable(t *testing.T) {
+	h := handler()
+	h(messages.EventContentBlockStart, []byte(`{"index":3,"content_block":{"type":"web_search_tool_result","tool_use_id":"srvtoolu_1","content":[]}}`))
+
+	result := h(messages.EventContentBlockStop, []byte(`{"index":3}`))
+	require.NoError(t, result.Err)
+	evt := result.Event.(*messages.ContentBlockStopEvent)
+	assert.Equal(t, 3, evt.Index)
+}
+
 func TestParser_PingEvent(t *testing.T) {
 	h := handler()
 	result := h(messages.EventPing, []byte(`{"type":"ping"}`))
@@ -217,4 +227,23 @@ func TestFixture_ErrorStream(t *testing.T) {
 	assert.True(t, events[0].Done)
 	require.Error(t, events[0].Err)
 	assert.Contains(t, events[0].Err.Error(), "Overloaded")
+}
+func TestFixture_WebSearchStream(t *testing.T) {
+	events := collectEvents(t, fixture(t, "web_search_stream.sse"))
+	var stops []int
+	var text *messages.TextCompleteEvent
+	for _, r := range events {
+		switch ev := r.Event.(type) {
+		case *messages.ContentBlockStopEvent:
+			stops = append(stops, ev.Index)
+		case *messages.TextCompleteEvent:
+			text = ev
+		}
+	}
+
+	// server_tool_use index=0 and web_search_tool_result index=1 should remain observable.
+	assert.Contains(t, stops, 0)
+	assert.Contains(t, stops, 1)
+	require.NotNil(t, text)
+	assert.Contains(t, text.Text, "weather")
 }

@@ -5,7 +5,7 @@
 >   - `PLAN-20260415-messages.md` (must be complete first)
 >   - `PLAN-20260415-completions.md` (must be complete first)
 >   - `PLAN-20260415-responses.md` (must be complete first)
-> **Estimated total**: ~50 min
+> **Estimated total**: ~55 min
 >
 > **Purpose**: `api/adapt` is the **only** package in `api/` that imports
 > `github.com/codewandler/llm`. It bridges wire types ↔ `llm.Publisher`.
@@ -47,6 +47,29 @@ provider/openrouter(r) /
 
 **Files created**: `api/adapt/messages_api.go`
 **Estimated time**: 5 min
+
+### Task 1 detail: Messages adapter event mapping matrix
+
+`messages_api.go` must mirror the Messages parser contract exactly:
+
+| Native event (`api/messages`) | Adapter action (`llm.Publisher`) |
+|---|---|
+| `MessageStartEvent` | `ModelResolved` (if needed) + `Started` + store request/model/token usage |
+| `ContentBlockStartEvent` | initialize tool-delta lookup for `tool_use` blocks only |
+| `ContentBlockDeltaEvent{text_delta}` | `pub.Delta(llm.TextDelta(...).WithIndex(idx))` |
+| `ContentBlockDeltaEvent{thinking_delta}` | `pub.Delta(llm.ThinkingDelta(...).WithIndex(idx))` |
+| `ContentBlockDeltaEvent{input_json_delta}` | `pub.Delta(llm.ToolDelta(id,name,fragment).WithIndex(idx))` when tool slot exists |
+| `TextCompleteEvent` | `pub.ContentBlock(msg.Text(...), index)` |
+| `ThinkingCompleteEvent` | `pub.ContentBlock(msg.Thinking(...), index)` |
+| `ToolCompleteEvent` | `pub.ToolCall(tool.NewToolCall(...))` |
+| `MessageDeltaEvent` | update `stopReason` + `outputTokens` |
+| `MessageStopEvent` | `UsageRecord` + `Completed` (fallback stop reason: `end_turn` when empty) |
+| `ContentBlockStopEvent` (non-accumulating) | explicit no-op |
+| `PingEvent` | explicit no-op |
+| stream `Err` | `pub.Error(err)` and return |
+
+Known non-accumulating blocks (`server_tool_use`, `web_search_tool_result`) should not
+create tool-delta slots. They are still observable via raw-event integration logging.
 
 ```go
 // api/adapt/messages_api.go
@@ -129,6 +152,12 @@ func (a *MessagesAdapter) StreamTo(ctx context.Context, req llm.Request, pub llm
 		messages.HeaderRequestID,
 	))
 
+	type toolSlot struct {
+		ID   string
+		Name string
+	}
+	activeToolSlots := make(map[int]toolSlot)
+
 	var (
 		requestID    string
 		model        string
@@ -167,17 +196,26 @@ func (a *MessagesAdapter) StreamTo(ctx context.Context, req llm.Request, pub llm
 				Extra:     extra,
 			})
 
+		case *messages.ContentBlockStartEvent:
+			// ContentBlock is raw JSON; decode the view for tool slot lookup.
+			var block messages.StartBlockView
+			if err := json.Unmarshal(evt.ContentBlock, &block); err == nil {
+				if block.Type == messages.BlockTypeToolUse {
+					activeToolSlots[evt.Index] = toolSlot{ID: block.ID, Name: block.Name}
+				}
+			}
+
 		case *messages.ContentBlockDeltaEvent:
 			idx := uint32(evt.Index)
 			switch evt.Delta.Type {
-			case "text_delta":
-				d := llm.TextDelta(evt.Delta.Text)
-				d.Index = &idx
-				pub.Delta(d)
-			case "thinking_delta":
-				d := llm.ThinkingDelta(evt.Delta.Thinking)
-				d.Index = &idx
-				pub.Delta(d)
+			case messages.DeltaTypeText:
+				pub.Delta(llm.TextDelta(evt.Delta.Text).WithIndex(idx))
+			case messages.DeltaTypeThinking:
+				pub.Delta(llm.ThinkingDelta(evt.Delta.Thinking).WithIndex(idx))
+			case messages.DeltaTypeInputJSON:
+				if slot, ok := activeToolSlots[evt.Index]; ok {
+					pub.Delta(llm.ToolDelta(slot.ID, slot.Name, evt.Delta.PartialJSON).WithIndex(idx))
+				}
 			}
 
 		case *messages.TextCompleteEvent:
@@ -199,7 +237,17 @@ func (a *MessagesAdapter) StreamTo(ctx context.Context, req llm.Request, pub llm
 			outputTokens = evt.Usage.OutputTokens
 			stopReason   = messagesStopReason(evt.Delta.StopReason)
 
+		case *messages.ContentBlockStopEvent:
+			// Non-accumulating block types (e.g. server_tool_use/web_search_tool_result)
+			// are intentionally no-op at the adapter layer.
+
+		case *messages.PingEvent:
+			// Keepalive event; no llm event emitted.
+
 		case *messages.MessageStopEvent:
+			if stopReason == "" {
+				stopReason = llm.StopReasonEndTurn
+			}
 			tokens := usage.TokenItems{
 				{Kind: usage.KindInput,      Count: inputTokens},
 				{Kind: usage.KindCacheRead,  Count: cacheRead},
@@ -233,14 +281,14 @@ func (a *MessagesAdapter) StreamTo(ctx context.Context, req llm.Request, pub llm
 
 func messagesStopReason(s string) llm.StopReason {
 	switch s {
-	case "end_turn":
+	case messages.StopReasonEndTurn:
 		return llm.StopReasonEndTurn
-	case "tool_use":
+	case messages.StopReasonToolUse:
 		return llm.StopReasonToolUse
-	case "max_tokens":
+	case messages.StopReasonMaxTok:
 		return llm.StopReasonMaxTokens
 	default:
-		return llm.StopReasonEndTurn
+		return llm.StopReason(s)
 	}
 }
 
@@ -1051,109 +1099,70 @@ go build ./api/adapt/...
 ## Task 5: Write messages_api_test.go
 
 **Files created**: `api/adapt/messages_api_test.go`
-**Estimated time**: 5 min
+**Estimated time**: 7 min
+
+Coverage requirements for `MessagesAdapter` + `MessagesRequestFromLLM`:
+
+1. `MessageStartEvent` path:
+   - emits `Started`
+   - emits `ModelResolved` when API model differs from requested model
+2. Delta mapping:
+   - `text_delta` → `DeltaKindText` with `Index`
+   - `thinking_delta` → `DeltaKindThinking` with `Index`
+   - `input_json_delta` with prior `tool_use` start → `DeltaKindTool` with index/id/name
+3. No-op event handling:
+   - `PingEvent` is accepted and ignored
+   - `ContentBlockStopEvent` for non-accumulating blocks is accepted and ignored
+4. Completion mapping:
+   - `TextCompleteEvent` and `ThinkingCompleteEvent` emit `ContentPartEvent`
+   - `ToolCompleteEvent` emits `ToolCallEvent`
+5. Usage + completion:
+   - `MessageDeltaEvent` + `MessageStopEvent` produce `UsageUpdatedEvent` and `CompletedEvent`
+6. Error path:
+   - `StreamResult{Err: ...}` emits `ErrorEvent` and returns error
+7. Convert coverage:
+   - thinking options
+   - cache-last-system
+   - tool choice mapping
+   - JSON output format mapping
+
+Reference skeleton:
 
 ```go
-// api/adapt/messages_api_test.go
-package adapt_test
-
-import (
-	"context"
-	"testing"
-
-	"github.com/codewandler/llm"
-	"github.com/codewandler/llm/api/adapt"
-	"github.com/codewandler/llm/api/apicore"
-	"github.com/codewandler/llm/api/messages"
-	"github.com/codewandler/llm/llmtest"
-	"github.com/codewandler/llm/usage"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-)
-
-type fakeMessagesStreamer struct{ results []apicore.StreamResult }
-
-func (f *fakeMessagesStreamer) Stream(_ context.Context, _ *messages.Request) (*apicore.StreamHandle, error) {
-	return apicore.NewTestHandle(f.results...), nil
-}
-
-func TestMessagesAdapter_TextDeltas(t *testing.T) {
-	s := &fakeMessagesStreamer{results: []apicore.StreamResult{
-		{Event: &messages.MessageStartEvent{Message: messages.MessageStartPayload{ID: "r1", Model: "claude-3-5-haiku-20241022"}}},
-		{Event: &messages.ContentBlockDeltaEvent{Index: 0, Delta: messages.Delta{Type: "text_delta", Text: "hello "}}},
-		{Event: &messages.ContentBlockDeltaEvent{Index: 0, Delta: messages.Delta{Type: "text_delta", Text: "world"}}},
-		{Event: &messages.TextCompleteEvent{Index: 0, Text: "hello world"}},
-		{Event: &messages.MessageDeltaEvent{}},
-		{Event: &messages.MessageStopEvent{}, Done: true},
-	}}
-	a := adapt.NewMessagesAdapter(s, []apicore.AdapterOption{apicore.WithProviderName("anthropic")})
-	result := llmtest.Collect(context.Background(), func(pub llm.Publisher) {
-		_ = a.StreamTo(context.Background(), llm.Request{Model: "claude-3-5-haiku-20241022"}, pub)
-	})
-	assert.Equal(t, "hello world", result.Text())
-	assert.Equal(t, llm.StopReasonEndTurn, result.StopReason())
-}
-
-func TestMessagesAdapter_ToolCall(t *testing.T) {
-	s := &fakeMessagesStreamer{results: []apicore.StreamResult{
-		{Event: &messages.MessageStartEvent{Message: messages.MessageStartPayload{ID: "r1", Model: "m"}}},
-		{Event: &messages.ToolCompleteEvent{ID: "tc1", Name: "search", Args: map[string]any{"q": "go"}}},
-		{Event: &messages.MessageDeltaEvent{}},
-		{Event: &messages.MessageStopEvent{}, Done: true},
-	}}
-	a := adapt.NewMessagesAdapter(s, nil)
-	result := llmtest.Collect(context.Background(), func(pub llm.Publisher) {
-		_ = a.StreamTo(context.Background(), llm.Request{Model: "m"}, pub)
-	})
-	require.Len(t, result.ToolCalls(), 1)
-	assert.Equal(t, "search", result.ToolCalls()[0].Name)
-	assert.Equal(t, llm.StopReasonToolUse, result.StopReason())
-}
-
-func TestMessagesAdapter_UsageRecord(t *testing.T) {
-	s := &fakeMessagesStreamer{results: []apicore.StreamResult{
-		{Event: &messages.MessageStartEvent{Message: messages.MessageStartPayload{
-			ID: "r1", Model: "m",
-			Usage: messages.MessageUsage{InputTokens: 50, CacheCreationInputTokens: 10},
-		}}},
-		{Event: &messages.MessageDeltaEvent{
-			Delta: struct{ StopReason string `json:"stop_reason"` }{StopReason: "end_turn"},
-			Usage: struct{ OutputTokens int `json:"output_tokens"` }{OutputTokens: 20},
-		}},
-		{Event: &messages.MessageStopEvent{}, Done: true},
-	}}
-	a := adapt.NewMessagesAdapter(s, []apicore.AdapterOption{apicore.WithProviderName("anthropic")})
-	result := llmtest.Collect(context.Background(), func(pub llm.Publisher) {
-		_ = a.StreamTo(context.Background(), llm.Request{Model: "m"}, pub)
-	})
-	require.NotNil(t, result.Usage())
-	assert.Equal(t, 50, result.Usage().Tokens.Count(usage.KindInput))
-	assert.Equal(t, 10, result.Usage().Tokens.Count(usage.KindCacheWrite))
-	assert.Equal(t, 20, result.Usage().Tokens.Count(usage.KindOutput))
-}
-
-func TestMessagesRequestFromLLM_ThinkingEnabled(t *testing.T) {
-	wire, err := adapt.MessagesRequestFromLLM(
-		llm.Request{Model: "claude-3-7-sonnet-20250219"},
-		adapt.MessagesWithThinking(messages.ThinkingEnabled, 8000),
-	)
-	require.NoError(t, err)
-	require.NotNil(t, wire.Thinking)
-	assert.Equal(t, "enabled", wire.Thinking.Type)
-	assert.Equal(t, 8000, wire.Thinking.BudgetTokens)
-}
-
-func TestMessagesRequestFromLLM_CacheLastSystem(t *testing.T) {
-	req := llm.Request{
-		Model:    "m",
-		Messages: llmtest.Messages(llmtest.System("sys1"), llmtest.System("sys2"), llmtest.User("hi")),
+func TestMessagesAdapter_ToolDeltaStreaming(t *testing.T) {
+	mustJSON := func(v any) []byte {
+		b, _ := json.Marshal(v)
+		return b
 	}
-	wire, err := adapt.MessagesRequestFromLLM(req, adapt.MessagesWithCacheLastSystem())
-	require.NoError(t, err)
-	require.Len(t, wire.System, 2)
-	assert.Nil(t, wire.System[0].CacheControl)
-	require.NotNil(t, wire.System[1].CacheControl)
-	assert.Equal(t, "ephemeral", wire.System[1].CacheControl.Type)
+	// Start tool block first so adapter can map index -> (id,name).
+	s := &fakeMessagesStreamer{results: []apicore.StreamResult{
+		{Event: &messages.MessageStartEvent{...}},
+		{Event: &messages.ContentBlockStartEvent{
+			Index: 1,
+			ContentBlock: mustJSON(messages.StartBlockView{Type: messages.BlockTypeToolUse, ID: "toolu_1", Name: "search"}),
+		}},
+		{Event: &messages.ContentBlockDeltaEvent{Index: 1, Delta: messages.Delta{Type: messages.DeltaTypeInputJSON, PartialJSON: "{\"q\":"}}},
+		{Event: &messages.ContentBlockDeltaEvent{Index: 1, Delta: messages.Delta{Type: messages.DeltaTypeInputJSON, PartialJSON: "\"go\"}"}}},
+		{Event: &messages.ToolCompleteEvent{Index: 1, ID: "toolu_1", Name: "search", Args: map[string]any{"q": "go"}}},
+		{Event: &messages.MessageDeltaEvent{...}},
+		{Event: &messages.PingEvent{}},
+		{Event: &messages.ContentBlockStopEvent{Index: 2}}, // non-accumulating no-op path
+		{Event: &messages.MessageStopEvent{}, Done: true},
+	}}
+
+	pub, ch := llm.NewEventPublisher()
+	go func() { _ = adapt.NewMessagesAdapter(s, nil).StreamTo(context.Background(), llm.Request{Model: "m"}, pub) }()
+
+	var seenToolDelta bool
+	for env := range ch {
+		if d, ok := env.Data.(*llm.DeltaEvent); ok && d.Kind == llm.DeltaKindTool {
+			seenToolDelta = true
+			require.NotNil(t, d.Index)
+			assert.Equal(t, "toolu_1", d.ToolID)
+			assert.Equal(t, "search", d.ToolName)
+		}
+	}
+	assert.True(t, seenToolDelta)
 }
 ```
 

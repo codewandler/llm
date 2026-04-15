@@ -335,31 +335,31 @@ func TestClient_Stream_ParseHook_InjectsEvents(t *testing.T) {
 			received = append(received, s)
 		}
 	}
-	// Expect: handler event, then hook event for "delta" only.
-	// [DONE] must not have a hook event after it.
-	assert.Equal(t, []string{"delta", "hook:delta"}, received)
+	// Hook events are emitted for all scanned SSE events, including terminal ones.
+	assert.Equal(t, []string{"delta", "hook:delta", "hook:[DONE]"}, received)
 }
 
-func TestClient_Stream_ParseHook_NotCalledAfterDone(t *testing.T) {
+func TestClient_Stream_ParseHook_CalledOnTerminalEvent(t *testing.T) {
 	body := sseBody(
-		"data: token",
-		"",
-		"data: [DONE]",
+		"event: message_stop",
+		`data: {"type":"message_stop"}`,
 		"",
 	)
 	transport := apicore.FixedSSEResponse(200, body)
 	hookCalls := 0
+	var hookEventName string
 	c := apicore.NewClient[testReq](func() apicore.EventHandler {
 		return func(name string, data []byte) apicore.StreamResult {
-			if string(data) == "[DONE]" {
+			if name == "message_stop" {
 				return apicore.StreamResult{Done: true}
 			}
-			return apicore.StreamResult{Event: string(data)}
+			return apicore.StreamResult{}
 		}
 	},
 		apicore.WithHTTPClient[testReq](&http.Client{Transport: transport}),
 		apicore.WithParseHook[testReq](func(req *testReq, name string, data []byte) any {
 			hookCalls++
+			hookEventName = name
 			return nil
 		}),
 	)
@@ -367,8 +367,9 @@ func TestClient_Stream_ParseHook_NotCalledAfterDone(t *testing.T) {
 	require.NoError(t, err)
 	for range handle.Events {
 	}
-	// Hook must be called for "token" but NOT for "[DONE]".
-	assert.Equal(t, 1, hookCalls)
+
+	require.Equal(t, 1, hookCalls)
+	assert.Equal(t, "message_stop", hookEventName)
 }
 
 func TestClient_Stream_ResponseHook_CalledOnNon2xx(t *testing.T) {

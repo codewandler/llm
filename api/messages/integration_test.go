@@ -95,19 +95,35 @@ func TestIntegration_OpenRouter_MessagesStream(t *testing.T) {
 		text      strings.Builder
 		streamErr error
 	)
+	handledCounts := map[string]int{}
 
 	for result := range handle.Events {
 		if result.Err != nil {
 			streamErr = result.Err
+			handledCounts[messages.EventError]++
 			continue
 		}
 		switch ev := result.Event.(type) {
 		case *messages.MessageStartEvent:
 			haveStart = true
+			handledCounts[messages.EventMessageStart]++
+		case *messages.ContentBlockStartEvent:
+			handledCounts[messages.EventContentBlockStart]++
+		case *messages.ContentBlockDeltaEvent:
+			handledCounts[messages.EventContentBlockDelta]++
+		case *messages.ContentBlockStopEvent:
+			handledCounts[messages.EventContentBlockStop]++
 		case *messages.TextCompleteEvent:
 			text.WriteString(ev.Text)
+			// synthesized from content_block_stop; raw coverage still comes from
+			// ContentBlockStopEvent handling above.
+		case *messages.PingEvent:
+			handledCounts[messages.EventPing]++
+		case *messages.MessageDeltaEvent:
+			handledCounts[messages.EventMessageDelta]++
 		case *messages.MessageStopEvent:
 			haveStop = true
+			handledCounts[messages.EventMessageStop]++
 		}
 	}
 
@@ -119,10 +135,10 @@ func TestIntegration_OpenRouter_MessagesStream(t *testing.T) {
 	assert.True(t, haveStop)
 	assert.NotEmpty(t, strings.TrimSpace(text.String()))
 
-	logUnknownRawEvents(t, rawCounts)
+	logUnknownRawEvents(t, rawCounts, handledCounts)
 }
 
-func logUnknownRawEvents(t *testing.T, rawCounts map[string]int) {
+func logUnknownRawEvents(t *testing.T, rawCounts, handledCounts map[string]int) {
 	t.Helper()
 	var keys []string
 	for k := range rawCounts {
@@ -132,11 +148,15 @@ func logUnknownRawEvents(t *testing.T, rawCounts map[string]int) {
 
 	var unknown []string
 	for _, name := range keys {
-		if _, ok := knownRawEvents[name]; ok {
-			t.Logf("observed known raw event: %s x%d", name, rawCounts[name])
+		remaining := rawCounts[name] - handledCounts[name]
+		if remaining <= 0 {
 			continue
 		}
-		t.Logf("observed UNKNOWN raw event: %s x%d", name, rawCounts[name])
+		if _, ok := knownRawEvents[name]; ok {
+			t.Logf("observed known raw event: %s x%d", name, remaining)
+			continue
+		}
+		t.Logf("observed UNKNOWN raw event: %s x%d", name, remaining)
 		unknown = append(unknown, name)
 	}
 

@@ -53,6 +53,7 @@ func parseAPIError(statusCode int, body []byte) error {
 		Error struct {
 			Message string `json:"message"`
 			Type    string `json:"type"`
+			Code    any    `json:"code"`
 		} `json:"error"`
 	}
 	if err := json.Unmarshal(body, &resp); err != nil || resp.Error.Message == "" {
@@ -61,5 +62,5 @@ func parseAPIError(statusCode int, body []byte) error {
 	if resp.Error.Type != "" {
 		return fmt.Errorf("%s: %s (HTTP %d)", resp.Error.Type, resp.Error.Message, statusCode)
 	}
-	return fmt.Errorf("openai error: %s (HTTP %d)", resp.Error.Message, statusCode)
+	return fmt.Errorf("%s (HTTP %d)", resp.Error.Message, statusCode)
 }

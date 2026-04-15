@@ -246,8 +246,10 @@ func (c *Client[Req]) Stream(ctx context.Context, req *Req) (*StreamHandle, erro
 				eventCount++
 			}
 
-			// ParseHook runs on non-terminal events only; Done marks the last item.
-			if c.parseHook != nil && !result.Done {
+			// ParseHook: emit extra events if hook returns non-nil.
+			// Run hook for every scanned SSE event, including terminal ones,
+			// so integration tests can observe full raw event coverage.
+			if c.parseHook != nil {
 				if extra := c.parseHook(req, ev.name, []byte(ev.data)); extra != nil {
 					ch <- StreamResult{Event: extra}
 				}

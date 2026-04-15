@@ -19,9 +19,12 @@ type Request struct {
 }
 
 // Message is a chat message in the messages array.
+//
+// Content supports both string and rich content arrays (OpenAI wire supports
+// either shape depending on model/features).
 type Message struct {
 	Role       string     `json:"role"` // "system", "user", "assistant", "tool"
-	Content    string     `json:"content,omitempty"`
+	Content    any        `json:"content,omitempty"`
 	ToolCalls  []ToolCall `json:"tool_calls,omitempty"`
 	ToolCallID string     `json:"tool_call_id,omitempty"`
 }
@@ -72,10 +75,13 @@ type Chunk struct {
 }
 
 // Choice is one completion choice inside a Chunk.
+//
+// FinishReason is nil for interim chunks (wire value null), set on terminal
+// choice chunks (e.g. "stop", "tool_calls", "length").
 type Choice struct {
-	Index        int    `json:"index"`
-	Delta        Delta  `json:"delta"`
-	FinishReason string `json:"finish_reason"` // "", stop/tool_calls/length/content_filter
+	Index        int     `json:"index"`
+	Delta        Delta   `json:"delta"`
+	FinishReason *string `json:"finish_reason"`
 }
 
 // Delta is the content delta in a Choice.

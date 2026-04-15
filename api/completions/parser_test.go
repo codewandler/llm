@@ -140,3 +140,53 @@ func TestParser_FixtureUsageChunk(t *testing.T) {
 	assert.Equal(t, 2, usage.PromptTokensDetails.CachedTokens)
 	assert.Equal(t, 1, usage.CompletionTokensDetails.ReasoningTokens)
 }
+
+func TestParser_FinishReasonNull_Decodes(t *testing.T) {
+	h := makeHandler()
+	data := []byte(`{"id":"c1","model":"gpt-4o","choices":[{"index":0,"delta":{"content":"hi"},"finish_reason":null}]}`)
+	result := h("", data)
+	require.NoError(t, result.Err)
+	chunk, ok := result.Event.(*completions.Chunk)
+	require.True(t, ok)
+	require.Len(t, chunk.Choices, 1)
+	assert.Nil(t, chunk.Choices[0].FinishReason)
+	assert.Equal(t, "hi", chunk.Choices[0].Delta.Content)
+}
+
+func TestParser_FixtureToolStream(t *testing.T) {
+	c := fixtureClient(t, "tool_stream.sse")
+	client := completions.NewClient(
+		completions.WithBaseURL("https://example.com"),
+		completions.WithHTTPClient(c),
+	)
+	handle, err := client.Stream(t.Context(), &completions.Request{Model: "gpt-4o", Stream: true})
+	require.NoError(t, err)
+
+	var (
+		argFragments []string
+		finish       *string
+		sawDone      bool
+	)
+	for ev := range handle.Events {
+		require.NoError(t, ev.Err)
+		if ev.Done {
+			sawDone = true
+			continue
+		}
+		chunk, ok := ev.Event.(*completions.Chunk)
+		if !ok || len(chunk.Choices) == 0 {
+			continue
+		}
+		choice := chunk.Choices[0]
+		if choice.FinishReason != nil {
+			finish = choice.FinishReason
+		}
+		if len(choice.Delta.ToolCalls) > 0 {
+			argFragments = append(argFragments, choice.Delta.ToolCalls[0].Function.Arguments)
+		}
+	}
+	require.True(t, sawDone)
+	require.Equal(t, []string{"{\"loc\"", ":\"Berlin\"}"}, argFragments)
+	require.NotNil(t, finish)
+	assert.Equal(t, completions.FinishReasonToolCalls, *finish)
+}
