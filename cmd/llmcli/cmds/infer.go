@@ -55,7 +55,7 @@ Examples:
 	f.TextVar(&opts.Thinking, "thinking", llm.ThinkingMode(""), "Thinking mode: auto, on, off")
 	f.TextVar(&opts.Effort, "effort", llm.Effort(""), "Effort: low, medium, high, max")
 	f.TextVar(&opts.ApiTypeHint, "api", llm.ApiType(""),
-		"API backend hint: auto, openai-chat, openai-responses, anthropic-messages")
+		"API backend hint: auto, openai-chat (or 'chat'), openai-responses (or 'responses'), anthropic-messages (or 'messages')")
 	f.TextVar(&opts.ToolChoice, "tool-choice", llm.ToolChoiceFlag{}, "Tool selection: auto, none, required, tool:<name>")
 	f.TextVar(&opts.OutputFormat, "output-format", llm.OutputFormat(""), "Output format: text, json")
 

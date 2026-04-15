@@ -165,10 +165,14 @@ func TestApiType_TextRoundtrip(t *testing.T) {
 		wantStr string
 	}{
 		{"auto", ApiTypeAuto, "auto"},
-		{"", ApiTypeAuto, "auto"},            // empty → auto
+		{"", ApiTypeAuto, "auto"}, // empty → auto
 		{"openai-chat", ApiTypeOpenAIChatCompletion, "openai-chat"},
 		{"openai-responses", ApiTypeOpenAIResponses, "openai-responses"},
 		{"anthropic-messages", ApiTypeAnthropicMessages, "anthropic-messages"},
+		// Shortforms
+		{"chat", ApiTypeOpenAIChatCompletion, "openai-chat"},         // shortform → full name
+		{"responses", ApiTypeOpenAIResponses, "openai-responses"},    // shortform → full name
+		{"messages", ApiTypeAnthropicMessages, "anthropic-messages"}, // shortform → full name
 	}
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {

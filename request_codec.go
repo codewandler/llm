@@ -68,15 +68,34 @@ func (t ApiType) MarshalText() ([]byte, error) {
 
 // UnmarshalText maps "auto" → ApiTypeAuto (the zero value "").
 // An empty input is also accepted as ApiTypeAuto.
+// Shortforms are normalized to their full names:
+//
+//	"chat" → "openai-chat"
+//	"responses" → "openai-responses"
+//	"messages" → "anthropic-messages"
 func (t *ApiType) UnmarshalText(b []byte) error {
 	s := string(b)
 	if s == "auto" || s == "" {
 		*t = ApiTypeAuto
 		return nil
 	}
+
+	// Normalize shortforms to full names
+	switch s {
+	case "chat":
+		*t = ApiTypeOpenAIChatCompletion
+		return nil
+	case "responses":
+		*t = ApiTypeOpenAIResponses
+		return nil
+	case "messages":
+		*t = ApiTypeAnthropicMessages
+		return nil
+	}
+
 	v := ApiType(s)
 	if !v.Valid() {
-		return fmt.Errorf("invalid api type %q; must be one of: auto, openai-chat, openai-responses, anthropic-messages", s)
+		return fmt.Errorf("invalid api type %q; must be one of: auto, openai-chat (or 'chat'), openai-responses (or 'responses'), anthropic-messages (or 'messages')", s)
 	}
 	*t = v
 	return nil
