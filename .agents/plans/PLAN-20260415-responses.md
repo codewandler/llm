@@ -29,8 +29,8 @@
 
 | Behaviour | Detail |
 |-----------|--------|
-| Terminal event | `response.completed` — parser returns `Done: true` |
-| No sentinel | No `[DONE]` line — `response.completed` is terminal |
+| Terminal events | `response.completed`, `response.failed`, and `error` all return `Done: true` |
+| No sentinel | No `[DONE]` line — stream ends on terminal SSE events above |
 | SSE routing | Uses `ev.name` (`event:` line) — same as existing provider code |
 | Tool accumulation | Keyed by `output_index`; ID+name from `output_item.added` |
 | `response.failed` | Unmarshalled as `ResponseCompletedEvent` (check `Status == "failed"`) |
@@ -606,8 +606,8 @@ go build ./api/responses/...
 
 **Estimated time**: 3 min
 
-These are real Responses API SSE streams (recorded format). The parser tests use
-`apicore.FixedSSEResponse` to replay them as HTTP responses.
+These are representative Responses API SSE fixtures (recorded-format wire payloads).
+The parser tests replay them via `apicore.FixedSSEResponse` as HTTP 200 event streams; protocol-level failures are encoded inside SSE `event: error` payloads.
 
 **`api/responses/testdata/text_stream.sse`**:
 ```
@@ -855,7 +855,11 @@ func TestParser_UnknownEvent_NoOp(t *testing.T) {
 		"response.in_progress",
 		"response.content_part.added",
 		"response.output_text.done",
+		"response.output_text.annotation.added",
 		"response.function_call_arguments.done",
+		"response.reasoning.delta",
+		"response.reasoning.done",
+		"response.reasoning_summary_text.done",
 		"rate_limits.updated",
 		"response.future_unknown_event",
 	}
@@ -1046,6 +1050,13 @@ import (
 //
 // Free models that work with this test (verified zero-cost):
 //
+//
+// Optional env overrides for model selection:
+//
+//	OPENROUTER_RESPONSES_FREE_MODEL
+//	OPENROUTER_RESPONSES_TOOL_MODEL
+//
+// Use these to quickly swap models if OpenRouter rotates free offerings.
 //	google/gemma-3-27b-it:free
 //	meta-llama/llama-3.3-70b-instruct:free
 //	deepseek/deepseek-chat-v3-0324:free
@@ -1058,7 +1069,10 @@ func TestIntegration_OpenRouter_TextResponse(t *testing.T) {
 		t.Skip("OPENROUTER_API_KEY not set — skipping integration test")
 	}
 
-	const model = "google/gemma-3-27b-it:free"
+	model := os.Getenv("OPENROUTER_RESPONSES_FREE_MODEL")
+	if model == "" {
+		model = "google/gemma-3-27b-it:free"
+	}
 
 	client := responses.NewClient(
 		responses.WithBaseURL("https://openrouter.ai/api"),
@@ -1150,7 +1164,10 @@ func TestIntegration_OpenRouter_ToolCall(t *testing.T) {
 		t.Skip("OPENROUTER_API_KEY not set — skipping integration test")
 	}
 
-	const model = "meta-llama/llama-3.3-70b-instruct:free"
+	model := os.Getenv("OPENROUTER_RESPONSES_TOOL_MODEL")
+	if model == "" {
+		model = "meta-llama/llama-3.3-70b-instruct:free"
+	}
 
 	client := responses.NewClient(
 		responses.WithBaseURL("https://openrouter.ai/api"),
@@ -1232,7 +1249,10 @@ func safeOutputTokens(ev *responses.ResponseCompletedEvent) int {
 go test ./api/responses/... -v -count=1
 
 # Integration tests (requires key):
-OPENROUTER_API_KEY=$OPENROUTER_API_KEY go test ./api/responses/... -v -run TestIntegration -count=1
+OPENROUTER_API_KEY=$OPENROUTER_API_KEY \
+OPENROUTER_RESPONSES_FREE_MODEL=${OPENROUTER_RESPONSES_FREE_MODEL:-google/gemma-3-27b-it:free} \
+OPENROUTER_RESPONSES_TOOL_MODEL=${OPENROUTER_RESPONSES_TOOL_MODEL:-meta-llama/llama-3.3-70b-instruct:free} \
+go test ./api/responses/... -v -run TestIntegration -count=1
 
 # Race detector (all tests):
 go test ./api/responses/... -race -count=1
@@ -1260,7 +1280,10 @@ grep -r '"github.com/codewandler/llm' api/responses/ --include="*.go" | grep -v 
 # Must print nothing
 
 # Integration (when API key available):
-OPENROUTER_API_KEY=$OPENROUTER_API_KEY go test ./api/responses/... -v -run TestIntegration
+OPENROUTER_API_KEY=$OPENROUTER_API_KEY \
+OPENROUTER_RESPONSES_FREE_MODEL=${OPENROUTER_RESPONSES_FREE_MODEL:-google/gemma-3-27b-it:free} \
+OPENROUTER_RESPONSES_TOOL_MODEL=${OPENROUTER_RESPONSES_TOOL_MODEL:-meta-llama/llama-3.3-70b-instruct:free} \
+go test ./api/responses/... -v -run TestIntegration
 ```
 
 ---
