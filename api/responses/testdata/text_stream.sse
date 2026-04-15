@@ -1,0 +1,15 @@
+event: response.created
+data: {"response":{"id":"resp_001","model":"gpt-4o-mini"}}
+
+event: response.output_item.added
+data: {"output_index":0,"item":{"type":"message","id":"msg_001","call_id":"","name":""}}
+
+event: response.output_text.delta
+data: {"output_index":0,"delta":"pong"}
+
+event: response.output_item.done
+data: {"output_index":0,"item":{"type":"message","id":"msg_001","call_id":"","name":"","arguments":""}}
+
+event: response.completed
+data: {"response":{"id":"resp_001","model":"gpt-4o-mini","status":"completed","usage":{"input_tokens":12,"output_tokens":1}}}
+
