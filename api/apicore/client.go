@@ -99,6 +99,9 @@ type StreamResult struct {
 
 // NewClient creates a new generic client with the given ParserFactory and options.
 func NewClient[Req any](parser ParserFactory, opts ...ClientOption[Req]) *Client[Req] {
+	if parser == nil {
+		panic("apicore: parser factory cannot be nil")
+	}
 	c := &Client[Req]{
 		parser:     parser,
 		httpClient: http.DefaultClient,
@@ -163,12 +166,12 @@ func (c *Client[Req]) Stream(ctx context.Context, req *Req) (*StreamHandle, erro
 	httpReq.Header.Set(HeaderContentType, ContentTypeJSON)
 	for k, vs := range c.headers {
 		for _, v := range vs {
-			httpReq.Header.Set(k, v)
+			httpReq.Header.Add(k, v)
 		}
 	}
 	for k, vs := range dynamicHeaders {
 		for _, v := range vs {
-			httpReq.Header.Set(k, v)
+			httpReq.Header.Add(k, v)
 		}
 	}
 

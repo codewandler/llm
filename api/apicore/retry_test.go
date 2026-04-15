@@ -175,3 +175,56 @@ func TestRetryTransport_TransportErrorReturned(t *testing.T) {
 	assert.ErrorIs(t, err, tErr)
 	assert.Nil(t, resp)
 }
+
+func TestRetryTransport_NegativeMaxRetries_SanitizedToZero(t *testing.T) {
+	calls := 0
+	base := apicore.RoundTripFunc(func(r *http.Request) (*http.Response, error) {
+		calls++
+		return &http.Response{
+			StatusCode: 429,
+			Header:     make(http.Header),
+			Body:       io.NopCloser(bytes.NewReader(nil)),
+		}, nil
+	})
+	tr := apicore.NewRetryTransport(base, apicore.RetryConfig{
+		MaxRetries:     -5,
+		InitialBackoff: time.Millisecond,
+	})
+	req, _ := http.NewRequestWithContext(context.Background(), "POST", "http://x", nil)
+	resp, err := tr.RoundTrip(req)
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+	assert.Equal(t, 429, resp.StatusCode)
+	assert.Equal(t, 1, calls, "negative retries should behave like zero retries")
+}
+
+func TestRetryTransport_NegativeBackoff_DoesNotPanic(t *testing.T) {
+	calls := 0
+	base := apicore.RoundTripFunc(func(r *http.Request) (*http.Response, error) {
+		calls++
+		status := 429
+		if calls > 1 {
+			status = 200
+		}
+		return &http.Response{
+			StatusCode: status,
+			Header:     make(http.Header),
+			Body:       io.NopCloser(bytes.NewReader(nil)),
+		}, nil
+	})
+	body := []byte(`{}`)
+	tr := apicore.NewRetryTransport(base, apicore.RetryConfig{
+		MaxRetries:     1,
+		InitialBackoff: -1 * time.Second,
+		MaxBackoff:     -1 * time.Second,
+	})
+	req, _ := http.NewRequestWithContext(context.Background(), "POST", "http://x", bytes.NewReader(body))
+	req.GetBody = func() (io.ReadCloser, error) { return io.NopCloser(bytes.NewReader(body)), nil }
+
+	assert.NotPanics(t, func() {
+		resp, err := tr.RoundTrip(req)
+		require.NoError(t, err)
+		require.NotNil(t, resp)
+		assert.Equal(t, 200, resp.StatusCode)
+	})
+}

@@ -400,3 +400,104 @@ func TestHTTPError_ErrorString(t *testing.T) {
 	e := &apicore.HTTPError{StatusCode: 429, Body: []byte(`{"error":"rate limited"}`)}
 	assert.Equal(t, `HTTP 429: {"error":"rate limited"}`, e.Error())
 }
+
+func TestNewClient_NilParserPanics(t *testing.T) {
+	assert.PanicsWithValue(t, "apicore: parser factory cannot be nil", func() {
+		_ = apicore.NewClient[testReq](nil)
+	})
+}
+
+func TestClient_Stream_SSEMultilineDataConcatenated(t *testing.T) {
+	body := sseBody(
+		"event: chunk",
+		"data: first",
+		"data: second",
+		"",
+		"data: [DONE]",
+		"",
+	)
+	transport := apicore.FixedSSEResponse(200, body)
+	type event struct{ name, data string }
+	c := apicore.NewClient[testReq](func() apicore.EventHandler {
+		return func(name string, data []byte) apicore.StreamResult {
+			if string(data) == "[DONE]" {
+				return apicore.StreamResult{Done: true}
+			}
+			return apicore.StreamResult{Event: event{name: name, data: string(data)}}
+		}
+	}, apicore.WithHTTPClient[testReq](&http.Client{Transport: transport}))
+
+	handle, err := c.Stream(context.Background(), &testReq{})
+	require.NoError(t, err)
+
+	var got []event
+	for result := range handle.Events {
+		e, ok := result.Event.(event)
+		if ok {
+			got = append(got, e)
+		}
+	}
+	require.Len(t, got, 1)
+	assert.Equal(t, "chunk", got[0].name)
+	assert.Equal(t, "first\nsecond", got[0].data)
+}
+
+func TestClient_Stream_SSEEventNameResetAfterBlankLine(t *testing.T) {
+	body := sseBody(
+		"event: named",
+		"",
+		"data: payload",
+		"",
+		"data: [DONE]",
+		"",
+	)
+	transport := apicore.FixedSSEResponse(200, body)
+	type event struct{ name, data string }
+	c := apicore.NewClient[testReq](func() apicore.EventHandler {
+		return func(name string, data []byte) apicore.StreamResult {
+			if string(data) == "[DONE]" {
+				return apicore.StreamResult{Done: true}
+			}
+			return apicore.StreamResult{Event: event{name: name, data: string(data)}}
+		}
+	}, apicore.WithHTTPClient[testReq](&http.Client{Transport: transport}))
+
+	handle, err := c.Stream(context.Background(), &testReq{})
+	require.NoError(t, err)
+
+	var got []event
+	for result := range handle.Events {
+		e, ok := result.Event.(event)
+		if ok {
+			got = append(got, e)
+		}
+	}
+	require.Len(t, got, 1)
+	assert.Equal(t, "", got[0].name)
+	assert.Equal(t, "payload", got[0].data)
+}
+
+func TestClient_Stream_HeaderMergePreservesMultipleValues(t *testing.T) {
+	var gotHeaders http.Header
+	transport := apicore.RoundTripFunc(func(r *http.Request) (*http.Response, error) {
+		gotHeaders = r.Header.Clone()
+		return &http.Response{
+			StatusCode: 200,
+			Header:     http.Header{"Content-Type": {"text/event-stream"}},
+			Body:       io.NopCloser(strings.NewReader("")),
+		}, nil
+	})
+
+	c := apicore.NewClient[testReq](func() apicore.EventHandler { return noopParser() },
+		apicore.WithHTTPClient[testReq](&http.Client{Transport: transport}),
+		apicore.WithHeader[testReq]("X-Multi", "a"),
+		apicore.WithHeader[testReq]("X-Multi", "b"),
+		apicore.WithHeaderFunc[testReq](func(ctx context.Context, req *testReq) (http.Header, error) {
+			return http.Header{"X-Multi": {"c", "d"}}, nil
+		}),
+	)
+
+	_, err := c.Stream(context.Background(), &testReq{})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"a", "b", "c", "d"}, gotHeaders.Values("X-Multi"))
+}

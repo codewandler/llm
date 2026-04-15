@@ -25,15 +25,24 @@ type RetryConfig struct {
 func (rc RetryConfig) withDefaults() RetryConfig {
 	if rc.MaxRetries == 0 {
 		rc.MaxRetries = 2
+	} else if rc.MaxRetries < 0 {
+		rc.MaxRetries = 0
 	}
 	if len(rc.RetryableStatuses) == 0 {
 		rc.RetryableStatuses = DefaultRetryableStatuses
 	}
 	if rc.InitialBackoff == 0 {
 		rc.InitialBackoff = time.Second
+	} else if rc.InitialBackoff < 0 {
+		rc.InitialBackoff = time.Second
 	}
 	if rc.MaxBackoff == 0 {
 		rc.MaxBackoff = 60 * time.Second
+	} else if rc.MaxBackoff < 0 {
+		rc.MaxBackoff = 60 * time.Second
+	}
+	if rc.MaxBackoff < rc.InitialBackoff {
+		rc.MaxBackoff = rc.InitialBackoff
 	}
 	return rc
 }

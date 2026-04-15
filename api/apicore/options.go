@@ -21,9 +21,9 @@ func WithHTTPClient[Req any](client *http.Client) ClientOption[Req] {
 	return func(c *Client[Req]) { c.httpClient = client }
 }
 
-// WithHeader sets a static header sent on every request.
+// WithHeader appends a static header value sent on every request.
 func WithHeader[Req any](key, value string) ClientOption[Req] {
-	return func(c *Client[Req]) { c.headers.Set(key, value) }
+	return func(c *Client[Req]) { c.headers.Add(key, value) }
 }
 
 func WithHeaderFunc[Req any](fn HeaderFunc[Req]) ClientOption[Req] {
