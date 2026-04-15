@@ -142,28 +142,37 @@ func TestParser_APIError_ReturnsDoneAndErr(t *testing.T) {
 	assert.Contains(t, result.Err.Error(), "rate limit")
 }
 
-func TestParser_UnknownEvent_NoOp(t *testing.T) {
+func TestParser_KnownNoOpEvent_NoOp(t *testing.T) {
+	h := handler()
 	tests := []string{
-		"response.in_progress",
-		"response.content_part.added",
-		"response.output_text.done",
-		"response.output_text.annotation.added",
-		"response.function_call_arguments.done",
-		"response.reasoning.delta",
-		"response.reasoning.done",
-		"response.reasoning_summary_text.done",
-		"rate_limits.updated",
-		"response.future_unknown_event",
+		responses.EventResponseInProgress,
+		responses.EventContentPartAdded,
+		responses.EventContentPartDone,
+		responses.EventOutputTextDone,
+		responses.EventOutputTextAnnotation,
+		responses.EventFuncArgsDone,
+		responses.EventReasoningDeltaRaw,
+		responses.EventReasoningDone,
+		responses.EventReasoningSummaryDone,
+		responses.EventResponseQueued,
+		responses.EventRateLimitsUpdated,
 	}
 	for _, name := range tests {
 		t.Run(name, func(t *testing.T) {
-			h := handler()
 			result := h(name, []byte(`{"some":"data"}`))
-			assert.Nil(t, result.Event, "unexpected event for %s", name)
+			assert.Nil(t, result.Event)
 			assert.NoError(t, result.Err)
 			assert.False(t, result.Done)
 		})
 	}
+}
+
+func TestParser_UnknownEvent_NoOp(t *testing.T) {
+	h := handler()
+	result := h("response.future_unknown_event", []byte(`{"some":"data"}`))
+	assert.Nil(t, result.Event)
+	assert.NoError(t, result.Err)
+	assert.False(t, result.Done)
 }
 
 func TestParser_IsolatedAcrossStreams(t *testing.T) {

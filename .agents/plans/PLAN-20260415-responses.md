@@ -34,7 +34,8 @@
 | SSE routing | Uses `ev.name` (`event:` line) — same as existing provider code |
 | Tool accumulation | Keyed by `output_index`; ID+name from `output_item.added` |
 | `response.failed` | Unmarshalled as `ResponseCompletedEvent` (check `Status == "failed"`) |
-| Unknown events | Default `return StreamResult{}` — forward-compatible no-op |
+| Unknown events | Known non-actionable events use explicit no-op `case` arms; `default` is reserved for future unknown events |
+| Drift detection | Integration tests record raw SSE names via `WithParseHook` and report unknown unhandled events (strict mode optional) |
 
 ---
 
@@ -491,13 +492,22 @@ func NewParser() apicore.ParserFactory {
 				}
 				return apicore.StreamResult{Err: &evt, Done: true}
 
+			case EventResponseInProgress,
+				EventContentPartAdded,
+				EventContentPartDone,
+				EventOutputTextDone,
+				EventOutputTextAnnotation,
+				EventFuncArgsDone,
+				EventReasoningDeltaRaw,
+				EventReasoningDone,
+				EventReasoningSummaryDone,
+				EventResponseQueued,
+				EventRateLimitsUpdated:
+				// Explicit known no-op events.
+				return apicore.StreamResult{}
+
 			default:
-				// Forward-compatible: silently ignore all unrecognised events.
-				// Known no-ops: response.in_progress, response.content_part.added,
-				// response.output_text.done, response.output_text.annotation.added,
-				// response.content_part.done, response.function_call_arguments.done,
-				// response.reasoning.delta, response.reasoning.done,
-				// response.reasoning_summary_text.done, rate_limits.updated, etc.
+				// Forward-compatible: unknown future events remain no-op.
 				return apicore.StreamResult{}
 			}
 		}
@@ -850,28 +860,37 @@ func TestParser_APIError_ReturnsDoneAndErr(t *testing.T) {
 	assert.Contains(t, result.Err.Error(), "rate limit")
 }
 
-func TestParser_UnknownEvent_NoOp(t *testing.T) {
+func TestParser_KnownNoOpEvent_NoOp(t *testing.T) {
+	h := handler()
 	tests := []string{
-		"response.in_progress",
-		"response.content_part.added",
-		"response.output_text.done",
-		"response.output_text.annotation.added",
-		"response.function_call_arguments.done",
-		"response.reasoning.delta",
-		"response.reasoning.done",
-		"response.reasoning_summary_text.done",
-		"rate_limits.updated",
-		"response.future_unknown_event",
+		responses.EventResponseInProgress,
+		responses.EventContentPartAdded,
+		responses.EventContentPartDone,
+		responses.EventOutputTextDone,
+		responses.EventOutputTextAnnotation,
+		responses.EventFuncArgsDone,
+		responses.EventReasoningDeltaRaw,
+		responses.EventReasoningDone,
+		responses.EventReasoningSummaryDone,
+		responses.EventResponseQueued,
+		responses.EventRateLimitsUpdated,
 	}
 	for _, name := range tests {
 		t.Run(name, func(t *testing.T) {
-			h := handler()
 			result := h(name, []byte(`{"some":"data"}`))
-			assert.Nil(t, result.Event, "unexpected event for %s", name)
+			assert.Nil(t, result.Event)
 			assert.NoError(t, result.Err)
 			assert.False(t, result.Done)
 		})
 	}
+}
+
+func TestParser_UnknownEvent_NoOp(t *testing.T) {
+	h := handler()
+	result := h("response.future_unknown_event", []byte(`{"some":"data"}`))
+	assert.Nil(t, result.Event)
+	assert.NoError(t, result.Err)
+	assert.False(t, result.Done)
 }
 
 func TestParser_IsolatedAcrossStreams(t *testing.T) {
@@ -1050,6 +1069,13 @@ import (
 //
 // Free models that work with this test (verified zero-cost):
 //
+//	google/gemma-3-27b-it:free
+//	meta-llama/llama-3.3-70b-instruct:free
+//	deepseek/deepseek-chat-v3-0324:free
+//
+// Optional strict mode for raw-event coverage:
+//
+//	RESPONSES_STRICT_EVENTS=1
 //
 // Optional env overrides for model selection:
 //
@@ -1057,9 +1083,6 @@ import (
 //	OPENROUTER_RESPONSES_TOOL_MODEL
 //
 // Use these to quickly swap models if OpenRouter rotates free offerings.
-//	google/gemma-3-27b-it:free
-//	meta-llama/llama-3.3-70b-instruct:free
-//	deepseek/deepseek-chat-v3-0324:free
 //
 // OpenRouter Responses API base URL: https://openrouter.ai/api
 // (DefaultPath /v1/responses → https://openrouter.ai/api/v1/responses)
@@ -1250,6 +1273,7 @@ go test ./api/responses/... -v -count=1
 
 # Integration tests (requires key):
 OPENROUTER_API_KEY=$OPENROUTER_API_KEY \
+RESPONSES_STRICT_EVENTS=1 \
 OPENROUTER_RESPONSES_FREE_MODEL=${OPENROUTER_RESPONSES_FREE_MODEL:-google/gemma-3-27b-it:free} \
 OPENROUTER_RESPONSES_TOOL_MODEL=${OPENROUTER_RESPONSES_TOOL_MODEL:-meta-llama/llama-3.3-70b-instruct:free} \
 go test ./api/responses/... -v -run TestIntegration -count=1
@@ -1281,6 +1305,7 @@ grep -r '"github.com/codewandler/llm' api/responses/ --include="*.go" | grep -v 
 
 # Integration (when API key available):
 OPENROUTER_API_KEY=$OPENROUTER_API_KEY \
+RESPONSES_STRICT_EVENTS=1 \
 OPENROUTER_RESPONSES_FREE_MODEL=${OPENROUTER_RESPONSES_FREE_MODEL:-google/gemma-3-27b-it:free} \
 OPENROUTER_RESPONSES_TOOL_MODEL=${OPENROUTER_RESPONSES_TOOL_MODEL:-meta-llama/llama-3.3-70b-instruct:free} \
 go test ./api/responses/... -v -run TestIntegration

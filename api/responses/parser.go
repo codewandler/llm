@@ -121,8 +121,22 @@ func NewParser() apicore.ParserFactory {
 				}
 				return apicore.StreamResult{Err: &evt, Done: true}
 
+			case EventResponseInProgress,
+				EventContentPartAdded,
+				EventContentPartDone,
+				EventOutputTextDone,
+				EventOutputTextAnnotation,
+				EventFuncArgsDone,
+				EventReasoningDeltaRaw,
+				EventReasoningDone,
+				EventReasoningSummaryDone,
+				EventResponseQueued,
+				EventRateLimitsUpdated:
+				// Explicit known no-op events.
+				return apicore.StreamResult{}
+
 			default:
-				// Forward-compatible: silently ignore unrecognised events.
+				// Forward-compatible: unknown future events remain no-op.
 				return apicore.StreamResult{}
 			}
 		}

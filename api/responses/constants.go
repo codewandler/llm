@@ -25,6 +25,23 @@ const (
 	EventAPIError          = "error"
 )
 
+// Explicit known no-op event names (documented by the API but currently
+// not required by the adapt layer). Parsers should keep explicit case labels
+// for these to make coverage intentional and visible.
+const (
+	EventResponseInProgress   = "response.in_progress"
+	EventContentPartAdded     = "response.content_part.added"
+	EventContentPartDone      = "response.content_part.done"
+	EventOutputTextDone       = "response.output_text.done"
+	EventOutputTextAnnotation = "response.output_text.annotation.added"
+	EventFuncArgsDone         = "response.function_call_arguments.done"
+	EventReasoningDeltaRaw    = "response.reasoning.delta"
+	EventReasoningDone        = "response.reasoning.done"
+	EventReasoningSummaryDone = "response.reasoning_summary_text.done"
+	EventResponseQueued       = "response.queued"
+	EventRateLimitsUpdated    = "rate_limits.updated"
+)
+
 // Response.Status values inside ResponseCompletedEvent.
 const (
 	StatusCompleted  = "completed"

@@ -29,17 +29,17 @@ const (
 )
 
 var knownNoOpEvents = map[string]struct{}{
-	"response.in_progress":                  {},
-	"response.content_part.added":           {},
-	"response.content_part.done":            {},
-	"response.output_text.done":             {},
-	"response.output_text.annotation.added": {},
-	"response.function_call_arguments.done": {},
-	"response.reasoning.delta":              {},
-	"response.reasoning.done":               {},
-	"response.reasoning_summary_text.done":  {},
-	"response.queued":                       {},
-	"rate_limits.updated":                   {},
+	responses.EventResponseInProgress:   {},
+	responses.EventContentPartAdded:     {},
+	responses.EventContentPartDone:      {},
+	responses.EventOutputTextDone:       {},
+	responses.EventOutputTextAnnotation: {},
+	responses.EventFuncArgsDone:         {},
+	responses.EventReasoningDeltaRaw:    {},
+	responses.EventReasoningDone:        {},
+	responses.EventReasoningSummaryDone: {},
+	responses.EventResponseQueued:       {},
+	responses.EventRateLimitsUpdated:    {},
 }
 
 func shouldSkipOpenRouterError(err error) bool {

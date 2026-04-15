@@ -723,6 +723,26 @@ func newParser() apicore.EventHandler {
 **Zero boilerplate per parser** — no SSE scanning, no channel management,
 no hook calling, no body closing. Just `(name, data) → StreamResult`.
 
+### Event-Handling Policy (explicit coverage + forward compatibility)
+
+For each protocol parser (`api/<protocol>/parser.go`):
+
+1. **Handle all currently documented SSE events explicitly**
+   - Every known event name from the upstream API docs must appear in a `case` arm.
+2. **Known non-actionable events use explicit no-op cases**
+   - Return `apicore.StreamResult{}` intentionally, but with named `case` labels.
+   - This documents intent and prevents accidental regressions when refactoring.
+3. **`default` is reserved for truly unknown future events**
+   - Keep `default: return apicore.StreamResult{}` for forward compatibility.
+   - Do not rely on `default` for currently known events.
+4. **Unknown-event observability is required in integration tests**
+   - Use `apicore.WithParseHook` to record raw SSE event names seen at runtime.
+   - Compare observed raw names against handled + known-no-op sets.
+   - Support strict mode (env flag) to fail on unknown unhandled events.
+
+This policy keeps production streams robust (new events don't break parsing) while
+still surfacing API drift quickly during integration runs.
+
 ### Response Header Extraction (ResponseHook)
 
 Providers need to read metadata from HTTP response headers.
@@ -992,42 +1012,25 @@ Protocol-specific adapters embed `AdapterConfig` and add their own options
 for `apicore.Client[Request]`.)
 
 ```go
-// api/messages/adapter.go
+// api/adapt/messages_api.go
 
-// Streamer sends a streaming request and returns native typed events.
-// *Client implements this. Tests can provide a fake.
-type Streamer interface {
-    Stream(ctx context.Context, req *Request) (*apicore.StreamHandle, error)
+// MessagesStreamer sends a streaming request and returns native typed events.
+// *messages.Client implements this. Tests can provide a fake.
+type MessagesStreamer interface {
+    Stream(ctx context.Context, req *messages.Request) (*apicore.StreamHandle, error)
 }
 
-type Adapter struct {
-    sender Streamer  // *Client in production, fake in tests
-    cfg    apicore.AdapterConfig
-    // protocol-specific settings:
-    thinkingMode ThinkingMode
-    thinkingBudgetLo, thinkingBudgetHi int
-    outputEffort string
-    userID       string
-    costCalc     CostCalculator
+type MessagesAdapter struct {
+    sender   MessagesStreamer
+    cfg      apicore.AdapterConfig
+    convOpts []MessagesConvertOption
 }
 
-// MessagesOption configures messages-specific adapter behavior.
-type MessagesOption func(*Adapter)
-
-func WithThinkingMode(mode ThinkingMode) MessagesOption    { ... }
-func WithThinkingBudget(lo, hi int) MessagesOption         { ... }
-func WithOutputEffort(effort string) MessagesOption        { ... }
-func WithUserID(id string) MessagesOption                  { ... }
-func WithCostCalculator(cc CostCalculator) MessagesOption  { ... }
-
-// NewAdapter creates a Messages API adapter.
-// Accepts Streamer (typically *Client, but any implementation works for testing).
-func NewAdapter(sender Streamer, base []apicore.AdapterOption, opts ...MessagesOption) *Adapter {
+// NewMessagesAdapter creates a Messages API adapter.
+// Accepts Streamer (typically *messages.Client, but any implementation works for testing).
+func NewMessagesAdapter(sender MessagesStreamer, base []apicore.AdapterOption, opts ...MessagesConvertOption) *MessagesAdapter {
     cfg := apicore.ApplyAdapterOptions(base...)
-    a := &Adapter{sender: sender, cfg: cfg}
-    for _, opt := range opts {
-        opt(a)
-    }
+    a := &MessagesAdapter{sender: sender, cfg: cfg, convOpts: opts}
     return a
 }
 ```
@@ -1035,12 +1038,11 @@ func NewAdapter(sender Streamer, base []apicore.AdapterOption, opts ...MessagesO
 Provider usage:
 ```go
 // Provider creates client once, then creates adapter from it:
-adapter := messages.NewAdapter(client,
+adapter := adapt.NewMessagesAdapter(client,
     []apicore.AdapterOption{
         apicore.WithProviderName("anthropic"),
     },
-    messages.WithThinkingMode(messages.ThinkingAdaptive),
-    messages.WithCostCalculator(usage.Default()),
+    adapt.MessagesWithThinking(messages.ThinkingAdaptive, 0),
 )
 
 // Provider's CreateStream delegates to the adapter:
@@ -1059,11 +1061,11 @@ func (p *Provider) CreateStream(ctx context.Context, src llm.Buildable) (llm.Str
 // StreamTo converts an llm.Request to a wire request, sends it via the client,
 // and publishes llm events to the publisher. Blocks until the stream ends.
 // Takes ownership of pub and calls pub.Close() when done.
-func (a *Adapter) StreamTo(ctx context.Context, req llm.Request, pub llm.Publisher) error {
+func (a *MessagesAdapter) StreamTo(ctx context.Context, req llm.Request, pub llm.Publisher) error {
     defer pub.Close()
 
-    // 1. Convert llm.Request → wire Request (via convert.go + adapter options)
-    wireReq, err := a.convertRequest(req)
+    // 1. Convert llm.Request → wire Request (inside api/adapt)
+    wireReq, err := MessagesRequestFromLLM(req, a.convOpts...)
 
     // 2. Send via sender, get native event stream + HTTP metadata
     handle, err := a.sender.Stream(ctx, wireReq)
@@ -1084,21 +1086,20 @@ func (a *Adapter) StreamTo(ctx context.Context, req llm.Request, pub llm.Publish
 }
 ```
 
-### `convert.go` — `llm.Request` → Wire Request
+### `api/adapt/<proto>_api.go` — `llm.Request` → Wire Request
 
 ```go
-// api/messages/convert.go
+// api/adapt/messages_api.go
 
-type ConvertOption func(*convertConfig)
+type MessagesConvertOption func(*messagesConvertConfig)
 
-func ConvertThinkingMode(mode ThinkingMode) ConvertOption
-func ConvertThinkingBudget(lo, hi int) ConvertOption
-func ConvertOutputEffort(effort string) ConvertOption
-func ConvertUserID(id string) ConvertOption
-func ConvertCacheRetention(ttl string) ConvertOption
+func MessagesWithThinking(mode messages.ThinkingMode, budget int) MessagesConvertOption
+func MessagesWithOutputEffort(effort string) MessagesConvertOption
+func MessagesWithUserID(id string) MessagesConvertOption
+func MessagesWithCacheLastSystem() MessagesConvertOption
 
-// RequestFromLLM converts an llm.Request to a Messages API Request.
-func RequestFromLLM(req llm.Request, opts ...ConvertOption) (*Request, error) { ... }
+// MessagesRequestFromLLM converts an llm.Request to a Messages API Request.
+func MessagesRequestFromLLM(req llm.Request, opts ...MessagesConvertOption) (*messages.Request, error) { ... }
 ```
 
 **Model-specific logic**: Today, `BuildRequest` calls `isAdaptiveThinkingSupported(model)`
@@ -1267,14 +1268,14 @@ Total: ~240 lines of bespoke wire code replaced by `api/completions`.
 | Source file | What moves | Target |
 |---|---|---|
 | `request.go` | `Request`, `ThinkingConfig`, `ToolDefinition`, `OutputConfig`, `Metadata` | `types.go` |
-| `request.go` | `BuildRequest()`, `BuildRequestBytes()` → becomes `RequestFromLLM()` | `convert.go` |
+| `request.go` | `BuildRequest()`, `BuildRequestBytes()` → becomes `MessagesRequestFromLLM()` | `api/adapt/messages_api.go` |
 | `request.go` | `isAdaptiveThinkingSupported()`, `isEffortSupported()` | temp helper (marked for removal) |
 | `message.go` | `Message`, `MessageContent`, `TextBlock`, `ToolUseBlock`, etc. | `types.go` |
-| `message.go` | `convertMessages()` | `convert.go` |
-| `cache.go` | `CacheControl`, `buildCacheControl()` | `types.go` / `convert.go` |
+| `message.go` | `convertMessages()` | `api/adapt/messages_api.go` |
+| `cache.go` | `CacheControl`, `buildCacheControl()` | `types.go` / `api/adapt/messages_api.go` |
 | `event.go` | All SSE event structs | `types.go` |
-| `stream_processor.go` | SSE parsing logic → parser; llm event mapping → adapter | `parser.go` + `adapter.go` |
-| `stream.go` | `ParseStream()`, `ParseStreamWith()` → replaced by `Client.Stream()` + `Adapter.StreamTo()` | `client.go` + `adapter.go` |
+| `stream_processor.go` | SSE parsing logic → parser; llm event mapping → adapter | `parser.go` + `api/adapt/messages_api.go` |
+| `stream.go` | `ParseStream()`, `ParseStreamWith()` → replaced by `Client.Stream()` + `MessagesAdapter.StreamTo()` | `client.go` + `api/adapt/messages_api.go` |
 | `anthropic.go` | `AnthropicVersion`, `BetaInterleavedThinking` constants + all header name constants | `constants.go` |
 | `count_tokens_api.go` | Stays in `provider/anthropic/` (provider-specific endpoint) | — |
 
@@ -1283,30 +1284,30 @@ Total: ~240 lines of bespoke wire code replaced by `api/completions`.
 | Source file | What moves | Target |
 |---|---|---|
 | `api_completions.go` | `ccRequest` → `Request`, `ccMessagePayload` → `Message`, etc. | `types.go` |
-| `api_completions.go` | `ccBuildRequest()` → `RequestFromLLM()` | `convert.go` |
+| `api_completions.go` | `ccBuildRequest()` → `CompletionsRequestFromLLM()` | `api/adapt/completions_api.go` |
 | `api_completions.go` | `ccStreamChunk` → `StreamChunk`, `ccParseStream()` | `types.go` + `parser.go` |
-| `api_completions.go` | `ccEmitToolCalls()` → adapter | `adapter.go` |
-| `usage.go` | `buildUsageTokenItems()` | `adapter.go` (usage building is adapter concern) |
+| `api_completions.go` | `ccEmitToolCalls()` → adapter | `api/adapt/completions_api.go` |
+| `usage.go` | `buildUsageTokenItems()` | `api/adapt/completions_api.go` (usage building is adapter concern) |
 
 ### From `provider/openai/` → `api/responses/`
 
 | Source file | What moves | Target |
 |---|---|---|
 | `api_responses.go` | `respRequest` → `Request`, `respInput` → `Input`, etc. | `types.go` |
-| `api_responses.go` | `respBuildRequest()` → `RequestFromLLM()` | `convert.go` |
+| `api_responses.go` | `respBuildRequest()` → `ResponsesRequestFromLLM()` | `api/adapt/responses_api.go` |
 | `api_responses.go` | All `resp*` SSE event types | `types.go` |
-| `api_responses.go` | `RespParseStream()`, `respHandleEvent()` | `parser.go` + `adapter.go` |
+| `api_responses.go` | `RespParseStream()`, `respHandleEvent()` | `parser.go` + `api/adapt/responses_api.go` |
 
 ### What stays in `provider/<name>/`
 
 | Provider | Keeps |
 |---|---|
-| `provider/anthropic/` | `Provider`, `Models()`, `Resolve()`, `CreateStream()`, `CountTokensAPI()`, model-specific decisions → creates `api/messages.Client` + `Adapter` |
-| `provider/openai/` | `Provider`, model registry (`models.go`), `enrichOpts()`, API dispatch (completions vs responses), Codex logic → creates `api/completions` + `api/responses` clients + adapters |
-| `provider/openrouter/` | `Provider`, `selectAPI()` (simplified: messages vs responses), model normalization, native client for credits/models/generations → creates `api/messages` + `api/responses` clients + adapters |
-| `provider/minimax/` | `Provider`, `adjustThinkingForMiniMax()` (now a `WithTransform`) → creates `api/messages.Client` + `Adapter` |
+| `provider/anthropic/` | `Provider`, `Models()`, `Resolve()`, `CreateStream()`, `CountTokensAPI()`, model-specific decisions → creates `api/messages.Client` + `adapt.MessagesAdapter` |
+| `provider/openai/` | `Provider`, model registry (`models.go`), `enrichOpts()`, API dispatch (completions vs responses), Codex logic → creates `api/completions` + `api/responses` clients + `adapt` adapters |
+| `provider/openrouter/` | `Provider`, `selectAPI()` (simplified: messages vs responses), model normalization, native client for credits/models/generations → creates `api/messages` + `api/responses` clients + `adapt` adapters |
+| `provider/minimax/` | `Provider`, `adjustThinkingForMiniMax()` (now a `WithTransform`) → creates `api/messages.Client` + `adapt.MessagesAdapter` |
 | `provider/dockermr/` | Unchanged — wraps `provider/openai` (no direct wire-level calls) |
-| `provider/ollama/` | `Provider`, `Models()`, `FetchModels()` (`/api/tags`), `Available()`, `CountTokens()` → creates `api/completions.Client` + `Adapter`, deletes ~240 lines of bespoke wire code |
+| `provider/ollama/` | `Provider`, `Models()`, `FetchModels()` (`/api/tags`), `Available()`, `CountTokens()` → creates `api/completions.Client` + `adapt.CompletionsAdapter`, deletes ~240 lines of bespoke wire code |
 | `provider/bedrock/` | Unchanged — uses AWS SDK, proprietary protocol |
 
 ---
@@ -1315,15 +1316,16 @@ Total: ~240 lines of bespoke wire code replaced by `api/completions`.
 
 ```
 api/apicore/           ← depends on: nothing (self-contained — no llm, no internal/)
-api/messages/          ← depends on: api/apicore, llm (adapter only)
-api/completions/       ← depends on: api/apicore, llm (adapter only)
-api/responses/         ← depends on: api/apicore, llm (adapter only)
+api/messages/          ← depends on: api/apicore
+api/completions/       ← depends on: api/apicore
+api/responses/         ← depends on: api/apicore
+api/adapt/             ← depends on: llm, api/messages, api/completions, api/responses
 
-provider/anthropic/    ← depends on: llm, api/messages
-provider/openai/       ← depends on: llm, api/completions, api/responses
-provider/openrouter/   ← depends on: llm, api/responses, api/messages
-provider/minimax/      ← depends on: llm, api/messages
-provider/ollama/       ← depends on: llm, api/completions
+provider/anthropic/    ← depends on: llm, api/messages, api/adapt
+provider/openai/       ← depends on: llm, api/completions, api/responses, api/adapt
+provider/openrouter/   ← depends on: llm, api/responses, api/messages, api/adapt
+provider/minimax/      ← depends on: llm, api/messages, api/adapt
+provider/ollama/       ← depends on: llm, api/completions, api/adapt
 provider/dockermr/     ← depends on: llm, provider/openai  (unchanged, wraps provider)
 provider/bedrock/      ← depends on: llm  (unchanged, AWS SDK)
 ```
@@ -1371,7 +1373,7 @@ provider/bedrock/      ← depends on: llm  (unchanged, AWS SDK)
 
 ### Phase 1: Extract `api/messages` (first, largest impact)
 
-1. Create `api/messages/` with types, parser, client (thin wrapper), adapter, convert
+1. Create `api/messages/` with types, parser, client (thin wrapper)
 2. Migrate `provider/anthropic` to use `api/messages`
 3. Migrate `provider/minimax` — drops `provider/anthropic` import entirely
 4. Migrate `provider/openrouter` messages path — drops `provider/anthropic` import
@@ -1379,14 +1381,14 @@ provider/bedrock/      ← depends on: llm  (unchanged, AWS SDK)
 
 ### Phase 2: Extract `api/responses`
 
-1. Create `api/responses/` with types, parser, client, adapter, convert
+1. Create `api/responses/` with types, parser, client
 2. Migrate `provider/openai` responses path
 3. Migrate `provider/openrouter` responses path — deletes duplicated Responses types
 4. All existing tests must pass
 
 ### Phase 3: Extract `api/completions`
 
-1. Create `api/completions/` with types, parser, client, adapter, convert
+1. Create `api/completions/` with types, parser, client
 2. Migrate `provider/openai` completions path
 3. Migrate `provider/ollama` — drops proprietary `/api/chat`, uses `/v1/chat/completions`
    via `api/completions`. Deletes ~240 lines of bespoke wire code.
@@ -1589,6 +1591,16 @@ Tests:
 - ParseHook → standalone events after standard events
 - Context cancellation → goroutine cleanup
 - Empty body, malformed SSE, connection drops
+
+#### Parser coverage requirements
+
+- Table-driven tests must include:
+  - terminal events
+  - all actionable delta/item events
+  - explicit known no-op events
+  - unknown future event fallback (`default` path)
+- For Responses API specifically, integration tests must track raw event names and
+  log unknown unhandled names; strict mode should fail when enabled.
 
 ### Layer 2b: Protocol Parsers (EventHandler) — Pure Function Tests
 
@@ -1821,8 +1833,6 @@ They verify the full pipeline: client → parser → adapter → llm events.
 3. **Phase ordering**: Phases 2 and 3 (responses vs completions) could be swapped.
    Responses is higher-impact (used by both openai and openrouter).
 
-4. **Adapter in same package or sub-package?** Currently adapter lives in
-   `api/messages/adapter.go` alongside types and parser. This means
-   `api/messages/` depends on `llm`. If standalone (no-llm) usage of the
-   wire client matters, adapter could move to `api/messages/adapter/`.
-   Not a concern for now — split later if needed.
+4. **Adapter location resolved**: adapters and conversion logic are centralized in
+   `api/adapt/` (`messages_api.go`, `completions_api.go`, `responses_api.go`).
+   Protocol packages remain pure wire/client/parser layers with no `llm` import.
