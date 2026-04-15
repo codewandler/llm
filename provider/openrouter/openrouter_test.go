@@ -14,6 +14,7 @@ import (
 
 	"github.com/codewandler/llm"
 	"github.com/codewandler/llm/msg"
+	"github.com/codewandler/llm/provider/anthropic"
 	"github.com/codewandler/llm/tokencount"
 	"github.com/codewandler/llm/tool"
 	"github.com/codewandler/llm/usage"
@@ -38,13 +39,19 @@ func TestProvider_ResolveAutoAlias(t *testing.T) {
 // openai/* routes to /v1/responses; the test server returns a minimal
 // response.completed event so the stream terminates cleanly.
 func TestProvider_CreateStream_DefaultModelApplied(t *testing.T) {
-	var gotPath, gotModel string
+	var (
+		gotPath   string
+		gotModel  string
+		gotHeader http.Header
+		gotBody   map[string]any
+	)
+
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		defer r.Body.Close()
 		gotPath = r.URL.Path
-		var body map[string]any
-		require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
-		gotModel, _ = body["model"].(string)
+		gotHeader = r.Header.Clone()
+		defer r.Body.Close()
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&gotBody))
+		gotModel, _ = gotBody["model"].(string)
 
 		w.Header().Set("Content-Type", "text/event-stream")
 		_, _ = io.WriteString(w, "event: response.completed\ndata: {\"response\":{\"id\":\"resp_1\",\"model\":\"openai/gpt-4o\",\"status\":\"completed\"}}\n\n")
@@ -63,15 +70,27 @@ func TestProvider_CreateStream_DefaultModelApplied(t *testing.T) {
 
 	assert.Equal(t, "/v1/responses", gotPath, "openai/* must route to /v1/responses")
 	assert.Equal(t, "openai/gpt-4o", gotModel)
+	require.NotEmpty(t, gotBody)
+	assert.Equal(t, true, gotBody["stream"])
+	assert.NotNil(t, gotBody["input"], "responses payload must include input array")
+	assert.Equal(t, "Bearer test-key", gotHeader.Get("Authorization"))
 }
 
 // TestProvider_CreateStream_AnthropicRoutesToMessages verifies that
 // anthropic/* models route to /v1/messages.
 func TestProvider_CreateStream_AnthropicRoutesToMessages(t *testing.T) {
-	var gotPath string
+	var (
+		gotPath   string
+		gotHeader http.Header
+		gotBody   map[string]any
+	)
+
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		defer r.Body.Close()
 		gotPath = r.URL.Path
+		gotHeader = r.Header.Clone()
+		defer r.Body.Close()
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&gotBody))
+
 		w.Header().Set("Content-Type", "text/event-stream")
 		_, _ = io.WriteString(w,
 			"event: message_start\ndata: {\"message\":{\"id\":\"msg_1\",\"model\":\"anthropic/claude-opus-4-5\",\"usage\":{\"input_tokens\":5}}}\n\n"+
@@ -91,6 +110,11 @@ func TestProvider_CreateStream_AnthropicRoutesToMessages(t *testing.T) {
 	}
 
 	assert.Equal(t, "/v1/messages", gotPath, "anthropic/* must route to /v1/messages")
+	require.NotEmpty(t, gotBody)
+	assert.Equal(t, "claude-opus-4-5", gotBody["model"], "anthropic payload must strip prefix")
+	assert.Equal(t, "Bearer test-key", gotHeader.Get("Authorization"))
+	assert.Equal(t, anthropic.AnthropicVersion, gotHeader.Get("Anthropic-Version"))
+	assert.Equal(t, anthropic.BetaInterleavedThinking, gotHeader.Get("Anthropic-Beta"))
 }
 
 // TestProvider_CreateStream_UnknownPrefixRoutesToResponses verifies that
@@ -240,6 +264,21 @@ func TestProvider_CreateStream_MessagesEvents(t *testing.T) {
 	assert.True(t, sawUsage)
 	assert.Equal(t, 8, inputTok)
 	assert.Equal(t, 2, outputTok)
+}
+
+func TestProvider_CreateStream_MissingAPIKey(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Errorf("unexpected request: %s", r.URL.Path)
+	}))
+	defer server.Close()
+
+	p := New(llm.WithBaseURL(server.URL))
+	_, err := p.CreateStream(t.Context(), llm.Request{
+		Model:    "openai/gpt-4o",
+		Messages: msg.BuildTranscript(msg.User("hi")),
+	})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, llm.ErrMissingAPIKey)
 }
 
 func TestSelectAPI(t *testing.T) {

@@ -9,6 +9,8 @@ import (
 	"strings"
 
 	"github.com/codewandler/llm"
+	"github.com/codewandler/llm/provider/anthropic"
+	"github.com/codewandler/llm/provider/providercore"
 	"github.com/codewandler/llm/tokencount"
 	"github.com/codewandler/llm/usage"
 )
@@ -23,38 +25,42 @@ const (
 
 // Provider implements the OpenRouter LLM backend.
 type Provider struct {
+	core         *providercore.Client
 	opts         *llm.Options
-	defaultModel string
 	client       *http.Client
+	defaultModel string
 	models       llm.Models
 }
 
 // DefaultOptions returns the default options for OpenRouter.
 func DefaultOptions() []llm.Option {
-	return []llm.Option{
-		llm.WithBaseURL(defaultBaseURL),
-	}
+	return []llm.Option{llm.WithBaseURL(defaultBaseURL)}
 }
 
 // New creates a new OpenRouter provider.
 func New(opts ...llm.Option) *Provider {
 	allOpts := append(DefaultOptions(), opts...)
-	cfg := llm.Apply(allOpts...)
-	client := cfg.HTTPClient
+	llmOpts := llm.Apply(allOpts...)
+
+	client := llmOpts.HTTPClient
 	if client == nil {
 		client = llm.DefaultHttpClient()
 	}
-	return &Provider{
-		opts:         cfg,
-		defaultModel: DefaultModel,
+
+	p := &Provider{
+		opts:         llmOpts,
 		client:       client,
+		defaultModel: DefaultModel,
 		models:       loadEmbeddedModels(),
 	}
+	p.core = p.buildCore()
+	return p
 }
 
 // WithDefaultModel sets the default model to use when none is specified.
 func (p *Provider) WithDefaultModel(modelID string) *Provider {
 	p.defaultModel = modelID
+	p.core = p.buildCore()
 	return p
 }
 
@@ -71,7 +77,7 @@ func (p *Provider) Resolve(model string) (llm.Model, error) {
 }
 
 func (p *Provider) FetchModels(ctx context.Context) ([]llm.Model, error) {
-	req, err := http.NewRequestWithContext(ctx, "GET", p.opts.BaseURL+"/v1/models", nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, p.opts.BaseURL+"/v1/models", nil)
 	if err != nil {
 		return nil, err
 	}
@@ -79,7 +85,6 @@ func (p *Provider) FetchModels(ctx context.Context) ([]llm.Model, error) {
 	if err != nil {
 		return nil, fmt.Errorf("openrouter list models: %w", err)
 	}
-	//nolint:errcheck
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
@@ -101,65 +106,101 @@ func (p *Provider) FetchModels(ctx context.Context) ([]llm.Model, error) {
 	return models, nil
 }
 
+// CreateStream delegates to the shared provider core.
 func (p *Provider) CreateStream(ctx context.Context, src llm.Buildable) (llm.Stream, error) {
-	opts, err := src.BuildRequest(ctx)
-	if err != nil {
-		return nil, llm.NewErrBuildRequest(llm.ProviderNameOpenRouter, err)
-	}
-
-	requestedModel := opts.Model
-	opts.Model = p.normalizeRequestModel(opts.Model)
-	if err := opts.Validate(); err != nil {
-		return nil, llm.NewErrBuildRequest(llm.ProviderNameOpenRouter, err)
-	}
-
-	apiKey, err := p.opts.ResolveAPIKey(ctx)
-	if err != nil || apiKey == "" {
-		return nil, llm.NewErrMissingAPIKey(llm.ProviderNameOpenRouter)
-	}
-
-	pub, ch := llm.NewEventPublisher()
-
-	if opts.Model != requestedModel {
-		pub.ModelResolved(providerName, requestedModel, opts.Model)
-	}
-
-	// Token estimates are path-independent; emit before dispatch.
-	if est, err := p.CountTokens(ctx, tokencount.TokenCountRequest{
-		Model: opts.Model, Messages: opts.Messages, Tools: opts.Tools,
-	}); err == nil {
-		for _, rec := range tokencount.EstimateRecords(est, providerName, opts.Model, "heuristic", usage.Default()) {
-			pub.TokenEstimate(rec)
-		}
-	}
-
-	backend, resolvedApiType := selectAPI(opts.Model, opts.ApiTypeHint)
-	switch backend {
-	case orResponses:
-		go p.streamResponses(ctx, opts, resolvedApiType, apiKey, pub)
-	case orMessages:
-		go p.streamMessages(ctx, opts, resolvedApiType, apiKey, pub)
-	}
-	return ch, nil
+	return p.core.Stream(ctx, src)
 }
 
-// --- API dispatch ---
+func (p *Provider) buildCore() *providercore.Client {
+	cfg := providercore.Config{
+		ProviderName: providerName,
+		DefaultModel: p.defaultModel,
+		BaseURL:      defaultBaseURL,
+		APIHint:      llm.ApiTypeOpenAIResponses,
+	}
 
-type orAPIBackend int
+	providercore.WithPreprocessRequest(func(req llm.Request) (llm.Request, string, error) {
+		original := req.Model
+		normalized := p.normalizeRequestModel(req.Model)
+		req.Model = normalized
 
-const (
-	orResponses orAPIBackend = iota
-	orMessages
-)
+		backend, resolved := selectAPI(normalized, req.ApiTypeHint)
+		req.ApiTypeHint = resolved
+		if backend == orMessages {
+			req.Model = strings.TrimPrefix(normalized, "anthropic/")
+		}
+		return req, original, nil
+	})(&cfg)
+
+	providercore.WithAPIHintResolver(func(req llm.Request) llm.ApiType {
+		_, hint := selectAPI(req.Model, req.ApiTypeHint)
+		return hint
+	})(&cfg)
+
+	providercore.WithUpstreamResolver(func(req llm.Request) string {
+		if req.ApiTypeHint == llm.ApiTypeAnthropicMessages {
+			return "anthropic"
+		}
+		return upstreamProviderFromModel(req.Model)
+	})(&cfg)
+
+	providercore.WithCostTargetResolver(func(req llm.Request) (string, string) {
+		if req.ApiTypeHint == llm.ApiTypeAnthropicMessages {
+			return "anthropic", req.Model
+		}
+		upstream := upstreamProviderFromModel(req.Model)
+		if upstream == providerName {
+			return "", ""
+		}
+		prefix := upstream + "/"
+		model := strings.TrimPrefix(req.Model, prefix)
+		return upstream, model
+	})(&cfg)
+
+	providercore.WithRequestMutator(func(r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/v1/messages") {
+			r.Header.Set("Anthropic-Version", anthropic.AnthropicVersion)
+			r.Header.Set("Anthropic-Beta", anthropic.BetaInterleavedThinking)
+		}
+	})(&cfg)
+
+	cfg.HeaderFunc = func(ctx context.Context, req *llm.Request) (http.Header, error) {
+		key, err := p.opts.ResolveAPIKey(ctx)
+		if err != nil {
+			return nil, err
+		}
+		if key == "" {
+			return nil, llm.NewErrMissingAPIKey(providerName)
+		}
+		return http.Header{"Authorization": {"Bearer " + key}}, nil
+	}
+
+	cfg.TokenCounter = tokencount.TokenCounterFunc(p.CountTokens)
+
+	return providercore.New(cfg, p.coreOptions()...)
+}
+
+func (p *Provider) coreOptions() []llm.Option {
+	if p.opts == nil {
+		return nil
+	}
+	var opts []llm.Option
+	if p.opts.BaseURL != "" {
+		opts = append(opts, llm.WithBaseURL(p.opts.BaseURL))
+	}
+	if p.opts.HTTPClient != nil {
+		opts = append(opts, llm.WithHTTPClient(p.opts.HTTPClient))
+	}
+	if p.opts.APIKeyFunc != nil {
+		opts = append(opts, llm.WithAPIKeyFunc(p.opts.APIKeyFunc))
+	}
+	if p.opts.Logger != nil {
+		opts = append(opts, llm.WithLogger(p.opts.Logger))
+	}
+	return opts
+}
 
 // selectAPI decides whether to use the Responses API or the Messages API.
-//
-// Routing rules:
-//   - explicit ApiTypeAnthropicMessages hint     → Messages API
-//   - model prefix "anthropic/"                  → Messages API
-//   - everything else (including all openai/*)   → Responses API
-//
-// The Chat Completions API is intentionally not supported.
 func selectAPI(model string, hint llm.ApiType) (orAPIBackend, llm.ApiType) {
 	if hint == llm.ApiTypeAnthropicMessages {
 		return orMessages, llm.ApiTypeAnthropicMessages
@@ -170,9 +211,7 @@ func selectAPI(model string, hint llm.ApiType) (orAPIBackend, llm.ApiType) {
 	return orResponses, llm.ApiTypeOpenAIResponses
 }
 
-// upstreamProviderFromModel extracts the provider prefix from an OpenRouter
-// model ID (e.g. "anthropic/claude-opus-4-5" → "anthropic").
-// Returns providerName ("openrouter") as fallback when the ID has no slash.
+// upstreamProviderFromModel extracts the provider prefix from an OpenRouter model ID.
 func upstreamProviderFromModel(model string) string {
 	if i := strings.IndexByte(model, '/'); i > 0 {
 		return model[:i]
@@ -188,3 +227,10 @@ func (p *Provider) normalizeRequestModel(model string) string {
 		return model
 	}
 }
+
+type orAPIBackend int
+
+const (
+	orResponses orAPIBackend = iota
+	orMessages
+)
