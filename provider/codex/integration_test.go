@@ -1022,3 +1022,44 @@ func TestCodex_MultiTurnWithEffort(t *testing.T) {
 	assert.Contains(t, strings.ToLower(text), "alice",
 		"model must recall the name from conversation history")
 }
+
+// TestCodex_AllModels probes every model returned by Models() with a minimal
+// request and verifies each one completes without error. Models that the API
+// rejects as unsupported for the current account tier are skipped.
+func TestCodex_AllModels(t *testing.T) {
+	p := newTestProvider(t)
+
+	models := p.Models()
+	require.NotEmpty(t, models, "Models() must return at least one model")
+
+	for _, m := range models {
+		m := m
+		t.Run(m.ID, func(t *testing.T) {
+			t.Parallel()
+
+			ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+			defer cancel()
+
+			stream, err := p.CreateStream(ctx, llm.Request{
+				Model: m.ID,
+				Messages: msg.BuildTranscript(
+					msg.System("You are a helpful assistant."),
+					msg.User("Reply with one word: pong"),
+				),
+			})
+			if err != nil {
+				var pe *llm.ProviderError
+				if errors.As(err, &pe) {
+					if strings.Contains(pe.ResponseBody, "not supported") {
+						t.Skipf("model not available for this account: %s", pe.ResponseBody)
+					}
+				}
+				require.NoError(t, err, "model %q must accept requests", m.ID)
+			}
+
+			_, completed, streamErr := drainStream(t, stream)
+			require.NoError(t, streamErr, "model %q stream must not error", m.ID)
+			assert.True(t, completed, "model %q stream must complete", m.ID)
+		})
+	}
+}

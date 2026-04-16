@@ -15,7 +15,8 @@ func (p *Provider) CountTokens(_ context.Context, req tokencount.TokenCountReque
 
 	enc, _ := tokencount.EncodingForModel(model)
 	if enc == "" {
-		enc = tokencount.EncodingCL100K
+		// Codex models are GPT-5 variants which use o200k_base, not cl100k_base.
+		enc = tokencount.EncodingO200K
 	}
 
 	tc := &tokencount.TokenCount{}

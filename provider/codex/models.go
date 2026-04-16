@@ -5,10 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
-	"strings"
 
 	"github.com/codewandler/llm"
-	"github.com/codewandler/llm/catalog"
 )
 
 const modelsClientVersion = "0.121.0"
@@ -42,6 +40,7 @@ type modelInfo struct {
 	LastUpdated              *string                 `json:"last_updated,omitempty"`
 	Deprecated               bool                    `json:"deprecated,omitempty"`
 	SupportsParallelTools    bool                    `json:"supports_parallel_tool_calls,omitempty"`
+	AvailableInPlans         []string                `json:"available_in_plans,omitempty"`
 	TruncationPolicy         *struct {
 		Mode  string `json:"mode"`
 		Limit int    `json:"limit"`
@@ -118,6 +117,22 @@ func fallbackModels() llm.Models {
 		if model.Visibility != "list" {
 			continue
 		}
+		if model.Deprecated {
+			continue
+		}
+		// When models.json is generated from the live API it will contain
+		// available_in_plans for every model. A non-empty list means the model
+		// is offered to at least one plan; an empty list (hand-crafted or old
+		// snapshot) means unknown — include it to avoid hiding real models.
+		// Once the file is regenerated this filter removes inaccessible models.
+		if len(model.AvailableInPlans) == 0 {
+			// Unknown plan availability — include conservatively.
+		} else {
+			// Plans are present; only include if at least one common plan is listed.
+			if !hasCommonPlan(model.AvailableInPlans) {
+				continue
+			}
+		}
 		out = append(out, llm.Model{
 			ID:       model.Slug,
 			Name:     firstNonEmpty(model.DisplayName, model.Slug),
@@ -125,6 +140,23 @@ func fallbackModels() llm.Models {
 		})
 	}
 	return attachProviderAliases(out)
+}
+
+// commonPlans are the broadly available ChatGPT subscription tiers.
+// A model available in at least one of these is considered accessible
+// to most users and safe to include in the fallback model list.
+var commonPlans = map[string]bool{
+	"free": true, "plus": true, "pro": true, "team": true,
+	"business": true, "enterprise": true, "edu": true, "education": true,
+}
+
+func hasCommonPlan(plans []string) bool {
+	for _, p := range plans {
+		if commonPlans[p] {
+			return true
+		}
+	}
+	return false
 }
 
 func attachProviderAliases(models llm.Models) llm.Models {
@@ -191,41 +223,6 @@ func mustLoadEmbeddedModels() modelsResponse {
 	return payload
 }
 
-func modelKeyForSlug(slug string) (catalog.ModelKey, bool) {
-	id := strings.TrimSpace(slug)
-	if id == "" {
-		return catalog.ModelKey{}, false
-	}
-	if strings.HasPrefix(id, "gpt-oss-") {
-		return catalog.NormalizeKey(catalog.ModelKey{Creator: "openai", Family: "gpt-oss", Variant: strings.TrimPrefix(id, "gpt-oss-")}), true
-	}
-	if strings.HasPrefix(id, "gpt-") {
-		rest := strings.TrimPrefix(id, "gpt-")
-		parts := strings.Split(rest, "-")
-		if len(parts) == 0 || parts[0] == "" {
-			return catalog.ModelKey{}, false
-		}
-		version := parts[0]
-		variant := ""
-		if len(parts) > 1 {
-			variant = strings.Join(parts[1:], "-")
-		}
-		return catalog.NormalizeKey(catalog.ModelKey{Creator: "openai", Family: "gpt", Version: version, Variant: variant}), true
-	}
-	if len(id) >= 2 && id[0] == 'o' {
-		parts := strings.Split(strings.TrimPrefix(id, "o"), "-")
-		if len(parts) == 0 || parts[0] == "" {
-			return catalog.ModelKey{}, false
-		}
-		version := parts[0]
-		variant := ""
-		if len(parts) > 1 {
-			variant = strings.Join(parts[1:], "-")
-		}
-		return catalog.NormalizeKey(catalog.ModelKey{Creator: "openai", Family: "o", Version: version, Variant: variant}), true
-	}
-	return catalog.ModelKey{}, false
-}
 
 func firstNonEmpty(values ...string) string {
 	for _, value := range values {

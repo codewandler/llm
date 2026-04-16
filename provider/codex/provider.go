@@ -10,10 +10,8 @@ import (
 	"sort"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/codewandler/llm"
-	"github.com/codewandler/llm/catalog"
 	"github.com/codewandler/llm/provider/providercore"
 	"github.com/codewandler/llm/api/responses"
 	"github.com/codewandler/llm/tokencount"
@@ -61,29 +59,14 @@ func (p *Provider) Resolve(modelID string) (llm.Model, error) { return p.Models(
 
 func (p *Provider) Models() llm.Models {
 	p.modelOnce.Do(func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-		defer cancel()
-		resolved, err := llm.ResolveCatalog(ctx, catalog.RegisteredSource{
-			Stage:     catalog.StageRuntime,
-			Authority: catalog.AuthorityLocal,
-			Source:    NewRuntimeSource(),
-		})
-		if err == nil {
-			models := llm.CatalogModelsForRuntime(resolved, runtimeID, false, llm.CatalogModelProjectionOptions{
-				ProviderName:          p.Name(),
-				ExcludeBuiltinAliases: true,
-			})
-			if len(models) > 0 {
-				p.models = attachProviderAliases(models)
-				return
-			}
-		}
 		p.models = fallbackModels()
 	})
 	return p.models
 }
 
-func (p *Provider) FetchModels(ctx context.Context) ([]llm.Model, error) {
+// FetchRawModels calls the /codex/models endpoint and returns the raw JSON
+// response body. This is the authoritative source for regenerating models.json.
+func (p *Provider) FetchRawModels(ctx context.Context) ([]byte, error) {
 	token, err := p.auth.Token(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("codex: get token: %w", err)
@@ -107,8 +90,20 @@ func (p *Provider) FetchModels(ctx context.Context) ([]llm.Model, error) {
 		body, _ := io.ReadAll(resp.Body)
 		return nil, llm.NewErrAPIError(p.Name(), resp.StatusCode, string(body))
 	}
+	return io.ReadAll(resp.Body)
+}
+
+// FetchModels fetches the live model list and returns it as unified llm.Models.
+// The list is account-specific — only models accessible to the current
+// credentials are returned. Use this instead of Models() when you need the
+// authoritative live list; Models() uses the embedded snapshot for speed.
+func (p *Provider) FetchModels(ctx context.Context) ([]llm.Model, error) {
+	raw, err := p.FetchRawModels(ctx)
+	if err != nil {
+		return nil, err
+	}
 	var payload modelsResponse
-	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+	if err := json.Unmarshal(raw, &payload); err != nil {
 		return nil, fmt.Errorf("decode models response: %w", err)
 	}
 	models := make([]llm.Model, 0, len(payload.Models))
@@ -164,12 +159,15 @@ func (p *Provider) buildCore() *providercore.Client {
 			body, err := io.ReadAll(r.Body)
 			r.Body.Close()
 			if err != nil {
+				// Can't read body — restore a fresh reader so the request
+				// doesn't fail with an empty body; mutations are skipped.
 				return
 			}
+			// Always ensure the original body is restorable from this point.
+			r.Body = io.NopCloser(bytes.NewReader(body))
 			var payload map[string]any
 			if err := json.Unmarshal(body, &payload); err != nil {
-				r.Body = io.NopCloser(bytes.NewReader(body))
-				return
+				return // non-JSON body — leave it unchanged
 			}
 			payload["store"] = false
 			delete(payload, "max_tokens")
@@ -181,8 +179,7 @@ func (p *Provider) buildCore() *providercore.Client {
 			delete(payload, "response_format")
 			encoded, err := json.Marshal(payload)
 			if err != nil {
-				r.Body = io.NopCloser(bytes.NewReader(body))
-				return
+				return // marshal failed — leave original body in place
 			}
 			r.Body = io.NopCloser(bytes.NewReader(encoded))
 			r.ContentLength = int64(len(encoded))
