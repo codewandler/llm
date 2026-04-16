@@ -14,6 +14,7 @@ import (
 	"github.com/codewandler/llm/provider/bedrock"
 	"github.com/codewandler/llm/provider/dockermr"
 	"github.com/codewandler/llm/provider/ollama"
+	"github.com/codewandler/llm/provider/openai"
 )
 
 // mockTokenStore implements claude.TokenStore for testing.
@@ -246,13 +247,12 @@ func TestWithCodexLocal_UsesChatGPTPrefix(t *testing.T) {
 	}
 }
 
-func TestBuildAliasTargets(t *testing.T) {
+func TestBuildBuiltinAliasTargets(t *testing.T) {
 	tests := []struct {
 		name         string
 		instanceName string
 		providerType string
 		wantAliases  []string
-		wantCodex    bool
 	}{
 		{
 			name:         "claude provider",
@@ -271,20 +271,18 @@ func TestBuildAliasTargets(t *testing.T) {
 			instanceName: "openai",
 			providerType: ProviderOpenAI,
 			wantAliases:  []string{AliasFast, AliasDefault, AliasPowerful},
-			wantCodex:    false,
 		},
 		{
-			name:         "chatgpt provider wires codex alias",
+			name:         "chatgpt provider builtins",
 			instanceName: "chatgpt",
 			providerType: ProviderChatGPT,
-			wantAliases:  []string{AliasFast, AliasDefault, AliasPowerful, AliasCodex},
-			wantCodex:    true,
+			wantAliases:  []string{AliasFast, AliasDefault, AliasPowerful},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			targets := buildAliasTargets(tt.instanceName, tt.providerType)
+			targets := buildBuiltinAliasTargets(tt.instanceName, tt.providerType)
 
 			if tt.wantAliases == nil {
 				assert.Nil(t, targets)
@@ -292,9 +290,7 @@ func TestBuildAliasTargets(t *testing.T) {
 			}
 
 			require.NotNil(t, targets)
-			if !tt.wantCodex {
-				assert.NotContains(t, targets, AliasCodex)
-			}
+			assert.NotContains(t, targets, AliasCodex)
 			for _, alias := range tt.wantAliases {
 				_, ok := targets[alias]
 				assert.True(t, ok, "missing alias %s", alias)
@@ -383,6 +379,62 @@ func TestConstants(t *testing.T) {
 	assert.NotEmpty(t, bedrock.ModelOpusLatest)
 	assert.NotEmpty(t, bedrock.ModelSonnetLatest)
 	assert.NotEmpty(t, bedrock.ModelHaikuLatest)
+}
+
+func TestWithoutBuiltinAliases_DisablesTopLevelFastDefaultPowerful(t *testing.T) {
+	ctx := context.Background()
+	p, err := New(ctx,
+		WithoutAutoDetect(),
+		WithoutBuiltinAliases(),
+		WithOpenAI(),
+	)
+	require.NoError(t, err)
+
+	_, err = p.Resolve(AliasFast)
+	require.Error(t, err)
+	_, err = p.Resolve(AliasDefault)
+	require.Error(t, err)
+	_, err = p.Resolve(AliasPowerful)
+	require.Error(t, err)
+
+	_, err = p.Resolve("openai/codex")
+	require.NoError(t, err)
+}
+
+func TestWithGlobalAlias_CanAddTopLevelCodexBack(t *testing.T) {
+	ctx := context.Background()
+	p, err := New(ctx,
+		WithoutAutoDetect(),
+		WithoutBuiltinAliases(),
+		WithOpenAI(),
+		WithGlobalAlias(AliasCodex, "openai/codex"),
+	)
+	require.NoError(t, err)
+
+	resolved, err := p.Resolve(AliasCodex)
+	require.NoError(t, err)
+	assert.Equal(t, "openai/"+openai.ModelGPT53Codex, resolved.ID)
+}
+
+func TestWithOpenAI_UsesBuiltinAliasesLikeAutodetect(t *testing.T) {
+	ctx := context.Background()
+	p, err := New(ctx,
+		WithoutAutoDetect(),
+		WithOpenAI(),
+	)
+	require.NoError(t, err)
+
+	fast, err := p.Resolve(AliasFast)
+	require.NoError(t, err)
+	assert.Equal(t, "openai/"+openai.ModelGPT54Mini, fast.ID)
+
+	def, err := p.Resolve(AliasDefault)
+	require.NoError(t, err)
+	assert.Equal(t, "openai/"+openai.ModelGPT54, def.ID)
+
+	powerful, err := p.Resolve(AliasPowerful)
+	require.NoError(t, err)
+	assert.Equal(t, "openai/"+openai.ModelGPT54Pro, powerful.ID)
 }
 
 // --- Tests for WithOllama(), WithoutOllama(), WithoutChatGPT() ---

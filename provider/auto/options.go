@@ -16,11 +16,11 @@ import (
 
 // providerEntry holds configuration for a single provider instance.
 type providerEntry struct {
-	name         string
-	providerType string
-	factory      router.Factory
-	modelAliases map[string]string
-	hasAliases   bool // whether to add global aliases (fast/default/powerful)
+	name              string
+	providerType      string
+	factory           router.Factory
+	modelAliases      map[string]string
+	hasBuiltinAliases bool // whether this provider participates in built-in top-level aliases
 }
 
 // claudeStoreEntry marks that accounts should be enumerated from a TokenStore.
@@ -30,14 +30,15 @@ type claudeStoreEntry struct {
 
 // config holds the auto provider configuration.
 type config struct {
-	name          string
-	providers     []providerEntry
-	claudeStores  []claudeStoreEntry // stores to enumerate accounts from
-	autoDetect    bool
-	disabledTypes map[string]bool     // provider types excluded from auto-detection
-	globalAliases map[string][]string // user-defined global aliases: alias -> []targets
-	httpClient    *http.Client        // optional shared HTTP client for all providers
-	llmOpts       []llm.Option        // optional shared llm.Options for all providers (e.g. logger)
+	name           string
+	providers      []providerEntry
+	claudeStores   []claudeStoreEntry // stores to enumerate accounts from
+	autoDetect     bool
+	builtinAliases bool                // whether built-in top-level aliases are enabled
+	disabledTypes  map[string]bool     // provider types excluded from auto-detection
+	globalAliases  map[string][]string // user-defined top-level aliases: alias -> []targets
+	httpClient     *http.Client        // optional shared HTTP client for all providers
+	llmOpts        []llm.Option        // optional shared llm.Options for all providers (e.g. logger)
 }
 
 // Option configures the auto provider.
@@ -71,6 +72,15 @@ func WithName(name string) Option {
 func WithoutAutoDetect() Option {
 	return func(c *config) {
 		c.autoDetect = false
+	}
+}
+
+// WithoutBuiltinAliases disables the built-in top-level aliases
+// fast/default/powerful. Provider-scoped aliases such as openai/mini or
+// chatgpt/codex remain available.
+func WithoutBuiltinAliases() Option {
+	return func(c *config) {
+		c.builtinAliases = false
 	}
 }
 
@@ -119,8 +129,8 @@ func WithClaudeAccount(name string, store claude.TokenStore) Option {
 				}
 				return claude.New(claudeOpts...)
 			},
-			modelAliases: modelAliasesForProvider(ProviderClaude),
-			hasAliases:   true,
+			modelAliases:      modelAliasesForProvider(ProviderClaude),
+			hasBuiltinAliases: true,
 		})
 	}
 }
@@ -139,8 +149,8 @@ func WithClaudeLocal() Option {
 				}
 				return claude.New(claudeOpts...)
 			},
-			modelAliases: modelAliasesForProvider(ProviderClaude),
-			hasAliases:   true,
+			modelAliases:      modelAliasesForProvider(ProviderClaude),
+			hasBuiltinAliases: true,
 		})
 	}
 }
@@ -180,8 +190,8 @@ func WithCodexLocal() Option {
 				}
 				return auth.NewProvider(base)
 			},
-			modelAliases: modelAliasesForProvider(ProviderChatGPT),
-			hasAliases:   true,
+			modelAliases:      modelAliasesForProvider(ProviderChatGPT),
+			hasBuiltinAliases: true,
 		})
 	}
 }
@@ -200,8 +210,8 @@ func WithBedrock() Option {
 				}
 				return bedrock.New(bedrockOpts...)
 			},
-			modelAliases: modelAliasesForProvider(ProviderBedrock),
-			hasAliases:   true,
+			modelAliases:      modelAliasesForProvider(ProviderBedrock),
+			hasBuiltinAliases: true,
 		})
 	}
 }
@@ -220,8 +230,8 @@ func WithOpenAI() Option {
 				}
 				return openai.New(opts...)
 			},
-			modelAliases: modelAliasesForProvider(ProviderOpenAI),
-			hasAliases:   false,
+			modelAliases:      modelAliasesForProvider(ProviderOpenAI),
+			hasBuiltinAliases: true,
 		})
 	}
 }
@@ -241,8 +251,8 @@ func WithOpenRouter() Option {
 				}
 				return openrouter.New(routerOpts...)
 			},
-			modelAliases: modelAliasesForProvider(ProviderOpenRouter),
-			hasAliases:   false,
+			modelAliases:      modelAliasesForProvider(ProviderOpenRouter),
+			hasBuiltinAliases: false,
 		})
 	}
 }
@@ -262,13 +272,13 @@ func WithAnthropic() Option {
 				}
 				return anthropic.New(anthropicOpts...)
 			},
-			modelAliases: modelAliasesForProvider(ProviderAnthropic),
-			hasAliases:   true,
+			modelAliases:      modelAliasesForProvider(ProviderAnthropic),
+			hasBuiltinAliases: true,
 		})
 	}
 }
 
-// WithGlobalAlias adds a user-defined global alias that resolves to one or more targets.
+// WithGlobalAlias adds a user-defined top-level alias that resolves to one or more targets.
 // Targets should be provider-prefixed model references (e.g., "openai/o3", "openrouter/openai/o3").
 // Multiple targets enable failover - if the first target fails, the next is tried.
 //
@@ -284,7 +294,7 @@ func WithGlobalAlias(alias string, targets ...string) Option {
 	}
 }
 
-// WithGlobalAliases adds multiple user-defined global aliases.
+// WithGlobalAliases adds multiple user-defined top-level aliases.
 // Each key is an alias name, and the value is a slice of targets.
 //
 // Example:
@@ -331,8 +341,8 @@ func WithOllama() Option {
 				}
 				return ollama.New(opts...)
 			},
-			modelAliases: nil,
-			hasAliases:   false,
+			modelAliases:      nil,
+			hasBuiltinAliases: false,
 		})
 	}
 }
@@ -386,8 +396,8 @@ func WithDockerModelRunner(opts ...llm.Option) Option {
 				}
 				return dockermr.New(allOpts...)
 			},
-			modelAliases: nil,
-			hasAliases:   false,
+			modelAliases:      nil,
+			hasBuiltinAliases: false,
 		})
 	}
 }

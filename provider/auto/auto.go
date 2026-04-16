@@ -37,8 +37,9 @@ const defaultName = "auto"
 //	)
 func New(ctx context.Context, opts ...Option) (*router.Provider, error) {
 	cfg := &config{
-		name:       defaultName,
-		autoDetect: true,
+		name:           defaultName,
+		autoDetect:     true,
+		builtinAliases: true,
 	}
 	for _, opt := range opts {
 		opt(cfg)
@@ -71,12 +72,7 @@ func New(ctx context.Context, opts ...Option) (*router.Provider, error) {
 	aggCfg := router.Config{
 		Name:      cfg.name,
 		Providers: make([]router.ProviderInstanceConfig, 0, len(allProviders)),
-		Aliases: map[string][]router.AliasTarget{
-			AliasFast:     {},
-			AliasDefault:  {},
-			AliasPowerful: {},
-			AliasCodex:    {},
-		},
+		Aliases:   map[string][]router.AliasTarget{},
 	}
 	factories := make(map[string]router.Factory)
 
@@ -113,8 +109,8 @@ func New(ctx context.Context, opts ...Option) (*router.Provider, error) {
 		factories[factoryKey] = entry.factory
 
 		// Add global alias targets for providers that support them
-		if entry.hasAliases {
-			targets := buildAliasTargets(instanceName, entry.providerType)
+		if cfg.builtinAliases && entry.hasBuiltinAliases {
+			targets := buildBuiltinAliasTargets(instanceName, entry.providerType)
 			for alias, target := range targets {
 				aggCfg.Aliases[alias] = append(aggCfg.Aliases[alias], target)
 			}
@@ -167,8 +163,8 @@ func enumerateClaudeAccounts(ctx context.Context, store claude.TokenStore, httpC
 				}
 				return claude.New(claudeOpts...)
 			},
-			modelAliases: modelAliasesForProvider(ProviderClaude),
-			hasAliases:   true,
+			modelAliases:      modelAliasesForProvider(ProviderClaude),
+			hasBuiltinAliases: true,
 		})
 	}
 

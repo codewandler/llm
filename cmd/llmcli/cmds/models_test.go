@@ -64,16 +64,23 @@ func TestPrintModelsSection_GroupsByProviderAndShowsAliasesWhenFiltered(t *testi
 	require.Contains(t, out, "MODELS\n")
 	require.Contains(t, out, "  anthropic (1)\n")
 	require.Contains(t, out, "  openai (1)\n")
-	require.Contains(t, out, "intent aliases: default")
+	require.Contains(t, out, "overlay aliases: default")
 	require.Contains(t, out, "aliases: flagship")
 	require.NotContains(t, out, "openai/flagship")
 }
 
 func TestSplitAliases_ClassifiesFriendlyAndSynthetic(t *testing.T) {
 	got := splitAliases([]string{"default", "flagship", "openai/flagship", "work/openai/flagship", "flagship"})
-	require.Equal(t, []string{"default"}, got.Intent)
+	require.Equal(t, []string{"default"}, got.Overlay)
 	require.Equal(t, []string{"flagship"}, got.Friendly)
 	require.Equal(t, []string{"openai/flagship", "work/openai/flagship"}, got.Synthetic)
+}
+
+func TestSplitAliases_TreatsCodexAsFriendlyNotOverlay(t *testing.T) {
+	got := splitAliases([]string{"codex", "openai/codex"})
+	require.Nil(t, got.Overlay)
+	require.Equal(t, []string{"codex"}, got.Friendly)
+	require.Equal(t, []string{"openai/codex"}, got.Synthetic)
 }
 
 func TestPrintModelsJSON_HidesSyntheticAliasesByDefault(t *testing.T) {
@@ -92,7 +99,7 @@ func TestPrintModelsJSON_HidesSyntheticAliasesByDefault(t *testing.T) {
 	require.NoError(t, json.Unmarshal([]byte(out), &got))
 	require.Len(t, got, 1)
 	require.NotNil(t, got[0].Aliases)
-	require.Nil(t, got[0].Aliases.Intent)
+	require.Nil(t, got[0].Aliases.Overlay)
 	require.Equal(t, []string{"flagship"}, got[0].Aliases.Friendly)
 	require.Nil(t, got[0].Aliases.Synthetic)
 }
@@ -113,12 +120,12 @@ func TestPrintModelsJSON_IncludesSyntheticAliasesWhenRequested(t *testing.T) {
 	require.NoError(t, json.Unmarshal([]byte(out), &got))
 	require.Len(t, got, 1)
 	require.NotNil(t, got[0].Aliases)
-	require.Nil(t, got[0].Aliases.Intent)
+	require.Nil(t, got[0].Aliases.Overlay)
 	require.Equal(t, []string{"flagship"}, got[0].Aliases.Friendly)
 	require.Equal(t, []string{"openai/flagship"}, got[0].Aliases.Synthetic)
 }
 
-func TestPrintModelsJSON_SeparatesIntentAliases(t *testing.T) {
+func TestPrintModelsJSON_SeparatesOverlayAliases(t *testing.T) {
 	models := []llm.Model{{
 		ID:       "claude-sonnet-4-6",
 		Name:     "Claude Sonnet 4.6",
@@ -134,7 +141,7 @@ func TestPrintModelsJSON_SeparatesIntentAliases(t *testing.T) {
 	require.NoError(t, json.Unmarshal([]byte(out), &got))
 	require.Len(t, got, 1)
 	require.NotNil(t, got[0].Aliases)
-	require.Equal(t, []string{"default", "fast"}, got[0].Aliases.Intent)
+	require.Equal(t, []string{"default", "fast"}, got[0].Aliases.Overlay)
 	require.Equal(t, []string{"sonnet"}, got[0].Aliases.Friendly)
 }
 

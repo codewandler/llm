@@ -13,8 +13,8 @@ import (
 	"github.com/codewandler/llm"
 )
 
-// Top-level aliases shown in their own section.
-var topLevelAliases = []string{"fast", "default", "powerful", "codex"}
+// Built-in top-level aliases shown in their own section.
+var topLevelAliases = []string{"fast", "default", "powerful"}
 
 type modelsOptions struct {
 	filter     string
@@ -25,7 +25,7 @@ type modelsOptions struct {
 }
 
 type modelAliasKinds struct {
-	Intent    []string `json:"intent,omitempty"`
+	Overlay   []string `json:"overlay,omitempty"`
 	Friendly  []string `json:"friendly,omitempty"`
 	Synthetic []string `json:"synthetic,omitempty"`
 }
@@ -146,11 +146,11 @@ func matchesAlias(m llm.Model, alias string) bool {
 }
 
 func splitAliases(aliases []string) modelAliasKinds {
-	seenIntent := make(map[string]struct{}, len(aliases))
+	seenOverlay := make(map[string]struct{}, len(aliases))
 	seenFriendly := make(map[string]struct{}, len(aliases))
 	seenSynthetic := make(map[string]struct{}, len(aliases))
 	out := modelAliasKinds{
-		Intent:    make([]string, 0, len(aliases)),
+		Overlay:   make([]string, 0, len(aliases)),
 		Friendly:  make([]string, 0, len(aliases)),
 		Synthetic: make([]string, 0, len(aliases)),
 	}
@@ -159,11 +159,11 @@ func splitAliases(aliases []string) modelAliasKinds {
 			continue
 		}
 		if isTopLevelAlias(alias) {
-			if _, ok := seenIntent[alias]; ok {
+			if _, ok := seenOverlay[alias]; ok {
 				continue
 			}
-			seenIntent[alias] = struct{}{}
-			out.Intent = append(out.Intent, alias)
+			seenOverlay[alias] = struct{}{}
+			out.Overlay = append(out.Overlay, alias)
 			continue
 		}
 		if strings.Contains(alias, "/") {
@@ -180,11 +180,11 @@ func splitAliases(aliases []string) modelAliasKinds {
 		seenFriendly[alias] = struct{}{}
 		out.Friendly = append(out.Friendly, alias)
 	}
-	sort.Strings(out.Intent)
+	sort.Strings(out.Overlay)
 	sort.Strings(out.Friendly)
 	sort.Strings(out.Synthetic)
-	if len(out.Intent) == 0 {
-		out.Intent = nil
+	if len(out.Overlay) == 0 {
+		out.Overlay = nil
 	}
 	if len(out.Friendly) == 0 {
 		out.Friendly = nil
@@ -218,7 +218,7 @@ func isTopLevelAlias(alias string) bool {
 
 func displayAliases(aliases []string, includeSynthetic bool) []string {
 	parts := splitAliases(aliases)
-	out := append([]string{}, parts.Intent...)
+	out := append([]string{}, parts.Overlay...)
 	out = append(out, parts.Friendly...)
 	if includeSynthetic {
 		out = append(out, parts.Synthetic...)
@@ -277,7 +277,7 @@ func printModelsJSON(models []llm.Model, opts modelsOptions) error {
 				aliases.Synthetic = nil
 			}
 			var aliasKinds *modelAliasKinds
-			if len(aliases.Intent) > 0 || len(aliases.Friendly) > 0 || len(aliases.Synthetic) > 0 {
+			if len(aliases.Overlay) > 0 || len(aliases.Friendly) > 0 || len(aliases.Synthetic) > 0 {
 				copy := aliases
 				aliasKinds = &copy
 			}
@@ -337,8 +337,8 @@ func printModelsSection(models []llm.Model, opts modelsOptions) {
 			fmt.Printf("    %-*s  %s\n", maxID, m.ID, m.Name)
 			if hasModelFilters(opts) {
 				aliases := splitAliases(m.Aliases)
-				if len(aliases.Intent) > 0 {
-					fmt.Printf("      intent aliases: %s\n", strings.Join(aliases.Intent, ", "))
+				if len(aliases.Overlay) > 0 {
+					fmt.Printf("      overlay aliases: %s\n", strings.Join(aliases.Overlay, ", "))
 				}
 				if len(aliases.Friendly) > 0 {
 					fmt.Printf("      aliases: %s\n", strings.Join(aliases.Friendly, ", "))

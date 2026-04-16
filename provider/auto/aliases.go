@@ -11,17 +11,16 @@ import (
 	"github.com/codewandler/llm/provider/router"
 )
 
-// aliasModels defines which model to use for each global alias per provider.
-type aliasModels struct {
+// builtinAliasModels defines which model to use for each built-in top-level alias per provider.
+type builtinAliasModels struct {
 	fast     string
 	normal   string
 	powerful string
-	codex    string // optional: the codex model to use for the AliasCodex global alias
 }
 
-// providerAliasModels maps provider types to their alias model mappings.
-// These are used for the built-in global aliases (fast, default, powerful, codex).
-var providerAliasModels = map[string]aliasModels{
+// builtinAliasFallbacks maps provider types to fallback model mappings used for
+// built-in top-level aliases (fast, default, powerful).
+var builtinAliasFallbacks = map[string]builtinAliasModels{
 	ProviderClaude: {
 		fast:     anthropic.ModelHaiku,
 		normal:   anthropic.ModelSonnet,
@@ -48,12 +47,12 @@ var providerAliasModels = map[string]aliasModels{
 		powerful: minimax.ModelM27,
 	},
 	// ChatGPT / Codex: accessed via chatgpt.com/backend-api using Codex CLI OAuth.
-	// All models are Codex-category; no general-purpose GPT aliases here.
+	// All models are Codex-category, but they still participate in the built-in
+	// fast/default/powerful alias set.
 	ProviderChatGPT: {
 		fast:     openai.ModelGPT51CodexMini,
 		normal:   openai.ModelGPT53Codex,
 		powerful: openai.ModelGPT53Codex,
-		codex:    openai.ModelGPT53Codex,
 	},
 }
 
@@ -63,23 +62,18 @@ var (
 	builtinCatalogErr  error
 )
 
-// buildAliasTargets creates alias targets for a provider instance.
-func buildAliasTargets(instanceName, providerType string) map[string]router.AliasTarget {
-	models, ok := providerAliasModels[providerType]
+// buildBuiltinAliasTargets creates the built-in top-level alias targets for a provider instance.
+func buildBuiltinAliasTargets(instanceName, providerType string) map[string]router.AliasTarget {
+	models, ok := resolveBuiltinAliasModels(providerType)
 	if !ok {
 		return nil
 	}
 
-	targets := map[string]router.AliasTarget{
+	return map[string]router.AliasTarget{
 		AliasFast:     {Provider: instanceName, Model: models.fast},
 		AliasDefault:  {Provider: instanceName, Model: models.normal},
 		AliasPowerful: {Provider: instanceName, Model: models.powerful},
 	}
-	// Wire the global "codex" alias for providers that designate a codex model.
-	if models.codex != "" {
-		targets[AliasCodex] = router.AliasTarget{Provider: instanceName, Model: models.codex}
-	}
-	return targets
 }
 
 // modelAliasesForProvider returns provider-scoped aliases for a provider type.

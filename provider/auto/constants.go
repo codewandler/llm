@@ -23,10 +23,14 @@ const (
 	EnvMiniMaxKey    = "MINIMAX_API_KEY"
 )
 
-// Global model aliases.
+// Built-in top-level aliases provided by provider/auto.
 const (
 	AliasFast     = "fast"
 	AliasDefault  = "default"
 	AliasPowerful = "powerful"
-	AliasCodex    = "codex"
+)
+
+// Common provider/user alias names.
+const (
+	AliasCodex = "codex"
 )

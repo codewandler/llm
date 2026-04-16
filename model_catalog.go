@@ -196,7 +196,7 @@ func mergeAliasesSlices(a, b []string) []string {
 
 func isIntentAlias(alias string) bool {
 	switch alias {
-	case ModelDefault, ModelFast, ModelPowerful, "codex":
+	case ModelDefault, ModelFast, ModelPowerful:
 		return true
 	default:
 		return false
