@@ -1,49 +1,42 @@
 package ollama
 
 import (
-	"context"
-	"io"
-	"net/http"
-	"strings"
 	"testing"
 
 	"github.com/codewandler/llm"
-	"github.com/codewandler/llm/api/completions"
+	"github.com/codewandler/llm/api/responses"
 	"github.com/codewandler/llm/api/unified"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
-func TestUnifiedCompletionsEventPipeline_OllamaCompatible(t *testing.T) {
-	sseBody := "data: {\"id\":\"chatcmpl_1\",\"model\":\"llama3.2\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"hello\"},\"finish_reason\":null}]}\n\n" +
-		"data: {\"id\":\"chatcmpl_1\",\"model\":\"llama3.2\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":5,\"completion_tokens\":2,\"total_tokens\":7}}\n\n" +
-		"data: [DONE]\n\n"
-
-	client := completions.NewClient(
-		completions.WithBaseURL("https://fake.api"),
-		completions.WithHTTPClient(&http.Client{Transport: ollamaRT(func(*http.Request) (*http.Response, error) {
-			return &http.Response{
-				StatusCode: 200,
-				Header:     http.Header{"Content-Type": {"text/event-stream"}},
-				Body:       io.NopCloser(strings.NewReader(sseBody)),
-			}, nil
-		})}),
-	)
-
-	handle, err := client.Stream(context.Background(), &completions.Request{Model: "llama3.2", Stream: true})
-	require.NoError(t, err)
-
+func TestUnifiedResponsesEventPipeline_OllamaCompatible(t *testing.T) {
 	pub, ch := llm.NewEventPublisher()
+
 	go func() {
 		defer pub.Close()
-		for r := range handle.Events {
-			if r.Err != nil {
-				pub.Error(r.Err)
-				return
-			}
-			uEv, ignored, convErr := unified.MapCompletionsEvent(r.Event)
-			if convErr != nil {
-				pub.Error(convErr)
+
+		events := []any{
+			&responses.ResponseCreatedEvent{Response: responses.ResponsePayload{ID: "resp_1", Model: "llama3.2"}},
+			&responses.OutputTextDeltaEvent{ContentRef: responses.ContentRef{OutputIndex: 0}, Delta: "pong"},
+			&responses.ResponseCompletedEvent{Response: struct {
+				ID                string `json:"id"`
+				Model             string `json:"model"`
+				Status            string `json:"status"`
+				IncompleteDetails *struct {
+					Reason string `json:"reason"`
+				} `json:"incomplete_details,omitempty"`
+				Error *struct {
+					Code    string `json:"code"`
+					Message string `json:"message"`
+				} `json:"error,omitempty"`
+				Usage *responses.ResponseUsage `json:"usage,omitempty"`
+			}{Status: responses.StatusCompleted, Usage: &responses.ResponseUsage{InputTokens: 11, OutputTokens: 4}}},
+		}
+
+		for _, event := range events {
+			uEv, ignored, err := unified.MapResponsesEvent(event)
+			if err != nil {
+				pub.Error(err)
 				return
 			}
 			if ignored {
@@ -56,15 +49,13 @@ func TestUnifiedCompletionsEventPipeline_OllamaCompatible(t *testing.T) {
 		}
 	}()
 
-	var sawCompleted bool
+	var sawDone bool
 	for ev := range ch {
 		if ev.Type == llm.StreamEventCompleted {
-			sawCompleted = true
+			sawDone = true
+			ce := ev.Data.(*llm.CompletedEvent)
+			assert.Equal(t, llm.StopReasonEndTurn, ce.StopReason)
 		}
 	}
-	assert.True(t, sawCompleted)
+	assert.True(t, sawDone)
 }
-
-type ollamaRT func(*http.Request) (*http.Response, error)
-
-func (f ollamaRT) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }

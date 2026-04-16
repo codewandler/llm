@@ -8,20 +8,17 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"strings"
 	"sync"
 	"time"
 
 	"github.com/codewandler/llm"
-	"github.com/codewandler/llm/msg"
-	"github.com/codewandler/llm/sortmap"
+	"github.com/codewandler/llm/provider/providercore"
 	"github.com/codewandler/llm/tokencount"
-	"github.com/codewandler/llm/tool"
 	"github.com/codewandler/llm/usage"
 )
 
 // Known model IDs for Ollama.
-// These are tested and known to work well with the chat API.
+// These are tested and known to work well with the Responses API.
 const (
 	ModelGLM47Flash      = "glm-4.7-flash"
 	ModelMinistral38B    = "ministral-3:8b"
@@ -46,13 +43,15 @@ const (
 const (
 	ModelDefault   = ModelGLM47Flash
 	defaultBaseURL = "http://localhost:11434"
+	responsesPath  = "/v1/responses"
 )
 
 // Provider implements the Ollama (local) LLM backend.
 type Provider struct {
-	opts          *llm.Options
-	defaultModel  string
-	client        *http.Client
+	core         *providercore.Client
+	opts         *llm.Options
+	defaultModel string
+	client       *http.Client
 	// lazy model list — populated on first Models() call
 	modelOnce     sync.Once
 	fetchedModels llm.Models
@@ -69,14 +68,6 @@ func DefaultOptions() []llm.Option {
 
 // New creates a new Ollama provider.
 // Options are applied on top of DefaultOptions().
-//
-// Example usage:
-//
-//	// Use defaults (localhost:11434)
-//	p := ollama.New()
-//
-//	// Custom base URL
-//	p := ollama.New(llm.WithBaseURL("http://remote-host:11434"))
 func New(opts ...llm.Option) *Provider {
 	allOpts := append(DefaultOptions(), opts...)
 	cfg := llm.Apply(allOpts...)
@@ -84,16 +75,19 @@ func New(opts ...llm.Option) *Provider {
 	if client == nil {
 		client = llm.DefaultHttpClient()
 	}
-	return &Provider{
+	p := &Provider{
 		opts:         cfg,
 		defaultModel: ModelDefault,
 		client:       client,
 	}
+	p.core = newOllamaCore(p.defaultModel, allOpts...)
+	return p
 }
 
 // WithDefaultModel sets the default model to use.
 func (p *Provider) WithDefaultModel(modelID string) *Provider {
 	p.defaultModel = modelID
+	p.core = newOllamaCore(modelID, optionsFromOptions(p.opts)...)
 	return p
 }
 
@@ -102,7 +96,7 @@ func (p *Provider) DefaultModel() string {
 	return p.defaultModel
 }
 
-func (p *Provider) Name() string { return "ollama" }
+func (p *Provider) Name() string { return llm.ProviderNameOllama }
 
 func (*Provider) CostCalculator() usage.CostCalculator {
 	// Ollama is local; no cost information is available.
@@ -165,7 +159,7 @@ func (p *Provider) Resolve(modelID string) (llm.Model, error) {
 // FetchModels retrieves the list of currently installed models from Ollama.
 // This enumerates ALL models, including ones that may not support chat.
 func (p *Provider) FetchModels(ctx context.Context) ([]llm.Model, error) {
-	req, err := http.NewRequestWithContext(ctx, "GET", p.opts.BaseURL+"/api/tags", nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, p.opts.BaseURL+"/api/tags", nil)
 	if err != nil {
 		return nil, err
 	}
@@ -174,7 +168,6 @@ func (p *Provider) FetchModels(ctx context.Context) ([]llm.Model, error) {
 	if err != nil {
 		return nil, fmt.Errorf("ollama list models: %w", err)
 	}
-	//nolint:errcheck // intentional: defer Close is only for cleanup, failure after response reading is non-fatal
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
@@ -207,7 +200,6 @@ func (p *Provider) FetchModels(ctx context.Context) ([]llm.Model, error) {
 // This method blocks until all models are downloaded.
 // Models that are already installed will be skipped.
 func (p *Provider) Download(ctx context.Context, models []llm.Model) error {
-	// First, get list of installed models to skip duplicates
 	installed, err := p.FetchModels(ctx)
 	if err != nil {
 		return fmt.Errorf("fetch installed models: %w", err)
@@ -218,10 +210,9 @@ func (p *Provider) Download(ctx context.Context, models []llm.Model) error {
 		installedMap[m.ID] = true
 	}
 
-	// Download each model that isn't already installed
 	for _, model := range models {
 		if installedMap[model.ID] {
-			continue // Skip already installed
+			continue
 		}
 
 		if err := p.downloadModel(ctx, model.ID); err != nil {
@@ -240,7 +231,7 @@ func (p *Provider) downloadModel(ctx context.Context, modelID string) error {
 		return err
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "POST", p.opts.BaseURL+"/api/pull", bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, p.opts.BaseURL+"/api/pull", bytes.NewReader(body))
 	if err != nil {
 		return err
 	}
@@ -250,7 +241,6 @@ func (p *Provider) downloadModel(ctx context.Context, modelID string) error {
 	if err != nil {
 		return llm.NewErrRequestFailed(llm.ProviderNameOllama, err)
 	}
-	//nolint:errcheck // intentional: defer Close is only for cleanup, failure after response reading is non-fatal
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
@@ -258,32 +248,22 @@ func (p *Provider) downloadModel(ctx context.Context, modelID string) error {
 		return llm.NewErrAPIError(llm.ProviderNameOllama, resp.StatusCode, string(errBody))
 	}
 
-	// Read the streaming response until done
 	scanner := bufio.NewScanner(resp.Body)
 	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
-
 	for scanner.Scan() {
-		line := scanner.Text()
-		if strings.TrimSpace(line) == "" {
-			continue
-		}
-
 		var status struct {
 			Status string `json:"status"`
 		}
-		if err := json.Unmarshal([]byte(line), &status); err != nil {
-			continue // Ignore parse errors in status updates
+		if err := json.Unmarshal(scanner.Bytes(), &status); err != nil {
+			continue
 		}
-
-		// Check for completion or errors
-		if strings.Contains(status.Status, "success") {
+		if status.Status == "success" || status.Status == "successfully pulled" {
 			return nil
 		}
-		if strings.Contains(strings.ToLower(status.Status), "error") {
+		if status.Status != "" && bytes.Contains(bytes.ToLower([]byte(status.Status)), []byte("error")) {
 			return fmt.Errorf("pull failed: %s", status.Status)
 		}
 	}
-
 	if err := scanner.Err(); err != nil {
 		return fmt.Errorf("read pull response: %w", err)
 	}
@@ -291,294 +271,46 @@ func (p *Provider) downloadModel(ctx context.Context, modelID string) error {
 	return nil
 }
 
+// CreateStream sends the request to Ollama's OpenAI-compatible Responses API.
 func (p *Provider) CreateStream(ctx context.Context, src llm.Buildable) (llm.Stream, error) {
-	opts, err := src.BuildRequest(ctx)
-	if err != nil {
-		return nil, llm.NewErrBuildRequest(llm.ProviderNameOllama, err)
-	}
-
-	if err := opts.Validate(); err != nil {
-		return nil, llm.NewErrBuildRequest(llm.ProviderNameOllama, err)
-	}
-	body, err := buildRequest(opts)
-	if err != nil {
-		return nil, llm.NewErrBuildRequest(llm.ProviderNameOllama, err)
-	}
-
-	req, err := http.NewRequestWithContext(ctx, "POST", p.opts.BaseURL+"/api/chat", bytes.NewReader(body))
-	if err != nil {
-		return nil, llm.NewErrBuildRequest(llm.ProviderNameOllama, err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-
-	startTime := time.Now()
-	resp, err := p.client.Do(req)
-	if err != nil {
-		return nil, llm.NewErrRequestFailed(llm.ProviderNameOllama, err)
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		//nolint:errcheck // intentional: defer Close is only for cleanup, failure after response reading is non-fatal
-		//nolint:errcheck // intentional: defer Close is only for cleanup, failure after response reading is non-fatal
-		defer resp.Body.Close()
-		errBody, _ := io.ReadAll(resp.Body)
-		return nil, llm.NewErrAPIError(llm.ProviderNameOllama, resp.StatusCode, string(errBody))
-	}
-
-	meta := streamMeta{
-		RequestedModel: opts.Model,
-		ResolvedModel:  opts.Model,
-		StartTime:      startTime,
-		ProviderName:   p.Name(),
-	}
-	pub, ch := llm.NewEventPublisher()
-
-	// Emit token estimates (Ollama is local, no cost charged — pass nil calculator)
-	if est, err := p.CountTokens(ctx, tokencount.TokenCountRequest{
-		Model: opts.Model, Messages: opts.Messages, Tools: opts.Tools,
-	}); err == nil {
-		for _, rec := range tokencount.EstimateRecords(est, llm.ProviderNameOllama, opts.Model, "heuristic", nil) {
-			pub.TokenEstimate(rec)
-		}
-	}
-
-	go parseStream(ctx, resp.Body, pub, meta)
-	return ch, nil
+	return p.core.Stream(ctx, src)
 }
 
-// --- Request building ---
-
-type request struct {
-	Model       string           `json:"model"`
-	Messages    []messagePayload `json:"messages"`
-	Tools       []toolPayload    `json:"tools,omitempty"`
-	MaxTokens   int              `json:"num_predict,omitempty"`
-	Temperature float64          `json:"temperature,omitempty"`
-	TopP        float64          `json:"top_p,omitempty"`
-	TopK        int              `json:"top_k,omitempty"`
-	Format      string           `json:"format,omitempty"`
-	Stream      bool             `json:"stream"`
-}
-
-type messagePayload struct {
-	Role      string         `json:"role"`
-	Content   string         `json:"content"`
-	ToolCalls []toolCallItem `json:"tool_calls,omitempty"`
-}
-
-type toolCallItem struct {
-	Function functionCall `json:"function"`
-}
-
-type functionCall struct {
-	Name      string         `json:"name"`
-	Arguments map[string]any `json:"arguments"`
-}
-
-type toolPayload struct {
-	Type     string          `json:"type"`
-	Function functionPayload `json:"function"`
-}
-
-type functionPayload struct {
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	Parameters  any    `json:"parameters"`
-}
-
-func buildRequest(opts llm.Request) ([]byte, error) {
-	r := request{
-		Model:  opts.Model,
-		Stream: true,
-	}
-
-	// Generation parameters
-	if opts.MaxTokens > 0 {
-		r.MaxTokens = opts.MaxTokens
-	}
-	if opts.Temperature > 0 {
-		r.Temperature = opts.Temperature
-	}
-	if opts.TopP > 0 {
-		r.TopP = opts.TopP
-	}
-	if opts.TopK > 0 {
-		r.TopK = opts.TopK
-	}
-	if opts.OutputFormat == llm.OutputFormatJSON {
-		r.Format = "json"
-	}
-
-	// Note: Ollama does not support tool_choice parameter.
-	// All ToolChoice settings are silently ignored (treated as auto).
-
-	for _, t := range opts.Tools {
-		r.Tools = append(r.Tools, toolPayload{
-			Type: "function",
-			Function: functionPayload{
-				Name:        t.Name,
-				Description: t.Description,
-				Parameters:  sortmap.NewSortedMap(t.Parameters),
-			},
-		})
-	}
-
-	for _, m := range opts.Messages {
-		var mp messagePayload
-
-		switch m.Role {
-		case msg.RoleSystem:
-			mp = messagePayload{
-				Role:    "system",
-				Content: m.Text(),
+func newOllamaCore(defaultModel string, opts ...llm.Option) *providercore.Client {
+	cfg := providercore.Config{
+		ProviderName: llm.ProviderNameOllama,
+		DefaultModel: defaultModel,
+		BaseURL:      defaultBaseURL,
+		BasePath:     responsesPath,
+		APIHint:      llm.ApiTypeOpenAIResponses,
+		TokenCounter: tokencount.TokenCounterFunc(func(_ context.Context, req tokencount.TokenCountRequest) (*tokencount.TokenCount, error) {
+			tc := &tokencount.TokenCount{}
+			if err := tokencount.CountMessagesAndTools(tc, req, tokencount.CountOpts{Encoding: tokencount.EncodingCL100K}); err != nil {
+				return nil, fmt.Errorf("ollama: %w", err)
 			}
-
-		case msg.RoleUser:
-			mp = messagePayload{
-				Role:    "user",
-				Content: m.Text(),
-			}
-
-		case msg.RoleAssistant:
-			mp = messagePayload{
-				Role:    "assistant",
-				Content: m.Text(),
-			}
-			for _, tc := range m.ToolCalls() {
-				mp.ToolCalls = append(mp.ToolCalls, toolCallItem{
-					Function: functionCall{
-						Name:      tc.Name,
-						Arguments: tc.Args,
-					},
-				})
-			}
-
-		case msg.RoleTool:
-			for _, tr := range m.ToolResults() {
-				mp = messagePayload{
-					Role:    "tool",
-					Content: tr.ToolOutput,
-				}
-				r.Messages = append(r.Messages, mp)
-			}
-			continue // avoid appending twice
-		}
-
-		r.Messages = append(r.Messages, mp)
+			return tc, nil
+		}),
 	}
-
-	return json.Marshal(r)
+	providercore.WithCostCalculator(nil)(&cfg)
+	return providercore.New(cfg, opts...)
 }
 
-// --- Publisher parsing ---
-
-// streamMeta passes context into the stream parser for StreamEventStart.
-type streamMeta struct {
-	RequestedModel string
-	ResolvedModel  string
-	StartTime      time.Time
-	ProviderName   string // used in StreamStartedEvent.Provider
-}
-
-type streamChunk struct {
-	Message struct {
-		Role      string `json:"role"`
-		Content   string `json:"content"`
-		ToolCalls []struct {
-			Function struct {
-				Name      string         `json:"name"`
-				Arguments map[string]any `json:"arguments"`
-			} `json:"function"`
-		} `json:"tool_calls,omitempty"`
-	} `json:"message"`
-	Done            bool   `json:"done"`
-	DoneReason      string `json:"done_reason,omitempty"`
-	PromptEvalCount int    `json:"prompt_eval_count,omitempty"` // input tokens (final chunk only)
-	EvalCount       int    `json:"eval_count,omitempty"`        // output tokens (final chunk only)
-}
-
-func parseStream(ctx context.Context, body io.ReadCloser, pub llm.Publisher, meta streamMeta) {
-	defer pub.Close()
-	//nolint:errcheck // intentional: defer Close is only for cleanup, failure after body consumption is non-fatal
-	defer body.Close()
-
-	scanner := bufio.NewScanner(body)
-	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
-
-	var toolCallID int
-	startEmitted := false
-
-	for scanner.Scan() {
-		select {
-		case <-ctx.Done():
-			pub.Error(llm.NewErrContextCancelled(llm.ProviderNameOllama, ctx.Err()))
-			return
-		default:
-		}
-		line := scanner.Text()
-		if strings.TrimSpace(line) == "" {
-			continue
-		}
-
-		var chunk streamChunk
-		if err := json.Unmarshal([]byte(line), &chunk); err != nil {
-			pub.Error(llm.NewErrStreamDecode(llm.ProviderNameOllama, err))
-			return
-		}
-
-		if !startEmitted {
-			startEmitted = true
-			pub.Started(llm.StreamStartedEvent{Provider: meta.ProviderName})
-		}
-
-		if chunk.Message.Content != "" {
-			pub.Delta(llm.TextDelta(chunk.Message.Content))
-		}
-
-		if len(chunk.Message.ToolCalls) > 0 {
-			for _, tc := range chunk.Message.ToolCalls {
-				toolCallID++
-				pub.ToolCall(tool.NewToolCall(
-					fmt.Sprintf("call_%d", toolCallID),
-					tc.Function.Name,
-					tc.Function.Arguments,
-				))
-			}
-		}
-
-		if chunk.Done {
-			stopReason := llm.StopReasonEndTurn
-			switch chunk.DoneReason {
-			case "length":
-				stopReason = llm.StopReasonMaxTokens
-			case "stop":
-				if toolCallID > 0 {
-					stopReason = llm.StopReasonToolUse
-				}
-			default:
-				if toolCallID > 0 {
-					stopReason = llm.StopReasonToolUse
-				}
-			}
-			// Build usage record from the token counts Ollama provides in the
-			// final chunk. PromptEvalCount / EvalCount may be zero on older
-			// Ollama builds; the record is emitted regardless so consumers
-			// always receive a UsageUpdatedEvent.
-			tokens := usage.TokenItems{
-				{Kind: usage.KindInput, Count: chunk.PromptEvalCount},
-				{Kind: usage.KindOutput, Count: chunk.EvalCount},
-			}.NonZero()
-			pub.UsageRecord(usage.Record{
-				Dims:       usage.Dims{Provider: llm.ProviderNameOllama, Model: meta.ResolvedModel},
-				Tokens:     tokens,
-				RecordedAt: time.Now(),
-			})
-			pub.Completed(llm.CompletedEvent{StopReason: stopReason})
-			return
-		}
+func optionsFromOptions(o *llm.Options) []llm.Option {
+	if o == nil {
+		return nil
 	}
-
-	if err := scanner.Err(); err != nil {
-		pub.Error(llm.NewErrStreamRead(llm.ProviderNameOllama, err))
+	var opts []llm.Option
+	if o.BaseURL != "" {
+		opts = append(opts, llm.WithBaseURL(o.BaseURL))
 	}
+	if o.HTTPClient != nil {
+		opts = append(opts, llm.WithHTTPClient(o.HTTPClient))
+	}
+	if o.APIKeyFunc != nil {
+		opts = append(opts, llm.WithAPIKeyFunc(o.APIKeyFunc))
+	}
+	if o.Logger != nil {
+		opts = append(opts, llm.WithLogger(o.Logger))
+	}
+	return opts
 }
