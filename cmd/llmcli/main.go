@@ -34,6 +34,7 @@ Currently supports Claude OAuth authentication.`,
 		SilenceErrors: true,
 	}
 
+	rootCmd.PersistentFlags().BoolVar(&rootFlags.Debug, "debug", false, "Enable provider debug logging")
 	rootCmd.PersistentFlags().BoolVar(&rootFlags.LogHTTP, "log-http", false, "Log HTTP requests and responses at debug level")
 	rootCmd.PersistentFlags().BoolVar(&rootFlags.LogHTTPDebug, "log-http-debug", false, "Log HTTP headers and bodies (implies --log-http)")
 	rootCmd.PersistentFlags().BoolVar(&rootFlags.LogHTTPAllHeaders, "log-http-all-headers", false, "Show all response headers instead of curated list (implies --log-http-debug)")

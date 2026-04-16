@@ -2,8 +2,10 @@ package cmds
 
 import (
 	"context"
+	"io"
 	"log/slog"
 	"net/http"
+	"os"
 
 	"github.com/codewandler/llm"
 	"github.com/codewandler/llm/cmd/llmcli/store"
@@ -14,6 +16,8 @@ import (
 // RootFlags holds flags defined on the root command that are shared across
 // all subcommands.
 type RootFlags struct {
+	// Debug enables provider-level debug logging.
+	Debug bool
 	// LogHTTP enables HTTP request/response logging at Debug level.
 	LogHTTP bool
 	// LogHTTPDebug additionally logs request/response headers and bodies.
@@ -46,12 +50,28 @@ func (f *RootFlags) BuildHTTPClient() (*http.Client, *httpLogHandler) {
 }
 
 // BuildLLMOptions returns llm.Option values for the root flags to be passed
-// to providers that don't use the HTTP transport for logging (e.g. Bedrock).
+// to providers, including ones that don't use the HTTP transport for logging
+// (e.g. Bedrock).
 func (f *RootFlags) BuildLLMOptions(handler *httpLogHandler) []llm.Option {
-	if handler == nil {
+	var logger *slog.Logger
+	switch {
+	case handler != nil:
+		logger = slog.New(handler)
+	case f.Debug:
+		logger = slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	default:
+		logger = nil
+	}
+	if logger == nil {
 		return nil
 	}
-	return []llm.Option{llm.WithLogger(slog.New(handler))}
+	if handler == nil {
+		logger = slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelDebug}))
+		if f.Debug {
+			logger = slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelDebug}))
+		}
+	}
+	return []llm.Option{llm.WithLogger(logger)}
 }
 
 // createProvider builds the aggregate provider from available credentials.
