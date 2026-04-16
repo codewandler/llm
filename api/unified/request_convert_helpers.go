@@ -3,6 +3,14 @@ package unified
 import (
 	"encoding/json"
 	"strings"
+
+	"github.com/codewandler/llm/msg"
+)
+
+const (
+	openAIMetadataSessionID = "session_id"
+	openAIMetadataTraceID   = "trace_id"
+	openAIMetadataRequestID = "request_id"
 )
 
 func partsText(parts []Part) string {
@@ -33,4 +41,140 @@ func contentString(v any) string {
 		return s
 	}
 	return ""
+}
+
+func cloneAnyMap(in map[string]any) map[string]any {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make(map[string]any, len(in))
+	for k, v := range in {
+		out[k] = v
+	}
+	return out
+}
+
+func cloneStringMap(in map[string]string) map[string]string {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(in))
+	for k, v := range in {
+		out[k] = v
+	}
+	return out
+}
+
+func promptCacheRetentionFromHint(h *msg.CacheHint) string {
+	if h != nil && h.Enabled && h.TTL == msg.CacheTTL1h.String() {
+		return "24h"
+	}
+	return ""
+}
+
+func cacheHintFromPromptCacheRetention(ret string) *msg.CacheHint {
+	if ret == "24h" {
+		return &msg.CacheHint{Enabled: true, TTL: msg.CacheTTL1h.String()}
+	}
+	return nil
+}
+
+func outputFromLLM(format string) *OutputSpec {
+	switch format {
+	case "json":
+		return &OutputSpec{Mode: OutputModeJSONObject}
+	case "text":
+		return &OutputSpec{Mode: OutputModeText}
+	default:
+		return nil
+	}
+}
+
+func metadataToOpenAI(meta *RequestMetadata, extra map[string]any) (string, map[string]any) {
+	user := ""
+	out := cloneAnyMap(extra)
+	if meta != nil {
+		user = meta.EndUserID
+		if meta.SessionID != "" {
+			if out == nil {
+				out = map[string]any{}
+			}
+			out[openAIMetadataSessionID] = meta.SessionID
+		}
+		if meta.TraceID != "" {
+			if out == nil {
+				out = map[string]any{}
+			}
+			out[openAIMetadataTraceID] = meta.TraceID
+		}
+		if meta.RequestID != "" {
+			if out == nil {
+				out = map[string]any{}
+			}
+			out[openAIMetadataRequestID] = meta.RequestID
+		}
+	}
+	return user, out
+}
+
+func metadataFromOpenAI(user string, raw map[string]any) (*RequestMetadata, map[string]any) {
+	var meta *RequestMetadata
+	extra := cloneAnyMap(raw)
+	set := func(apply func(*RequestMetadata)) {
+		if meta == nil {
+			meta = &RequestMetadata{}
+		}
+		apply(meta)
+	}
+	if user != "" {
+		set(func(m *RequestMetadata) { m.EndUserID = user })
+	}
+	if v, ok := extra[openAIMetadataSessionID].(string); ok && v != "" {
+		set(func(m *RequestMetadata) { m.SessionID = v })
+		delete(extra, openAIMetadataSessionID)
+	}
+	if v, ok := extra[openAIMetadataTraceID].(string); ok && v != "" {
+		set(func(m *RequestMetadata) { m.TraceID = v })
+		delete(extra, openAIMetadataTraceID)
+	}
+	if v, ok := extra[openAIMetadataRequestID].(string); ok && v != "" {
+		set(func(m *RequestMetadata) { m.RequestID = v })
+		delete(extra, openAIMetadataRequestID)
+	}
+	if len(extra) == 0 {
+		extra = nil
+	}
+	return meta, extra
+}
+
+func ensureMessagesExtras(r *Request) *MessagesExtras {
+	if r.Extras.Messages == nil {
+		r.Extras.Messages = &MessagesExtras{}
+	}
+	return r.Extras.Messages
+}
+
+func messagesCachePartIndex(r Request, messageIndex int) *int {
+	if r.Extras.Messages == nil || r.Extras.Messages.MessageCachePartIndex == nil {
+		return nil
+	}
+	idx, ok := r.Extras.Messages.MessageCachePartIndex[messageIndex]
+	if !ok {
+		return nil
+	}
+	return &idx
+}
+
+func ensureCompletionsExtras(r *Request) *CompletionsExtras {
+	if r.Extras.Completions == nil {
+		r.Extras.Completions = &CompletionsExtras{}
+	}
+	return r.Extras.Completions
+}
+
+func ensureResponsesExtras(r *Request) *ResponsesExtras {
+	if r.Extras.Responses == nil {
+		r.Extras.Responses = &ResponsesExtras{}
+	}
+	return r.Extras.Responses
 }

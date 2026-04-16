@@ -33,7 +33,9 @@ func BuildMessagesRequest(r Request, opts ...MessagesOption) (*messages.Request,
 		Stream:    true,
 		Messages:  make([]messages.Message, 0, len(r.Messages)),
 	}
-
+	if r.Temperature > 0 {
+		out.Temperature = r.Temperature
+	}
 	if r.TopK > 0 {
 		out.TopK = r.TopK
 	}
@@ -41,12 +43,15 @@ func BuildMessagesRequest(r Request, opts ...MessagesOption) (*messages.Request,
 		out.TopP = r.TopP
 	}
 
-	if r.OutputFormat == llm.OutputFormatJSON {
-		out.OutputConfig = &messages.OutputConfig{Format: &messages.JSONOutputFormat{Type: "json_schema"}}
+	mextras := r.Extras.Messages
+	if mextras != nil && len(mextras.StopSequences) > 0 {
+		out.StopSequences = append([]string(nil), mextras.StopSequences...)
 	}
-
-	if r.UserID != "" {
-		out.Metadata = &messages.Metadata{UserID: r.UserID}
+	if err := applyMessagesOutput(out, r.Output); err != nil {
+		return nil, err
+	}
+	if err := applyMessagesMetadata(out, r.Metadata, mextras); err != nil {
+		return nil, err
 	}
 
 	for _, t := range r.Tools {
@@ -73,14 +78,7 @@ func BuildMessagesRequest(r Request, opts ...MessagesOption) (*messages.Request,
 	}
 
 	caps := mopts.modelCaps(r.Model)
-	if r.Thinking == llm.ThinkingOff {
-		out.Thinking = &messages.ThinkingConfig{Type: "disabled"}
-	} else if caps.SupportsAdaptiveThinking {
-		out.Thinking = &messages.ThinkingConfig{Type: "adaptive", Display: caps.DefaultThinkingDisplay}
-	} else {
-		out.Thinking = &messages.ThinkingConfig{Type: "enabled", BudgetTokens: effortToBudget(r.Effort), Display: caps.DefaultThinkingDisplay}
-	}
-
+	out.Thinking = messagesThinkingFromRequest(r, mextras, caps)
 	if out.Thinking != nil && out.Thinking.Type != "disabled" {
 		switch r.ToolChoice.(type) {
 		case llm.ToolChoiceRequired, llm.ToolChoiceTool:
@@ -102,7 +100,9 @@ func BuildMessagesRequest(r Request, opts ...MessagesOption) (*messages.Request,
 	}
 
 	for _, m := range r.Messages {
-		if Role(m.Role) == RoleSystem {
+		msgIndex := len(out.System) + len(out.Messages)
+		switch Role(m.Role) {
+		case RoleSystem, RoleDeveloper:
 			text := strings.TrimSpace(partsText(m.Parts))
 			if text != "" {
 				out.System = append(out.System, &messages.TextBlock{
@@ -114,7 +114,7 @@ func BuildMessagesRequest(r Request, opts ...MessagesOption) (*messages.Request,
 			continue
 		}
 
-		wire, err := messageToMessages(m)
+		wire, err := messageToMessages(m, messagesCachePartIndex(r, msgIndex))
 		if err != nil {
 			return nil, err
 		}
@@ -125,8 +125,12 @@ func BuildMessagesRequest(r Request, opts ...MessagesOption) (*messages.Request,
 		out.Messages = make([]messages.Message, 0)
 	}
 
-	if r.CacheHint != nil && r.CacheHint.Enabled && !hasPerMessageCacheHints(r.Messages) {
-		out.CacheControl = cacheHintToMessages(r.CacheHint)
+	if !hasPerMessageCacheHints(r.Messages) {
+		if cc := cacheHintToMessages(r.CacheHint); cc != nil {
+			out.CacheControl = cc
+		} else if mextras != nil && mextras.RequestCacheControl != nil {
+			out.CacheControl = cloneMessagesCacheControl(mextras.RequestCacheControl)
+		}
 	}
 
 	return out, nil
@@ -135,33 +139,51 @@ func BuildMessagesRequest(r Request, opts ...MessagesOption) (*messages.Request,
 // RequestFromMessages converts an Anthropic Messages wire request to unified.
 func RequestFromMessages(r messages.Request) (Request, error) {
 	u := Request{
-		Model:        r.Model,
-		MaxTokens:    r.MaxTokens,
-		TopK:         r.TopK,
-		TopP:         r.TopP,
-		OutputFormat: llm.OutputFormatText,
-		Messages:     make([]Message, 0, len(r.Messages)+len(r.System)),
+		Model:       r.Model,
+		MaxTokens:   r.MaxTokens,
+		Temperature: r.Temperature,
+		TopK:        r.TopK,
+		TopP:        r.TopP,
+		Messages:    make([]Message, 0, len(r.Messages)+len(r.System)),
 	}
-	if r.OutputConfig != nil && r.OutputConfig.Format != nil && r.OutputConfig.Format.Type == "json_schema" {
-		u.OutputFormat = llm.OutputFormatJSON
+	if r.OutputConfig != nil {
+		if r.OutputConfig.Format != nil {
+			switch {
+			case r.OutputConfig.Format.Type == "json_schema" && r.OutputConfig.Format.Schema != nil:
+				u.Output = &OutputSpec{Mode: OutputModeJSONSchema, Schema: r.OutputConfig.Format.Schema}
+			case r.OutputConfig.Format.Type == "json_schema":
+				u.Output = &OutputSpec{Mode: OutputModeJSONObject}
+			}
+		}
+		if r.OutputConfig.Effort != "" {
+			u.Effort = llm.Effort(r.OutputConfig.Effort)
+		}
 	}
-	if r.Metadata != nil {
-		u.UserID = r.Metadata.UserID
+	if r.Metadata != nil && r.Metadata.UserID != "" {
+		u.Metadata = &RequestMetadata{EndUserID: r.Metadata.UserID}
 	}
 	if r.CacheControl != nil {
 		u.CacheHint = cacheHintFromMessages(r.CacheControl)
+		ensureMessagesExtras(&u).RequestCacheControl = cloneMessagesCacheControl(r.CacheControl)
+	}
+	if len(r.StopSequences) > 0 {
+		ensureMessagesExtras(&u).StopSequences = append([]string(nil), r.StopSequences...)
 	}
 	if r.Thinking != nil {
-		switch r.Thinking.Type {
-		case "disabled":
+		if r.Thinking.Type == "disabled" {
 			u.Thinking = llm.ThinkingOff
-		default:
+		} else {
 			u.Thinking = llm.ThinkingOn
 		}
+		mextras := ensureMessagesExtras(&u)
+		mextras.ThinkingType = r.Thinking.Type
+		mextras.ThinkingBudgetTokens = r.Thinking.BudgetTokens
+		mextras.ThinkingDisplay = r.Thinking.Display
 	}
 	for _, t := range r.Tools {
 		u.Tools = append(u.Tools, Tool{Name: t.Name, Description: t.Description, Parameters: toMap(t.InputSchema)})
 	}
+	u.ToolChoice = toolChoiceFromMessages(r.ToolChoice)
 	for _, s := range r.System {
 		if s == nil {
 			continue
@@ -169,11 +191,16 @@ func RequestFromMessages(r messages.Request) (Request, error) {
 		u.Messages = append(u.Messages, Message{Role: RoleSystem, Parts: []Part{{Type: PartTypeText, Text: s.Text}}, CacheHint: cacheHintFromMessages(s.CacheControl)})
 	}
 	for _, m := range r.Messages {
-		x, err := messageFromMessages(m)
+		canonicalIndex := len(u.Messages)
+		x, cachePartIndex, err := messageFromMessages(m)
 		if err != nil {
 			return Request{}, err
 		}
 		u.Messages = append(u.Messages, x)
+		if cachePartIndex != nil {
+			ensureMessagesExtras(&u).MessageCachePartIndex = ensureMessagesCachePartIndexMap(ensureMessagesExtras(&u).MessageCachePartIndex)
+			u.Extras.Messages.MessageCachePartIndex[canonicalIndex] = *cachePartIndex
+		}
 	}
 	if err := u.Validate(); err != nil {
 		return Request{}, err
@@ -193,7 +220,7 @@ func WithMessagesModelCaps(fn ModelCapsFunc) MessagesOption {
 	return func(o *messagesOptions) { o.modelCaps = fn }
 }
 
-func messageToMessages(m Message) (*messages.Message, error) {
+func messageToMessages(m Message, cachePartIndex *int) (*messages.Message, error) {
 	wire := &messages.Message{}
 	switch Role(m.Role) {
 	case RoleUser:
@@ -201,8 +228,6 @@ func messageToMessages(m Message) (*messages.Message, error) {
 	case RoleAssistant:
 		wire.Role = string(msg.RoleAssistant)
 	case RoleTool:
-		wire.Role = string(msg.RoleUser)
-	case RoleDeveloper:
 		wire.Role = string(msg.RoleUser)
 	default:
 		wire.Role = string(m.Role)
@@ -234,8 +259,8 @@ func messageToMessages(m Message) (*messages.Message, error) {
 	wire.Content = blocks
 
 	if h := cacheHintToMessages(m.CacheHint); h != nil {
-		if len(blocks) > 0 {
-			switch tb := blocks[len(blocks)-1].(type) {
+		if attachIndex := resolveMessagesCacheBlockIndex(blocks, cachePartIndex); attachIndex >= 0 {
+			switch tb := blocks[attachIndex].(type) {
 			case *messages.TextBlock:
 				tb.CacheControl = h
 			case *messages.ToolUseBlock:
@@ -251,7 +276,7 @@ func messageToMessages(m Message) (*messages.Message, error) {
 	return wire, nil
 }
 
-func messageFromMessages(m messages.Message) (Message, error) {
+func messageFromMessages(m messages.Message) (Message, *int, error) {
 	um := Message{Parts: make([]Part, 0)}
 	switch m.Role {
 	case string(msg.RoleUser):
@@ -261,6 +286,7 @@ func messageFromMessages(m messages.Message) (Message, error) {
 	default:
 		um.Role = Role(m.Role)
 	}
+	var cachePartIndex *int
 
 	switch c := m.Content.(type) {
 	case string:
@@ -268,16 +294,18 @@ func messageFromMessages(m messages.Message) (Message, error) {
 			um.Parts = append(um.Parts, Part{Type: PartTypeText, Text: c})
 		}
 	case []any:
-		for _, item := range c {
+		for i, item := range c {
 			part, hint, err := partFromMessagesRaw(item)
 			if err != nil {
-				return Message{}, err
+				return Message{}, nil, err
 			}
 			if part != nil {
 				um.Parts = append(um.Parts, *part)
 			}
 			if hint != nil {
 				um.CacheHint = hint
+				idx := i
+				cachePartIndex = &idx
 			}
 		}
 	}
@@ -285,7 +313,7 @@ func messageFromMessages(m messages.Message) (Message, error) {
 	if len(um.Parts) == 0 {
 		um.Parts = []Part{{Type: PartTypeText, Text: ""}}
 	}
-	return um, nil
+	return um, cachePartIndex, nil
 }
 
 func partFromMessagesRaw(v any) (*Part, *msg.CacheHint, error) {
@@ -318,18 +346,139 @@ func partFromMessagesRaw(v any) (*Part, *msg.CacheHint, error) {
 	}
 }
 
+func applyMessagesOutput(out *messages.Request, spec *OutputSpec) error {
+	if spec == nil {
+		return nil
+	}
+	switch spec.Mode {
+	case OutputModeText:
+		return nil
+	case OutputModeJSONObject:
+		if out.OutputConfig == nil {
+			out.OutputConfig = &messages.OutputConfig{}
+		}
+		out.OutputConfig.Format = &messages.JSONOutputFormat{Type: "json_schema"}
+		return nil
+	case OutputModeJSONSchema:
+		if out.OutputConfig == nil {
+			out.OutputConfig = &messages.OutputConfig{}
+		}
+		out.OutputConfig.Format = &messages.JSONOutputFormat{Type: "json_schema", Schema: spec.Schema}
+		return nil
+	default:
+		return fmt.Errorf("unsupported output mode %q", spec.Mode)
+	}
+}
+
+func applyMessagesMetadata(out *messages.Request, meta *RequestMetadata, _ *MessagesExtras) error {
+	if meta == nil {
+		return nil
+	}
+	if meta.EndUserID != "" {
+		out.Metadata = &messages.Metadata{UserID: meta.EndUserID}
+	}
+	return nil
+}
+
+func messagesThinkingFromRequest(r Request, extras *MessagesExtras, caps ModelCaps) *messages.ThinkingConfig {
+	var thinking *messages.ThinkingConfig
+	if extras != nil && extras.ThinkingType != "" {
+		thinking = &messages.ThinkingConfig{
+			Type:         extras.ThinkingType,
+			BudgetTokens: extras.ThinkingBudgetTokens,
+			Display:      extras.ThinkingDisplay,
+		}
+		return thinking
+	}
+
+	if r.Thinking == llm.ThinkingOff {
+		thinking = &messages.ThinkingConfig{Type: "disabled"}
+	} else if caps.SupportsAdaptiveThinking {
+		thinking = &messages.ThinkingConfig{Type: "adaptive", Display: caps.DefaultThinkingDisplay}
+	} else {
+		thinking = &messages.ThinkingConfig{Type: "enabled", BudgetTokens: effortToBudget(r.Effort), Display: caps.DefaultThinkingDisplay}
+	}
+	if extras != nil && extras.ThinkingDisplay != "" {
+		thinking.Display = extras.ThinkingDisplay
+	}
+	return thinking
+}
+
+func toolChoiceFromMessages(v any) llm.ToolChoice {
+	typ, name, ok := messagesToolChoiceFields(v)
+	if !ok {
+		return nil
+	}
+	switch typ {
+	case "auto":
+		return llm.ToolChoiceAuto{}
+	case "any":
+		return llm.ToolChoiceRequired{}
+	case "tool":
+		if name != "" {
+			return llm.ToolChoiceTool{Name: name}
+		}
+	}
+	return nil
+}
+
+func messagesToolChoiceFields(v any) (typ, name string, ok bool) {
+	switch t := v.(type) {
+	case map[string]any:
+		typ, _ = t["type"].(string)
+		name, _ = t["name"].(string)
+		return typ, name, typ != ""
+	case map[string]string:
+		return t["type"], t["name"], t["type"] != ""
+	default:
+		return "", "", false
+	}
+}
+
+func cloneMessagesCacheControl(cc *messages.CacheControl) *messages.CacheControl {
+	if cc == nil {
+		return nil
+	}
+	return &messages.CacheControl{Type: cc.Type, TTL: cc.TTL}
+}
+
+func ensureMessagesCachePartIndexMap(in map[int]int) map[int]int {
+	if in != nil {
+		return in
+	}
+	return map[int]int{}
+}
+
+func resolveMessagesCacheBlockIndex(blocks []any, preferred *int) int {
+	if len(blocks) == 0 {
+		return -1
+	}
+	if preferred != nil && *preferred >= 0 && *preferred < len(blocks) {
+		return *preferred
+	}
+	return len(blocks) - 1
+}
+
 func cacheHintToMessages(h *msg.CacheHint) *messages.CacheControl {
 	if h == nil || !h.Enabled {
 		return nil
 	}
-	return &messages.CacheControl{Type: "ephemeral"}
+	cc := &messages.CacheControl{Type: "ephemeral"}
+	if h.TTL == msg.CacheTTL1h.String() {
+		cc.TTL = h.TTL
+	}
+	return cc
 }
 
 func cacheHintFromMessages(cc *messages.CacheControl) *msg.CacheHint {
 	if cc == nil {
 		return nil
 	}
-	return &msg.CacheHint{Enabled: true, TTL: msg.CacheTTL5m.String()}
+	ttl := cc.TTL
+	if ttl == "" {
+		ttl = msg.CacheTTL5m.String()
+	}
+	return &msg.CacheHint{Enabled: true, TTL: ttl}
 }
 
 func cacheHintFromRaw(m map[string]any) *msg.CacheHint {
@@ -337,8 +486,11 @@ func cacheHintFromRaw(m map[string]any) *msg.CacheHint {
 	if !ok {
 		return nil
 	}
-	_, _ = raw["type"].(string)
-	return &msg.CacheHint{Enabled: true, TTL: msg.CacheTTL5m.String()}
+	ttl, _ := raw["ttl"].(string)
+	if ttl == "" {
+		ttl = msg.CacheTTL5m.String()
+	}
+	return &msg.CacheHint{Enabled: true, TTL: ttl}
 }
 
 func effortToBudget(e llm.Effort) int {

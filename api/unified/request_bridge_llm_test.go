@@ -53,7 +53,8 @@ func TestRequestFromLLM_AndBack(t *testing.T) {
 	require.NotNil(t, uReq.ToolChoice)
 	assert.Equal(t, EffortHigh, uReq.Effort)
 	assert.Equal(t, ThinkingOn, uReq.Thinking)
-	assert.Equal(t, OutputFormatJSON, uReq.OutputFormat)
+	require.NotNil(t, uReq.Output)
+	assert.Equal(t, OutputModeJSONObject, uReq.Output.Mode)
 
 	back, err := RequestToLLM(uReq)
 	require.NoError(t, err)
@@ -63,4 +64,16 @@ func TestRequestFromLLM_AndBack(t *testing.T) {
 	assert.Equal(t, llmReq.OutputFormat, back.OutputFormat)
 	require.Len(t, back.Messages, 4)
 	require.Len(t, back.Tools, 1)
+}
+
+func TestRequestToLLM_JSONSchemaDowngradesToJSON(t *testing.T) {
+	req := Request{
+		Model:    "gpt-4o",
+		Output:   &OutputSpec{Mode: OutputModeJSONSchema, Schema: map[string]any{"type": "object"}},
+		Messages: []Message{{Role: RoleUser, Parts: []Part{{Type: PartTypeText, Text: "hi"}}}},
+	}
+
+	back, err := RequestToLLM(req)
+	require.NoError(t, err)
+	assert.Equal(t, llm.OutputFormatJSON, back.OutputFormat)
 }

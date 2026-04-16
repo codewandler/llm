@@ -36,15 +36,43 @@ func BuildCompletionsRequest(r Request, _ ...CompletionsOption) (*completions.Re
 	if r.TopK > 0 {
 		out.TopK = r.TopK
 	}
-	if r.OutputFormat == llm.OutputFormatJSON {
-		out.ResponseFormat = &completions.ResponseFormat{Type: "json_object"}
+	if r.Output != nil {
+		switch r.Output.Mode {
+		case OutputModeText:
+			// omit
+		case OutputModeJSONObject:
+			out.ResponseFormat = &completions.ResponseFormat{Type: "json_object"}
+		case OutputModeJSONSchema:
+			return nil, fmt.Errorf("chat completions request does not support output mode %q", r.Output.Mode)
+		default:
+			return nil, fmt.Errorf("unsupported output mode %q", r.Output.Mode)
+		}
 	}
 
 	if !r.Effort.IsEmpty() {
 		out.ReasoningEffort = string(r.Effort)
 	}
-	if r.CacheHint != nil && r.CacheHint.Enabled && r.CacheHint.TTL == "1h" {
-		out.PromptCacheRetention = "24h"
+
+	cextras := r.Extras.Completions
+	if cextras != nil {
+		out.Stop = append([]string(nil), cextras.Stop...)
+		out.N = cextras.N
+		out.PresencePenalty = cextras.PresencePenalty
+		out.FrequencyPenalty = cextras.FrequencyPenalty
+		out.LogProbs = cextras.LogProbs
+		out.TopLogProbs = cextras.TopLogProbs
+		out.Store = cextras.Store
+		out.ParallelToolCalls = cextras.ParallelToolCalls
+		out.ServiceTier = cextras.ServiceTier
+		out.PromptCacheRetention = cextras.PromptCacheRetention
+	}
+	if retention := promptCacheRetentionFromHint(r.CacheHint); retention != "" {
+		out.PromptCacheRetention = retention
+	}
+	out.User, out.Metadata = metadataToOpenAI(r.Metadata, nil)
+	if cextras != nil {
+		_, out.Metadata = metadataToOpenAI(r.Metadata, cextras.ExtraMetadata)
+		out.User, _ = metadataToOpenAI(r.Metadata, nil)
 	}
 
 	for _, t := range r.Tools {
@@ -79,16 +107,18 @@ func BuildCompletionsRequest(r Request, _ ...CompletionsOption) (*completions.Re
 
 	for _, m := range r.Messages {
 		wire := completions.Message{}
+		content, err := buildCompletionsContent(m)
+		if err != nil {
+			return nil, err
+		}
+		wire.Content = content
 		switch Role(m.Role) {
-		case RoleSystem:
+		case RoleSystem, RoleDeveloper:
 			wire.Role = string(msg.RoleSystem)
-			wire.Content = partsText(m.Parts)
 		case RoleUser:
 			wire.Role = string(msg.RoleUser)
-			wire.Content = partsText(m.Parts)
 		case RoleAssistant:
 			wire.Role = string(msg.RoleAssistant)
-			wire.Content = partsText(m.Parts)
 			for _, p := range m.Parts {
 				if p.Type != PartTypeToolCall || p.ToolCall == nil {
 					continue
@@ -117,7 +147,6 @@ func BuildCompletionsRequest(r Request, _ ...CompletionsOption) (*completions.Re
 			continue
 		default:
 			wire.Role = string(m.Role)
-			wire.Content = partsText(m.Parts)
 		}
 		out.Messages = append(out.Messages, wire)
 	}
@@ -128,24 +157,52 @@ func BuildCompletionsRequest(r Request, _ ...CompletionsOption) (*completions.Re
 // RequestFromCompletions converts a Chat Completions wire request to unified.
 func RequestFromCompletions(r completions.Request) (Request, error) {
 	u := Request{
-		Model:        r.Model,
-		MaxTokens:    r.MaxTokens,
-		Temperature:  r.Temperature,
-		TopP:         r.TopP,
-		TopK:         r.TopK,
-		OutputFormat: llm.OutputFormatText,
-		Messages:     make([]Message, 0, len(r.Messages)),
+		Model:       r.Model,
+		MaxTokens:   r.MaxTokens,
+		Temperature: r.Temperature,
+		TopP:        r.TopP,
+		TopK:        r.TopK,
+		Messages:    make([]Message, 0, len(r.Messages)),
 	}
 
-	if r.ResponseFormat != nil && r.ResponseFormat.Type == "json_object" {
-		u.OutputFormat = llm.OutputFormatJSON
+	if r.ResponseFormat != nil {
+		switch r.ResponseFormat.Type {
+		case "json_object":
+			u.Output = &OutputSpec{Mode: OutputModeJSONObject}
+		case "text":
+			u.Output = &OutputSpec{Mode: OutputModeText}
+		}
 	}
 	if r.ReasoningEffort != "" {
 		u.Effort = llm.Effort(r.ReasoningEffort)
 	}
+	if hint := cacheHintFromPromptCacheRetention(r.PromptCacheRetention); hint != nil {
+		u.CacheHint = hint
+	}
+	if meta, extra := metadataFromOpenAI(r.User, r.Metadata); meta != nil {
+		u.Metadata = meta
+		if extra != nil {
+			ensureCompletionsExtras(&u).ExtraMetadata = extra
+		}
+	} else if extra != nil {
+		ensureCompletionsExtras(&u).ExtraMetadata = extra
+	}
 	if r.PromptCacheRetention != "" {
-		u.Extras.Completions = &CompletionsExtras{PromptCacheRetention: r.PromptCacheRetention}
-		u.CacheHint = &msg.CacheHint{Enabled: true, TTL: "1h"}
+		ensureCompletionsExtras(&u).PromptCacheRetention = r.PromptCacheRetention
+	}
+	if len(r.Stop) > 0 {
+		ensureCompletionsExtras(&u).Stop = append([]string(nil), r.Stop...)
+	}
+	if r.N > 0 || r.PresencePenalty != 0 || r.FrequencyPenalty != 0 || r.LogProbs || r.TopLogProbs > 0 || r.Store || r.ParallelToolCalls || r.ServiceTier != "" {
+		extras := ensureCompletionsExtras(&u)
+		extras.N = r.N
+		extras.PresencePenalty = r.PresencePenalty
+		extras.FrequencyPenalty = r.FrequencyPenalty
+		extras.LogProbs = r.LogProbs
+		extras.TopLogProbs = r.TopLogProbs
+		extras.Store = r.Store
+		extras.ParallelToolCalls = r.ParallelToolCalls
+		extras.ServiceTier = r.ServiceTier
 	}
 
 	for _, t := range r.Tools {
@@ -173,6 +230,8 @@ func RequestFromCompletions(r completions.Request) (Request, error) {
 
 		if text, ok := m.Content.(string); ok && text != "" {
 			um.Parts = append(um.Parts, Part{Type: PartTypeText, Text: text})
+		} else if m.Content != nil {
+			um.Parts = append(um.Parts, Part{Native: m.Content})
 		}
 		for _, tc := range m.ToolCalls {
 			var args map[string]any
@@ -223,4 +282,49 @@ func toolChoiceFromCompletions(v any) llm.ToolChoice {
 		}
 	}
 	return nil
+}
+
+func buildCompletionsContent(m Message) (any, error) {
+	var native any
+	hasNative := false
+	hasCanonical := false
+
+	for _, p := range m.Parts {
+		if p.Native != nil {
+			if hasNative {
+				return nil, fmt.Errorf("chat completions message cannot project multiple native content parts")
+			}
+			if partHasCanonicalFields(p) {
+				return nil, fmt.Errorf("chat completions native content part must not also carry canonical fields")
+			}
+			native = p.Native
+			hasNative = true
+			continue
+		}
+		if partContributesCanonicalContent(p) {
+			hasCanonical = true
+		}
+	}
+
+	if hasNative && hasCanonical {
+		return nil, fmt.Errorf("chat completions message cannot mix native content with canonical parts")
+	}
+	if hasNative {
+		return native, nil
+	}
+	return partsText(m.Parts), nil
+}
+
+func partHasCanonicalFields(p Part) bool {
+	return p.Type != "" || p.Text != "" || p.Thinking != nil || p.ToolCall != nil || p.ToolResult != nil
+}
+
+func partContributesCanonicalContent(p Part) bool {
+	if p.Native != nil {
+		return false
+	}
+	if p.Thinking != nil || p.ToolCall != nil || p.ToolResult != nil {
+		return true
+	}
+	return p.Type == PartTypeText && p.Text != ""
 }

@@ -15,17 +15,16 @@ func RequestFromLLM(req llm.Request) (Request, error) {
 	}
 
 	u := Request{
-		Model:        req.Model,
-		MaxTokens:    req.MaxTokens,
-		Temperature:  req.Temperature,
-		TopP:         req.TopP,
-		TopK:         req.TopK,
-		OutputFormat: req.OutputFormat,
-		Effort:       req.Effort,
-		Thinking:     req.Thinking,
-		CacheHint:    req.CacheHint,
-		ApiTypeHint:  req.ApiTypeHint,
-		ToolChoice:   req.ToolChoice,
+		Model:       req.Model,
+		MaxTokens:   req.MaxTokens,
+		Temperature: req.Temperature,
+		TopP:        req.TopP,
+		TopK:        req.TopK,
+		Output:      outputFromLLM(string(req.OutputFormat)),
+		Effort:      req.Effort,
+		Thinking:    req.Thinking,
+		CacheHint:   req.CacheHint,
+		ToolChoice:  req.ToolChoice,
 	}
 
 	for _, t := range req.Tools {
@@ -52,17 +51,23 @@ func RequestToLLM(req Request) (llm.Request, error) {
 	}
 
 	out := llm.Request{
-		Model:        req.Model,
-		MaxTokens:    req.MaxTokens,
-		Temperature:  req.Temperature,
-		TopP:         req.TopP,
-		TopK:         req.TopK,
-		OutputFormat: req.OutputFormat,
-		Effort:       req.Effort,
-		Thinking:     req.Thinking,
-		CacheHint:    req.CacheHint,
-		ApiTypeHint:  req.ApiTypeHint,
-		ToolChoice:   req.ToolChoice,
+		Model:       req.Model,
+		MaxTokens:   req.MaxTokens,
+		Temperature: req.Temperature,
+		TopP:        req.TopP,
+		TopK:        req.TopK,
+		Effort:      req.Effort,
+		Thinking:    req.Thinking,
+		CacheHint:   req.CacheHint,
+		ToolChoice:  req.ToolChoice,
+	}
+	if req.Output != nil {
+		switch req.Output.Mode {
+		case OutputModeText:
+			out.OutputFormat = llm.OutputFormatText
+		case OutputModeJSONObject, OutputModeJSONSchema:
+			out.OutputFormat = llm.OutputFormatJSON
+		}
 	}
 
 	for _, t := range req.Tools {

@@ -110,6 +110,7 @@ type ToolDefinition struct {
 
 type CacheControl struct {
 	Type string `json:"type"`
+	TTL  string `json:"ttl,omitempty"`
 }
 
 // SSE: message_start

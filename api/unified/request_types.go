@@ -30,7 +30,6 @@ const (
 type (
 	Effort       = llm.Effort
 	ThinkingMode = llm.ThinkingMode
-	OutputFormat = llm.OutputFormat
 )
 
 const (
@@ -43,20 +42,41 @@ const (
 	ThinkingAuto = llm.ThinkingAuto
 	ThinkingOn   = llm.ThinkingOn
 	ThinkingOff  = llm.ThinkingOff
-
-	OutputFormatText = llm.OutputFormatText
-	OutputFormatJSON = llm.OutputFormatJSON
 )
+
+// OutputMode is the canonical output contract used by unified.Request.
+type OutputMode string
+
+const (
+	OutputModeText       OutputMode = "text"
+	OutputModeJSONObject OutputMode = "json_object"
+	OutputModeJSONSchema OutputMode = "json_schema"
+)
+
+// OutputSpec describes the requested output contract.
+type OutputSpec struct {
+	Mode   OutputMode
+	Schema any
+}
+
+// RequestMetadata carries fixed-key tracking identifiers that are portable
+// across the supported request protocols.
+type RequestMetadata struct {
+	EndUserID string
+	SessionID string
+	TraceID   string
+	RequestID string
+}
 
 // Request is the canonical internal request schema used by api/unified.
 type Request struct {
-	Model        string
-	Messages     []Message
-	MaxTokens    int
-	Temperature  float64
-	TopP         float64
-	TopK         int
-	OutputFormat OutputFormat
+	Model       string
+	Messages    []Message
+	MaxTokens   int
+	Temperature float64
+	TopP        float64
+	TopK        int
+	Output      *OutputSpec
 
 	Tools      []Tool
 	ToolChoice llm.ToolChoice
@@ -64,9 +84,8 @@ type Request struct {
 	Effort   Effort
 	Thinking ThinkingMode
 
-	CacheHint   *msg.CacheHint
-	UserID      string
-	ApiTypeHint llm.ApiType
+	Metadata  *RequestMetadata
+	CacheHint *msg.CacheHint
 
 	Extras RequestExtras
 }
