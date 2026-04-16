@@ -7,6 +7,7 @@ import (
 
 	"github.com/codewandler/llm"
 	"github.com/codewandler/llm/api/messages"
+	"github.com/codewandler/llm/internal/models"
 	"github.com/codewandler/llm/provider/anthropic"
 	"github.com/codewandler/llm/provider/providercore"
 	"github.com/codewandler/llm/tokencount"
@@ -16,7 +17,6 @@ import (
 const (
 	providerName   = "minimax"
 	defaultBaseURL = "https://api.minimax.io/anthropic"
-	ModelDefault   = ModelM27
 )
 
 // Provider implements the MiniMax LLM backend using the Anthropic-compatible API.
@@ -37,6 +37,17 @@ func DefaultOptions() []llm.Option {
 	}
 }
 
+var allModels = func() llm.Models {
+	c, err := models.LoadBuiltIn()
+	if err != nil {
+		return nil
+	}
+	return llm.CatalogModelsForService(c, providerName, llm.CatalogModelProjectionOptions{
+		ProviderName:          providerName,
+		ExcludeBuiltinAliases: false,
+	})
+}()
+
 // New creates a new MiniMax provider.
 func New(opts ...Option) *Provider {
 	llmOpts := llm.Apply(DefaultOptions()...)
@@ -45,13 +56,11 @@ func New(opts ...Option) *Provider {
 	}
 
 	p := &Provider{
-		opts: llmOpts,
-		models: llm.Models{
-			{ID: ModelM27, Name: "MiniMax M2.7", Provider: providerName, Aliases: []string{llm.ModelDefault, llm.ModelFast, "minimax"}},
-			{ID: ModelM25, Name: "MiniMax M2.5", Provider: providerName},
-			{ID: ModelM21, Name: "MiniMax M2.1", Provider: providerName},
-			{ID: ModelM2, Name: "MiniMax M2", Provider: providerName},
-		},
+		opts:   llmOpts,
+		models: allModels,
+	}
+	if p.models == nil {
+		panic("minimax: failed to load models from catalog")
 	}
 	p.rebuildCore()
 
@@ -81,7 +90,26 @@ func (p *Provider) CostCalculator() usage.CostCalculator { return usage.Default(
 
 func (p *Provider) Models() llm.Models { return p.models }
 
-func (p *Provider) Resolve(model string) (llm.Model, error) { return p.models.Resolve(model) }
+func (p *Provider) Resolve(model string) (llm.Model, error) {
+	if model == "" {
+		return llm.Model{}, fmt.Errorf("model is required")
+	}
+	// Only check exact ID and aliases, not name containment (which would
+	// cause "minimax" to match "MiniMax M2" via substring).
+	for _, m := range p.models {
+		if m.ID == model {
+			return m, nil
+		}
+	}
+	for _, m := range p.models {
+		for _, a := range m.Aliases {
+			if a == model {
+				return m, nil
+			}
+		}
+	}
+	return llm.Model{}, fmt.Errorf("model %q not found", model)
+}
 
 // CreateStream delegates to the shared provider core.
 func (p *Provider) CreateStream(ctx context.Context, src llm.Buildable) (llm.Stream, error) {

@@ -36,10 +36,13 @@ func TestProviderModels_HaveCorrectIDs(t *testing.T) {
 	models := p.Models()
 
 	expectedIDs := map[string]bool{
-		ModelM27: true,
-		ModelM25: true,
-		ModelM21: true,
-		ModelM2:  true,
+		ModelM27:          true,
+		ModelM27Highspeed: true,
+		ModelM25:          true,
+		ModelM25Highspeed: true,
+		ModelM21:          true,
+		ModelM21Highspeed: true,
+		ModelM2:           true,
 	}
 
 	for _, m := range models {
