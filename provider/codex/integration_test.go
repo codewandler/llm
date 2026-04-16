@@ -4,6 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -1062,4 +1065,41 @@ func TestCodex_AllModels(t *testing.T) {
 			assert.True(t, completed, "model %q stream must complete", m.ID)
 		})
 	}
+}
+
+func TestCodex_PreprocessRequestInjectsDefaultSystemPrompt(t *testing.T) {
+	t.Parallel()
+
+	var serverBody map[string]any
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer r.Body.Close()
+		b, err := io.ReadAll(r.Body)
+		require.NoError(t, err)
+		require.NoError(t, json.Unmarshal(b, &serverBody))
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = io.WriteString(w, strings.Join([]string{
+			`event: response.completed`,
+			`data: {"response":{"id":"r1","model":"gpt-5.4","status":"completed"}}`,
+			"",
+		}, "\n"))
+	}))
+	defer server.Close()
+
+	auth := &Auth{auth: authFile{Tokens: tokenStore{AccessToken: "test-token", AccountID: "acct-test"}}, httpClient: http.DefaultClient}
+	p := New(auth, llm.WithBaseURL(server.URL), llm.WithHTTPClient(server.Client()))
+
+	stream, err := p.CreateStream(context.Background(), llm.Request{
+		Model: "gpt-5.4",
+		Messages: msg.BuildTranscript(
+			msg.User("hi"),
+		),
+	})
+	require.NoError(t, err)
+	for range stream {
+	}
+
+	require.NotNil(t, serverBody)
+	assert.Equal(t, false, serverBody["store"])
+	assert.Equal(t, "You are a helpful assistant.", serverBody["instructions"])
 }

@@ -194,6 +194,16 @@ func (p *Provider) buildCore() *providercore.Client {
 			if req.Thinking.IsOff() {
 				req.Effort = llm.EffortUnspecified
 			}
+			hasSystem := false
+			for _, m := range req.Messages {
+				if m.IsSystem() {
+					hasSystem = true
+					break
+				}
+			}
+			if !hasSystem {
+				req.Messages = append(llm.Messages{llm.System("You are a helpful assistant.")}, req.Messages...)
+			}
 			return req, original, nil
 		},
 
