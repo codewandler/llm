@@ -271,8 +271,8 @@ type ccStreamMeta struct {
 	responseID    string
 	responseModel string
 	// providerName is the billing/attribution provider for usage records.
-	// Defaults to llm.ProviderNameOpenAI; set to llm.ProviderNameChatGPT
-	// for requests routed through the ChatGPT Codex backend.
+	// Defaults to llm.ProviderNameOpenAI; set to llm.ProviderNameCodex
+	// for requests routed through the Codex backend.
 	providerName string
 	// logger, when non-nil, receives warnings about anomalous API data
 	// (e.g. negative token counts from arithmetic clamping).

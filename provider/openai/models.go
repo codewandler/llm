@@ -3,7 +3,6 @@ package openai
 import (
 	"fmt"
 	"sort"
-	"strings"
 
 	"github.com/codewandler/llm"
 )
@@ -76,16 +75,6 @@ var ModelAliases = map[string]string{
 	// Thought models
 	"o4": ModelO4Mini,
 	"o3": ModelO3,
-}
-
-// CodexModelAliases maps short alias names to Codex model IDs.
-// These are used by the auto package when the ChatGPT (codex) provider is
-// registered, e.g. "chatgpt/codex" or "chatgpt/mini".
-// Only models in categoryCodex are included because other OpenAI model IDs
-// are not accepted by the chatgpt.com/backend-api/codex/responses endpoint.
-var CodexModelAliases = map[string]string{
-	"codex": ModelGPT53Codex,     // default / most capable Codex model
-	"mini":  ModelGPT51CodexMini, // cheapest Codex model
 }
 
 // modelCategory identifies reasoning support level for a model.
@@ -230,11 +219,11 @@ var modelOrder = []string{
 }
 
 func (p *Provider) catalogModels() llm.Models {
-	return loadOpenAIModels(p.Name(), p.codexModelsOnly)
+	return loadOpenAIModels(p.Name())
 }
 
-func loadOpenAIModels(providerName string, codexOnly bool) llm.Models {
-	fallback := fallbackOpenAIModels(providerName, codexOnly)
+func loadOpenAIModels(providerName string) llm.Models {
+	fallback := fallbackOpenAIModels(providerName)
 	catalogSnapshot, err := llm.LoadBuiltInCatalog()
 	if err != nil {
 		return fallback
@@ -250,13 +239,10 @@ func loadOpenAIModels(providerName string, codexOnly bool) llm.Models {
 
 	remaining := make(map[string]llm.Model, len(models))
 	for _, model := range models {
-		if !allowCatalogModel(model.ID, codexOnly) {
-			continue
-		}
 		if info, ok := modelRegistry[model.ID]; ok && (model.Name == "" || model.Name == model.ID) {
 			model.Name = info.Name
 		}
-		model.Aliases = mergeOpenAIAliases(policyAliasesForModel(model.ID, codexOnly), model.Aliases)
+		model.Aliases = mergeOpenAIAliases(policyAliasesForModel(model.ID), model.Aliases)
 		remaining[model.ID] = model
 	}
 	if len(remaining) == 0 {
@@ -284,52 +270,31 @@ func loadOpenAIModels(providerName string, codexOnly bool) llm.Models {
 	return out
 }
 
-func fallbackOpenAIModels(providerName string, codexOnly bool) llm.Models {
+func fallbackOpenAIModels(providerName string) llm.Models {
 	models := make(llm.Models, 0, len(modelOrder))
 	for _, id := range modelOrder {
 		info, ok := modelRegistry[id]
 		if !ok {
 			continue
 		}
-		if codexOnly && info.Category != categoryCodex {
-			continue
-		}
 		models = append(models, llm.Model{
 			ID:       info.ID,
 			Name:     info.Name,
 			Provider: providerName,
-			Aliases:  policyAliasesForModel(info.ID, codexOnly),
+			Aliases:  policyAliasesForModel(info.ID),
 		})
 	}
 	return models
 }
 
-func policyAliasesForModel(modelID string, codexOnly bool) []string {
+func policyAliasesForModel(modelID string) []string {
 	aliases := make([]string, 0, 2)
-	if codexOnly {
-		for alias, target := range CodexModelAliases {
-			if target == modelID {
-				aliases = append(aliases, alias)
-			}
-		}
-		return aliases
-	}
 	for alias, target := range ModelAliases {
 		if target == modelID {
 			aliases = append(aliases, alias)
 		}
 	}
 	return aliases
-}
-
-func allowCatalogModel(modelID string, codexOnly bool) bool {
-	if !codexOnly {
-		return true
-	}
-	if info, err := getModelInfo(modelID); err == nil {
-		return info.Category == categoryCodex
-	}
-	return strings.Contains(modelID, "codex")
 }
 
 func mergeOpenAIAliases(a, b []string) []string {

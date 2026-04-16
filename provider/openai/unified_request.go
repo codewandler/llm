@@ -22,7 +22,7 @@ func buildCompletionsBodyUnified(opts llm.Request) ([]byte, error) {
 	return json.Marshal(wire)
 }
 
-func buildResponsesBodyUnified(opts llm.Request) ([]byte, error) {
+func BuildResponsesBody(opts llm.Request) ([]byte, error) {
 	uReq, err := unified.RequestFromLLM(opts)
 	if err != nil {
 		return nil, fmt.Errorf("request from llm: %w", err)
@@ -34,4 +34,8 @@ func buildResponsesBodyUnified(opts llm.Request) ([]byte, error) {
 	}
 
 	return json.Marshal(wire)
+}
+
+func buildResponsesBodyUnified(opts llm.Request) ([]byte, error) {
+	return BuildResponsesBody(opts)
 }

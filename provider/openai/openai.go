@@ -23,11 +23,10 @@ const (
 // It dispatches to the Responses API for Codex models and to Chat Completions
 // for everything else.
 type Provider struct {
-	opts            *llm.Options
-	defaultModel    string
-	client          *http.Client
-	codexModelsOnly bool   // when true, Models() returns only categoryCodex models
-	providerName    string // "openai" by default; "chatgpt" for Codex OAuth providers
+	opts         *llm.Options
+	defaultModel string
+	client       *http.Client
+	providerName string
 }
 
 // DefaultOptions returns the default options for the OpenAI provider.
@@ -62,17 +61,6 @@ func (p *Provider) WithDefaultModel(modelID string) *Provider {
 	return &clone
 }
 
-// WithCodexModels returns a copy of the provider that exposes only Codex-category
-// models (categoryCodex). This is used by CodexAuth.NewProvider() to prevent
-// non-Codex models from being offered to the router when the provider is registered
-// under the "chatgpt" prefix — those model IDs are not accepted by the
-// chatgpt.com/backend-api/codex/responses endpoint.
-func (p *Provider) WithCodexModels() *Provider {
-	clone := *p
-	clone.codexModelsOnly = true
-	return &clone
-}
-
 // WithName returns a copy of the provider that identifies itself with the given
 // name in error messages, usage records, and stream events. This allows the
 // provider to be reused for OpenAI-compatible APIs that are not OpenAI itself
@@ -99,8 +87,6 @@ func (*Provider) CostCalculator() usage.CostCalculator {
 func (p *Provider) Resolve(modelID string) (llm.Model, error) { return p.Models().Resolve(modelID) }
 
 // Models returns the catalog-backed OpenAI model view.
-// When the provider was created with WithCodexModels(), only Codex-category
-// models are returned.
 func (p *Provider) Models() llm.Models { return p.catalogModels() }
 
 // FetchModels retrieves the live list of models from the OpenAI API.
@@ -161,7 +147,7 @@ func (p *Provider) CreateStream(ctx context.Context, src llm.Buildable) (llm.Str
 		return nil, llm.NewErrBuildRequest(p.Name(), err)
 	}
 
-	enriched, err := enrichOpts(opts)
+	enriched, err := EnrichRequest(opts)
 	if err != nil {
 		return nil, err
 	}
@@ -175,7 +161,7 @@ func (p *Provider) CreateStream(ctx context.Context, src llm.Buildable) (llm.Str
 // enrichOpts resolves model-specific fields before dispatch.
 // Currently handles reasoning effort mapping only; cache retention is
 // determined at request-build time by wantsExtendedCache.
-func enrichOpts(opts llm.Request) (llm.Request, error) {
+func EnrichRequest(opts llm.Request) (llm.Request, error) {
 	mapped, err := mapEffortAndThinking(opts.Model, opts.Effort, opts.Thinking)
 	if err != nil {
 		return opts, err
@@ -183,6 +169,8 @@ func enrichOpts(opts llm.Request) (llm.Request, error) {
 	opts.Effort = llm.Effort(mapped)
 	return opts, nil
 }
+
+func enrichOpts(opts llm.Request) (llm.Request, error) { return EnrichRequest(opts) }
 
 // wantsExtendedCache reports whether the request should use 24h prompt cache
 // retention. An explicit CacheHint with TTL "1h" takes priority; otherwise
