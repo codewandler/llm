@@ -95,3 +95,27 @@ func TestCatalogModelsForRuntime(t *testing.T) {
 	_, hasOpus := aliases["opus"]
 	assert.False(t, hasOpus)
 }
+
+func TestResolveCatalog_WithRuntimeSource(t *testing.T) {
+	resolved, err := ResolveCatalog(context.Background(), catalog.RegisteredSource{
+		Stage:     catalog.StageRuntime,
+		Authority: catalog.AuthorityLocal,
+		Source: catalog.SourceFunc{
+			SourceID: "resolve-catalog-test",
+			FetchFunc: func(context.Context) (*catalog.Fragment, error) {
+				key := catalog.NormalizeKey(catalog.ModelKey{Creator: "openai", Family: "gpt", Version: "5.4"})
+				return &catalog.Fragment{
+					Services:           []catalog.Service{{ID: "codex", Name: "Codex", Kind: catalog.ServiceKindPlatform}},
+					Models:             []catalog.ModelRecord{{Key: key, Name: "GPT-5.4"}},
+					Offerings:          []catalog.Offering{{ServiceID: "codex", WireModelID: "gpt-5.4", ModelKey: key}},
+					Runtimes:           []catalog.Runtime{{ID: "codex-local", ServiceID: "codex", Name: "Codex Local"}},
+					RuntimeAccess:      []catalog.RuntimeAccess{{RuntimeID: "codex-local", Offering: catalog.OfferingRef{ServiceID: "codex", WireModelID: "gpt-5.4"}, Routable: true, ResolvedWireID: "gpt-5.4"}},
+					RuntimeAcquisition: []catalog.RuntimeAcquisition{{RuntimeID: "codex-local", Offering: catalog.OfferingRef{ServiceID: "codex", WireModelID: "gpt-5.4"}, Known: true, Status: "available"}},
+				}, nil
+			},
+		},
+	})
+	require.NoError(t, err)
+	assert.Contains(t, resolved.Services, "codex")
+	assert.Contains(t, resolved.Runtimes, "codex-local")
+}

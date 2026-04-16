@@ -12,7 +12,7 @@ const (
 	ProviderNameAnthropic = "anthropic"
 	ProviderNameClaude    = "claude"
 	ProviderNameBedrock   = "bedrock"
-	ProviderNameChatGPT   = "chatgpt"
+	ProviderNameCodex     = "codex"
 	ProviderNameOllama    = "ollama"
 	// ProviderNameDockerMR is the identifier for the Docker Model Runner provider.
 	// Docker Model Runner is built into Docker Desktop 4.40+ and available as a

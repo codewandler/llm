@@ -2,11 +2,10 @@ package llm
 
 import (
 	"context"
-	"fmt"
 	"sort"
-	"sync"
 
 	"github.com/codewandler/llm/catalog"
+	internalmodels "github.com/codewandler/llm/internal/models"
 	"github.com/codewandler/llm/usage"
 )
 
@@ -19,20 +18,12 @@ type CatalogModelProjectionOptions struct {
 type CatalogSnapshot = catalog.Catalog
 type ResolvedCatalogSnapshot = catalog.ResolvedCatalog
 
-var (
-	builtInCatalogOnce sync.Once
-	builtInCatalog     catalog.Catalog
-	builtInCatalogErr  error
-)
-
 func LoadBuiltInCatalog() (catalog.Catalog, error) {
-	builtInCatalogOnce.Do(func() {
-		builtInCatalog, builtInCatalogErr = catalog.LoadBuiltIn()
-	})
-	if builtInCatalogErr != nil {
-		return catalog.Catalog{}, builtInCatalogErr
-	}
-	return builtInCatalog, nil
+	return internalmodels.LoadBuiltIn()
+}
+
+func ResolveCatalog(ctx context.Context, sources ...catalog.RegisteredSource) (catalog.ResolvedCatalog, error) {
+	return internalmodels.Resolve(ctx, sources...)
 }
 
 func CatalogModelsForService(c catalog.Catalog, serviceID string, opts CatalogModelProjectionOptions) Models {
@@ -52,7 +43,7 @@ func CatalogModelsForRuntime(c catalog.ResolvedCatalog, runtimeID string, routab
 }
 
 func CatalogVisibleModelsForRuntime(ctx context.Context, base catalog.Catalog, runtimeID string, source catalog.Source, opts CatalogModelProjectionOptions) (Models, error) {
-	resolved, err := catalog.ResolveCatalog(ctx, base, catalog.RegisteredSource{
+	resolved, err := internalmodels.ResolveWithBase(ctx, base, catalog.RegisteredSource{
 		Stage:     catalog.StageRuntime,
 		Authority: catalog.AuthorityLocal,
 		Source:    source,
@@ -300,9 +291,5 @@ func aliasMapFromView(view catalog.View) map[string]string {
 }
 
 func MustLoadBuiltInCatalog() catalog.Catalog {
-	c, err := LoadBuiltInCatalog()
-	if err != nil {
-		panic(fmt.Sprintf("load built-in catalog: %v", err))
-	}
-	return c
+	return internalmodels.MustLoadBuiltIn()
 }
