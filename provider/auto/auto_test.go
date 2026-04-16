@@ -341,6 +341,18 @@ func TestModelAliasesForProvider(t *testing.T) {
 	assert.Nil(t, ollamaAliases, "ollama has no shorthand aliases")
 }
 
+func TestModelAliasesForProvider_PrefersCatalogFactualAliasesAndKeepsPolicyAliases(t *testing.T) {
+	openaiAliases := modelAliasesForProvider(ProviderOpenAI)
+	require.NotNil(t, openaiAliases)
+
+	// Factual aliases come from the built-in catalog when available.
+	assert.Equal(t, "gpt-5.4", openaiAliases["gpt-5.4"])
+
+	// Policy aliases remain provider-owned and are intentionally merged in.
+	assert.Equal(t, "gpt-5.4", openaiAliases["flagship"])
+	assert.Equal(t, "gpt-5.3-codex", openaiAliases["codex"])
+}
+
 func TestConstants(t *testing.T) {
 	// Verify constants are not empty
 	assert.NotEmpty(t, ProviderClaude)

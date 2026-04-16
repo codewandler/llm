@@ -82,9 +82,17 @@ func buildAliasTargets(instanceName, providerType string) map[string]router.Alia
 	return targets
 }
 
-// modelAliasesForProvider returns the local model aliases for a provider type.
-// Catalog-backed factual aliases are preferred when available. Provider-local
-// fallback registries remain in place for providers not yet modeled in catalog.
+// modelAliasesForProvider returns provider-scoped aliases for a provider type.
+//
+// Factual aliases are loaded from the built-in catalog when a provider is
+// modeled there. Provider-local fallback maps remain for two reasons:
+//
+//  1. Some providers are not yet catalog-backed for shorthand aliases.
+//  2. Consumer policy aliases such as OpenAI's "flagship" or ChatGPT's
+//     Codex-only shorthands are intentionally not catalog truth.
+//
+// This function therefore merges catalog-backed factual aliases with provider
+// policy/fallback aliases, preferring catalog entries when the same key exists.
 func modelAliasesForProvider(providerType string) map[string]string {
 	var aliases map[string]string
 	if c, ok := autoCatalog(); ok {

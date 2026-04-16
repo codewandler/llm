@@ -176,6 +176,19 @@ Views are:
 
 This is the primary API surface intended for consumers of the standalone module.
 
+## Source layout
+
+Not all source-related code belongs under `internal/source/...`.
+
+- `catalog/source_*.go` contains public source adapters such as
+  `NewModelsDevSource()` or `NewOllamaRuntimeSource()`
+- `catalog/internal/source/...` contains upstream-specific implementation
+  details such as transport helpers, fixtures, and wire schemas
+
+This split is intentional: consumers of the future standalone module should be
+able to construct source adapters directly, while upstream-specific internals
+remain hidden.
+
 ## Snapshot generation
 
 The embedded `catalog.json` snapshot is refreshed through the CLI.
