@@ -8,6 +8,8 @@ import (
 	"net/http"
 
 	"github.com/codewandler/llm"
+	"github.com/codewandler/llm/provider/providercore"
+	"github.com/codewandler/llm/tokencount"
 	"github.com/codewandler/llm/usage"
 )
 
@@ -25,8 +27,6 @@ const (
 type Provider struct {
 	opts         *llm.Options
 	defaultModel string
-	client       *http.Client
-	providerName string
 }
 
 // DefaultOptions returns the default options for the OpenAI provider.
@@ -43,14 +43,9 @@ func DefaultOptions() []llm.Option {
 func New(opts ...llm.Option) *Provider {
 	allOpts := append(DefaultOptions(), opts...)
 	cfg := llm.Apply(allOpts...)
-	client := cfg.HTTPClient
-	if client == nil {
-		client = llm.DefaultHttpClient()
-	}
 	return &Provider{
 		opts:         cfg,
 		defaultModel: DefaultModel,
-		client:       client,
 	}
 }
 
@@ -61,24 +56,7 @@ func (p *Provider) WithDefaultModel(modelID string) *Provider {
 	return &clone
 }
 
-// WithName returns a copy of the provider that identifies itself with the given
-// name in error messages, usage records, and stream events. This allows the
-// provider to be reused for OpenAI-compatible APIs that are not OpenAI itself
-// (e.g. Docker Model Runner).
-func (p *Provider) WithName(name string) *Provider {
-	clone := *p
-	clone.providerName = name
-	return &clone
-}
-
-// GetDefaultModel returns the configured default model ID.
-func (p *Provider) GetDefaultModel() string { return p.defaultModel }
-func (p *Provider) Name() string {
-	if p.providerName != "" {
-		return p.providerName
-	}
-	return providerName
-}
+func (p *Provider) Name() string { return providerName }
 
 func (*Provider) CostCalculator() usage.CostCalculator {
 	return usage.Default()
@@ -91,9 +69,14 @@ func (p *Provider) Models() llm.Models { return p.catalogModels() }
 
 // FetchModels retrieves the live list of models from the OpenAI API.
 func (p *Provider) FetchModels(ctx context.Context) ([]llm.Model, error) {
-	apiKey, err := p.opts.APIKeyFunc(ctx)
+	apiKey, err := p.opts.ResolveAPIKey(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("get API key: %w", err)
+	}
+
+	client := p.opts.HTTPClient
+	if client == nil {
+		client = llm.DefaultHttpClient()
 	}
 
 	req, err := http.NewRequestWithContext(ctx, "GET", p.opts.BaseURL+"/v1/models", nil)
@@ -102,7 +85,7 @@ func (p *Provider) FetchModels(ctx context.Context) ([]llm.Model, error) {
 	}
 	req.Header.Set("Authorization", "Bearer "+apiKey)
 
-	resp, err := p.client.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("openai list models: %w", err)
 	}
@@ -135,81 +118,102 @@ func (p *Provider) FetchModels(ctx context.Context) ([]llm.Model, error) {
 	return models, nil
 }
 
-// Stream dispatches to the Responses API for Codex models and gpt-5.4-series
+// CreateStream dispatches to the Responses API for Codex models and gpt-5.4-series
 // models, and to Chat Completions for everything else.
 //
 // Thought effort is validated and mapped before the request is forwarded.
 // Unknown models (not in the registry) default to Chat Completions so that
 // newly released models work without a registry update.
 func (p *Provider) CreateStream(ctx context.Context, src llm.Buildable) (llm.Stream, error) {
-	opts, err := src.BuildRequest(ctx)
-	if err != nil {
-		return nil, llm.NewErrBuildRequest(p.Name(), err)
-	}
-
-	enriched, err := EnrichRequest(opts)
-	if err != nil {
-		return nil, err
-	}
-
-	if useResponsesAPI(opts.Model) {
-		return p.streamResponses(ctx, enriched)
-	}
-	return p.streamCompletions(ctx, enriched)
+	return p.buildCore().Stream(ctx, src)
 }
 
-// enrichOpts resolves model-specific fields before dispatch.
-// Currently handles reasoning effort mapping only; cache retention is
-// determined at request-build time by wantsExtendedCache.
-func EnrichRequest(opts llm.Request) (llm.Request, error) {
-	mapped, err := mapEffortAndThinking(opts.Model, opts.Effort, opts.Thinking)
-	if err != nil {
-		return opts, err
+func (p *Provider) buildCore() *providercore.Client {
+	cfg := providercore.Config{
+		ProviderName:   providerName,
+		DefaultModel:   p.defaultModel,
+		BaseURL:        defaultBaseURL,
+		APIHint:        llm.ApiTypeOpenAIChatCompletion,
+		CostCalculator: usage.Default(),
+		TokenCounter:   tokencount.TokenCounterFunc(p.CountTokens),
+		HeaderFunc: func(ctx context.Context, _ *llm.Request) (http.Header, error) {
+			key, err := p.opts.ResolveAPIKey(ctx)
+			if err != nil || key == "" {
+				return nil, llm.NewErrMissingAPIKey(providerName)
+			}
+			return http.Header{"Authorization": {"Bearer " + key}}, nil
+		},
+		ResolveAPIHint: func(req llm.Request) llm.ApiType {
+			if useResponsesAPI(req.Model) {
+				return llm.ApiTypeOpenAIResponses
+			}
+			return llm.ApiTypeOpenAIChatCompletion
+		},
+		PreprocessRequest: func(req llm.Request) (llm.Request, string, error) {
+			original := req.Model
+			mapped, err := mapEffortAndThinking(req.Model, req.Effort, req.Thinking)
+			if err != nil {
+				return req, original, err
+			}
+			req.Effort = llm.Effort(mapped)
+			return req, original, nil
+		},
+		ResolveHTTPErrorAction: func(_ llm.Request, statusCode int, _ error) providercore.HTTPErrorAction {
+			if llm.IsRetriableHTTPStatus(statusCode) {
+				return providercore.HTTPErrorActionReturn
+			}
+			return providercore.HTTPErrorActionStream
+		},
 	}
-	opts.Effort = llm.Effort(mapped)
-	return opts, nil
+
+	return providercore.New(
+		cfg,
+		llm.WithBaseURL(p.opts.BaseURL),
+		llm.WithHTTPClient(p.opts.HTTPClient),
+	)
 }
 
-func enrichOpts(opts llm.Request) (llm.Request, error) { return EnrichRequest(opts) }
-
-// wantsExtendedCache reports whether the request should use 24h prompt cache
-// retention. An explicit CacheHint with TTL "1h" takes priority; otherwise
-// the model registry is consulted for automatic extended-cache support.
-func wantsExtendedCache(opts llm.Request) bool {
-	if opts.CacheHint != nil && opts.CacheHint.Enabled && opts.CacheHint.TTL == "1h" {
+// wantsExtendedCache returns true if the request should use 24h cache retention.
+// It checks both the CacheHint TTL and the model's SupportsExtendedCache flag.
+func wantsExtendedCache(req llm.Request) bool {
+	// Explicit cache hint override: TTL "1h" signals 24h extended retention.
+	if req.CacheHint != nil && req.CacheHint.Enabled && req.CacheHint.TTL == "1h" {
 		return true
 	}
-	info, err := getModelInfo(opts.Model)
-	return err == nil && info.SupportsExtendedCache
+
+	// Model-based auto-detection: use SupportsExtendedCache.
+	info, err := getModelInfo(req.Model)
+	if err != nil {
+		return false
+	}
+	return info.SupportsExtendedCache
 }
 
-// wantsExtendedCacheInResponsesAPI reports whether the request should include
-// prompt_cache_retention: "24h" in a /v1/responses body.
-//
-// Codex-category models also route through streamResponses but are dispatched
-// to the ChatGPT Codex backend, which does not support prompt_cache_retention.
-// Only models with UseResponsesAPI: true (e.g. gpt-5.4 series) support it.
-func wantsExtendedCacheInResponsesAPI(opts llm.Request) bool {
-	if opts.CacheHint != nil && opts.CacheHint.Enabled && opts.CacheHint.TTL == "1h" {
-		return true
+// wantsExtendedCacheInResponsesAPI is like wantsExtendedCache but also
+// considers models with UseResponsesAPI: true (e.g. gpt-5.4 series).
+// Codex models route to a different backend that does not support
+// prompt_cache_retention, so we only set it for non-Codex Responses API models.
+func wantsExtendedCacheInResponsesAPI(req llm.Request) bool {
+	if !wantsExtendedCache(req) {
+		return false
 	}
-	info, err := getModelInfo(opts.Model)
-	return err == nil && info.UseResponsesAPI && info.SupportsExtendedCache
+	info, err := getModelInfo(req.Model)
+	if err != nil {
+		return false
+	}
+	// Codex models (categoryCodex) use a backend that doesn't support this parameter.
+	return info.Category != categoryCodex
 }
 
-// mapOpenAIFinishReason converts an OpenAI/OpenRouter finish_reason string to
-// a typed StopReason.
-func mapOpenAIFinishReason(s string) llm.StopReason {
-	switch s {
-	case "stop":
-		return llm.StopReasonEndTurn
-	case "tool_calls":
-		return llm.StopReasonToolUse
-	case "length":
-		return llm.StopReasonMaxTokens
-	case "content_filter":
-		return llm.StopReasonContentFilter
-	default:
-		return llm.StopReason(s)
+// enrichOpts validates and maps effort/thinking parameters for the OpenAI API.
+// It is used by tests that exercise the legacy request builder path.
+// In the providercore pipeline, this logic runs in PreprocessRequest.
+func enrichOpts(req llm.Request) (llm.Request, error) {
+	out := req
+	mapped, err := mapEffortAndThinking(req.Model, req.Effort, req.Thinking)
+	if err != nil {
+		return req, err
 	}
+	out.Effort = llm.Effort(mapped)
+	return out, nil
 }
