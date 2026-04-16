@@ -17,41 +17,279 @@ Scope: `provider/codex/` only. No other packages are touched.
 
 ---
 
-## Known blocker — tool-name resolution
+## Known blocker — tool-name and call-id resolution
 
-Before executing this migration, a bug in `api/unified/stream_bridge_responses.go`
-must be fixed (outside this scope, noted here as a prerequisite).
+Before executing the `provider/codex` migration, a bug in
+`api/unified/stream_bridge_responses.go` must be fixed.
 
-**Root cause:** The OpenAI standard sends `"name"` inside
-`response.function_call_arguments.done`. Codex does not — it sends `name` and
-`call_id` only in `response.output_item.added` / `response.output_item.done`.
+### Is this Codex-specific?
 
-Raw events from the Codex API for a tool call:
+No. The `name` field in `FunctionCallArgumentsDoneEvent` is
+`json:"name,omitempty"` in `api/responses/types.go` — it is optional by
+design. The existing `api/responses` integration test already reads tool
+calls from `OutputItemDoneEvent`, not `FunctionCallArgumentsDoneEvent`,
+precisely because `output_item.done` is the only event that *always*
+carries both `name` and `call_id`. Any provider can legitimately omit
+`name` from `function_call_arguments.done`.
+
+### Should the fix go in `api/responses`?
+
+No. `api/responses` is a thin JSON-deserialisation layer that faithfully
+reflects the wire. `FunctionCallArgumentsDoneEvent` already models the
+wire correctly (`Name omitempty`). The incorrect assumption that `name` is
+always present lives in `api/unified`.
+
+### Exact wire events captured from the Codex API
 
 ```
 event: response.output_item.added
-data: {"item":{"id":"fc_...","type":"function_call","call_id":"call_...","name":"get_weather"}, ...}
+data: {"item":{"id":"fc_...","type":"function_call",
+              "call_id":"call_...","name":"get_weather"},
+       "output_index":0}
+           ^ name and call_id ARE present
 
 event: response.function_call_arguments.delta
-data: {"delta":"{\"loc","item_id":"fc_...", ...}   ← no name, no call_id
+data: {"delta":"{\"location\"","item_id":"fc_...","output_index":0}
+           ^ no name, no call_id
 
 event: response.function_call_arguments.done
-data: {"arguments":"{\"location\":\"Tokyo\"}","item_id":"fc_...", ...}  ← no name, no call_id
+data: {"arguments":"{\"location\":\"Tokyo\"}","item_id":"fc_...","output_index":0}
+           ^ no name, no call_id
 
 event: response.output_item.done
-data: {"item":{"id":"fc_...","call_id":"call_...","name":"get_weather","arguments":"..."}, ...}
+data: {"item":{"id":"fc_...","call_id":"call_...",
+              "name":"get_weather","arguments":"{...}"},
+       "output_index":0}
+           ^ name and call_id present again
 ```
 
-The unified bridge emits the `ToolCall` event in `FunctionCallArgumentsDoneEvent`
-using `e.Name` — which is empty for Codex. The name must instead be carried
-forward from `OutputItemAddedEvent` (where `item.name` is present).
+Two problems in the current `MapResponsesEvent` `FunctionCallArgumentsDoneEvent` case:
 
-The fix to `stream_bridge_responses.go` is to maintain a name-tracking map
-(keyed by `output_index`) populated from `OutputItemAddedEvent` and consumed
-in `FunctionCallArgumentsDoneEvent`. The rest of the migration is independent
-of this fix and can proceed in parallel.
+1. `Name: e.Name` — empty for Codex (not sent in this event)
+2. `ID: e.ItemID` — uses internal item ID (`"fc_..."`), not the
+   tool-call ID (`"call_..."`). Tool result messages must reference
+   `call_id` to match the call, not `item_id`.
+
+### Root cause
+
+```go
+// CURRENT — broken for providers that omit name/call_id from .done
+case *responses.FunctionCallArgumentsDoneEvent:
+    var args map[string]any
+    _ = json.Unmarshal([]byte(e.Arguments), &args)
+    return ..., StreamEvent{
+        StreamToolCall: &StreamToolCall{
+            ID:   e.ItemID, // item_id, not call_id
+            Name: e.Name,   // empty on Codex
+        },
+        ToolCall: &ToolCall{
+            ID:   e.ItemID,
+            Name: e.Name,
+        },
+    }, ...
+```
+
+`MapResponsesEvent` is a **stateless** function — it cannot see what
+`OutputItemAddedEvent` emitted earlier in the same stream.
+
+### Fix: `ResponsesMapper` in `api/unified/stream_bridge_responses.go`
+
+Convert `MapResponsesEvent` from a stateless function into a method on a
+new `ResponsesMapper` struct that tracks `{name, callID}` from
+`output_item.added` (keyed by `output_index`) and back-fills them when
+`function_call_arguments.done` arrives.
+
+#### 1. Add types (top of `stream_bridge_responses.go`)
+
+```go
+// funcCallMeta holds function-call metadata from response.output_item.added
+// that may be absent from the later response.function_call_arguments.done.
+type funcCallMeta struct {
+    name   string
+    callID string
+}
+
+// ResponsesMapper converts Responses API events to unified StreamEvents.
+// It is stateful: it carries function-call name and call_id forward from
+// response.output_item.added so that response.function_call_arguments.done
+// events from providers that omit those fields (e.g. Codex) still produce
+// correct ToolCall events.
+type ResponsesMapper struct {
+    pending map[int]funcCallMeta // keyed by output_index
+}
+
+// NewResponsesMapper returns an initialised mapper for one stream.
+func NewResponsesMapper() *ResponsesMapper {
+    return &ResponsesMapper{pending: make(map[int]funcCallMeta)}
+}
+```
+
+#### 2. Convert `MapResponsesEvent` to a method
+
+```go
+// BEFORE
+func MapResponsesEvent(ev any) (StreamEvent, bool, error) {
+
+// AFTER
+func (m *ResponsesMapper) MapEvent(ev any) (StreamEvent, bool, error) {
+```
+
+The entire function body is unchanged except for the two case changes below.
+
+#### 3. `OutputItemAddedEvent` case — record metadata
+
+```go
+// BEFORE
+case *responses.OutputItemAddedEvent:
+    return withRawEventPayload(withProviderExtras(withRawEventName(
+        StreamEvent{Type: StreamEventLifecycle, Lifecycle: &Lifecycle{
+            Scope: LifecycleScopeItem, State: LifecycleStateAdded,
+            Ref: responsesItemRef(e.OutputIndex, e.Item.ID), ItemType: e.Item.Type,
+        }}, responses.EventOutputItemAdded),
+        map[string]any{"item": e.Item}), source), false, nil
+
+// AFTER
+case *responses.OutputItemAddedEvent:
+    if e.Item.Type == "function_call" && (e.Item.Name != "" || e.Item.CallID != "") {
+        m.pending[e.OutputIndex] = funcCallMeta{
+            name:   e.Item.Name,
+            callID: e.Item.CallID,
+        }
+    }
+    return withRawEventPayload(withProviderExtras(withRawEventName(
+        StreamEvent{Type: StreamEventLifecycle, Lifecycle: &Lifecycle{
+            Scope: LifecycleScopeItem, State: LifecycleStateAdded,
+            Ref: responsesItemRef(e.OutputIndex, e.Item.ID), ItemType: e.Item.Type,
+        }}, responses.EventOutputItemAdded),
+        map[string]any{"item": e.Item}), source), false, nil
+```
+
+#### 4. `FunctionCallArgumentsDoneEvent` case — consume metadata
+
+```go
+// BEFORE
+case *responses.FunctionCallArgumentsDoneEvent:
+    var args map[string]any
+    _ = json.Unmarshal([]byte(e.Arguments), &args)
+    return withRawEventPayload(withRawEventName(StreamEvent{
+        Type: StreamEventToolCall,
+        StreamToolCall: &StreamToolCall{
+            Ref: responsesItemRef(e.OutputIndex, e.ItemID),
+            ID: e.ItemID, Name: e.Name, RawInput: e.Arguments, Args: args,
+        },
+        ToolCall: &ToolCall{ID: e.ItemID, Name: e.Name, Args: args},
+    }, responses.EventFunctionCallArgumentsDone), source), false, nil
+
+// AFTER
+case *responses.FunctionCallArgumentsDoneEvent:
+    var args map[string]any
+    _ = json.Unmarshal([]byte(e.Arguments), &args)
+    // Resolve name and call_id: providers such as Codex omit these from
+    // function_call_arguments.done; carry them from output_item.added.
+    name, callID := e.Name, e.ItemID
+    if meta, ok := m.pending[e.OutputIndex]; ok {
+        if name == "" {
+            name = meta.name
+        }
+        if meta.callID != "" {
+            // Always prefer the explicit call_id over item_id:
+            // tool result messages reference call_id, not item_id.
+            callID = meta.callID
+        }
+        delete(m.pending, e.OutputIndex)
+    }
+    return withRawEventPayload(withRawEventName(StreamEvent{
+        Type: StreamEventToolCall,
+        StreamToolCall: &StreamToolCall{
+            Ref:      responsesItemRef(e.OutputIndex, e.ItemID),
+            ID:       callID,
+            Name:     name,
+            RawInput: e.Arguments,
+            Args:     args,
+        },
+        ToolCall: &ToolCall{ID: callID, Name: name, Args: args},
+    }, responses.EventFunctionCallArgumentsDone), source), false, nil
+```
+
+#### 5. Keep backward-compatible package-level wrapper
+
+All existing tests call `MapResponsesEvent` as a free function.
+
+```go
+// MapResponsesEvent is a stateless convenience wrapper around
+// ResponsesMapper.MapEvent. For streaming use prefer NewResponsesMapper().MapEvent
+// so that state is preserved across events in the same stream.
+func MapResponsesEvent(ev any) (StreamEvent, bool, error) {
+    return NewResponsesMapper().MapEvent(ev)
+}
+```
+
+#### 6. Update `ForwardResponses` in `stream_forward_responses.go`
+
+```go
+// BEFORE
+for result := range handle.Events {
+    ...
+    uEv, ignored, err := MapResponsesEvent(result)
+
+// AFTER  (one new line before the loop, one changed line inside it)
+mapper := NewResponsesMapper()
+for result := range handle.Events {
+    ...
+    uEv, ignored, err := mapper.MapEvent(result)
+```
+
+#### 7. New test in `stream_bridge_responses_test.go`
+
+```go
+func TestResponsesMapper_FillsMissingFuncCallMeta(t *testing.T) {
+    // Codex style: name and call_id only in output_item.added, absent from .done
+    mapper := NewResponsesMapper()
+
+    _, _, err := mapper.MapEvent(&responses.OutputItemAddedEvent{
+        OutputIndex: 0,
+        Item: responses.ResponseOutputItem{
+            ID: "fc_abc", Type: "function_call",
+            Name: "get_weather", CallID: "call_xyz",
+        },
+    })
+    require.NoError(t, err)
+
+    ev, _, err := mapper.MapEvent(&responses.FunctionCallArgumentsDoneEvent{
+        OutputRef: responses.OutputRef{OutputIndex: 0, ItemID: "fc_abc"},
+        Name:      "",    // not sent by Codex
+        Arguments: `{"location":"Tokyo"}`,
+    })
+    require.NoError(t, err)
+    require.Equal(t, StreamEventToolCall, ev.Type)
+    require.NotNil(t, ev.ToolCall)
+    assert.Equal(t, "get_weather", ev.ToolCall.Name, "name filled from output_item.added")
+    assert.Equal(t, "call_xyz",    ev.ToolCall.ID,   "ID is call_id, not item_id")
+
+    // Standard OpenAI style: name present in .done, no prior tracking needed
+    mapper2 := NewResponsesMapper()
+    ev2, _, err := mapper2.MapEvent(&responses.FunctionCallArgumentsDoneEvent{
+        OutputRef: responses.OutputRef{OutputIndex: 0, ItemID: "call_1"},
+        Name:      "lookup",
+        Arguments: `{"a":1}`,
+    })
+    require.NoError(t, err)
+    assert.Equal(t, "lookup", ev2.ToolCall.Name, "existing behaviour preserved")
+}
+```
+
+### Files changed for this prerequisite
+
+| File | Change |
+|---|---|
+| `api/unified/stream_bridge_responses.go` | Add `ResponsesMapper`, `funcCallMeta`, `NewResponsesMapper`; convert to method; record in `OutputItemAddedEvent`; resolve in `FunctionCallArgumentsDoneEvent`; keep `MapResponsesEvent` wrapper |
+| `api/unified/stream_forward_responses.go` | `mapper := NewResponsesMapper()` before loop; `mapper.MapEvent(result)` inside loop |
+| `api/unified/stream_bridge_responses_test.go` | Add `TestResponsesMapper_FillsMissingFuncCallMeta` |
+
+No changes to `api/responses/` — it is correct as-is.
 
 ---
+
 
 ## Step 1 — Update imports in `provider.go`
 
