@@ -4,7 +4,6 @@ import (
 	"sort"
 
 	"github.com/codewandler/llm"
-	"github.com/codewandler/llm/modeldb"
 )
 
 const (
@@ -57,39 +56,68 @@ var _ llm.ModelResolver = (*claudeModels)(nil)
 var _ llm.ModelsProvider = (*claudeModels)(nil)
 
 func getClaudeModels() []llm.Model {
-	provider, ok := modeldb.GetProvider("anthropic")
-	if !ok || len(provider.Models) == 0 {
-		return nil
+	catalogSnapshot, err := llm.LoadBuiltInCatalog()
+	if err != nil {
+		return preferredModels
+	}
+	models := llm.CatalogModelsForService(catalogSnapshot, "anthropic", llm.CatalogModelProjectionOptions{
+		ProviderName:         providerName,
+		ExcludeIntentAliases: true,
+	})
+	if len(models) == 0 {
+		return preferredModels
 	}
 
-	ids := make([]string, 0, len(supportedModels))
-	for id := range provider.Models {
-		if supportedModels[id] {
-			ids = append(ids, id)
+	remaining := make(map[string]llm.Model)
+	for _, model := range models {
+		if !supportedModels[model.ID] {
+			continue
 		}
+		if pref, ok := preferredModelsByID[model.ID]; ok {
+			model.Aliases = mergeClaudeAliases(pref.Aliases, model.Aliases)
+		}
+		remaining[model.ID] = model
+	}
+	if len(remaining) == 0 {
+		return preferredModels
 	}
 
-	if len(ids) == 0 {
-		return nil
+	out := make([]llm.Model, 0, len(remaining))
+	for _, pref := range preferredModels {
+		if model, ok := remaining[pref.ID]; ok {
+			out = append(out, model)
+			delete(remaining, pref.ID)
+			continue
+		}
+		out = append(out, pref)
+	}
+
+	ids := make([]string, 0, len(remaining))
+	for id := range remaining {
+		ids = append(ids, id)
 	}
 
 	sort.Strings(ids)
-	out := make([]llm.Model, 0, len(ids))
 	for _, id := range ids {
-		m := provider.Models[id]
-		name := m.Name
-		if name == "" {
-			name = id
-		}
-		mm := llm.Model{ID: id, Name: name, Provider: providerName}
-		// Inject curated aliases from preferredModelsByID (O(1) lookup).
-		if pref, ok := preferredModelsByID[id]; ok {
-			mm.Aliases = pref.Aliases
-		}
-		out = append(out, mm)
+		out = append(out, remaining[id])
 	}
+	return out
+}
 
-	// preferredModels comes first: its ordering determines the provider default
-	// (position 0) and the alias set visible to callers.
-	return append(preferredModels, out...)
+func mergeClaudeAliases(a, b []string) []string {
+	seen := make(map[string]struct{}, len(a)+len(b))
+	out := make([]string, 0, len(a)+len(b))
+	for _, values := range [][]string{a, b} {
+		for _, value := range values {
+			if value == "" {
+				continue
+			}
+			if _, ok := seen[value]; ok {
+				continue
+			}
+			seen[value] = struct{}{}
+			out = append(out, value)
+		}
+	}
+	return out
 }

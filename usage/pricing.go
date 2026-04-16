@@ -2,8 +2,9 @@ package usage
 
 import (
 	"strings"
+	"sync"
 
-	"github.com/codewandler/llm/modeldb"
+	"github.com/codewandler/llm/catalog"
 )
 
 // Pricing holds per-token rates in USD per million tokens.
@@ -220,10 +221,8 @@ var KnownPricing = []PricingEntry{
 }
 
 // providerAliases maps provider names that share pricing tables to their
-// canonical name in KnownPricing. Kept here (not only in modeldb) so Static()
-// works correctly even for providers whose modeldb mapping differs.
-// Note: modeldb.ProviderMapping also maps "claude" → "anthropic" for model
-// DB lookups; keep the two in sync when adding aliases.
+// canonical name in KnownPricing. Kept here so static and catalog-backed
+// pricing lookups agree on provider naming.
 var providerAliases = map[string]string{
 	"claude": "anthropic", // OAuth wrapper — same models, same Anthropic pricing
 }
@@ -283,20 +282,63 @@ func Static(entries ...PricingEntry) CostCalculator {
 	})
 }
 
-// ModelDB returns a CostCalculator backed by the embedded models.dev database.
-func ModelDB() CostCalculator {
+var (
+	catalogCalcOnce sync.Once
+	catalogCalc     CostCalculator
+)
+
+// Catalog returns a CostCalculator backed by the embedded built-in catalog.
+func Catalog() CostCalculator {
+	catalogCalcOnce.Do(func() {
+		catalogCalc = newCatalogCalculator()
+	})
+	return catalogCalc
+}
+
+func newCatalogCalculator() CostCalculator {
+	c, err := catalog.LoadBuiltIn()
+	if err != nil {
+		return CostCalculatorFunc(func(string, string, TokenItems) (Cost, bool) {
+			return Cost{}, false
+		})
+	}
+	pricingByProvider := make(map[string]map[string]Pricing)
+	for ref, offering := range c.Offerings {
+		pricing := offering.Pricing
+		if pricing == nil {
+			model, ok := c.Models[offering.ModelKey]
+			if !ok {
+				continue
+			}
+			pricing = model.ReferencePricing
+		}
+		if pricing == nil {
+			continue
+		}
+		if pricingByProvider[ref.ServiceID] == nil {
+			pricingByProvider[ref.ServiceID] = make(map[string]Pricing)
+		}
+		pricingByProvider[ref.ServiceID][ref.WireModelID] = Pricing{
+			Input:       pricing.Input,
+			Output:      pricing.Output,
+			Reasoning:   pricing.Reasoning,
+			CachedInput: pricing.CachedInput,
+			CacheWrite:  pricing.CacheWrite,
+		}
+	}
 	return CostCalculatorFunc(func(provider, model string, tokens TokenItems) (Cost, bool) {
-		m, ok := modeldb.GetModel(provider, model)
-		if !ok || (m.Cost.Input == 0 && m.Cost.Output == 0) {
+		if canonical, ok := providerAliases[provider]; ok {
+			provider = canonical
+		}
+		models, ok := pricingByProvider[provider]
+		if !ok {
 			return Cost{}, false
 		}
-		p := Pricing{
-			Input:       m.Cost.Input,
-			Output:      m.Cost.Output,
-			CachedInput: m.Cost.CacheRead,
-			CacheWrite:  m.Cost.CacheWrite,
+		pricing, ok := models[model]
+		if !ok {
+			return Cost{}, false
 		}
-		return CalcCost(tokens, p), true
+		return CalcCost(tokens, pricing), true
 	})
 }
 
@@ -316,14 +358,14 @@ func Compose(calculators ...CostCalculator) CostCalculator {
 // defaultCalc is the package-level singleton returned by Default().
 // Initialised once at package load; avoids closure allocations on every
 // provider usage event.
-var defaultCalc = Compose(Static(), ModelDB()) //nolint:gochecknoglobals
+var defaultCalc = Compose(Static(), Catalog()) //nolint:gochecknoglobals
 
 // Default returns the recommended default calculator:
 //
-//	Compose(Static(), ModelDB())
+//	Compose(Static(), Catalog())
 //
 // Static() is checked first because KnownPricing is manually maintained and
-// verified against provider docs. ModelDB() provides broader coverage.
+// verified against provider docs. Catalog() provides broader offering coverage.
 func Default() CostCalculator {
 	return defaultCalc
 }

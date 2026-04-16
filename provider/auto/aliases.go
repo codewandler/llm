@@ -3,7 +3,7 @@ package auto
 import (
 	"sync"
 
-	"github.com/codewandler/llm/catalog"
+	"github.com/codewandler/llm"
 	"github.com/codewandler/llm/provider/anthropic"
 	"github.com/codewandler/llm/provider/bedrock"
 	"github.com/codewandler/llm/provider/minimax"
@@ -59,7 +59,7 @@ var providerAliasModels = map[string]aliasModels{
 
 var (
 	builtinCatalogOnce sync.Once
-	builtinCatalog     catalog.Catalog
+	builtinCatalog     llm.CatalogSnapshot
 	builtinCatalogErr  error
 )
 
@@ -110,19 +110,19 @@ func modelAliasesForProvider(providerType string) map[string]string {
 	}
 }
 
-func autoCatalog() (catalog.Catalog, bool) {
+func autoCatalog() (llm.CatalogSnapshot, bool) {
 	builtinCatalogOnce.Do(func() {
-		builtinCatalog, builtinCatalogErr = catalog.LoadBuiltIn()
+		builtinCatalog, builtinCatalogErr = llm.LoadBuiltInCatalog()
 	})
 	return builtinCatalog, builtinCatalogErr == nil
 }
 
-func modelAliasesFromCatalog(c catalog.Catalog, providerType string) map[string]string {
+func modelAliasesFromCatalog(c llm.CatalogSnapshot, providerType string) map[string]string {
 	serviceID, ok := catalogServiceID(providerType)
 	if !ok {
 		return nil
 	}
-	return c.FactualAliasesForService(serviceID)
+	return llm.CatalogFactualAliasesForService(c, serviceID)
 }
 
 func catalogServiceID(providerType string) (string, bool) {
