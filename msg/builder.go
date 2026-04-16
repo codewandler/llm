@@ -39,6 +39,11 @@ func (b *Builder) Cache(opts ...CacheOpt) *Builder {
 	return b
 }
 
+func (b *Builder) Phase(phase AssistantPhase) *Builder {
+	b.m.Phase = phase
+	return b
+}
+
 func System(text string) *Builder          { return buildMsg(RoleSystem).Text(text) }
 func Developer(text string) *Builder       { return buildMsg(RoleDeveloper).Text(text) }
 func User(text string) *Builder            { return buildMsg(RoleUser).Text(text) }

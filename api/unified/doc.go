@@ -13,7 +13,7 @@
 // projection errors over silently weakening semantics.
 //
 // Current protocol-specific limits:
-//   - Anthropic Messages projects only RequestMetadata.EndUserID to the wire.
+//   - Anthropic Messages projects only RequestMetadata.User to the wire.
 //   - Chat Completions only projects native content when a message is native-only.
 //   - Responses outbound projection only supports one leading text-only system
 //     message via instructions.

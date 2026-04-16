@@ -116,6 +116,18 @@ func TestAssistantMsg_MarshalJSON_ContentOnly(t *testing.T) {
 	assert.Equal(t, "assistant", result["role"])
 }
 
+func TestAssistantMsg_MarshalJSON_WithPhase(t *testing.T) {
+	m := msg.Assistant(msg.Text("Working"))
+	m.Phase(msg.AssistantPhaseCommentary)
+
+	data, err := json.Marshal(m.Build())
+	require.NoError(t, err)
+
+	var result map[string]any
+	require.NoError(t, json.Unmarshal(data, &result))
+	assert.Equal(t, "commentary", result["phase"])
+}
+
 func TestAssistantMsg_MarshalJSON_ToolCallsOnly(t *testing.T) {
 	m := msg.Assistant(
 		msg.ToolCall(msg.NewToolCall("call_123", "get_weather", msg.ToolArgs{"location": "Paris"})),
@@ -203,6 +215,21 @@ func TestAssistantMsg_Validate(t *testing.T) {
 		{
 			name:    "empty - no content or tool calls",
 			msg:     msg.Assistant().Build(),
+			wantErr: true,
+		},
+		{
+			name:    "assistant phase allowed",
+			msg:     msg.Assistant(msg.Text("Working")).Phase(msg.AssistantPhaseCommentary).Build(),
+			wantErr: false,
+		},
+		{
+			name:    "invalid assistant phase rejected",
+			msg:     msg.Assistant(msg.Text("Working")).Phase(msg.AssistantPhase("bogus")).Build(),
+			wantErr: true,
+		},
+		{
+			name:    "non assistant phase rejected",
+			msg:     msg.User("Hello").Phase(msg.AssistantPhaseCommentary).Build(),
 			wantErr: true,
 		},
 	}

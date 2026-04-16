@@ -21,6 +21,9 @@ func (r Request) Validate() error {
 		return err
 	}
 	for i, m := range r.Messages {
+		if err := validateMessage(fmt.Sprintf("messages[%d]", i), m); err != nil {
+			return err
+		}
 		if err := validateCacheHint(fmt.Sprintf("messages[%d].cache_hint", i), m.CacheHint); err != nil {
 			return err
 		}
@@ -58,4 +61,14 @@ func validateCacheHint(field string, h *msg.CacheHint) error {
 	default:
 		return fmt.Errorf("%s ttl must be one of: %q, %q, %q", field, "", msg.CacheTTL5m.String(), msg.CacheTTL1h.String())
 	}
+}
+
+func validateMessage(field string, m Message) error {
+	if !m.Phase.Valid() {
+		return fmt.Errorf("%s phase must be one of: %q, %q, %q", field, "", msg.AssistantPhaseCommentary, msg.AssistantPhaseFinalAnswer)
+	}
+	if !m.Phase.IsEmpty() && m.Role != RoleAssistant {
+		return fmt.Errorf("%s phase is only valid for assistant role", field)
+	}
+	return nil
 }

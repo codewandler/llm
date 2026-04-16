@@ -160,7 +160,7 @@ func RequestFromMessages(r messages.Request) (Request, error) {
 		}
 	}
 	if r.Metadata != nil && r.Metadata.UserID != "" {
-		u.Metadata = &RequestMetadata{EndUserID: r.Metadata.UserID}
+		u.Metadata = &RequestMetadata{User: r.Metadata.UserID}
 	}
 	if r.CacheControl != nil {
 		u.CacheHint = cacheHintFromMessages(r.CacheControl)
@@ -374,8 +374,8 @@ func applyMessagesMetadata(out *messages.Request, meta *RequestMetadata, _ *Mess
 	if meta == nil {
 		return nil
 	}
-	if meta.EndUserID != "" {
-		out.Metadata = &messages.Metadata{UserID: meta.EndUserID}
+	if meta.User != "" {
+		out.Metadata = &messages.Metadata{UserID: meta.User}
 	}
 	return nil
 }

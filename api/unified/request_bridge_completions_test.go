@@ -16,7 +16,7 @@ func TestBuildCompletionsRequest(t *testing.T) {
 		MaxTokens:  128,
 		Effort:     EffortMedium,
 		Output:     &OutputSpec{Mode: OutputModeJSONObject},
-		Metadata:   &RequestMetadata{EndUserID: "user-123", SessionID: "sess-1", TraceID: "trace-1", RequestID: "req-1"},
+		Metadata:   &RequestMetadata{User: "user-123", Metadata: map[string]any{"session_id": "sess-1", "trace_id": "trace-1", "request_id": "req-1"}},
 		CacheHint:  &msg.CacheHint{Enabled: true, TTL: "1h"},
 		ToolChoice: llm.ToolChoiceRequired{},
 		Tools:      []Tool{{Name: "search", Description: "Search", Parameters: map[string]any{"type": "object"}}},
@@ -103,16 +103,16 @@ func TestRequestFromCompletions(t *testing.T) {
 	assert.Equal(t, OutputModeJSONObject, uReq.Output.Mode)
 	assert.Equal(t, EffortHigh, uReq.Effort)
 	require.NotNil(t, uReq.Metadata)
-	assert.Equal(t, "user-123", uReq.Metadata.EndUserID)
-	assert.Equal(t, "sess-1", uReq.Metadata.SessionID)
-	assert.Equal(t, "trace-1", uReq.Metadata.TraceID)
-	assert.Equal(t, "req-1", uReq.Metadata.RequestID)
+	assert.Equal(t, "user-123", uReq.Metadata.User)
+	assert.Equal(t, "sess-1", uReq.Metadata.Metadata["session_id"])
+	assert.Equal(t, "trace-1", uReq.Metadata.Metadata["trace_id"])
+	assert.Equal(t, "req-1", uReq.Metadata.Metadata["request_id"])
 	require.NotNil(t, uReq.CacheHint)
 	assert.Equal(t, "1h", uReq.CacheHint.TTL)
 	require.NotNil(t, uReq.Extras.Completions)
 	assert.Equal(t, []string{"DONE"}, uReq.Extras.Completions.Stop)
 	assert.Equal(t, "24h", uReq.Extras.Completions.PromptCacheRetention)
-	assert.Equal(t, "value", uReq.Extras.Completions.ExtraMetadata["custom"])
+	assert.Equal(t, "value", uReq.Metadata.Metadata["custom"])
 	assert.True(t, uReq.Extras.Completions.Store)
 	assert.True(t, uReq.Extras.Completions.ParallelToolCalls)
 }

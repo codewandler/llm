@@ -109,6 +109,8 @@ type respRequest struct {
 	TopK                 int                 `json:"top_k,omitempty"`
 	ResponseFormat       *respResponseFormat `json:"response_format,omitempty"`
 	PromptCacheRetention string              `json:"prompt_cache_retention,omitempty"`
+	Metadata             map[string]any      `json:"metadata,omitempty"`
+	User                 string              `json:"user,omitempty"`
 	Stream               bool                `json:"stream"`
 }
 
@@ -132,6 +134,7 @@ type respInput struct {
 	// For message items — type is omitted, role is set.
 	Role    string `json:"role,omitempty"`
 	Content string `json:"content,omitempty"`
+	Phase   string `json:"phase,omitempty"`
 
 	// For function_call and function_call_output items.
 	Type string `json:"type,omitempty"`
@@ -169,6 +172,10 @@ func respBuildRequest(opts llm.Request) ([]byte, error) {
 	// than wantsExtendedCache (checks SupportsExtendedCache only).
 	if wantsExtendedCacheInResponsesAPI(opts) {
 		r.PromptCacheRetention = "24h"
+	}
+	if opts.RequestMeta != nil {
+		r.User = opts.RequestMeta.User
+		r.Metadata = opts.RequestMeta.Clone().Metadata
 	}
 
 	// Generation parameters
@@ -212,10 +219,12 @@ func respBuildRequest(opts llm.Request) ([]byte, error) {
 			})
 
 		case msg.RoleAssistant:
+			phase := string(m.Phase)
 			if m.Text() != "" {
 				r.Input = append(r.Input, respInput{
 					Role:    "assistant",
 					Content: m.Text(),
+					Phase:   phase,
 				})
 			}
 			for _, tc := range m.ToolCalls() {
@@ -228,6 +237,7 @@ func respBuildRequest(opts llm.Request) ([]byte, error) {
 					CallID:    tc.ID,
 					Name:      tc.Name,
 					Arguments: string(argsJSON),
+					Phase:     phase,
 				})
 			}
 

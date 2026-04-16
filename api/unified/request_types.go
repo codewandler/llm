@@ -28,8 +28,9 @@ const (
 
 // Re-export core request enums from llm to keep unified and provider options aligned.
 type (
-	Effort       = llm.Effort
-	ThinkingMode = llm.ThinkingMode
+	Effort         = llm.Effort
+	ThinkingMode   = llm.ThinkingMode
+	AssistantPhase = msg.AssistantPhase
 )
 
 const (
@@ -42,6 +43,9 @@ const (
 	ThinkingAuto = llm.ThinkingAuto
 	ThinkingOn   = llm.ThinkingOn
 	ThinkingOff  = llm.ThinkingOff
+
+	AssistantPhaseCommentary  = msg.AssistantPhaseCommentary
+	AssistantPhaseFinalAnswer = msg.AssistantPhaseFinalAnswer
 )
 
 // OutputMode is the canonical output contract used by unified.Request.
@@ -59,13 +63,10 @@ type OutputSpec struct {
 	Schema any
 }
 
-// RequestMetadata carries fixed-key tracking identifiers that are portable
-// across the supported request protocols.
+// RequestMetadata carries OpenAI-compatible request attribution metadata.
 type RequestMetadata struct {
-	EndUserID string
-	SessionID string
-	TraceID   string
-	RequestID string
+	User     string
+	Metadata map[string]any
 }
 
 // Request is the canonical internal request schema used by api/unified.
@@ -94,6 +95,7 @@ type Request struct {
 type Message struct {
 	Role      Role
 	Parts     []Part
+	Phase     AssistantPhase
 	CacheHint *msg.CacheHint
 }
 

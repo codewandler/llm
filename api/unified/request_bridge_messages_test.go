@@ -21,7 +21,7 @@ func TestBuildMessagesRequest(t *testing.T) {
 			Mode:   OutputModeJSONSchema,
 			Schema: map[string]any{"type": "object"},
 		},
-		Metadata:  &RequestMetadata{EndUserID: "user-123"},
+		Metadata:  &RequestMetadata{User: "user-123"},
 		CacheHint: &msg.CacheHint{Enabled: true, TTL: "1h"},
 		Extras:    RequestExtras{Messages: &MessagesExtras{StopSequences: []string{"DONE"}}},
 		Tools: []Tool{{
@@ -69,7 +69,7 @@ func TestBuildMessagesRequest(t *testing.T) {
 func TestBuildMessagesRequest_BestEffortTrackingMetadata(t *testing.T) {
 	wire, err := BuildMessagesRequest(Request{
 		Model:    "claude-sonnet-4-6",
-		Metadata: &RequestMetadata{EndUserID: "user-123", SessionID: "sess-1", TraceID: "trace-1", RequestID: "req-1"},
+		Metadata: &RequestMetadata{User: "user-123", Metadata: map[string]any{"trace_id": "trace-1"}},
 		Messages: []Message{{Role: RoleUser, Parts: []Part{{Type: PartTypeText, Text: "hi"}}}},
 	})
 	require.NoError(t, err)
@@ -128,7 +128,7 @@ func TestRequestFromMessages(t *testing.T) {
 	assert.Equal(t, OutputModeJSONSchema, uReq.Output.Mode)
 	assert.Equal(t, EffortHigh, uReq.Effort)
 	require.NotNil(t, uReq.Metadata)
-	assert.Equal(t, "user-123", uReq.Metadata.EndUserID)
+	assert.Equal(t, "user-123", uReq.Metadata.User)
 	require.NotNil(t, uReq.CacheHint)
 	assert.Equal(t, "1h", uReq.CacheHint.TTL)
 	require.NotNil(t, uReq.Extras.Messages)

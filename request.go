@@ -130,6 +130,38 @@ func (t ApiType) Valid() bool {
 
 type StreamRequest = Request
 
+// RequestMeta carries provider-specific request attribution metadata used by
+// OpenAI-compatible APIs such as OpenAI and OpenRouter.
+type RequestMeta struct {
+	User     string         `json:"user,omitempty"`
+	Metadata map[string]any `json:"metadata,omitempty"`
+}
+
+func (m *RequestMeta) Clone() *RequestMeta {
+	if m == nil {
+		return nil
+	}
+	return &RequestMeta{User: m.User, Metadata: cloneRequestMetaMap(m.Metadata)}
+}
+
+func cloneRequestMetaMap(in map[string]any) map[string]any {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make(map[string]any, len(in))
+	for k, v := range in {
+		out[k] = v
+	}
+	return out
+}
+
+func ensureRequestMeta(r *Request) *RequestMeta {
+	if r.RequestMeta == nil {
+		r.RequestMeta = &RequestMeta{}
+	}
+	return r.RequestMeta
+}
+
 // Request configures a provider CreateStream call.
 type Request struct {
 	// Model is the model identifier or alias to use, e.g. "fast", "anthropic/claude-sonnet-4-5".
@@ -172,6 +204,9 @@ type Request struct {
 	// Thinking controls whether extended/chain-of-thought reasoning is used.
 	// This is a mode selector (on/off/auto), not a depth control.
 	Thinking ThinkingMode `json:"thinking,omitempty"`
+
+	// RequestMeta carries OpenAI-compatible request attribution metadata.
+	RequestMeta *RequestMeta `json:"request_meta,omitempty"`
 
 	// CacheHint is a top-level prompt caching hint. Behaviour is provider-specific:
 	// Anthropic auto mode, Bedrock trailing cachePoint, OpenAI extended retention.

@@ -76,6 +76,21 @@ func (b *RequestBuilder) Effort(level Effort) *RequestBuilder {
 	return b
 }
 
+func (b *RequestBuilder) RequestMeta(meta *RequestMeta) *RequestBuilder {
+	b.req.RequestMeta = meta.Clone()
+	return b
+}
+
+func (b *RequestBuilder) EndUser(user string) *RequestBuilder {
+	ensureRequestMeta(b.req).User = user
+	return b
+}
+
+func (b *RequestBuilder) Metadata(metadata map[string]any) *RequestBuilder {
+	ensureRequestMeta(b.req).Metadata = cloneRequestMetaMap(metadata)
+	return b
+}
+
 func (b *RequestBuilder) MaxTokens(maxTokens int) *RequestBuilder {
 	b.req.MaxTokens = maxTokens
 	return b
@@ -181,6 +196,18 @@ func WithThinking(mode ThinkingMode) RequestOption {
 
 func WithEffort(level Effort) RequestOption {
 	return func(r *Request) { r.Effort = level }
+}
+
+func WithRequestMeta(meta *RequestMeta) RequestOption {
+	return func(r *Request) { r.RequestMeta = meta.Clone() }
+}
+
+func WithEndUser(user string) RequestOption {
+	return func(r *Request) { ensureRequestMeta(r).User = user }
+}
+
+func WithMetadata(metadata map[string]any) RequestOption {
+	return func(r *Request) { ensureRequestMeta(r).Metadata = cloneRequestMetaMap(metadata) }
 }
 
 func WithMaxTokens(n int) RequestOption {

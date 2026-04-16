@@ -13,9 +13,10 @@ const (
 )
 
 type Message struct {
-	Role      Role       `json:"role"`
-	Parts     Parts      `json:"parts"`
-	CacheHint *CacheHint `json:"cache_hint,omitempty"`
+	Role      Role           `json:"role"`
+	Parts     Parts          `json:"parts"`
+	Phase     AssistantPhase `json:"phase,omitempty"`
+	CacheHint *CacheHint     `json:"cache_hint,omitempty"`
 }
 
 func (m Message) Text() string             { return m.Parts.Text() }
@@ -37,6 +38,13 @@ func (m Message) IsEmpty() bool {
 func (m Message) Validate() error {
 	if m.Role == "" {
 		return fmt.Errorf("message: role is required")
+	}
+
+	if !m.Phase.Valid() {
+		return fmt.Errorf("message: invalid assistant phase %q", m.Phase)
+	}
+	if !m.Phase.IsEmpty() && m.Role != RoleAssistant {
+		return fmt.Errorf("message: phase is only valid for assistant role")
 	}
 
 	if len(m.Parts) == 0 {

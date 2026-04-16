@@ -26,6 +26,9 @@ func RequestFromLLM(req llm.Request) (Request, error) {
 		CacheHint:   req.CacheHint,
 		ToolChoice:  req.ToolChoice,
 	}
+	if req.RequestMeta != nil {
+		u.Metadata = &RequestMetadata{User: req.RequestMeta.User, Metadata: cloneAnyMap(req.RequestMeta.Metadata)}
+	}
 
 	for _, t := range req.Tools {
 		u.Tools = append(u.Tools, Tool{
@@ -61,6 +64,9 @@ func RequestToLLM(req Request) (llm.Request, error) {
 		CacheHint:   req.CacheHint,
 		ToolChoice:  req.ToolChoice,
 	}
+	if req.Metadata != nil {
+		out.RequestMeta = &llm.RequestMeta{User: req.Metadata.User, Metadata: cloneAnyMap(req.Metadata.Metadata)}
+	}
 	if req.Output != nil {
 		switch req.Output.Mode {
 		case OutputModeText:
@@ -90,6 +96,7 @@ func messageFromLLM(m msg.Message) Message {
 	um := Message{
 		Role:      Role(m.Role),
 		CacheHint: m.CacheHint,
+		Phase:     AssistantPhase(m.Phase),
 		Parts:     make([]Part, 0, len(m.Parts)),
 	}
 	for _, p := range m.Parts {
@@ -128,7 +135,7 @@ func partFromLLM(p msg.Part) Part {
 }
 
 func messageToLLM(m Message) msg.Message {
-	out := msg.Message{Role: msg.Role(m.Role), CacheHint: m.CacheHint}
+	out := msg.Message{Role: msg.Role(m.Role), CacheHint: m.CacheHint, Phase: msg.AssistantPhase(m.Phase)}
 	out.Parts = make(msg.Parts, 0, len(m.Parts))
 	for _, p := range m.Parts {
 		out.Parts = append(out.Parts, partToLLM(p))

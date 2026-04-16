@@ -7,12 +7,6 @@ import (
 	"github.com/codewandler/llm/msg"
 )
 
-const (
-	openAIMetadataSessionID = "session_id"
-	openAIMetadataTraceID   = "trace_id"
-	openAIMetadataRequestID = "request_id"
-)
-
 func partsText(parts []Part) string {
 	var b strings.Builder
 	for _, p := range parts {
@@ -94,57 +88,27 @@ func metadataToOpenAI(meta *RequestMetadata, extra map[string]any) (string, map[
 	user := ""
 	out := cloneAnyMap(extra)
 	if meta != nil {
-		user = meta.EndUserID
-		if meta.SessionID != "" {
+		user = meta.User
+		if len(meta.Metadata) > 0 {
 			if out == nil {
 				out = map[string]any{}
 			}
-			out[openAIMetadataSessionID] = meta.SessionID
-		}
-		if meta.TraceID != "" {
-			if out == nil {
-				out = map[string]any{}
+			for k, v := range meta.Metadata {
+				out[k] = v
 			}
-			out[openAIMetadataTraceID] = meta.TraceID
 		}
-		if meta.RequestID != "" {
-			if out == nil {
-				out = map[string]any{}
-			}
-			out[openAIMetadataRequestID] = meta.RequestID
-		}
+	}
+	if len(out) == 0 {
+		out = nil
 	}
 	return user, out
 }
 
 func metadataFromOpenAI(user string, raw map[string]any) (*RequestMetadata, map[string]any) {
-	var meta *RequestMetadata
-	extra := cloneAnyMap(raw)
-	set := func(apply func(*RequestMetadata)) {
-		if meta == nil {
-			meta = &RequestMetadata{}
-		}
-		apply(meta)
+	if user == "" && len(raw) == 0 {
+		return nil, nil
 	}
-	if user != "" {
-		set(func(m *RequestMetadata) { m.EndUserID = user })
-	}
-	if v, ok := extra[openAIMetadataSessionID].(string); ok && v != "" {
-		set(func(m *RequestMetadata) { m.SessionID = v })
-		delete(extra, openAIMetadataSessionID)
-	}
-	if v, ok := extra[openAIMetadataTraceID].(string); ok && v != "" {
-		set(func(m *RequestMetadata) { m.TraceID = v })
-		delete(extra, openAIMetadataTraceID)
-	}
-	if v, ok := extra[openAIMetadataRequestID].(string); ok && v != "" {
-		set(func(m *RequestMetadata) { m.RequestID = v })
-		delete(extra, openAIMetadataRequestID)
-	}
-	if len(extra) == 0 {
-		extra = nil
-	}
-	return meta, extra
+	return &RequestMetadata{User: user, Metadata: cloneAnyMap(raw)}, nil
 }
 
 func ensureMessagesExtras(r *Request) *MessagesExtras {

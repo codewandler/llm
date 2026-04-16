@@ -40,6 +40,7 @@ type ResponseFormat struct {
 type Input struct {
 	Role      string `json:"role,omitempty"`
 	Content   string `json:"content,omitempty"`
+	Phase     string `json:"phase,omitempty"`
 	Type      string `json:"type,omitempty"`
 	CallID    string `json:"call_id,omitempty"`
 	Name      string `json:"name,omitempty"`
@@ -128,6 +129,7 @@ type ResponseOutputItem struct {
 	Type        string                 `json:"type,omitempty"`
 	Status      string                 `json:"status,omitempty"`
 	Role        string                 `json:"role,omitempty"`
+	Phase       string                 `json:"phase,omitempty"`
 	Content     []ResponseContentPart  `json:"content,omitempty"`
 	CallID      string                 `json:"call_id,omitempty"`
 	Name        string                 `json:"name,omitempty"`

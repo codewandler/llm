@@ -32,6 +32,10 @@ func TestRequestFromLLM_AndBack(t *testing.T) {
 		Effort:     llm.EffortHigh,
 		Thinking:   llm.ThinkingOn,
 		CacheHint:  msg.NewCacheHint(),
+		RequestMeta: &llm.RequestMeta{
+			User:     "user-123",
+			Metadata: map[string]any{"trace_id": "trace-1"},
+		},
 		Messages: llm.Messages{
 			msg.System("You are a helpful assistant").Build(),
 			msg.User("What is Go?").Build(),
@@ -39,7 +43,7 @@ func TestRequestFromLLM_AndBack(t *testing.T) {
 				msg.Thinking("reasoning", "sig-1"),
 				msg.Text("Calling tool..."),
 				msg.NewToolCall("call-1", "search", msg.ToolArgs{"query": "golang"}),
-			).Build(),
+			).Phase(msg.AssistantPhaseCommentary).Build(),
 			msg.Tool().Results(msg.ToolResult{ToolCallID: "call-1", ToolOutput: "Go is a language."}).Build(),
 		},
 	}
@@ -53,6 +57,10 @@ func TestRequestFromLLM_AndBack(t *testing.T) {
 	require.NotNil(t, uReq.ToolChoice)
 	assert.Equal(t, EffortHigh, uReq.Effort)
 	assert.Equal(t, ThinkingOn, uReq.Thinking)
+	require.NotNil(t, uReq.Metadata)
+	assert.Equal(t, "user-123", uReq.Metadata.User)
+	assert.Equal(t, "trace-1", uReq.Metadata.Metadata["trace_id"])
+	assert.Equal(t, AssistantPhaseCommentary, uReq.Messages[2].Phase)
 	require.NotNil(t, uReq.Output)
 	assert.Equal(t, OutputModeJSONObject, uReq.Output.Mode)
 
@@ -62,7 +70,11 @@ func TestRequestFromLLM_AndBack(t *testing.T) {
 	assert.Equal(t, llmReq.Model, back.Model)
 	assert.Equal(t, llmReq.MaxTokens, back.MaxTokens)
 	assert.Equal(t, llmReq.OutputFormat, back.OutputFormat)
+	require.NotNil(t, back.RequestMeta)
+	assert.Equal(t, "user-123", back.RequestMeta.User)
+	assert.Equal(t, "trace-1", back.RequestMeta.Metadata["trace_id"])
 	require.Len(t, back.Messages, 4)
+	assert.Equal(t, llm.AssistantPhaseCommentary, back.Messages[2].Phase)
 	require.Len(t, back.Tools, 1)
 }
 

@@ -3,10 +3,11 @@ package llm
 import "github.com/codewandler/llm/msg"
 
 type (
-	Role      = msg.Role
-	Message   = msg.Message
-	Messages  = msg.Messages
-	CacheHint = msg.CacheHint
+	Role           = msg.Role
+	Message        = msg.Message
+	Messages       = msg.Messages
+	CacheHint      = msg.CacheHint
+	AssistantPhase = msg.AssistantPhase
 
 	// CacheOpt and CacheTTL are re-exported from the msg package so callers
 	// using RequestBuilder do not need to import msg directly.
@@ -20,6 +21,9 @@ const (
 	RoleAssistant = msg.RoleAssistant
 	RoleTool      = msg.RoleTool
 	RoleDeveloper = msg.RoleDeveloper
+
+	AssistantPhaseCommentary  = msg.AssistantPhaseCommentary
+	AssistantPhaseFinalAnswer = msg.AssistantPhaseFinalAnswer
 
 	// Cache TTL convenience aliases.
 	CacheTTL5m = msg.CacheTTL5m

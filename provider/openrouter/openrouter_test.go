@@ -141,6 +141,46 @@ func TestProvider_CreateStream_UnknownPrefixRoutesToResponses(t *testing.T) {
 	assert.Equal(t, "/v1/responses", gotPath, "unknown prefix must route to /v1/responses")
 }
 
+func TestProvider_CreateStream_ResponsesBodyIncludesRequestMetaAndPhase(t *testing.T) {
+	var gotBody map[string]any
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer r.Body.Close()
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&gotBody))
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = io.WriteString(w, "event: response.completed\ndata: {\"response\":{\"id\":\"resp_1\",\"model\":\"openai/gpt-5.4\",\"status\":\"completed\"}}\n\n")
+	}))
+	defer server.Close()
+
+	p := New(llm.WithBaseURL(server.URL), llm.WithAPIKey("test-key"))
+	stream, err := p.CreateStream(t.Context(), llm.Request{
+		Model:       "openai/gpt-5.4",
+		RequestMeta: &llm.RequestMeta{User: "user-123", Metadata: map[string]any{"trace_id": "trace-1"}},
+		Messages: llm.Messages{
+			llm.User("hello"),
+			msg.Assistant(msg.Text("working"), msg.NewToolCall("call-1", "search", msg.ToolArgs{"q": "golang"})).Phase(msg.AssistantPhaseCommentary).Build(),
+		},
+	})
+	require.NoError(t, err)
+	for range stream {
+	}
+
+	assert.Equal(t, "user-123", gotBody["user"])
+	metadata, ok := gotBody["metadata"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "trace-1", metadata["trace_id"])
+	inputs, ok := gotBody["input"].([]any)
+	require.True(t, ok)
+	require.Len(t, inputs, 3)
+	assistant, ok := inputs[1].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "commentary", assistant["phase"])
+	call, ok := inputs[2].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "commentary", call["phase"])
+	assert.Equal(t, "function_call", call["type"])
+}
+
 // TestProvider_CreateStream_ResponsesEvents verifies that the responses path
 // publishes the expected events (started, delta, usage, completed) through
 // the unified pipeline.

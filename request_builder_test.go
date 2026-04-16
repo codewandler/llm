@@ -249,3 +249,51 @@ func TestBuildRequest_PassesOptsThrough(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "injected-model", req.Model)
 }
+
+func TestRequestBuilder_RequestMetaHelpers(t *testing.T) {
+	req, err := NewRequestBuilder().
+		Model("test-model").
+		User("hello").
+		EndUser("user-123").
+		Metadata(map[string]any{"trace_id": "trace-1"}).
+		Build()
+
+	require.NoError(t, err)
+	require.NotNil(t, req.RequestMeta)
+	assert.Equal(t, "user-123", req.RequestMeta.User)
+	assert.Equal(t, "trace-1", req.RequestMeta.Metadata["trace_id"])
+}
+
+func TestWithRequestMeta_ClonesInput(t *testing.T) {
+	meta := &RequestMeta{User: "user-123", Metadata: map[string]any{"trace_id": "trace-1"}}
+	req, err := BuildRequest(
+		WithModel("test-model"),
+		WithUser("hi"),
+		WithRequestMeta(meta),
+	)
+	require.NoError(t, err)
+
+	meta.User = "changed"
+	meta.Metadata["trace_id"] = "changed"
+
+	require.NotNil(t, req.RequestMeta)
+	assert.Equal(t, "user-123", req.RequestMeta.User)
+	assert.Equal(t, "trace-1", req.RequestMeta.Metadata["trace_id"])
+}
+
+func TestWithEndUserAndMetadata(t *testing.T) {
+	metadata := map[string]any{"trace_id": "trace-1"}
+	req, err := BuildRequest(
+		WithModel("test-model"),
+		WithUser("hi"),
+		WithEndUser("user-123"),
+		WithMetadata(metadata),
+	)
+	require.NoError(t, err)
+
+	metadata["trace_id"] = "changed"
+
+	require.NotNil(t, req.RequestMeta)
+	assert.Equal(t, "user-123", req.RequestMeta.User)
+	assert.Equal(t, "trace-1", req.RequestMeta.Metadata["trace_id"])
+}

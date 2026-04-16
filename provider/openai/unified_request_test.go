@@ -19,6 +19,7 @@ func TestBuildCompletionsBodyUnified_Parity(t *testing.T) {
 		TopP:         0.9,
 		TopK:         20,
 		OutputFormat: llm.OutputFormatJSON,
+		RequestMeta:  &llm.RequestMeta{User: "user-123", Metadata: map[string]any{"trace_id": "trace-1"}},
 		Tools: []tool.Definition{{
 			Name:        "search",
 			Description: "Search docs",
@@ -52,6 +53,7 @@ func TestBuildResponsesBodyUnified_Parity(t *testing.T) {
 		TopP:         0.8,
 		TopK:         10,
 		OutputFormat: llm.OutputFormatJSON,
+		RequestMeta:  &llm.RequestMeta{User: "user-123", Metadata: map[string]any{"trace_id": "trace-1"}},
 		Tools: []tool.Definition{{
 			Name:        "search",
 			Description: "Search docs",
@@ -65,6 +67,7 @@ func TestBuildResponsesBodyUnified_Parity(t *testing.T) {
 		Messages: llm.Messages{
 			llm.System("sys1"),
 			llm.User("hello"),
+			msg.Assistant(msg.Text("working"), msg.NewToolCall("call-1", "search", msg.ToolArgs{"q": "golang"})).Phase(msg.AssistantPhaseCommentary).Build(),
 		},
 	}
 

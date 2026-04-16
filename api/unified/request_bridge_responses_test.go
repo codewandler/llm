@@ -17,7 +17,7 @@ func TestBuildResponsesRequest(t *testing.T) {
 		MaxTokens:  256,
 		Effort:     EffortHigh,
 		Output:     &OutputSpec{Mode: OutputModeJSONObject},
-		Metadata:   &RequestMetadata{EndUserID: "user-123", SessionID: "sess-1", TraceID: "trace-1", RequestID: "req-1"},
+		Metadata:   &RequestMetadata{User: "user-123", Metadata: map[string]any{"session_id": "sess-1", "trace_id": "trace-1", "request_id": "req-1"}},
 		CacheHint:  &msg.CacheHint{Enabled: true, TTL: "1h"},
 		ToolChoice: llm.ToolChoiceTool{Name: "search"},
 		Tools:      []Tool{{Name: "search", Description: "Search", Parameters: map[string]any{"type": "object"}}},
@@ -33,7 +33,7 @@ func TestBuildResponsesRequest(t *testing.T) {
 		Messages: []Message{
 			{Role: RoleDeveloper, Parts: []Part{{Type: PartTypeText, Text: "secondary system"}}},
 			{Role: RoleUser, Parts: []Part{{Type: PartTypeText, Text: "hi"}}},
-			{Role: RoleAssistant, Parts: []Part{{Type: PartTypeText, Text: "ok"}, {Type: PartTypeToolCall, ToolCall: &ToolCall{ID: "call-1", Name: "search", Args: map[string]any{"q": "golang"}}}}},
+			{Role: RoleAssistant, Phase: AssistantPhaseCommentary, Parts: []Part{{Type: PartTypeText, Text: "ok"}, {Type: PartTypeToolCall, ToolCall: &ToolCall{ID: "call-1", Name: "search", Args: map[string]any{"q": "golang"}}}}},
 			{Role: RoleTool, Parts: []Part{{Type: PartTypeToolResult, ToolResult: &ToolResult{ToolCallID: "call-1", ToolOutput: "result"}}}},
 		},
 	}
@@ -55,6 +55,8 @@ func TestBuildResponsesRequest(t *testing.T) {
 	require.NotEmpty(t, wire.Input)
 	assert.Equal(t, "developer", wire.Input[0].Role)
 	assert.Equal(t, "secondary system", wire.Input[0].Content)
+	assert.Equal(t, "commentary", wire.Input[2].Phase)
+	assert.Equal(t, "commentary", wire.Input[3].Phase)
 	require.NotNil(t, wire.Reasoning)
 	assert.Equal(t, "high", wire.Reasoning.Effort)
 	assert.Equal(t, "concise", wire.Reasoning.Summary)
@@ -196,8 +198,8 @@ func TestRequestFromResponses(t *testing.T) {
 		Input: []responses.Input{
 			{Role: "developer", Content: "secondary system"},
 			{Role: "user", Content: "hi"},
-			{Role: "assistant", Content: "ok"},
-			{Type: "function_call", CallID: "call-1", Name: "search", Arguments: `{"q":"golang"}`},
+			{Role: "assistant", Content: "ok", Phase: "commentary"},
+			{Type: "function_call", CallID: "call-1", Name: "search", Arguments: `{"q":"golang"}`, Phase: "commentary"},
 			{Type: "function_call_output", CallID: "call-1", Output: "result"},
 		},
 	}
@@ -209,10 +211,10 @@ func TestRequestFromResponses(t *testing.T) {
 	assert.Equal(t, OutputModeJSONObject, uReq.Output.Mode)
 	assert.Equal(t, EffortHigh, uReq.Effort)
 	require.NotNil(t, uReq.Metadata)
-	assert.Equal(t, "user-123", uReq.Metadata.EndUserID)
-	assert.Equal(t, "sess-1", uReq.Metadata.SessionID)
-	assert.Equal(t, "trace-1", uReq.Metadata.TraceID)
-	assert.Equal(t, "req-1", uReq.Metadata.RequestID)
+	assert.Equal(t, "user-123", uReq.Metadata.User)
+	assert.Equal(t, "sess-1", uReq.Metadata.Metadata["session_id"])
+	assert.Equal(t, "trace-1", uReq.Metadata.Metadata["trace_id"])
+	assert.Equal(t, "req-1", uReq.Metadata.Metadata["request_id"])
 	require.NotNil(t, uReq.CacheHint)
 	assert.Equal(t, "1h", uReq.CacheHint.TTL)
 	require.NotNil(t, uReq.Extras.Responses)
@@ -227,9 +229,10 @@ func TestRequestFromResponses(t *testing.T) {
 	require.Len(t, uReq.Messages, 5)
 	assert.Equal(t, RoleSystem, uReq.Messages[0].Role)
 	assert.Equal(t, RoleDeveloper, uReq.Messages[1].Role)
+	assert.Equal(t, AssistantPhaseCommentary, uReq.Messages[3].Phase)
 	require.Len(t, uReq.Messages[3].Parts, 2)
 	assert.Equal(t, PartTypeToolCall, uReq.Messages[3].Parts[1].Type)
-	assert.Equal(t, "value", uReq.Extras.Responses.ExtraMetadata["custom"])
+	assert.Equal(t, "value", uReq.Metadata.Metadata["custom"])
 }
 
 func TestRequestFromResponses_GroupsAssistantTextAndMultipleToolCalls(t *testing.T) {
@@ -292,4 +295,29 @@ func TestRequestFromResponses_FunctionCallWithoutAssistantTextCreatesAssistantTu
 	assert.Equal(t, RoleAssistant, uReq.Messages[0].Role)
 	require.Len(t, uReq.Messages[0].Parts, 1)
 	assert.Equal(t, PartTypeToolCall, uReq.Messages[0].Parts[0].Type)
+}
+
+func TestRequestFromResponses_SplitsAssistantTurnsOnPhaseChange(t *testing.T) {
+	uReq, err := RequestFromResponses(responses.Request{
+		Model: "gpt-5.4",
+		Input: []responses.Input{
+			{Role: "assistant", Content: "thinking", Phase: "commentary"},
+			{Type: "function_call", CallID: "call-1", Name: "search", Arguments: `{"q":"golang"}`, Phase: "commentary"},
+			{Role: "assistant", Content: "final", Phase: "final_answer"},
+		},
+	})
+	require.NoError(t, err)
+	require.Len(t, uReq.Messages, 2)
+	assert.Equal(t, AssistantPhaseCommentary, uReq.Messages[0].Phase)
+	assert.Equal(t, AssistantPhaseFinalAnswer, uReq.Messages[1].Phase)
+}
+
+func TestRequestFromResponses_PreservesToolCallOnlyAssistantPhase(t *testing.T) {
+	uReq, err := RequestFromResponses(responses.Request{
+		Model: "gpt-5.4",
+		Input: []responses.Input{{Type: "function_call", CallID: "call-1", Name: "search", Arguments: `{"q":"golang"}`, Phase: "commentary"}},
+	})
+	require.NoError(t, err)
+	require.Len(t, uReq.Messages, 1)
+	assert.Equal(t, AssistantPhaseCommentary, uReq.Messages[0].Phase)
 }

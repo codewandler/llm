@@ -95,6 +95,8 @@ type ccRequest struct {
 	ToolChoice           any                `json:"tool_choice,omitempty"`
 	ReasoningEffort      string             `json:"reasoning_effort,omitempty"`
 	PromptCacheRetention string             `json:"prompt_cache_retention,omitempty"`
+	Metadata             map[string]any     `json:"metadata,omitempty"`
+	User                 string             `json:"user,omitempty"`
 	MaxTokens            int                `json:"max_tokens,omitempty"`
 	Temperature          float64            `json:"temperature,omitempty"`
 	TopP                 float64            `json:"top_p,omitempty"`
@@ -205,6 +207,10 @@ func ccBuildRequest(opts llm.Request) ([]byte, error) {
 	// requested via CacheHint.TTL == "1h".
 	if wantsExtendedCache(opts) {
 		r.PromptCacheRetention = "24h"
+	}
+	if opts.RequestMeta != nil {
+		r.User = opts.RequestMeta.User
+		r.Metadata = opts.RequestMeta.Clone().Metadata
 	}
 
 	// Messages

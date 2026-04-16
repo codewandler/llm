@@ -222,8 +222,8 @@ func RequestFromResponses(r responses.Request) (Request, error) {
 		if assistantTurn.empty() {
 			return
 		}
-		u.Messages = append(u.Messages, Message{Role: RoleAssistant, Parts: assistantTurn.parts})
-		assistantTurn.parts = nil
+		u.Messages = append(u.Messages, Message{Role: RoleAssistant, Phase: assistantTurn.phase, Parts: assistantTurn.parts})
+		assistantTurn.reset()
 	}
 
 	for _, in := range r.Input {
@@ -235,10 +235,26 @@ func RequestFromResponses(r responses.Request) (Request, error) {
 			flushAssistantTurn()
 			u.Messages = append(u.Messages, Message{Role: RoleUser, Parts: []Part{{Type: PartTypeText, Text: in.Content}}})
 		case in.Role == string(msg.RoleAssistant):
+			phase, err := responsesAssistantPhase(in.Phase)
+			if err != nil {
+				return Request{}, err
+			}
+			if assistantTurn.shouldFlush(phase) {
+				flushAssistantTurn()
+			}
+			assistantTurn.adoptPhase(phase)
 			if in.Content != "" {
 				assistantTurn.parts = append(assistantTurn.parts, Part{Type: PartTypeText, Text: in.Content})
 			}
 		case in.Type == "function_call":
+			phase, err := responsesAssistantPhase(in.Phase)
+			if err != nil {
+				return Request{}, err
+			}
+			if assistantTurn.shouldFlush(phase) {
+				flushAssistantTurn()
+			}
+			assistantTurn.adoptPhase(phase)
 			var args map[string]any
 			if in.Arguments != "" {
 				_ = json.Unmarshal([]byte(in.Arguments), &args)
@@ -294,6 +310,7 @@ func buildResponsesAssistantInputs(m Message) ([]responses.Input, error) {
 	inputs := make([]responses.Input, 0, len(m.Parts)+1)
 	var text strings.Builder
 	seenToolCall := false
+	phase := string(m.Phase)
 
 	for _, p := range m.Parts {
 		switch {
@@ -315,6 +332,7 @@ func buildResponsesAssistantInputs(m Message) ([]responses.Input, error) {
 				CallID:    p.ToolCall.ID,
 				Name:      p.ToolCall.Name,
 				Arguments: string(argRaw),
+				Phase:     phase,
 			})
 		case p.Type == PartTypeThinking:
 			return nil, fmt.Errorf("responses assistant message does not support thinking parts")
@@ -326,7 +344,7 @@ func buildResponsesAssistantInputs(m Message) ([]responses.Input, error) {
 	}
 
 	if text.Len() > 0 {
-		inputs = append([]responses.Input{{Role: string(msg.RoleAssistant), Content: text.String()}}, inputs...)
+		inputs = append([]responses.Input{{Role: string(msg.RoleAssistant), Content: text.String(), Phase: phase}}, inputs...)
 	}
 	return inputs, nil
 }
@@ -367,9 +385,36 @@ func isTextOnlyMessage(m Message) bool {
 }
 
 type responsesAssistantTurn struct {
+	phase AssistantPhase
 	parts []Part
 }
 
 func (t responsesAssistantTurn) empty() bool {
 	return len(t.parts) == 0
+}
+
+func (t *responsesAssistantTurn) reset() {
+	t.phase = ""
+	t.parts = nil
+}
+
+func (t *responsesAssistantTurn) shouldFlush(phase AssistantPhase) bool {
+	if t.empty() || phase.IsEmpty() || t.phase.IsEmpty() {
+		return false
+	}
+	return t.phase != phase
+}
+
+func (t *responsesAssistantTurn) adoptPhase(phase AssistantPhase) {
+	if t.phase.IsEmpty() {
+		t.phase = phase
+	}
+}
+
+func responsesAssistantPhase(raw string) (AssistantPhase, error) {
+	phase := AssistantPhase(raw)
+	if !phase.Valid() {
+		return "", fmt.Errorf("responses assistant item has invalid phase %q", raw)
+	}
+	return phase, nil
 }
