@@ -106,6 +106,16 @@ func (c *Client) Stream(ctx context.Context, src llm.Buildable) (llm.Stream, err
 		return nil, err
 	}
 
+	// MutateRequest (called inside buildHTTPRequest) may have replaced
+	// httpReq.Body with a mutated payload. Re-read it so the RequestEvent
+	// body matches what is actually sent on the wire.
+	if httpReq.Body != nil {
+		if mutated, readErr := io.ReadAll(httpReq.Body); readErr == nil {
+			bodyBytes = mutated
+			httpReq.Body = io.NopCloser(bytes.NewReader(bodyBytes))
+		}
+	}
+
 	pub, ch := llm.NewEventPublisher()
 
 	if requestedModel != "" && requestedModel != req.Model {

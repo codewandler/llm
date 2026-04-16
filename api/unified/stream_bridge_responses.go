@@ -10,9 +10,30 @@ import (
 	"github.com/codewandler/llm/usage"
 )
 
-// MapResponsesEvent converts a Responses native parser event into a unified StreamEvent.
-// Returns ignored=true for explicit no-op events.
-func MapResponsesEvent(ev any) (StreamEvent, bool, error) {
+// funcCallMeta holds function-call metadata from response.output_item.added that may
+// be absent from the later response.function_call_arguments.done event (e.g. Codex).
+type funcCallMeta struct {
+	name   string
+	callID string
+}
+
+// ResponsesMapper converts Responses API events to unified StreamEvents.
+// It is stateful: it carries function-call name and call_id forward from
+// response.output_item.added so that response.function_call_arguments.done
+// events from providers that omit those fields still produce correct ToolCall
+// events with the right name and ID.
+type ResponsesMapper struct {
+	pending map[int]funcCallMeta // keyed by output_index
+}
+
+// NewResponsesMapper returns an initialised ResponsesMapper for one stream.
+func NewResponsesMapper() *ResponsesMapper {
+	return &ResponsesMapper{pending: make(map[int]funcCallMeta)}
+}
+
+// MapEvent converts one Responses API parser event to a unified StreamEvent.
+// It must be called in stream order on the same ResponsesMapper instance.
+func (m *ResponsesMapper) MapEvent(ev any) (StreamEvent, bool, error) {
 	source := ev
 	payload, _, _ := sourceEvent(ev)
 	switch e := payload.(type) {
@@ -98,7 +119,21 @@ func MapResponsesEvent(ev any) (StreamEvent, bool, error) {
 	case *responses.FunctionCallArgumentsDoneEvent:
 		var args map[string]any
 		_ = json.Unmarshal([]byte(e.Arguments), &args)
-		return withRawEventPayload(withRawEventName(StreamEvent{Type: StreamEventToolCall, StreamToolCall: &StreamToolCall{Ref: responsesItemRef(e.OutputIndex, e.ItemID), ID: e.ItemID, Name: e.Name, RawInput: e.Arguments, Args: args}, ToolCall: &ToolCall{ID: e.ItemID, Name: e.Name, Args: args}}, responses.EventFunctionCallArgumentsDone), source), false, nil
+		// Resolve name and call_id: providers such as Codex omit these from
+		// function_call_arguments.done; carry them from output_item.added.
+		name, callID := e.Name, e.ItemID
+		if meta, ok := m.pending[e.OutputIndex]; ok {
+			if name == "" {
+				name = meta.name
+			}
+			if meta.callID != "" {
+				// Always prefer the explicit call_id over item_id:
+				// tool result messages reference call_id, not item_id.
+				callID = meta.callID
+			}
+			delete(m.pending, e.OutputIndex)
+		}
+		return withRawEventPayload(withRawEventName(StreamEvent{Type: StreamEventToolCall, StreamToolCall: &StreamToolCall{Ref: responsesItemRef(e.OutputIndex, e.ItemID), ID: callID, Name: name, RawInput: e.Arguments, Args: args}, ToolCall: &ToolCall{ID: callID, Name: name, Args: args}}, responses.EventFunctionCallArgumentsDone), source), false, nil
 
 	case *responses.CustomToolCallInputDeltaEvent:
 		return withRawEventPayload(withRawEventName(StreamEvent{Type: StreamEventToolDelta, ToolDelta: &ToolDelta{Ref: responsesItemRef(e.OutputIndex, e.ItemID), Kind: ToolDeltaKindCustomInput, Data: e.Delta}}, responses.EventCustomToolCallInputDelta), source), false, nil
@@ -107,6 +142,9 @@ func MapResponsesEvent(ev any) (StreamEvent, bool, error) {
 		return withRawEventPayload(withRawEventName(StreamEvent{Type: StreamEventToolDelta, ToolDelta: &ToolDelta{Ref: responsesItemRef(e.OutputIndex, e.ItemID), Kind: ToolDeltaKindCustomInput, Data: e.Input, Final: true}}, responses.EventCustomToolCallInputDone), source), false, nil
 
 	case *responses.OutputItemAddedEvent:
+		if e.Item.Type == "function_call" && (e.Item.Name != "" || e.Item.CallID != "") {
+			m.pending[e.OutputIndex] = funcCallMeta{name: e.Item.Name, callID: e.Item.CallID}
+		}
 		return withRawEventPayload(withProviderExtras(withRawEventName(StreamEvent{Type: StreamEventLifecycle, Lifecycle: &Lifecycle{Scope: LifecycleScopeItem, State: LifecycleStateAdded, Ref: responsesItemRef(e.OutputIndex, e.Item.ID), ItemType: e.Item.Type}}, responses.EventOutputItemAdded), map[string]any{"item": e.Item}), source), false, nil
 
 	case *responses.OutputItemDoneEvent:
@@ -262,4 +300,11 @@ func responsesPartMime(partType string) string {
 	default:
 		return ""
 	}
+}
+
+// MapResponsesEvent is a stateless convenience wrapper around ResponsesMapper.MapEvent.
+// For streaming use prefer NewResponsesMapper().MapEvent so that state is preserved
+// across events in the same stream.
+func MapResponsesEvent(ev any) (StreamEvent, bool, error) {
+	return NewResponsesMapper().MapEvent(ev)
 }

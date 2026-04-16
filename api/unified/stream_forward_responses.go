@@ -32,13 +32,14 @@ func ForwardResponses(
 		upstreamProvider = provider
 	}
 
+	mapper := NewResponsesMapper()
 	for result := range handle.Events {
 		if result.Err != nil {
 			pub.Error(result.Err)
 			return
 		}
 
-		uEv, ignored, err := MapResponsesEvent(result)
+		uEv, ignored, err := mapper.MapEvent(result)
 		if err != nil {
 			pub.Error(err)
 			return

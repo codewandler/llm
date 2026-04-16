@@ -1,6 +1,7 @@
 package providercore
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -510,4 +511,139 @@ func TestClientStream_TransformWireRequestUpdatesRequestEventBody(t *testing.T) 
 	assert.False(t, gotThinking)
 	assert.False(t, reqThinking)
 	assert.Equal(t, gotBody, requestBody)
+}
+
+// TestClientStream_MutateRequestBody_ReflectedInRequestEvent verifies that
+// body mutations made by Config.MutateRequest appear in the RequestEvent's
+// ProviderRequest.Body — i.e. the event reflects the actual wire payload.
+func TestClientStream_MutateRequestBody_ReflectedInRequestEvent(t *testing.T) {
+	t.Parallel()
+
+	var serverBody map[string]any
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer r.Body.Close()
+		b, _ := io.ReadAll(r.Body)
+		_ = json.Unmarshal(b, &serverBody)
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = io.WriteString(w, strings.Join([]string{
+			`data: {"id":"cmpl-1","choices":[{"index":0,"delta":{"role":"assistant","content":"hi"}}]}`,
+			"",
+			`data: {"id":"cmpl-1","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}`,
+			"",
+			"data: [DONE]",
+			"",
+		}, "\n"))
+	}))
+	defer server.Close()
+
+	client := New(Config{
+		ProviderName: "test",
+		BaseURL:      server.URL,
+		APIHint:      llm.ApiTypeOpenAIChatCompletion,
+		MutateRequest: func(r *http.Request) {
+			// Inject a sentinel field into the JSON body.
+			body, _ := io.ReadAll(r.Body)
+			r.Body.Close()
+			var m map[string]any
+			_ = json.Unmarshal(body, &m)
+			m["injected_by_mutate"] = true
+			encoded, _ := json.Marshal(m)
+			r.Body = io.NopCloser(bytes.NewReader(encoded))
+			r.ContentLength = int64(len(encoded))
+		},
+	}, llm.WithBaseURL(server.URL))
+
+	stream, err := client.Stream(context.Background(), llm.Request{
+		Model:    "gpt-test",
+		Messages: llm.Messages{llm.User("hi")},
+	})
+	require.NoError(t, err)
+
+	var eventBody map[string]any
+	for ev := range stream {
+		if ev.Type == llm.StreamEventRequest {
+			reqEv := ev.Data.(*llm.RequestEvent)
+			require.NoError(t, json.Unmarshal(reqEv.ProviderRequest.Body, &eventBody))
+		}
+	}
+
+	// The server received the mutated body.
+	require.NotNil(t, serverBody)
+	assert.Equal(t, true, serverBody["injected_by_mutate"],
+		"server must receive the mutated body")
+
+	// The RequestEvent must also carry the mutated body, not the pre-mutation one.
+	require.NotNil(t, eventBody)
+	assert.Equal(t, true, eventBody["injected_by_mutate"],
+		"RequestEvent.Body must reflect the body after MutateRequest")
+
+	// Both must be identical — event body == wire body.
+	assert.Equal(t, serverBody, eventBody,
+		"RequestEvent.Body must exactly match what was sent on the wire")
+}
+
+// TestClientStream_MutateRequestBody_StrippedField verifies that fields
+// deleted from the body by Config.MutateRequest are also absent from the
+// RequestEvent — covering the strip-field pattern used by the Codex provider.
+func TestClientStream_MutateRequestBody_StrippedField(t *testing.T) {
+	t.Parallel()
+
+	var serverBody map[string]any
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer r.Body.Close()
+		b, _ := io.ReadAll(r.Body)
+		_ = json.Unmarshal(b, &serverBody)
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = io.WriteString(w, strings.Join([]string{
+			`data: {"id":"cmpl-2","choices":[{"index":0,"delta":{"role":"assistant","content":"ok"}}]}`,
+			"",
+			`data: {"id":"cmpl-2","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}`,
+			"",
+			"data: [DONE]",
+			"",
+		}, "\n"))
+	}))
+	defer server.Close()
+
+	client := New(Config{
+		ProviderName: "test",
+		BaseURL:      server.URL,
+		APIHint:      llm.ApiTypeOpenAIChatCompletion,
+		MutateRequest: func(r *http.Request) {
+			// Strip a field from the body (mirrors Codex stripping max_tokens).
+			body, _ := io.ReadAll(r.Body)
+			r.Body.Close()
+			var m map[string]any
+			_ = json.Unmarshal(body, &m)
+			delete(m, "stream") // strip the stream field as a stand-in
+			encoded, _ := json.Marshal(m)
+			r.Body = io.NopCloser(bytes.NewReader(encoded))
+			r.ContentLength = int64(len(encoded))
+		},
+	}, llm.WithBaseURL(server.URL))
+
+	stream, err := client.Stream(context.Background(), llm.Request{
+		Model:    "gpt-test",
+		Messages: llm.Messages{llm.User("hi")},
+	})
+	require.NoError(t, err)
+
+	var eventBody map[string]any
+	for ev := range stream {
+		if ev.Type == llm.StreamEventRequest {
+			reqEv := ev.Data.(*llm.RequestEvent)
+			require.NoError(t, json.Unmarshal(reqEv.ProviderRequest.Body, &eventBody))
+		}
+	}
+
+	require.NotNil(t, serverBody)
+	require.NotNil(t, eventBody)
+
+	_, serverHasStream := serverBody["stream"]
+	_, eventHasStream := eventBody["stream"]
+	assert.False(t, serverHasStream, "server must receive body without stripped field")
+	assert.False(t, eventHasStream,
+		"RequestEvent.Body must not contain fields stripped by MutateRequest")
 }
