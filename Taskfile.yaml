@@ -1,0 +1,11 @@
+version: '3'
+
+tasks:
+  install:
+    desc: Install llmcli binary
+    cmds:
+      - go install ./cmd/llmcli
+    sources:
+      - cmd/llmcli/**/*.go
+      - go.mod
+      - go.sum
