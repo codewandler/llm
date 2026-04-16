@@ -12,9 +12,13 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 
 	"github.com/codewandler/llm"
+	"github.com/codewandler/llm/api/messages"
+	"github.com/codewandler/llm/api/unified"
 	"github.com/codewandler/llm/provider/anthropic"
+	"github.com/codewandler/llm/provider/providercore"
 	"github.com/codewandler/llm/tokencount"
 	"github.com/codewandler/llm/usage"
 )
@@ -109,146 +113,117 @@ func (*Provider) CostCalculator() usage.CostCalculator {
 
 // CreateStream implements llm.Provider.
 func (p *Provider) CreateStream(ctx context.Context, src llm.Buildable) (llm.Stream, error) {
-	req, err := src.BuildRequest(ctx)
-	if err != nil {
-		return nil, llm.NewErrBuildRequest(llm.ProviderNameClaude, err)
-	}
-
 	if p.initErr != nil {
 		return nil, llm.NewErrProviderMsg(llm.ProviderNameClaude, p.initErr.Error())
 	}
-
-	normalizeRequest(&req)
-
-	// Use the provider default when no model is specified.
-	// Validation below requires a non-empty model, so this must come first.
-	if req.Model == "" {
-		req.Model = ModelDefault
-	}
-
-	// Resolve model to include inference profile prefix.
-
-	resolvedModel, err := p.Resolve(req.Model)
-	if err != nil {
-		return nil, llm.NewErrBuildRequest(llm.ProviderNameClaude, err)
-	}
-	req.Model = resolvedModel.ID
-
-	if err := req.Validate(); err != nil {
-		return nil, llm.NewErrBuildRequest(llm.ProviderNameClaude, err)
-	}
-
-	if p.tokenProvider == nil {
-		return nil, llm.NewErrMissingAPIKey(llm.ProviderNameClaude)
-	}
-
-	token, err := p.tokenProvider.Token(ctx)
-	if err != nil {
-		return nil, llm.NewErrRequestFailed(llm.ProviderNameClaude, err)
-	}
-
-	// Build request
-	requestBody, err := p.buildRequest(req)
-	if err != nil {
-		return nil, llm.NewErrBuildRequest(llm.ProviderNameClaude, err)
-	}
-
-	requestBodyBytes, err := json.MarshalIndent(requestBody, "", "  ")
-	if err != nil {
-		return nil, llm.NewErrBuildRequest(llm.ProviderNameClaude, err)
-	}
-	p.log.Debug("request body", "body", string(requestBodyBytes))
-
-	// Build http.Request first so URL, method, and headers are available for
-	// the RequestEvent. The request is fully constructed here but not yet sent.
-	httpReq, err := p.newAPIRequest(ctx, token.AccessToken, requestBodyBytes)
-	if err != nil {
-		return nil, llm.NewErrBuildRequest(llm.ProviderNameClaude, err)
-	}
-
-	parseOpts := anthropic.ParseOpts{
-		Model:         req.Model,
-		ProviderName:  providerName,
-		LLMRequest:    req,
-		RequestParams: llm.ProviderRequestFromHTTP(httpReq, requestBodyBytes),
-	}
-
-	// Create publisher and emit RequestEvent BEFORE the HTTP call.
-	pub, ch := llm.NewEventPublisher()
-	anthropic.PublishRequestParams(pub, parseOpts)
-
-	// Emit token estimates: heuristic (local BPE) + API (exact count).
-	// Both are emitted so consumers can compare drift between the two methods.
-
-	// 1. Heuristic estimate (local, no network call)
-	if est, err := p.CountTokens(ctx, tokencount.TokenCountRequest{
-		Model:    req.Model,
-		Messages: req.Messages,
-		Tools:    req.Tools,
-	}); err == nil {
-		for _, rec := range tokencount.EstimateRecords(est, llm.ProviderNameClaude, req.Model, "heuristic", usage.Default()) {
-			pub.TokenEstimate(rec)
-		}
-	}
-
-	// 2. API count (exact, free endpoint — adds one HTTP round-trip).
-	// Build a proper Claude OAuth request with all required headers.
-	if apiCount, err := p.countTokensAPI(ctx, token.AccessToken, requestBody); err == nil {
-		apiEst := &tokencount.TokenCount{InputTokens: apiCount}
-		for _, rec := range tokencount.EstimateRecords(apiEst, llm.ProviderNameClaude, req.Model, "api", usage.Default()) {
-			pub.TokenEstimate(rec)
-		}
-	}
-
-	resp, err := p.client.Do(httpReq)
-	if err != nil {
-		pub.Close()
-		return nil, llm.NewErrRequestFailed(llm.ProviderNameClaude, err)
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		//nolint:errcheck // intentional: defer Close is only for cleanup, failure after response reading is non-fatal
-		defer resp.Body.Close()
-		errBody, _ := io.ReadAll(resp.Body)
-		apiErr := llm.NewErrAPIErrorWithRequest(llm.ProviderNameClaude, string(requestBodyBytes), resp.StatusCode, string(errBody))
-		if llm.IsRetriableHTTPStatus(resp.StatusCode) {
-			// Retriable: return error so the router can try the next provider.
-			// Events already emitted (RequestEvent) are lost, but failover is more important.
-			pub.Close()
-			return nil, apiErr
-		}
-		// Non-retriable: surface the error through the stream so all
-		// preamble events (RequestEvent etc.) remain visible to the caller.
-		pub.Error(apiErr)
-		pub.Close()
-		return ch, nil
-	}
-
-	anthropic.ParseStreamWith(ctx, resp.Body, pub, parseOpts)
-	return ch, nil
+	return p.buildCore().Stream(ctx, src)
 }
 
-func (p *Provider) newAPIRequest(ctx context.Context, accessToken string, body []byte) (*http.Request, error) {
-	endpoint := p.baseURL + "/v1/messages?beta=true"
-	req, err := http.NewRequestWithContext(ctx, "POST", endpoint, bytes.NewReader(body))
-	if err != nil {
-		return nil, err
+func (p *Provider) buildCore() *providercore.Client {
+	cfg := providercore.Config{
+		ProviderName: providerName,
+		DefaultModel: ModelDefault,
+		BaseURL:      p.baseURL,
+		BasePath:     "/v1/messages",
+		APIHint:      llm.ApiTypeAnthropicMessages,
+		DefaultHeaders: http.Header{
+			"Accept": {"application/json"},
+		},
+		CostCalculator: usage.Default(),
+		TokenCounter:   p,
+		RateLimitParser: func(resp *http.Response) *llm.RateLimits {
+			if resp == nil {
+				return nil
+			}
+			headers := make(map[string]string, len(resp.Header))
+			for k, values := range resp.Header {
+				if len(values) > 0 {
+					headers[strings.ToLower(k)] = values[0]
+				}
+			}
+			return llm.ParseRateLimits(headers)
+		},
+		HeaderFunc: func(ctx context.Context, _ *llm.Request) (http.Header, error) {
+			if p.tokenProvider == nil {
+				return nil, llm.NewErrMissingAPIKey(llm.ProviderNameClaude)
+			}
+			token, err := p.tokenProvider.Token(ctx)
+			if err != nil {
+				return nil, llm.NewErrRequestFailed(llm.ProviderNameClaude, err)
+			}
+			return http.Header{"Authorization": {"Bearer " + token.AccessToken}}, nil
+		},
+		MutateRequest: func(r *http.Request) {
+			p.setClaudeStaticHeaders(r)
+			q := r.URL.Query()
+			q.Set("beta", "true")
+			r.URL.RawQuery = q.Encode()
+		},
+		PreprocessRequest: func(req llm.Request) (llm.Request, string, error) {
+			normalizeRequest(&req)
+			original := req.Model
+			resolvedModel, err := p.Resolve(req.Model)
+			if err != nil {
+				return req, original, err
+			}
+			req.Model = resolvedModel.ID
+			return req, original, nil
+		},
+		TransformWireRequest: func(api llm.ApiType, wire any) (any, error) {
+			msgReq, ok := wire.(*messages.Request)
+			if !ok {
+				return nil, fmt.Errorf("unexpected messages payload %T", wire)
+			}
+			if err := p.augmentMessagesRequest(msgReq); err != nil {
+				return nil, err
+			}
+			return msgReq, nil
+		},
+		APITokenCounter: func(ctx context.Context, _ llm.Request, wire any) (*tokencount.TokenCount, error) {
+			msgReq, ok := wire.(*messages.Request)
+			if !ok {
+				return nil, fmt.Errorf("unexpected messages payload %T", wire)
+			}
+			count, err := p.countTokensAPI(ctx, msgReq)
+			if err != nil {
+				return nil, err
+			}
+			return &tokencount.TokenCount{InputTokens: count}, nil
+		},
+		ResolveHTTPErrorAction: func(_ llm.Request, statusCode int, _ error) providercore.HTTPErrorAction {
+			if llm.IsRetriableHTTPStatus(statusCode) {
+				return providercore.HTTPErrorActionReturn
+			}
+			return providercore.HTTPErrorActionStream
+		},
 	}
 
-	p.setClaudeHeaders(req, accessToken)
-	return req, nil
+	return providercore.New(
+		cfg,
+		llm.WithBaseURL(p.baseURL),
+		llm.WithHTTPClient(p.client),
+		llm.WithLogger(p.log),
+	)
 }
 
 // countTokensAPI calls /v1/messages/count_tokens with proper Claude OAuth headers.
-func (p *Provider) countTokensAPI(ctx context.Context, accessToken string, apiReq anthropic.Request) (int, error) {
+func (p *Provider) countTokensAPI(ctx context.Context, apiReq *messages.Request) (int, error) {
+	if p.tokenProvider == nil {
+		return 0, fmt.Errorf("claude: count_tokens: missing token provider")
+	}
+	token, err := p.tokenProvider.Token(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("claude: count_tokens: %w", err)
+	}
+
 	countReqBody, err := json.Marshal(struct {
-		Model        string                     `json:"model"`
-		Messages     []anthropic.Message        `json:"messages"`
-		System       anthropic.SystemBlocks     `json:"system,omitempty"`
-		Tools        []anthropic.ToolDefinition `json:"tools,omitempty"`
-		ToolChoice   any                        `json:"tool_choice,omitempty"`
-		Thinking     *anthropic.ThinkingConfig  `json:"thinking,omitempty"`
-		CacheControl *anthropic.CacheControl    `json:"cache_control,omitempty"`
+		Model        string                    `json:"model"`
+		Messages     []messages.Message        `json:"messages"`
+		System       messages.SystemBlocks     `json:"system,omitempty"`
+		Tools        []messages.ToolDefinition `json:"tools,omitempty"`
+		ToolChoice   any                       `json:"tool_choice,omitempty"`
+		Thinking     *messages.ThinkingConfig  `json:"thinking,omitempty"`
+		CacheControl *messages.CacheControl    `json:"cache_control,omitempty"`
 	}{
 		Model:        apiReq.Model,
 		Messages:     apiReq.Messages,
@@ -262,14 +237,15 @@ func (p *Provider) countTokensAPI(ctx context.Context, accessToken string, apiRe
 		return 0, fmt.Errorf("claude: count_tokens: %w", err)
 	}
 
+	endpoint := p.baseURL + "/v1/messages/count_tokens?beta=true"
 	req, err := http.NewRequestWithContext(ctx, "POST",
-		p.baseURL+"/v1/messages/count_tokens?beta=true",
+		endpoint,
 		bytes.NewReader(countReqBody))
 	if err != nil {
 		return 0, fmt.Errorf("claude: count_tokens: %w", err)
 	}
 
-	p.setClaudeHeaders(req, accessToken)
+	p.setClaudeHeaders(req, token.AccessToken)
 
 	resp, err := p.client.Do(req)
 	if err != nil {
@@ -293,10 +269,14 @@ func (p *Provider) countTokensAPI(ctx context.Context, accessToken string, apiRe
 
 // setClaudeHeaders applies the full set of Claude OAuth headers to a request.
 func (p *Provider) setClaudeHeaders(req *http.Request, accessToken string) {
+	p.setClaudeStaticHeaders(req)
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+}
+
+func (p *Provider) setClaudeStaticHeaders(req *http.Request) {
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Accept-Encoding", "gzip, deflate, br, zstd")
-	req.Header.Set("Authorization", "Bearer "+accessToken)
 	req.Header.Set("Anthropic-Version", anthropic.AnthropicVersion)
 	req.Header.Set("Anthropic-Beta", claudeBeta)
 	req.Header.Set("Anthropic-Dangerous-Direct-Browser-Access", "true")
@@ -313,15 +293,33 @@ func (p *Provider) setClaudeHeaders(req *http.Request, accessToken string) {
 	req.Header.Set("Connection", "keep-alive")
 }
 
-func (p *Provider) buildRequest(llmRequest llm.Request) (anthropic.Request, error) {
-	return anthropic.BuildRequest(anthropic.RequestOptions{
-		SystemBlocks: anthropic.SystemBlocks{
-			anthropic.Text(billingHeader),
-			anthropic.Text(systemCore).WithCacheControl(&anthropic.CacheControl{Type: "ephemeral", TTL: "1h"}),
-		},
-		UserID:     p.userID,
-		LLMRequest: llmRequest,
-	})
+func (p *Provider) buildRequest(llmRequest llm.Request) (*messages.Request, error) {
+	uReq, err := unified.RequestFromLLM(llmRequest)
+	if err != nil {
+		return nil, err
+	}
+	msgReq, err := unified.BuildMessagesRequest(uReq)
+	if err != nil {
+		return nil, err
+	}
+	if err := p.augmentMessagesRequest(msgReq); err != nil {
+		return nil, err
+	}
+	return msgReq, nil
+}
+
+func (p *Provider) augmentMessagesRequest(msgReq *messages.Request) error {
+	if msgReq == nil {
+		return fmt.Errorf("nil messages request")
+	}
+	msgReq.System = append(messages.SystemBlocks{
+		&messages.TextBlock{Type: messages.BlockTypeText, Text: billingHeader},
+		&messages.TextBlock{Type: messages.BlockTypeText, Text: systemCore, CacheControl: &messages.CacheControl{Type: "ephemeral", TTL: "1h"}},
+	}, msgReq.System...)
+	if p.userID != "" {
+		msgReq.Metadata = &messages.Metadata{UserID: p.userID}
+	}
+	return nil
 }
 
 func (p *Provider) buildUserID() string {

@@ -276,6 +276,97 @@ func TestClientStream_ErrorParser(t *testing.T) {
 	assert.True(t, sawRequest)
 }
 
+func TestClientStream_HTTPErrorActionStream(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer r.Body.Close()
+		http.Error(w, `{"error":"invalid_request"}`, http.StatusBadRequest)
+	}))
+	defer server.Close()
+
+	client := New(Config{
+		ProviderName: "test",
+		DefaultModel: "m",
+		BaseURL:      server.URL,
+		APIHint:      llm.ApiTypeOpenAIChatCompletion,
+		ResolveHTTPErrorAction: func(llm.Request, int, error) HTTPErrorAction {
+			return HTTPErrorActionStream
+		},
+	}, llm.WithBaseURL(server.URL))
+
+	stream, err := client.Stream(context.Background(), llm.Request{
+		Model:    "m",
+		Messages: llm.Messages{llm.User("hi")},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, stream)
+
+	var (
+		sawRequest bool
+		sawError   bool
+	)
+	for ev := range stream {
+		switch ev.Type {
+		case llm.StreamEventRequest:
+			sawRequest = true
+		case llm.StreamEventError:
+			sawError = true
+			assert.ErrorIs(t, ev.Data.(*llm.ErrorEvent).Error, llm.ErrAPIError)
+		}
+	}
+
+	assert.True(t, sawRequest)
+	assert.True(t, sawError)
+}
+
+func TestClientStream_APITokenCounterEmitsAdditionalEstimate(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer r.Body.Close()
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = io.WriteString(w, strings.Join([]string{
+			`data: {"id":"chatcmpl-1","choices":[{"index":0,"delta":{"role":"assistant","content":"hello"}}]}`,
+			"",
+			`data: {"id":"chatcmpl-1","choices":[{"index":0,"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":10,"completion_tokens":3}}`,
+			"",
+			"data: [DONE]",
+			"",
+		}, "\n"))
+	}))
+	defer server.Close()
+
+	client := New(Config{
+		ProviderName: "test",
+		DefaultModel: "m",
+		BaseURL:      server.URL,
+		APIHint:      llm.ApiTypeOpenAIChatCompletion,
+		TokenCounter: tokencount.TokenCounterFunc(func(context.Context, tokencount.TokenCountRequest) (*tokencount.TokenCount, error) {
+			return &tokencount.TokenCount{InputTokens: 11}, nil
+		}),
+		APITokenCounter: func(context.Context, llm.Request, any) (*tokencount.TokenCount, error) {
+			return &tokencount.TokenCount{InputTokens: 17}, nil
+		},
+	}, llm.WithBaseURL(server.URL))
+
+	stream, err := client.Stream(context.Background(), llm.Request{
+		Model:    "m",
+		Messages: llm.Messages{llm.User("hi")},
+	})
+	require.NoError(t, err)
+
+	var sources []string
+	for ev := range stream {
+		if ev.Type != llm.StreamEventTokenEstimate {
+			continue
+		}
+		sources = append(sources, ev.Data.(*llm.TokenEstimateEvent).Estimate.Source)
+	}
+
+	assert.Equal(t, []string{"heuristic", "api"}, sources)
+}
+
 func TestClientStream_APIHintResolver(t *testing.T) {
 	t.Parallel()
 

@@ -3,14 +3,13 @@ package anthropic
 import (
 	"bytes"
 	"context"
-	"encoding/json"
-	"io"
+	"fmt"
 	"net/http"
 	"strings"
 
 	"github.com/codewandler/llm"
 	"github.com/codewandler/llm/api/messages"
-	"github.com/codewandler/llm/api/unified"
+	"github.com/codewandler/llm/provider/providercore"
 	"github.com/codewandler/llm/tokencount"
 	"github.com/codewandler/llm/usage"
 )
@@ -68,161 +67,89 @@ func (*Provider) CostCalculator() usage.CostCalculator {
 func (p *Provider) Resolve(modelID string) (llm.Model, error) {
 	return allModelsWithAliases.Resolve(modelID)
 }
+
 func (p *Provider) CreateStream(ctx context.Context, src llm.Buildable) (llm.Stream, error) {
-	opts, err := src.BuildRequest(ctx)
-	if err != nil {
-		return nil, llm.NewErrBuildRequest(llm.ProviderNameAnthropic, err)
+	return p.buildCore().Stream(ctx, src)
+}
+
+func (p *Provider) buildCore() *providercore.Client {
+	cfg := providercore.Config{
+		ProviderName: providerName,
+		BaseURL:      defaultBaseURL,
+		BasePath:     "/v1/messages",
+		APIHint:      llm.ApiTypeAnthropicMessages,
+		DefaultHeaders: http.Header{
+			"Accept": {"application/json"},
+		},
+		TokenCounter: tokencount.TokenCounterFunc(p.CountTokens),
+		APITokenCounter: func(ctx context.Context, _ llm.Request, wire any) (*tokencount.TokenCount, error) {
+			msgReq, ok := wire.(*messages.Request)
+			if !ok {
+				return nil, fmt.Errorf("unexpected messages payload %T", wire)
+			}
+			count, err := p.CountTokensAPI(ctx, msgReq)
+			if err != nil {
+				return nil, err
+			}
+			return &tokencount.TokenCount{InputTokens: count}, nil
+		},
+		RateLimitParser: func(resp *http.Response) *llm.RateLimits {
+			if resp == nil {
+				return nil
+			}
+			headers := make(map[string]string, len(resp.Header))
+			for k, values := range resp.Header {
+				if len(values) > 0 {
+					headers[strings.ToLower(k)] = values[0]
+				}
+			}
+			return llm.ParseRateLimits(headers)
+		},
+		HeaderFunc: func(ctx context.Context, _ *llm.Request) (http.Header, error) {
+			key, err := p.opts.ResolveAPIKey(ctx)
+			if err != nil || key == "" {
+				return nil, llm.NewErrMissingAPIKey(llm.ProviderNameAnthropic)
+			}
+			return http.Header{
+				"x-api-key": {key},
+			}, nil
+		},
+		MutateRequest: func(r *http.Request) {
+			r.Header.Set("Content-Type", "application/json")
+			r.Header.Set("Anthropic-Version", anthropicVersion)
+			r.Header.Set("Anthropic-Beta", BetaInterleavedThinking)
+		},
+		PreprocessRequest: func(req llm.Request) (llm.Request, string, error) {
+			original := req.Model
+			if original != "" {
+				if resolved, err := p.Resolve(original); err == nil {
+					req.Model = resolved.ID
+				}
+			}
+			return req, original, nil
+		},
+		ResolveHTTPErrorAction: func(_ llm.Request, statusCode int, _ error) providercore.HTTPErrorAction {
+			if llm.IsRetriableHTTPStatus(statusCode) {
+				return providercore.HTTPErrorActionReturn
+			}
+			return providercore.HTTPErrorActionStream
+		},
 	}
 
-	// Resolve aliases (e.g. "default", "fast") to real model IDs.
-	// Unknown model IDs pass through to the API unchanged.
-	if opts.Model != "" {
-		if resolved, err := p.Resolve(opts.Model); err == nil {
-			opts.Model = resolved.ID
-		}
-	}
-
-	if err := opts.Validate(); err != nil {
-		return nil, llm.NewErrBuildRequest(llm.ProviderNameAnthropic, err)
-	}
-
-	apiKey, err := p.opts.ResolveAPIKey(ctx)
-	if err != nil {
-		return nil, llm.NewErrMissingAPIKey(llm.ProviderNameAnthropic)
-	}
-	if apiKey == "" {
-		return nil, llm.NewErrMissingAPIKey(llm.ProviderNameAnthropic)
-	}
-
-	uReq, err := unified.RequestFromLLM(opts)
-	if err != nil {
-		return nil, llm.NewErrBuildRequest(llm.ProviderNameAnthropic, err)
-	}
-	wireReq, err := unified.BuildMessagesRequest(uReq)
-	if err != nil {
-		return nil, llm.NewErrBuildRequest(llm.ProviderNameAnthropic, err)
-	}
-
-	body, err := json.MarshalIndent(wireReq, "", "  ")
-	if err != nil {
-		return nil, llm.NewErrBuildRequest(llm.ProviderNameAnthropic, err)
-	}
-
-	// Build http.Request first so URL, method, and headers are available for
-	// the RequestEvent. The request is fully constructed here but not yet sent.
-	req, err := p.newAPIRequest(ctx, apiKey, body)
-	if err != nil {
-		return nil, llm.NewErrBuildRequest(llm.ProviderNameAnthropic, err)
-	}
-
-	// Create publisher and emit RequestEvent BEFORE the HTTP call
-	// so consumers see what was requested even if the call fails.
-	pub, ch := llm.NewEventPublisher()
-	pub.Publish(&llm.RequestEvent{
-		OriginalRequest: opts,
-		ProviderRequest: llm.ProviderRequestFromHTTP(req, body),
-		ResolvedApiType: llm.ApiTypeAnthropicMessages,
-	})
-
-	// Emit token estimates: heuristic (local BPE) + API (exact count).
-	if est, err := p.CountTokens(ctx, tokencount.TokenCountRequest{
-		Model:    opts.Model,
-		Messages: opts.Messages,
-		Tools:    opts.Tools,
-	}); err == nil {
-		for _, rec := range tokencount.EstimateRecords(est, llm.ProviderNameAnthropic, opts.Model, "heuristic", usage.Default()) {
-			pub.TokenEstimate(rec)
-		}
-	}
-
-	// API count (exact, free endpoint — adds one HTTP round-trip)
-	if apiCount, err := p.CountTokensAPI(ctx, wireReq); err == nil {
-		apiEst := &tokencount.TokenCount{InputTokens: apiCount}
-		for _, rec := range tokencount.EstimateRecords(apiEst, llm.ProviderNameAnthropic, opts.Model, "api", usage.Default()) {
-			pub.TokenEstimate(rec)
-		}
-	}
-
-	resp, err := p.client.Do(req)
-	if err != nil {
-		pub.Close()
-		return nil, llm.NewErrRequestFailed(llm.ProviderNameAnthropic, err)
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		//nolint:errcheck
-		defer resp.Body.Close()
-		errBody, _ := io.ReadAll(resp.Body)
-		apiErr := llm.NewErrAPIError(llm.ProviderNameAnthropic, resp.StatusCode, string(errBody))
-		if llm.IsRetriableHTTPStatus(resp.StatusCode) {
-			pub.Close()
-			return nil, apiErr
-		}
-		pub.Error(apiErr)
-		pub.Close()
-		return ch, nil
-	}
-
-	// Parse response headers for rate limits.
-	headers := make(map[string]string, len(resp.Header))
-	for k, v := range resp.Header {
-		if len(v) > 0 {
-			headers[strings.ToLower(k)] = v[0]
-		}
-	}
-	rateLimits := llm.ParseRateLimits(headers)
-
-	// Stream the response body through the unified pipeline.
-	// We use messages.NewClient to get a properly parsed handle,
-	// feeding the already-received response body through a fake transport.
-	msgClient := messages.NewClient(
-		messages.WithBaseURL(p.opts.BaseURL),
-		messages.WithHTTPClient(&http.Client{
-			Transport: &singleResponseTransport{resp: resp},
-		}),
+	return providercore.New(
+		cfg,
+		llm.WithBaseURL(p.opts.BaseURL),
+		llm.WithHTTPClient(p.client),
 	)
-	handle, err := msgClient.Stream(ctx, wireReq)
-	if err != nil {
-		pub.Error(err)
-		pub.Close()
-		return ch, nil
-	}
-
-	sctx := unified.StreamContext{
-		Provider:   providerName,
-		Model:      opts.Model,
-		CostCalc:   usage.Default(),
-		RateLimits: rateLimits,
-	}
-
-	go func() {
-		defer pub.Close()
-		unified.ForwardMessages(ctx, handle, pub, sctx)
-	}()
-
-	return ch, nil
-}
-
-// singleResponseTransport is an http.RoundTripper that returns a pre-built
-// *http.Response exactly once. Used to feed an already-received response
-// body into a messages.Client without making a second HTTP call.
-type singleResponseTransport struct {
-	resp *http.Response
-}
-
-func (t *singleResponseTransport) RoundTrip(_ *http.Request) (*http.Response, error) {
-	return t.resp, nil
 }
 
 func (p *Provider) newAPIRequest(ctx context.Context, apiKey string, body []byte) (*http.Request, error) {
-	req, err := http.NewRequestWithContext(ctx, "POST", p.opts.BaseURL+"/v1/messages", bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, p.opts.BaseURL+"/v1/messages", bytes.NewReader(body))
 	if err != nil {
 		return nil, err
 	}
-
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
-	req.Header.Set("Accept-Encoding", "gzip, deflate, br, zstd")
 	req.Header.Set("Anthropic-Version", anthropicVersion)
 	req.Header.Set("Anthropic-Beta", BetaInterleavedThinking)
 	req.Header.Set("x-api-key", apiKey)

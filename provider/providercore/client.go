@@ -112,13 +112,13 @@ func (c *Client) Stream(ctx context.Context, src llm.Buildable) (llm.Stream, err
 		pub.ModelResolved(c.cfg.ProviderName, requestedModel, req.Model)
 	}
 
-	c.emitTokenEstimates(ctx, pub, req)
-
 	pub.Publish(&llm.RequestEvent{
 		OriginalRequest: req,
 		ProviderRequest: llm.ProviderRequestFromHTTP(httpReq, bodyBytes),
 		ResolvedApiType: apiHint,
 	})
+
+	c.emitTokenEstimates(ctx, pub, req, wireBody)
 
 	resp, err := c.client.Do(httpReq)
 	if err != nil {
@@ -128,8 +128,19 @@ func (c *Client) Stream(ctx context.Context, src llm.Buildable) (llm.Stream, err
 
 	if resp.StatusCode/100 != 2 {
 		apiErr := c.buildAPIError(resp)
-		pub.Close()
-		return ch, apiErr
+		action := HTTPErrorActionReturn
+		if c.cfg.ResolveHTTPErrorAction != nil {
+			action = c.cfg.ResolveHTTPErrorAction(req, resp.StatusCode, apiErr)
+		}
+		switch action {
+		case HTTPErrorActionStream:
+			pub.Error(apiErr)
+			pub.Close()
+			return ch, nil
+		default:
+			pub.Close()
+			return ch, apiErr
+		}
 	}
 
 	rateLimits := parseRateLimits(resp, c.cfg.RateLimitParser)
@@ -327,21 +338,29 @@ func (c *Client) resolveCostTargets(req llm.Request, upstream string) (string, s
 	return provider, req.Model
 }
 
-func (c *Client) emitTokenEstimates(ctx context.Context, pub llm.Publisher, req llm.Request) {
-	if c.cfg.TokenCounter == nil {
-		return
+func (c *Client) emitTokenEstimates(ctx context.Context, pub llm.Publisher, req llm.Request, wire any) {
+	if c.cfg.TokenCounter != nil {
+		count, err := c.cfg.TokenCounter.CountTokens(ctx, tokencount.TokenCountRequest{
+			Model:    req.Model,
+			Messages: req.Messages,
+			Tools:    req.Tools,
+		})
+		if err == nil && count != nil {
+			records := tokencount.EstimateRecords(count, c.cfg.ProviderName, req.Model, "heuristic", c.cfg.CostCalculator)
+			for _, rec := range records {
+				pub.TokenEstimate(rec)
+			}
+		}
 	}
 
-	count, err := c.cfg.TokenCounter.CountTokens(ctx, tokencount.TokenCountRequest{
-		Model:    req.Model,
-		Messages: req.Messages,
-		Tools:    req.Tools,
-	})
+	if c.cfg.APITokenCounter == nil {
+		return
+	}
+	count, err := c.cfg.APITokenCounter(ctx, req, wire)
 	if err != nil || count == nil {
 		return
 	}
-
-	records := tokencount.EstimateRecords(count, c.cfg.ProviderName, req.Model, "heuristic", c.cfg.CostCalculator)
+	records := tokencount.EstimateRecords(count, c.cfg.ProviderName, req.Model, "api", c.cfg.CostCalculator)
 	for _, rec := range records {
 		pub.TokenEstimate(rec)
 	}

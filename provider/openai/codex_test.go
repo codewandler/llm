@@ -293,10 +293,60 @@ func TestCodexTransport_StripsPromptCacheRetention(t *testing.T) {
 		"store:false must be injected by codexTransport")
 }
 
+func TestCodexTransport_RewritesPathAndInjectsHeaders(t *testing.T) {
+	var (
+		capturedPath    string
+		capturedHeaders http.Header
+	)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		capturedPath = r.URL.Path
+		capturedHeaders = r.Header.Clone()
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		_, _ = fmt.Fprintln(w, `event: response.completed`)
+		_, _ = fmt.Fprintln(w, `data: {"type":"response.completed","response":{"status":"completed","output":[],"usage":{"input_tokens":1,"output_tokens":1,"total_tokens":2}}}`)
+		_, _ = fmt.Fprintln(w, ``)
+	}))
+	defer server.Close()
+
+	exp := time.Now().Add(1 * time.Hour).Unix()
+	accessToken := makeJWT(t, map[string]any{"exp": exp, "sub": "test-user"})
+	auth := codexAuthFile{
+		AuthMode: "chatgpt",
+		Tokens: codexTokenStore{
+			AccessToken: accessToken,
+			AccountID:   "test-account",
+		},
+	}
+	path := writeAuthFile(t, auth)
+	c, err := loadCodexAuthFrom(path)
+	require.NoError(t, err)
+
+	transport := &codexTransport{base: http.DefaultTransport, auth: c}
+	reqBody := `{"model":"gpt-5.3-codex","stream":true,"input":[{"role":"user","content":"hi"}]}`
+	httpReq, err := http.NewRequest(http.MethodPost, server.URL+"/v1/responses", strings.NewReader(reqBody))
+	require.NoError(t, err)
+	httpReq.Header.Set("Content-Type", "application/json")
+
+	resp, err := transport.RoundTrip(httpReq)
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+	_ = resp.Body.Close()
+
+	assert.Equal(t, "/codex/responses", capturedPath)
+	assert.Equal(t, "Bearer "+accessToken, capturedHeaders.Get("Authorization"))
+	assert.Equal(t, "test-account", capturedHeaders.Get(codexAccountIDHeader))
+	assert.Equal(t, codexBetaValue, capturedHeaders.Get(codexBetaHeader))
+	assert.Equal(t, codexOriginator, capturedHeaders.Get("originator"))
+}
+
 // TestCodexAuth_Stream_ChatCompletions verifies that calling /v1/chat/completions
-// on api.openai.com with the ChatGPT OAuth token is rejected with the expected
-// missing-scope error. Chat Completions are not available with this token;
-// use the Responses API via NewProvider() instead (see TestCodexAuth_Stream_ResponsesAPI).
+// on api.openai.com with the ChatGPT OAuth token is rejected by the developer
+// API. The exact status may vary by account state (scope rejection, quota,
+// billing), but the request must fail as an API error. Chat Completions are not
+// available with this token; use the Responses API via NewProvider() instead
+// (see TestCodexAuth_Stream_ResponsesAPI).
 func TestCodexAuth_Stream_ChatCompletions(t *testing.T) {
 	if !CodexLocalAvailable() {
 		t.Skip("~/.codex/auth.json not available")
@@ -310,18 +360,17 @@ func TestCodexAuth_Stream_ChatCompletions(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	// Chat Completions requires the model.request scope which the ChatGPT
-	// Plus OAuth token does not carry — expect a 401 missing-scope error.
+	// Chat Completions is not a supported path for the ChatGPT OAuth token.
 	_, apiErr := p.CreateStream(ctx, llm.Request{
 		Model: ModelGPT4oMini,
 		Messages: llm.Messages{
 			llm.User("hi"),
 		},
 	})
-	require.Error(t, apiErr, "expected error: ChatGPT OAuth token lacks model.request scope")
-	assert.Contains(t, apiErr.Error(), "401",
-		"expected HTTP 401 (missing scope), got: %v", apiErr)
-	t.Logf("confirmed expected scope rejection: %v", apiErr)
+	require.Error(t, apiErr, "expected developer API request to fail with ChatGPT OAuth token")
+	assert.ErrorIs(t, apiErr, llm.ErrAPIError)
+	assert.Contains(t, apiErr.Error(), "HTTP ", "expected an HTTP API error, got: %v", apiErr)
+	t.Logf("confirmed expected developer API rejection: %v", apiErr)
 }
 
 // TestCodexAuth_Stream_ResponsesAPI makes a real streaming request to the

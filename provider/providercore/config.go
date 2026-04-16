@@ -9,6 +9,17 @@ import (
 	"github.com/codewandler/llm/usage"
 )
 
+// HTTPErrorAction describes how providercore should surface a non-2xx API response.
+type HTTPErrorAction int
+
+const (
+	// HTTPErrorActionReturn returns the error from Stream while keeping already
+	// published preamble events inspectable on the returned stream.
+	HTTPErrorActionReturn HTTPErrorAction = iota
+	// HTTPErrorActionStream emits the API error on the stream and returns nil.
+	HTTPErrorActionStream
+)
+
 // Config captures provider-level defaults wired into the core client.
 //
 // Provider implementations pass a Config to New and may customise it further
@@ -40,8 +51,17 @@ type Config struct {
 	// TokenCounter provides pre-request token estimates.
 	TokenCounter tokencount.TokenCounter
 
+	// APITokenCounter provides an optional exact/API-backed token estimate using
+	// the final typed wire payload about to be sent to the provider.
+	APITokenCounter func(ctx context.Context, req llm.Request, wire any) (*tokencount.TokenCount, error)
+
 	// ErrorParser converts non-2xx HTTP responses into provider-specific errors.
 	ErrorParser func(statusCode int, body []byte) error
+
+	// ResolveHTTPErrorAction customises how non-2xx HTTP responses are surfaced.
+	// Use llm.IsRetriableHTTPStatus inside the callback if a provider should
+	// return retriable API errors but stream non-retriable ones.
+	ResolveHTTPErrorAction func(req llm.Request, statusCode int, apiErr error) HTTPErrorAction
 
 	// RateLimitParser extracts rate-limit data from HTTP responses.
 	RateLimitParser func(*http.Response) *llm.RateLimits
@@ -135,10 +155,24 @@ func WithTokenCounter(counter tokencount.TokenCounter) Option {
 	}
 }
 
+// WithAPITokenCounter configures an optional exact/API-backed token estimate.
+func WithAPITokenCounter(counter func(context.Context, llm.Request, any) (*tokencount.TokenCount, error)) Option {
+	return func(cfg *Config) {
+		cfg.APITokenCounter = counter
+	}
+}
+
 // WithErrorParser sets a custom HTTP error translator.
 func WithErrorParser(fn func(int, []byte) error) Option {
 	return func(cfg *Config) {
 		cfg.ErrorParser = fn
+	}
+}
+
+// WithHTTPErrorActionResolver customises how non-2xx API responses are surfaced.
+func WithHTTPErrorActionResolver(fn func(llm.Request, int, error) HTTPErrorAction) Option {
+	return func(cfg *Config) {
+		cfg.ResolveHTTPErrorAction = fn
 	}
 }
 

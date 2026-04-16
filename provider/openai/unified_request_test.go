@@ -64,7 +64,6 @@ func TestBuildResponsesBodyUnified_Parity(t *testing.T) {
 		CacheHint:  &msg.CacheHint{Enabled: true, TTL: "1h"},
 		Messages: llm.Messages{
 			llm.System("sys1"),
-			msg.System("sys2").Build(),
 			llm.User("hello"),
 		},
 	}
@@ -76,6 +75,19 @@ func TestBuildResponsesBodyUnified_Parity(t *testing.T) {
 	require.NoError(t, err)
 
 	assertJSONEq(t, legacyBody, unifiedBody)
+}
+
+func TestBuildResponsesBodyUnified_ErrorsOnMultipleSystemMessages(t *testing.T) {
+	_, err := buildResponsesBodyUnified(llm.Request{
+		Model: "gpt-5.4",
+		Messages: llm.Messages{
+			llm.System("sys1"),
+			msg.System("sys2").Build(),
+			llm.User("hello"),
+		},
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "multiple system messages")
 }
 
 func assertJSONEq(t *testing.T, a, b []byte) {

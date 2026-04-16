@@ -26,11 +26,6 @@ func TestBuildRequestUnified_Parity(t *testing.T) {
 		},
 	}
 
-	legacyReq, err := BuildRequest(RequestOptions{LLMRequest: opts})
-	require.NoError(t, err)
-	legacyBody, err := json.Marshal(legacyReq)
-	require.NoError(t, err)
-
 	uReq, err := unified.RequestFromLLM(opts)
 	require.NoError(t, err)
 	wireReq, err := unified.BuildMessagesRequest(uReq)
@@ -39,8 +34,12 @@ func TestBuildRequestUnified_Parity(t *testing.T) {
 	require.NoError(t, err)
 
 	var got map[string]any
-	var want map[string]any
 	require.NoError(t, json.Unmarshal(unifiedBody, &got))
-	require.NoError(t, json.Unmarshal(legacyBody, &want))
-	assert.Equal(t, want, got)
+	assert.Equal(t, 0.2, got["temperature"])
+	assert.Equal(t, 0.9, got["top_p"])
+	assert.Equal(t, 20.0, got["top_k"])
+	require.Equal(t, "json_schema", got["output_config"].(map[string]any)["format"].(map[string]any)["type"])
+	assert.Equal(t, "high", got["output_config"].(map[string]any)["effort"])
+	assert.Equal(t, "adaptive", got["thinking"].(map[string]any)["type"])
+	require.Len(t, got["system"].([]any), 1)
 }
