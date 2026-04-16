@@ -1,0 +1,79 @@
+{
+  "models": [
+    {
+      "slug": "gpt-5.4",
+      "display_name": "gpt-5.4",
+      "description": "Latest frontier agentic coding model.",
+      "default_reasoning_level": "medium",
+      "visibility": "list",
+      "supported_in_api": true,
+      "priority": 0,
+      "additional_speed_tiers": ["fast"]
+    },
+    {
+      "slug": "gpt-5.2-codex",
+      "display_name": "gpt-5.2-codex",
+      "description": "Frontier agentic coding model.",
+      "default_reasoning_level": "medium",
+      "visibility": "list",
+      "supported_in_api": true,
+      "priority": 1
+    },
+    {
+      "slug": "gpt-5.1-codex-max",
+      "display_name": "gpt-5.1-codex-max",
+      "description": "Codex-optimized flagship for deep and fast reasoning.",
+      "default_reasoning_level": "high",
+      "visibility": "list",
+      "supported_in_api": true,
+      "priority": 2
+    },
+    {
+      "slug": "gpt-5.4-mini",
+      "display_name": "gpt-5.4-mini",
+      "description": "Smaller frontier agentic coding model.",
+      "default_reasoning_level": "medium",
+      "visibility": "list",
+      "supported_in_api": true,
+      "priority": 3
+    },
+    {
+      "slug": "gpt-5.3-codex",
+      "display_name": "gpt-5.3-codex",
+      "description": "Frontier Codex-optimized agentic coding model.",
+      "default_reasoning_level": "medium",
+      "visibility": "list",
+      "supported_in_api": true,
+      "priority": 4
+    },
+    {
+      "slug": "gpt-5.3-codex-spark",
+      "display_name": "gpt-5.3-codex-spark",
+      "description": "Ultra-fast coding model.",
+      "default_reasoning_level": "low",
+      "visibility": "list",
+      "supported_in_api": true,
+      "priority": 5,
+      "additional_speed_tiers": ["fast"]
+    },
+    {
+      "slug": "gpt-5.2",
+      "display_name": "gpt-5.2",
+      "description": "Optimized for professional work and long-running agents.",
+      "default_reasoning_level": "medium",
+      "visibility": "list",
+      "supported_in_api": true,
+      "priority": 6
+    },
+    {
+      "slug": "gpt-5.1-codex-mini",
+      "display_name": "gpt-5.1-codex-mini",
+      "description": "Optimized for Codex. Cheaper, faster, but less capable.",
+      "default_reasoning_level": "low",
+      "visibility": "list",
+      "supported_in_api": true,
+      "priority": 7,
+      "additional_speed_tiers": ["fast"]
+    }
+  ]
+}
