@@ -2,6 +2,7 @@ package providercore
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 
 	"github.com/codewandler/llm"
@@ -99,6 +100,27 @@ type Config struct {
 	TransformWireRequest func(api llm.ApiType, wire any) (any, error)
 
 	costCalculatorSet bool
+}
+
+// ApplyDefaults fills optional zero-value settings with package defaults.
+func (cfg *Config) ApplyDefaults() {
+	if !cfg.costCalculatorSet {
+		cfg.CostCalculator = usage.Default()
+	}
+	if cfg.DefaultHeaders == nil {
+		cfg.DefaultHeaders = make(http.Header)
+	}
+}
+
+// Validate reports invalid provider core configuration.
+func (cfg Config) Validate() error {
+	if cfg.ProviderName == "" {
+		return fmt.Errorf("providercore: ProviderName must be set")
+	}
+	if cfg.APIHint == llm.ApiTypeAuto {
+		return fmt.Errorf("providercore: APIHint must be a concrete API type")
+	}
+	return nil
 }
 
 // Option mutates a Config before constructing the Client.

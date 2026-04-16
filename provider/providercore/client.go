@@ -17,7 +17,6 @@ import (
 	"github.com/codewandler/llm/api/responses"
 	"github.com/codewandler/llm/api/unified"
 	"github.com/codewandler/llm/tokencount"
-	"github.com/codewandler/llm/usage"
 )
 
 // Client orchestrates request building, HTTP execution, and stream parsing for
@@ -390,18 +389,10 @@ func (c *Client) buildAPIError(resp *http.Response) error {
 }
 
 func applyDefaults(cfg *Config) {
-	if cfg.ProviderName == "" {
-		panic("providercore: ProviderName must be set")
+	if err := cfg.Validate(); err != nil {
+		panic(err.Error())
 	}
-	if cfg.APIHint == llm.ApiTypeAuto || cfg.APIHint == "" {
-		panic("providercore: APIHint must be a concrete API type")
-	}
-	if !cfg.costCalculatorSet {
-		cfg.CostCalculator = usage.Default()
-	}
-	if cfg.DefaultHeaders == nil {
-		cfg.DefaultHeaders = make(http.Header)
-	}
+	cfg.ApplyDefaults()
 }
 
 func resolveHTTPClient(opts *llm.Options) *http.Client {

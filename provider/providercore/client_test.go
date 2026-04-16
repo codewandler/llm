@@ -647,3 +647,56 @@ func TestClientStream_MutateRequestBody_StrippedField(t *testing.T) {
 	assert.False(t, eventHasStream,
 		"RequestEvent.Body must not contain fields stripped by MutateRequest")
 }
+
+func TestConfigApplyDefaultsAndValidate(t *testing.T) {
+	t.Parallel()
+
+	t.Run("apply defaults", func(t *testing.T) {
+		t.Parallel()
+
+		cfg := Config{}
+		cfg.ApplyDefaults()
+
+		require.NotNil(t, cfg.DefaultHeaders)
+		require.NotNil(t, cfg.CostCalculator)
+	})
+
+	t.Run("respect explicit nil cost calculator", func(t *testing.T) {
+		t.Parallel()
+
+		cfg := Config{}
+		WithCostCalculator(nil)(&cfg)
+		cfg.ApplyDefaults()
+
+		require.Nil(t, cfg.CostCalculator)
+	})
+
+	t.Run("validate missing provider name", func(t *testing.T) {
+		t.Parallel()
+
+		err := (Config{APIHint: llm.ApiTypeOpenAIChatCompletion}).Validate()
+		require.EqualError(t, err, "providercore: ProviderName must be set")
+	})
+
+	t.Run("validate missing api hint", func(t *testing.T) {
+		t.Parallel()
+
+		err := (Config{ProviderName: "test"}).Validate()
+		require.EqualError(t, err, "providercore: APIHint must be a concrete API type")
+	})
+
+	t.Run("validate success", func(t *testing.T) {
+		t.Parallel()
+
+		err := (Config{ProviderName: "test", APIHint: llm.ApiTypeOpenAIChatCompletion}).Validate()
+		require.NoError(t, err)
+	})
+}
+
+func TestClientStream_InvalidConfig(t *testing.T) {
+	t.Parallel()
+
+	assert.PanicsWithValue(t, "providercore: ProviderName must be set", func() {
+		_ = New(Config{})
+	})
+}
