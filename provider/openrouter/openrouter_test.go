@@ -34,7 +34,7 @@ func TestProvider_ResolveAutoAlias(t *testing.T) {
 	assert.Equal(t, "openrouter/auto", m.ID)
 }
 
-func TestProvider_Models_IncludeAutoIntentAliases(t *testing.T) {
+func TestProvider_Models_IncludeAutoBuiltinAliases(t *testing.T) {
 	p := New()
 	model, ok := p.Models().ByID("openrouter/auto")
 	require.True(t, ok)

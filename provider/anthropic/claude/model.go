@@ -61,8 +61,8 @@ func getClaudeModels() []llm.Model {
 		return preferredModels
 	}
 	models := llm.CatalogModelsForService(catalogSnapshot, "anthropic", llm.CatalogModelProjectionOptions{
-		ProviderName:         providerName,
-		ExcludeIntentAliases: true,
+		ProviderName:          providerName,
+		ExcludeBuiltinAliases: true,
 	})
 	if len(models) == 0 {
 		return preferredModels

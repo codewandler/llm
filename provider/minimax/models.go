@@ -11,8 +11,9 @@ const (
 	ModelM2           = "MiniMax-M2"
 )
 
-// ModelAliases maps short alias names to full model IDs.
-// Used by the auto package for provider-prefixed resolution (e.g., "minimax/fast").
+// ModelAliases maps provider-scoped shorthand aliases to full model IDs.
+// These are provider policy aliases used for resolution like "minimax/fast";
+// they are not the canonical source of truth for model discovery.
 var ModelAliases = map[string]string{
 	"minimax":      ModelM27,
 	"minimax:fast": ModelM27,

@@ -15,7 +15,7 @@ func TestCatalogModelsForService(t *testing.T) {
 	c := catalog.NewCatalog()
 	require.NoError(t, catalog.MergeCatalogFragment(&c, fragment))
 
-	models := CatalogModelsForService(c, "anthropic", CatalogModelProjectionOptions{IncludePricing: true, ExcludeIntentAliases: true})
+	models := CatalogModelsForService(c, "anthropic", CatalogModelProjectionOptions{IncludePricing: true, ExcludeBuiltinAliases: true})
 	require.NotEmpty(t, models)
 
 	sonnet, ok := models.ByID("claude-sonnet-4-6")
@@ -81,13 +81,13 @@ func TestCatalogModelsForRuntime(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	routable := CatalogModelsForRuntime(resolved, "ollama-local", true, CatalogModelProjectionOptions{ExcludeIntentAliases: true})
+	routable := CatalogModelsForRuntime(resolved, "ollama-local", true, CatalogModelProjectionOptions{ExcludeBuiltinAliases: true})
 	require.Len(t, routable, 1)
 	assert.Equal(t, "installed", routable[0].ID)
 	assert.Contains(t, routable[0].Aliases, "sonnet")
 	assert.NotContains(t, routable[0].Aliases, ModelFast)
 
-	visible := CatalogModelsForRuntime(resolved, "ollama-local", false, CatalogModelProjectionOptions{ExcludeIntentAliases: true})
+	visible := CatalogModelsForRuntime(resolved, "ollama-local", false, CatalogModelProjectionOptions{ExcludeBuiltinAliases: true})
 	require.Len(t, visible, 2)
 
 	aliases := CatalogFactualAliasesForRuntime(resolved, "ollama-local")

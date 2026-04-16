@@ -27,8 +27,8 @@ func selectBuiltinAliasModelsFromCatalog(providerType string) (builtinAliasModel
 		return builtinAliasModels{}, false
 	}
 	models := llm.CatalogModelsForService(catalogSnapshot, serviceID, llm.CatalogModelProjectionOptions{
-		ProviderName:         providerType,
-		ExcludeIntentAliases: true,
+		ProviderName:          providerType,
+		ExcludeBuiltinAliases: true,
 	})
 	if len(models) == 0 {
 		return builtinAliasModels{}, false

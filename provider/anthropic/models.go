@@ -24,6 +24,8 @@ var ModelAliases = map[string]string{
 	"haiku":  ModelHaiku,
 }
 
+// fallbackModels preserves tested names, ordering, and built-in aliases when
+// the catalog snapshot is unavailable.
 var fallbackModels = llm.Models{
 	{ID: ModelSonnet, Name: "Claude Sonnet 4.6", Provider: providerName, Aliases: []string{llm.ModelDefault, llm.ModelFast, ModelAliases["sonnet"], "claude-sonnet-4-6"}},
 	{ID: ModelOpus, Name: "Claude Opus 4.6", Provider: providerName, Aliases: []string{llm.ModelPowerful, ModelAliases["opus"], "claude-opus-4-6"}},
@@ -57,8 +59,8 @@ func loadAnthropicModels() llm.Models {
 	}
 
 	models := llm.CatalogModelsForService(catalogSnapshot, providerName, llm.CatalogModelProjectionOptions{
-		ProviderName:         providerName,
-		ExcludeIntentAliases: true,
+		ProviderName:          providerName,
+		ExcludeBuiltinAliases: true,
 	})
 	if len(models) == 0 {
 		return fallbackModels

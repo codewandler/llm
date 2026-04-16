@@ -109,7 +109,9 @@ type modelInfo struct {
 	UseResponsesAPI       bool          // True if the model must be called via /v1/responses instead of /v1/chat/completions
 }
 
-// modelRegistry maps model IDs to their metadata.
+// modelRegistry maps model IDs to provider-specific routing metadata.
+// The built-in catalog is the source of truth for model discovery; this table
+// only captures OpenAI behavior such as API selection and reasoning category.
 var modelRegistry = map[string]modelInfo{
 	// GPT-5.4 series (flagship, latest) — requires Responses API (/v1/responses)
 	"gpt-5.4":      {ID: "gpt-5.4", Name: "GPT-5.4", Category: categoryPreGPT51, SupportsExtendedCache: true, UseResponsesAPI: true},
@@ -239,8 +241,8 @@ func loadOpenAIModels(providerName string, codexOnly bool) llm.Models {
 	}
 
 	models := llm.CatalogModelsForService(catalogSnapshot, "openai", llm.CatalogModelProjectionOptions{
-		ProviderName:         providerName,
-		ExcludeIntentAliases: true,
+		ProviderName:          providerName,
+		ExcludeBuiltinAliases: true,
 	})
 	if len(models) == 0 {
 		return fallback

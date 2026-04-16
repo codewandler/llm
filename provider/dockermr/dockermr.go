@@ -150,8 +150,8 @@ func (p *Provider) catalogModels(ctx context.Context) (llm.Models, error) {
 	source.BaseURL = p.opts.BaseURL
 	source.Client = p.client
 	return llm.CatalogVisibleModelsForRuntime(ctx, base, "dockermr-local", source, llm.CatalogModelProjectionOptions{
-		ProviderName:         p.Name(),
-		ExcludeIntentAliases: true,
+		ProviderName:          p.Name(),
+		ExcludeBuiltinAliases: true,
 	})
 }
 

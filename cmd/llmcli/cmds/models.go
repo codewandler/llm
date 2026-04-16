@@ -46,14 +46,16 @@ func NewModelsCmd(root *RootFlags) *cobra.Command {
 		Short: "List available models",
 		Long: `List all models available through configured credentials.
 
-		Shows friendly aliases first, then groups models by provider.
+		Shows built-in top-level aliases (fast/default/powerful) first, then groups models by provider.
 		When filtering, only matching models are shown and aliases are printed inline.
+		Provider-scoped aliases such as openai/codex remain available even when they are not top-level aliases.
 
 		Examples:
 		  llmcli models                     # List aliases and grouped models
 		  llmcli models -f sonnet           # Filter by substring
 		  llmcli models --provider openai   # Only show OpenAI models
 		  llmcli models --alias sonnet      # Only models with alias 'sonnet'
+		  llmcli models --alias openai/codex # Match a provider-scoped alias
 		  llmcli models --json              # Emit machine-readable JSON`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runModels(cmd.Context(), opts, root)

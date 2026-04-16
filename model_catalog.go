@@ -11,9 +11,9 @@ import (
 )
 
 type CatalogModelProjectionOptions struct {
-	ProviderName         string
-	IncludePricing       bool
-	ExcludeIntentAliases bool
+	ProviderName          string
+	IncludePricing        bool
+	ExcludeBuiltinAliases bool
 }
 
 type CatalogSnapshot = catalog.Catalog
@@ -140,7 +140,7 @@ func projectCatalogModel(providerName string, offering catalog.Offering, model c
 		ID:       offering.WireModelID,
 		Name:     firstNonEmptyString(model.Name, offering.WireModelID),
 		Provider: providerName,
-		Aliases:  projectedCatalogAliases(offering, model, opts.ExcludeIntentAliases),
+		Aliases:  projectedCatalogAliases(offering, model, opts.ExcludeBuiltinAliases),
 	}
 	if opts.IncludePricing {
 		pricing := offering.Pricing
@@ -160,15 +160,15 @@ func projectCatalogModel(providerName string, offering catalog.Offering, model c
 	return entry
 }
 
-func projectedCatalogAliases(offering catalog.Offering, model catalog.ModelRecord, excludeIntent bool) []string {
+func projectedCatalogAliases(offering catalog.Offering, model catalog.ModelRecord, excludeBuiltin bool) []string {
 	aliases := mergeAliasesSlices(nil, offering.Aliases)
 	aliases = mergeAliasesSlices(aliases, model.Aliases)
-	if !excludeIntent {
+	if !excludeBuiltin {
 		return aliases
 	}
 	out := make([]string, 0, len(aliases))
 	for _, alias := range aliases {
-		if isIntentAlias(alias) {
+		if isBuiltinAlias(alias) {
 			continue
 		}
 		out = append(out, alias)
@@ -194,7 +194,7 @@ func mergeAliasesSlices(a, b []string) []string {
 	return out
 }
 
-func isIntentAlias(alias string) bool {
+func isBuiltinAlias(alias string) bool {
 	switch alias {
 	case ModelDefault, ModelFast, ModelPowerful:
 		return true
@@ -282,7 +282,7 @@ func aliasMapFromView(view catalog.View) map[string]string {
 	result := make(map[string]string)
 	conflicts := make(map[string]struct{})
 	for _, alias := range view.AliasNames() {
-		if isIntentAlias(alias) {
+		if isBuiltinAlias(alias) {
 			continue
 		}
 		items := view.ResolveAll(alias)

@@ -80,8 +80,8 @@ func catalogModels() llm.Models {
 	c, err := llm.LoadBuiltInCatalog()
 	if err == nil {
 		models := llm.CatalogModelsForService(c, providerName, llm.CatalogModelProjectionOptions{
-			ProviderName:         providerName,
-			ExcludeIntentAliases: true,
+			ProviderName:          providerName,
+			ExcludeBuiltinAliases: true,
 		})
 		if len(models) > 0 {
 			return ensureOpenRouterAliases(models)

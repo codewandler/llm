@@ -279,6 +279,9 @@ func WithAnthropic() Option {
 }
 
 // WithGlobalAlias adds a user-defined top-level alias that resolves to one or more targets.
+// Use this to add custom aliases on top of the built-in fast/default/powerful
+// set, for example a project-local shortcut that points to one or more
+// provider-scoped models.
 // Targets should be provider-prefixed model references (e.g., "openai/o3", "openrouter/openai/o3").
 // Multiple targets enable failover - if the first target fails, the next is tried.
 //
