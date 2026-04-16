@@ -146,7 +146,7 @@ func TestDetectProviders_CodexLocalDetected(t *testing.T) {
 		ProviderOpenRouter: true,
 		ProviderMiniMax:    true,
 		ProviderOllama:     true,
-		ProviderDockerMR: true,
+		ProviderDockerMR:   true,
 	})
 
 	require.Len(t, providers, 1)
@@ -166,7 +166,7 @@ func TestDetectProviders_CodexLocalNotDetected_NoFile(t *testing.T) {
 		ProviderOpenRouter: true,
 		ProviderMiniMax:    true,
 		ProviderOllama:     true,
-		ProviderDockerMR: true,
+		ProviderDockerMR:   true,
 	})
 
 	require.Empty(t, providers)
@@ -184,7 +184,7 @@ func TestDetectProviders_OllamaDetected_EnvVar(t *testing.T) {
 		ProviderOpenRouter: true,
 		ProviderMiniMax:    true,
 		ProviderChatGPT:    true,
-		ProviderDockerMR: true,
+		ProviderDockerMR:   true,
 	})
 
 	require.Len(t, providers, 1)
@@ -207,7 +207,7 @@ func TestDetectProviders_OllamaNotDetected_NoEnvVar(t *testing.T) {
 		ProviderOpenRouter: true,
 		ProviderMiniMax:    true,
 		ProviderChatGPT:    true,
-		ProviderDockerMR: true,
+		ProviderDockerMR:   true,
 	})
 
 	require.Empty(t, providers)
@@ -400,8 +400,8 @@ func TestWithoutOllama_SuppressesAutoDetection(t *testing.T) {
 	providers := detectProviders(nil, nil, map[string]bool{
 		ProviderClaude: true, ProviderAnthropic: true, ProviderBedrock: true,
 		ProviderOpenAI: true, ProviderOpenRouter: true, ProviderMiniMax: true,
-		ProviderChatGPT: true,
-		ProviderOllama:  true, // ← what WithoutOllama() sets in the disabled map
+		ProviderChatGPT:  true,
+		ProviderOllama:   true, // ← what WithoutOllama() sets in the disabled map
 		ProviderDockerMR: true,
 	})
 
@@ -425,8 +425,8 @@ func TestWithoutChatGPT_SuppressesAutoDetection(t *testing.T) {
 	providers := detectProviders(nil, nil, map[string]bool{
 		ProviderClaude: true, ProviderAnthropic: true, ProviderBedrock: true,
 		ProviderOpenAI: true, ProviderOpenRouter: true, ProviderMiniMax: true,
-		ProviderOllama:  true,
-		ProviderChatGPT: true, // ← what WithoutChatGPT() sets in the disabled map
+		ProviderOllama:   true,
+		ProviderChatGPT:  true, // ← what WithoutChatGPT() sets in the disabled map
 		ProviderDockerMR: true,
 	})
 

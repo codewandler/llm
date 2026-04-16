@@ -73,6 +73,16 @@ func (p *Provider) WithCodexModels() *Provider {
 	return &clone
 }
 
+// WithName returns a copy of the provider that identifies itself with the given
+// name in error messages, usage records, and stream events. This allows the
+// provider to be reused for OpenAI-compatible APIs that are not OpenAI itself
+// (e.g. Docker Model Runner).
+func (p *Provider) WithName(name string) *Provider {
+	clone := *p
+	clone.providerName = name
+	return &clone
+}
+
 // GetDefaultModel returns the configured default model ID.
 func (p *Provider) GetDefaultModel() string { return p.defaultModel }
 func (p *Provider) Name() string {
@@ -130,7 +140,7 @@ func (p *Provider) FetchModels(ctx context.Context) ([]llm.Model, error) {
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		return nil, llm.NewErrAPIError(llm.ProviderNameOpenAI, resp.StatusCode, string(body))
+		return nil, llm.NewErrAPIError(p.Name(), resp.StatusCode, string(body))
 	}
 
 	var result struct {
@@ -148,7 +158,7 @@ func (p *Provider) FetchModels(ctx context.Context) ([]llm.Model, error) {
 		models = append(models, llm.Model{
 			ID:       m.ID,
 			Name:     m.ID,
-			Provider: providerName,
+			Provider: p.Name(),
 		})
 	}
 	return models, nil
@@ -163,7 +173,7 @@ func (p *Provider) FetchModels(ctx context.Context) ([]llm.Model, error) {
 func (p *Provider) CreateStream(ctx context.Context, src llm.Buildable) (llm.Stream, error) {
 	opts, err := src.BuildRequest(ctx)
 	if err != nil {
-		return nil, llm.NewErrBuildRequest(llm.ProviderNameOpenAI, err)
+		return nil, llm.NewErrBuildRequest(p.Name(), err)
 	}
 
 	enriched, err := enrichOpts(opts)

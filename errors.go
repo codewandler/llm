@@ -9,11 +9,15 @@ import (
 
 // Provider name constants used in ProviderError.Provider.
 const (
-	ProviderNameAnthropic  = "anthropic"
-	ProviderNameClaude     = "claude"
-	ProviderNameBedrock    = "bedrock"
-	ProviderNameChatGPT    = "chatgpt"
-	ProviderNameOllama     = "ollama"
+	ProviderNameAnthropic = "anthropic"
+	ProviderNameClaude    = "claude"
+	ProviderNameBedrock   = "bedrock"
+	ProviderNameChatGPT   = "chatgpt"
+	ProviderNameOllama    = "ollama"
+	// ProviderNameDockerMR is the identifier for the Docker Model Runner provider.
+	// Docker Model Runner is built into Docker Desktop 4.40+ and available as a
+	// plugin for Docker Engine on Linux. No API key is required.
+	ProviderNameDockerMR   = "dockermr"
 	ProviderNameOpenAI     = "openai"
 	ProviderNameOpenRouter = "openrouter"
 	ProviderNameRouter     = "router"

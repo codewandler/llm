@@ -33,7 +33,7 @@ func detectProviders(httpClient *http.Client, llmOpts []llm.Option, disabled map
 				}
 				return claude.New(claudeOpts...)
 			},
-			modelAliases: anthropic.ModelAliases,
+			modelAliases: modelAliasesForProvider(ProviderClaude),
 			hasAliases:   true,
 		})
 	}
@@ -50,7 +50,7 @@ func detectProviders(httpClient *http.Client, llmOpts []llm.Option, disabled map
 				}
 				return anthropic.New(anthropicOpts...)
 			},
-			modelAliases: anthropic.ModelAliases,
+			modelAliases: modelAliasesForProvider(ProviderAnthropic),
 			hasAliases:   true,
 		})
 	}
@@ -72,7 +72,7 @@ func detectProviders(httpClient *http.Client, llmOpts []llm.Option, disabled map
 				}
 				return bedrock.New(bedrockOpts...)
 			},
-			modelAliases: bedrock.ModelAliases,
+			modelAliases: modelAliasesForProvider(ProviderBedrock),
 			hasAliases:   true,
 		})
 	}
@@ -88,7 +88,7 @@ func detectProviders(httpClient *http.Client, llmOpts []llm.Option, disabled map
 				}
 				return openai.New(opts...)
 			},
-			modelAliases: openai.ModelAliases,
+			modelAliases: modelAliasesForProvider(ProviderOpenAI),
 			hasAliases:   true,
 		})
 	}
@@ -105,7 +105,7 @@ func detectProviders(httpClient *http.Client, llmOpts []llm.Option, disabled map
 				}
 				return openrouter.New(routerOpts...)
 			},
-			modelAliases: nil,
+			modelAliases: modelAliasesForProvider(ProviderOpenRouter),
 			hasAliases:   false,
 		})
 	}
@@ -125,7 +125,7 @@ func detectProviders(httpClient *http.Client, llmOpts []llm.Option, disabled map
 				}
 				return minimax.New(minimaxOpts...)
 			},
-			modelAliases: minimax.ModelAliases,
+			modelAliases: modelAliasesForProvider(ProviderMiniMax),
 			hasAliases:   true,
 		})
 	}
@@ -165,7 +165,7 @@ func detectProviders(httpClient *http.Client, llmOpts []llm.Option, disabled map
 					}
 					return auth.NewProvider(base)
 				},
-				modelAliases: openai.CodexModelAliases,
+				modelAliases: modelAliasesForProvider(ProviderChatGPT),
 				hasAliases:   true,
 			})
 		}

@@ -1,6 +1,9 @@
 package auto
 
 import (
+	"sync"
+
+	"github.com/codewandler/llm/catalog"
 	"github.com/codewandler/llm/provider/anthropic"
 	"github.com/codewandler/llm/provider/bedrock"
 	"github.com/codewandler/llm/provider/minimax"
@@ -54,6 +57,12 @@ var providerAliasModels = map[string]aliasModels{
 	},
 }
 
+var (
+	builtinCatalogOnce sync.Once
+	builtinCatalog     catalog.Catalog
+	builtinCatalogErr  error
+)
+
 // buildAliasTargets creates alias targets for a provider instance.
 func buildAliasTargets(instanceName, providerType string) map[string]router.AliasTarget {
 	models, ok := providerAliasModels[providerType]
@@ -74,13 +83,22 @@ func buildAliasTargets(instanceName, providerType string) map[string]router.Alia
 }
 
 // modelAliasesForProvider returns the local model aliases for a provider type.
-// Aliases are defined in each provider package (e.g., openai.ModelAliases).
+// Catalog-backed factual aliases are preferred when available. Provider-local
+// fallback registries remain in place for providers not yet modeled in catalog.
 func modelAliasesForProvider(providerType string) map[string]string {
+	if c, ok := autoCatalog(); ok {
+		if aliases := modelAliasesFromCatalog(c, providerType); len(aliases) > 0 {
+			return aliases
+		}
+	}
+
 	switch providerType {
 	case ProviderClaude, ProviderAnthropic:
 		return anthropic.ModelAliases
 	case ProviderOpenAI:
 		return openai.ModelAliases
+	case ProviderOpenRouter:
+		return nil
 	case ProviderChatGPT:
 		return openai.CodexModelAliases
 	case ProviderBedrock:
@@ -89,5 +107,33 @@ func modelAliasesForProvider(providerType string) map[string]string {
 		return minimax.ModelAliases
 	default:
 		return nil
+	}
+}
+
+func autoCatalog() (catalog.Catalog, bool) {
+	builtinCatalogOnce.Do(func() {
+		builtinCatalog, builtinCatalogErr = catalog.LoadBuiltIn()
+	})
+	return builtinCatalog, builtinCatalogErr == nil
+}
+
+func modelAliasesFromCatalog(c catalog.Catalog, providerType string) map[string]string {
+	serviceID, ok := catalogServiceID(providerType)
+	if !ok {
+		return nil
+	}
+	return c.FactualAliasesForService(serviceID)
+}
+
+func catalogServiceID(providerType string) (string, bool) {
+	switch providerType {
+	case ProviderClaude, ProviderAnthropic:
+		return "anthropic", true
+	case ProviderOpenAI:
+		return "openai", true
+	case ProviderOpenRouter:
+		return "openrouter", true
+	default:
+		return "", false
 	}
 }

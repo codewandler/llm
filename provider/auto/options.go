@@ -119,7 +119,7 @@ func WithClaudeAccount(name string, store claude.TokenStore) Option {
 				}
 				return claude.New(claudeOpts...)
 			},
-			modelAliases: anthropic.ModelAliases,
+			modelAliases: modelAliasesForProvider(ProviderClaude),
 			hasAliases:   true,
 		})
 	}
@@ -139,7 +139,7 @@ func WithClaudeLocal() Option {
 				}
 				return claude.New(claudeOpts...)
 			},
-			modelAliases: anthropic.ModelAliases,
+			modelAliases: modelAliasesForProvider(ProviderClaude),
 			hasAliases:   true,
 		})
 	}
@@ -180,7 +180,7 @@ func WithCodexLocal() Option {
 				}
 				return auth.NewProvider(base)
 			},
-			modelAliases: openai.CodexModelAliases,
+			modelAliases: modelAliasesForProvider(ProviderChatGPT),
 			hasAliases:   true,
 		})
 	}
@@ -200,7 +200,7 @@ func WithBedrock() Option {
 				}
 				return bedrock.New(bedrockOpts...)
 			},
-			modelAliases: bedrock.ModelAliases,
+			modelAliases: modelAliasesForProvider(ProviderBedrock),
 			hasAliases:   true,
 		})
 	}
@@ -220,7 +220,7 @@ func WithOpenAI() Option {
 				}
 				return openai.New(opts...)
 			},
-			modelAliases: openai.ModelAliases,
+			modelAliases: modelAliasesForProvider(ProviderOpenAI),
 			hasAliases:   false,
 		})
 	}
@@ -241,7 +241,7 @@ func WithOpenRouter() Option {
 				}
 				return openrouter.New(routerOpts...)
 			},
-			modelAliases: nil,
+			modelAliases: modelAliasesForProvider(ProviderOpenRouter),
 			hasAliases:   false,
 		})
 	}
@@ -262,7 +262,7 @@ func WithAnthropic() Option {
 				}
 				return anthropic.New(anthropicOpts...)
 			},
-			modelAliases: anthropic.ModelAliases,
+			modelAliases: modelAliasesForProvider(ProviderAnthropic),
 			hasAliases:   true,
 		})
 	}

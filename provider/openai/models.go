@@ -82,8 +82,8 @@ var ModelAliases = map[string]string{
 // Only models in categoryCodex are included because other OpenAI model IDs
 // are not accepted by the chatgpt.com/backend-api/codex/responses endpoint.
 var CodexModelAliases = map[string]string{
-	"codex": ModelGPT53Codex,      // default / most capable Codex model
-	"mini":  ModelGPT51CodexMini,  // cheapest Codex model
+	"codex": ModelGPT53Codex,     // default / most capable Codex model
+	"mini":  ModelGPT51CodexMini, // cheapest Codex model
 }
 
 // modelCategory identifies reasoning support level for a model.
@@ -263,7 +263,9 @@ func getModelInfo(model string) (modelInfo, error) {
 func mapEffortAndThinking(model string, effort llm.Effort, thinking llm.ThinkingMode) (string, error) {
 	info, err := getModelInfo(model)
 	if err != nil {
-		return "", err
+		// Unknown model (e.g. an OpenAI-compatible provider like Docker Model Runner).
+		// Treat as non-reasoning: no reasoning_effort field, no error.
+		return "", nil
 	}
 
 	// Non-reasoning models never send reasoning_effort.

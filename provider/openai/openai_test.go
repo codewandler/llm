@@ -652,9 +652,9 @@ func TestMapEffortAndThinking(t *testing.T) {
 }
 
 func TestMapEffortAndThinking_UnknownModel(t *testing.T) {
-	_, err := mapEffortAndThinking("unknown-model", llm.EffortHigh, llm.ThinkingAuto)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "unknown model")
+	result, err := mapEffortAndThinking("unknown-model", llm.EffortHigh, llm.ThinkingAuto)
+	require.NoError(t, err)
+	assert.Equal(t, "", result)
 }
 
 // --- enrichOpts + ccBuildRequest integration tests ---
