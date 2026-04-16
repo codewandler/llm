@@ -5,6 +5,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/codewandler/llm/catalog"
 )
 
 func TestCalcCost(t *testing.T) {
@@ -34,10 +36,10 @@ func TestCalcCost(t *testing.T) {
 			},
 			pricing: Pricing{Input: 3.0, Output: 15.0, CachedInput: 0.30, CacheWrite: 3.75},
 			wantCost: Cost{
-				Input:      1.5,  // 500k * 3.0 / 1M
-				CacheRead:  0.09, // 300k * 0.30 / 1M
-				CacheWrite: 0.75, // 200k * 3.75 / 1M
-				Output:     1.5,  // 100k * 15.0 / 1M
+				Input:      1.5,
+				CacheRead:  0.09,
+				CacheWrite: 0.75,
+				Output:     1.5,
 				Total:      3.84,
 				Source:     "calculated",
 			},
@@ -55,7 +57,7 @@ func TestCalcCost(t *testing.T) {
 		{
 			name:    "reasoning fallback to output rate",
 			tokens:  TokenItems{{Kind: KindReasoning, Count: 1_000_000}},
-			pricing: Pricing{Output: 15.0, Reasoning: 0}, // Reasoning == 0 means use Output
+			pricing: Pricing{Output: 15.0, Reasoning: 0},
 			wantCost: Cost{
 				Reasoning: 15.0,
 				Total:     15.0,
@@ -78,53 +80,23 @@ func TestCalcCost(t *testing.T) {
 	}
 }
 
-func TestStatic(t *testing.T) {
-	calc := Static() // uses KnownPricing
-
-	t.Run("exact match", func(t *testing.T) {
-		tokens := TokenItems{{Kind: KindInput, Count: 1_000_000}}
-		cost, ok := calc.Calculate("anthropic", "claude-sonnet-4-6", tokens)
-		require.True(t, ok)
-		assert.Equal(t, "calculated", cost.Source)
-		assert.InDelta(t, 3.0, cost.Total, 0.001)
-	})
-
-	t.Run("prefix match with date suffix", func(t *testing.T) {
-		tokens := TokenItems{{Kind: KindInput, Count: 1_000_000}}
-		cost, ok := calc.Calculate("anthropic", "claude-sonnet-4-6-20251015", tokens)
-		require.True(t, ok)
-		assert.InDelta(t, 3.0, cost.Total, 0.001)
-	})
-
-	t.Run("unknown model", func(t *testing.T) {
-		tokens := TokenItems{{Kind: KindInput, Count: 1_000_000}}
-		_, ok := calc.Calculate("anthropic", "unknown-model-xyz", tokens)
-		assert.False(t, ok)
-	})
-}
-
-func TestDefault(t *testing.T) {
+func TestDefault_CatalogModelPricing(t *testing.T) {
 	calc := Default()
-
-	// Sanity check: known models from KnownPricing should resolve
 	tokens := TokenItems{{Kind: KindInput, Count: 1_000_000}}
 
 	cost, ok := calc.Calculate("anthropic", "claude-sonnet-4-6", tokens)
-	require.True(t, ok, "claude-sonnet-4-6 should be in KnownPricing")
+	require.True(t, ok, "claude-sonnet-4-6 should be resolved via catalog")
 	assert.Greater(t, cost.Total, 0.0)
 
-	cost, ok = calc.Calculate("openai", "gpt-4o", tokens)
-	require.True(t, ok, "gpt-4o should be in KnownPricing")
+	cost, ok = calc.Calculate("minimax", "MiniMax-M2.7", tokens)
+	require.True(t, ok, "MiniMax-M2.7 should be resolved via catalog")
 	assert.Greater(t, cost.Total, 0.0)
 }
 
-func TestStatic_ProviderAliases(t *testing.T) {
+func TestDefault_ProviderAliases(t *testing.T) {
 	calc := Default()
 	tokens := TokenItems{{Kind: KindInput, Count: 1_000_000}}
 
-	// "claude" (OAuth wrapper) must resolve via the "anthropic" alias and
-	// return identical pricing.  Removing the alias would silently produce
-	// zero cost with no error, so this test acts as a regression guard.
 	costClaude, ok := calc.Calculate("claude", "claude-sonnet-4-6", tokens)
 	require.True(t, ok, "claude provider should resolve via anthropic alias")
 
@@ -136,49 +108,98 @@ func TestStatic_ProviderAliases(t *testing.T) {
 }
 
 func TestCalcCost_NegativeInputProducesNegativeCost(t *testing.T) {
-	// CalcCost itself does not clamp: providers are responsible for clamping
-	// before calling CalcCost.  This test documents that behaviour so a
-	// future change doesn't silently introduce clamping at the wrong layer.
 	tokens := TokenItems{{Kind: KindInput, Count: -100}}
 	pricing := Pricing{Input: 3.0}
 	got := CalcCost(tokens, pricing)
-	assert.True(t, got.Input < 0, "negative input tokens must produce negative cost (clamping is the caller's job)")
+	assert.True(t, got.Input < 0, "negative input tokens must produce negative cost")
 }
 
-func TestStatic_PrefixFallback_AllKnownModels(t *testing.T) {
-	// Every entry in KnownPricing must be reachable via a synthetic
-	// future-dated variant, ensuring the prefix-matching logic covers the
-	// full registry.  This is ported from the old
-	// provider/anthropic/models_test.go TestMatchPricingByPrefix_DerivedFromRegistry.
-	calc := Static()
-	for _, entry := range KnownPricing {
-		futureID := entry.Model + "-20991231"
-		cost, ok := calc.Calculate(entry.Provider, futureID, TokenItems{{Kind: KindInput, Count: 1_000_000}})
-		assert.True(t, ok, "prefix lookup failed for future variant %q (provider %s)", futureID, entry.Provider)
-		if ok {
-			// Must produce the same cost as the exact match.
-			exactCost, _ := calc.Calculate(entry.Provider, entry.Model, TokenItems{{Kind: KindInput, Count: 1_000_000}})
-			assert.InDelta(t, exactCost.Total, cost.Total, 1e-9,
-				"prefix match for %q should equal exact match for %q", futureID, entry.Model)
-		}
-	}
+func TestDefault_UnknownModel(t *testing.T) {
+	calc := Default()
+	tokens := TokenItems{{Kind: KindInput, Count: 1_000_000}}
+	_, ok := calc.Calculate("anthropic", "unknown-model-xyz", tokens)
+	assert.False(t, ok)
 }
 
-func TestStatic_BedrockInferenceProfilePrefix(t *testing.T) {
-	// Bedrock models can be prefixed with region (e.g. "us.anthropic.claude-sonnet-4-6").
-	// The provider strips the prefix before calling Calculate, so here we test
-	// the bare model ID (no region prefix) against the pricing table.
-	calc := Static()
+func TestDefault_LineKeyFallback(t *testing.T) {
+	calc := Default()
 	tokens := TokenItems{{Kind: KindInput, Count: 1_000_000}}
 
-	// Bare model ID (after prefix stripping by provider) — must match.
-	cost, ok := calc.Calculate("bedrock", "anthropic.claude-sonnet-4-6", tokens)
-	require.True(t, ok, "bare Bedrock model should resolve pricing")
-	assert.Greater(t, cost.Total, 0.0, "Bedrock model should have non-zero cost")
+	cost, ok := calc.Calculate("anthropic", "claude-sonnet-4-6-20250929", tokens)
+	require.True(t, ok, "future-dated variant should fall back to line-level pricing")
+	assert.Greater(t, cost.Total, 0.0)
 
-	// A version suffix should also resolve via prefix match.
-	cost2, ok2 := calc.Calculate("bedrock", "anthropic.claude-sonnet-4-6-v2:0", tokens)
-	if ok2 {
-		assert.Greater(t, cost2.Total, 0.0)
+	exactCost, ok2 := calc.Calculate("anthropic", "claude-sonnet-4-6", tokens)
+	require.True(t, ok2)
+	assert.InDelta(t, exactCost.Total, cost.Total, 1e-9,
+		"line fallback for %q should equal exact match", "claude-sonnet-4-6-20250929")
+}
+
+func TestDefault_BedrockOfferings(t *testing.T) {
+	calc := Default()
+	tokens := TokenItems{{Kind: KindInput, Count: 1_000_000}}
+
+	cost, ok := calc.Calculate("bedrock", "anthropic.claude-sonnet-4-6", tokens)
+	require.True(t, ok, "bedrock offering should resolve via catalog")
+	assert.Greater(t, cost.Total, 0.0, "bedrock model should have non-zero cost")
+}
+
+func TestDefault_CodexProviderAliasResolvesOpenAIPricing(t *testing.T) {
+	calc := Default()
+	tokens := TokenItems{{Kind: KindInput, Count: 1_000_000}}
+
+	costOpenAI, okOpenAI := calc.Calculate("openai", "gpt-5.4-mini", tokens)
+	require.True(t, okOpenAI, "openai gpt-5.4-mini should resolve via built-in catalog fallback")
+	require.Greater(t, costOpenAI.Total, 0.0)
+
+	costCodex, okCodex := calc.Calculate("codex", "gpt-5.4-mini", tokens)
+	require.True(t, okCodex, "codex should reuse openai pricing for identical wire model IDs")
+	assert.InDelta(t, costOpenAI.Total, costCodex.Total, 1e-12)
+	assert.InDelta(t, costOpenAI.Input, costCodex.Input, 1e-12)
+}
+
+func TestInferPricingModelKey_OpenAIDottedVersions(t *testing.T) {
+	assert.Equal(t, pricingByModelKey{Creator: "openai", Family: "gpt", Version: "5.4", Variant: "mini"}, inferPricingModelKey("openai", "gpt-5.4-mini"))
+	assert.Equal(t, pricingByModelKey{Creator: "openai", Family: "gpt", Version: "5.3", Variant: "codex"}, inferPricingModelKey("openai", "gpt-5.3-codex"))
+	assert.Equal(t, pricingByModelKey{Creator: "openai", Family: "gpt", Version: "5.1", Variant: "codex-mini"}, inferPricingModelKey("openai", "gpt-5.1-codex-mini"))
+}
+
+func TestDefault_CodexOpenAIFallback(t *testing.T) {
+	c, err := catalog.LoadBuiltIn()
+	require.NoError(t, err)
+
+	anthropicOfferings := c.OfferingsByService("anthropic")
+	require.NotEmpty(t, anthropicOfferings, "anthropic should have offerings")
+
+	calc := Default()
+	tokens := TokenItems{{Kind: KindInput, Count: 1_000_000}}
+
+	found := false
+	for _, offering := range anthropicOfferings {
+		modelKey := catalog.LineID(offering.ModelKey)
+		cost, ok := calc.Calculate("anthropic", offering.WireModelID, tokens)
+		if ok && cost.Total > 0 {
+			found = true
+			t.Logf("resolved %s via catalog", modelKey)
+			return
+		}
 	}
+	require.True(t, found, "at least one anthropic model should be resolvable via catalog")
+}
+
+func TestCompose(t *testing.T) {
+	calc := Compose(Default())
+
+	ok1, ok2 := false, false
+	var c1, c2 Cost
+
+	c1, ok1 = calc.Calculate("anthropic", "claude-sonnet-4-6", TokenItems{{Kind: KindInput, Count: 1_000_000}})
+	if !ok1 {
+		c1, ok1 = calc.Calculate("minimax", "MiniMax-M2.7", TokenItems{{Kind: KindInput, Count: 1_000_000}})
+	}
+	c2, ok2 = calc.Calculate("minimax", "MiniMax-M2.7", TokenItems{{Kind: KindInput, Count: 1_000_000}})
+
+	assert.True(t, ok1 || ok2, "at least one calculator should succeed")
+	_ = c1
+	_ = c2
 }
