@@ -92,9 +92,11 @@ type StreamHandle struct {
 
 // StreamResult is one item on the Events channel.
 type StreamResult struct {
-	Event any   // typed event from EventHandler, or provider-specific from ParseHook
-	Err   error // set on protocol-level errors
-	Done  bool  // true on terminal event; channel is closed after this item
+	Event        any    // typed event from EventHandler, or provider-specific from ParseHook
+	Err          error  // set on protocol-level errors
+	Done         bool   // true on terminal event; channel is closed after this item
+	RawEventName string // original SSE event name
+	RawJSON      []byte // original SSE payload bytes
 }
 
 // NewClient creates a new generic client with the given ParserFactory and options.
@@ -231,7 +233,10 @@ func (c *Client[Req]) Stream(ctx context.Context, req *Req) (*StreamHandle, erro
 		streamStart := time.Now()
 
 		scanErr := forEachDataLine(ctx, resp.Body, func(ev sseEvent) bool {
-			result := handler(ev.name, []byte(ev.data))
+			rawJSON := []byte(ev.data)
+			result := handler(ev.name, rawJSON)
+			result.RawEventName = ev.name
+			result.RawJSON = append([]byte(nil), rawJSON...)
 
 			if c.logger != nil {
 				c.logger.DebugContext(ctx, "SSE event",
@@ -250,8 +255,8 @@ func (c *Client[Req]) Stream(ctx context.Context, req *Req) (*StreamHandle, erro
 			// Run hook for every scanned SSE event, including terminal ones,
 			// so integration tests can observe full raw event coverage.
 			if c.parseHook != nil {
-				if extra := c.parseHook(req, ev.name, []byte(ev.data)); extra != nil {
-					ch <- StreamResult{Event: extra}
+				if extra := c.parseHook(req, ev.name, rawJSON); extra != nil {
+					ch <- StreamResult{Event: extra, RawEventName: ev.name, RawJSON: append([]byte(nil), rawJSON...)}
 				}
 			}
 

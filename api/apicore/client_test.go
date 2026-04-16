@@ -239,6 +239,31 @@ func TestClient_Stream_NamedEvents(t *testing.T) {
 	assert.Equal(t, "message_stop", received[2].name)
 }
 
+func TestClient_Stream_AttachesRawEventPayload(t *testing.T) {
+	body := sseBody(
+		"event: content_block_delta",
+		`data: {"text":"hello"}`,
+		"",
+	)
+	transport := apicore.FixedSSEResponse(200, body)
+	c := apicore.NewClient[testReq](func() apicore.EventHandler {
+		return func(name string, data []byte) apicore.StreamResult {
+			return apicore.StreamResult{Event: string(data), Done: true}
+		}
+	}, apicore.WithHTTPClient[testReq](&http.Client{Transport: transport}))
+
+	handle, err := c.Stream(context.Background(), &testReq{})
+	require.NoError(t, err)
+
+	results := make([]apicore.StreamResult, 0, 1)
+	for result := range handle.Events {
+		results = append(results, result)
+	}
+	require.Len(t, results, 1)
+	assert.Equal(t, "content_block_delta", results[0].RawEventName)
+	assert.JSONEq(t, `{"text":"hello"}`, string(results[0].RawJSON))
+}
+
 func TestClient_Stream_ContextCancelled_ChannelCloses(t *testing.T) {
 	pr, pw := io.Pipe()
 	defer pw.Close()

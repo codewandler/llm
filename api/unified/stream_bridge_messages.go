@@ -12,7 +12,9 @@ import (
 // MapMessagesEvent converts a Messages native parser event into a unified StreamEvent.
 // Returns ignored=true for explicit no-op events.
 func MapMessagesEvent(ev any) (StreamEvent, bool, error) {
-	switch e := ev.(type) {
+	source := ev
+	payload, _, _ := sourceEvent(ev)
+	switch e := payload.(type) {
 	case *messages.MessageStartEvent:
 		tokens := usage.TokenItems{
 			{Kind: usage.KindInput, Count: e.Message.Usage.InputTokens},
@@ -23,7 +25,7 @@ func MapMessagesEvent(ev any) (StreamEvent, bool, error) {
 			Type:    StreamEventStarted,
 			Started: &Started{RequestID: e.Message.ID, Model: e.Message.Model},
 			Usage:   &Usage{Tokens: tokens},
-		}, messages.EventMessageStart), e), false, nil
+		}, messages.EventMessageStart), source), false, nil
 
 	case *messages.ContentBlockStartEvent:
 		out := StreamEvent{
@@ -42,7 +44,7 @@ func MapMessagesEvent(ev any) (StreamEvent, bool, error) {
 		} else {
 			out.Extras.Provider = map[string]any{"content_block": string(e.ContentBlock)}
 		}
-		return withRawEventPayload(withRawEventName(out, messages.EventContentBlockStart), e), false, nil
+		return withRawEventPayload(withRawEventName(out, messages.EventContentBlockStart), source), false, nil
 
 	case *messages.ContentBlockDeltaEvent:
 		ref := StreamRef{ItemIndex: uint32Ptr(e.Index)}
@@ -58,7 +60,7 @@ func MapMessagesEvent(ev any) (StreamEvent, bool, error) {
 					Data:     e.Delta.Text,
 				},
 				Delta: &Delta{Kind: llm.DeltaKindText, Index: ref.ItemIndex, Text: e.Delta.Text},
-			}, messages.EventContentBlockDelta), e), false, nil
+			}, messages.EventContentBlockDelta), source), false, nil
 		case messages.DeltaTypeThinking:
 			return withRawEventPayload(withRawEventName(StreamEvent{
 				Type: StreamEventContentDelta,
@@ -69,7 +71,7 @@ func MapMessagesEvent(ev any) (StreamEvent, bool, error) {
 					Data:     e.Delta.Thinking,
 				},
 				Delta: &Delta{Kind: llm.DeltaKindThinking, Index: ref.ItemIndex, Thinking: e.Delta.Thinking},
-			}, messages.EventContentBlockDelta), e), false, nil
+			}, messages.EventContentBlockDelta), source), false, nil
 		case messages.DeltaTypeInputJSON:
 			return withRawEventPayload(withRawEventName(StreamEvent{
 				Type: StreamEventToolDelta,
@@ -79,7 +81,7 @@ func MapMessagesEvent(ev any) (StreamEvent, bool, error) {
 					Data: e.Delta.PartialJSON,
 				},
 				Delta: &Delta{Kind: llm.DeltaKindTool, Index: ref.ItemIndex, ToolArgs: e.Delta.PartialJSON},
-			}, messages.EventContentBlockDelta), e), false, nil
+			}, messages.EventContentBlockDelta), source), false, nil
 		case messages.DeltaTypeSignature:
 			return withRawEventPayload(withRawEventName(StreamEvent{
 				Type: StreamEventContentDelta,
@@ -88,9 +90,9 @@ func MapMessagesEvent(ev any) (StreamEvent, bool, error) {
 					Kind:      ContentKindReasoning,
 					Signature: e.Delta.Signature,
 				},
-			}, messages.EventContentBlockDelta), e), false, nil
+			}, messages.EventContentBlockDelta), source), false, nil
 		default:
-			return withRawEventPayload(withProviderExtras(withRawEventName(StreamEvent{Type: StreamEventUnknown}, messages.EventContentBlockDelta), e), e), false, nil
+			return withRawEventPayload(withProviderExtras(withRawEventName(StreamEvent{Type: StreamEventUnknown}, messages.EventContentBlockDelta), e), source), false, nil
 		}
 
 	case *messages.TextCompleteEvent:
@@ -112,7 +114,7 @@ func MapMessagesEvent(ev any) (StreamEvent, bool, error) {
 				Data:     e.Text,
 			},
 			Content: &ContentPart{Part: msg.Text(e.Text), Index: e.Index},
-		}, messages.EventContentBlockStop), e), false, nil
+		}, messages.EventContentBlockStop), source), false, nil
 
 	case *messages.ThinkingCompleteEvent:
 		ref := StreamRef{ItemIndex: uint32Ptr(e.Index)}
@@ -132,7 +134,7 @@ func MapMessagesEvent(ev any) (StreamEvent, bool, error) {
 				Signature: e.Signature,
 			},
 			Content: &ContentPart{Part: msg.Thinking(e.Thinking, e.Signature), Index: e.Index},
-		}, messages.EventContentBlockStop), e), false, nil
+		}, messages.EventContentBlockStop), source), false, nil
 
 	case *messages.ToolCompleteEvent:
 		ref := StreamRef{ItemIndex: uint32Ptr(e.Index)}
@@ -146,7 +148,7 @@ func MapMessagesEvent(ev any) (StreamEvent, bool, error) {
 			},
 			StreamToolCall: &StreamToolCall{Ref: ref, ID: e.ID, Name: e.Name, RawInput: e.RawInput, Args: e.Args},
 			ToolCall:       &ToolCall{ID: e.ID, Name: e.Name, Args: e.Args},
-		}, messages.EventContentBlockStop), e), false, nil
+		}, messages.EventContentBlockStop), source), false, nil
 
 	case *messages.MessageDeltaEvent:
 		tokens := usage.TokenItems{{Kind: usage.KindOutput, Count: e.Usage.OutputTokens}}.NonZero()
@@ -154,10 +156,10 @@ func MapMessagesEvent(ev any) (StreamEvent, bool, error) {
 			Type:      StreamEventCompleted,
 			Completed: &Completed{StopReason: mapMessagesStopReason(e.Delta.StopReason)},
 			Usage:     &Usage{Tokens: tokens},
-		}, messages.EventMessageDelta), e), false, nil
+		}, messages.EventMessageDelta), source), false, nil
 
 	case *messages.StreamErrorEvent:
-		return withRawEventPayload(withRawEventName(StreamEvent{Type: StreamEventError, Error: &StreamError{Err: e}}, messages.EventError), e), false, nil
+		return withRawEventPayload(withRawEventName(StreamEvent{Type: StreamEventError, Error: &StreamError{Err: e}}, messages.EventError), source), false, nil
 
 	case *messages.PingEvent, *messages.MessageStopEvent:
 		return StreamEvent{}, true, nil
@@ -170,7 +172,7 @@ func MapMessagesEvent(ev any) (StreamEvent, bool, error) {
 				State: LifecycleStateDone,
 				Ref:   StreamRef{ItemIndex: uint32Ptr(e.Index)},
 			},
-		}, messages.EventContentBlockStop), e), false, nil
+		}, messages.EventContentBlockStop), source), false, nil
 
 	default:
 		return StreamEvent{Type: StreamEventUnknown}, false, nil

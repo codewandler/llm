@@ -5,19 +5,21 @@ import "encoding/json"
 // Request is the wire body for POST /v1/messages.
 // Ref: https://docs.anthropic.com/en/api/messages#body
 type Request struct {
-	Model        string           `json:"model"`
-	MaxTokens    int              `json:"max_tokens"`
-	Stream       bool             `json:"stream"`
-	System       SystemBlocks     `json:"system,omitempty"`
-	Messages     []Message        `json:"messages"`
-	Tools        []ToolDefinition `json:"tools,omitempty"`
-	ToolChoice   any              `json:"tool_choice,omitempty"`
-	Thinking     *ThinkingConfig  `json:"thinking,omitempty"`
-	Metadata     *Metadata        `json:"metadata,omitempty"`
-	CacheControl *CacheControl    `json:"cache_control,omitempty"`
-	TopK         int              `json:"top_k,omitempty"`
-	TopP         float64          `json:"top_p,omitempty"`
-	OutputConfig *OutputConfig    `json:"output_config,omitempty"`
+	Model         string           `json:"model"`
+	MaxTokens     int              `json:"max_tokens"`
+	Stream        bool             `json:"stream"`
+	System        SystemBlocks     `json:"system,omitempty"`
+	Messages      []Message        `json:"messages"`
+	Tools         []ToolDefinition `json:"tools,omitempty"`
+	ToolChoice    any              `json:"tool_choice,omitempty"`
+	Thinking      *ThinkingConfig  `json:"thinking,omitempty"`
+	Metadata      *Metadata        `json:"metadata,omitempty"`
+	CacheControl  *CacheControl    `json:"cache_control,omitempty"`
+	TopK          int              `json:"top_k,omitempty"`
+	TopP          float64          `json:"top_p,omitempty"`
+	Temperature   float64          `json:"temperature,omitempty"`
+	StopSequences []string         `json:"stop_sequences,omitempty"`
+	OutputConfig  *OutputConfig    `json:"output_config,omitempty"`
 }
 
 type ThinkingConfig struct {

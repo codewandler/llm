@@ -13,9 +13,20 @@ type Request struct {
 	Temperature          float64         `json:"temperature,omitempty"`
 	TopP                 float64         `json:"top_p,omitempty"`
 	TopK                 int             `json:"top_k,omitempty"`
+	Stop                 []string        `json:"stop,omitempty"`
+	N                    int             `json:"n,omitempty"`
+	PresencePenalty      float64         `json:"presence_penalty,omitempty"`
+	FrequencyPenalty     float64         `json:"frequency_penalty,omitempty"`
+	LogProbs             bool            `json:"logprobs,omitempty"`
+	TopLogProbs          int             `json:"top_logprobs,omitempty"`
 	ResponseFormat       *ResponseFormat `json:"response_format,omitempty"`
 	Stream               bool            `json:"stream"`
 	StreamOptions        *StreamOptions  `json:"stream_options,omitempty"`
+	User                 string          `json:"user,omitempty"`
+	Metadata             map[string]any  `json:"metadata,omitempty"`
+	Store                bool            `json:"store,omitempty"`
+	ParallelToolCalls    bool            `json:"parallel_tool_calls,omitempty"`
+	ServiceTier          string          `json:"service_tier,omitempty"`
 }
 
 // Message is a chat message in the messages array.

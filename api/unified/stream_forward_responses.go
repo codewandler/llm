@@ -38,7 +38,7 @@ func ForwardResponses(
 			return
 		}
 
-		uEv, ignored, err := MapResponsesEvent(result.Event)
+		uEv, ignored, err := MapResponsesEvent(result)
 		if err != nil {
 			pub.Error(err)
 			return

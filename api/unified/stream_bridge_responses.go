@@ -13,15 +13,17 @@ import (
 // MapResponsesEvent converts a Responses native parser event into a unified StreamEvent.
 // Returns ignored=true for explicit no-op events.
 func MapResponsesEvent(ev any) (StreamEvent, bool, error) {
-	switch e := ev.(type) {
+	source := ev
+	payload, _, _ := sourceEvent(ev)
+	switch e := payload.(type) {
 	case *responses.ResponseCreatedEvent:
-		return withRawEventPayload(withRawEventName(StreamEvent{Type: StreamEventStarted, Started: &Started{RequestID: e.Response.ID, Model: e.Response.Model}}, responses.EventResponseCreated), e), false, nil
+		return withRawEventPayload(withRawEventName(StreamEvent{Type: StreamEventStarted, Started: &Started{RequestID: e.Response.ID, Model: e.Response.Model}}, responses.EventResponseCreated), source), false, nil
 
 	case *responses.ResponseQueuedEvent:
-		return withRawEventPayload(withProviderExtras(withRawEventName(StreamEvent{Type: StreamEventLifecycle, Lifecycle: &Lifecycle{Scope: LifecycleScopeResponse, State: LifecycleStateQueued, Ref: StreamRef{ResponseID: e.Response.ID}}}, responses.EventResponseQueued), e), e), false, nil
+		return withRawEventPayload(withProviderExtras(withRawEventName(StreamEvent{Type: StreamEventLifecycle, Lifecycle: &Lifecycle{Scope: LifecycleScopeResponse, State: LifecycleStateQueued, Ref: StreamRef{ResponseID: e.Response.ID}}}, responses.EventResponseQueued), e), source), false, nil
 
 	case *responses.ResponseInProgressEvent:
-		return withRawEventPayload(withProviderExtras(withRawEventName(StreamEvent{Type: StreamEventLifecycle, Lifecycle: &Lifecycle{Scope: LifecycleScopeResponse, State: LifecycleStateInProgress, Ref: StreamRef{ResponseID: e.Response.ID}}}, responses.EventResponseInProgress), e), e), false, nil
+		return withRawEventPayload(withProviderExtras(withRawEventName(StreamEvent{Type: StreamEventLifecycle, Lifecycle: &Lifecycle{Scope: LifecycleScopeResponse, State: LifecycleStateInProgress, Ref: StreamRef{ResponseID: e.Response.ID}}}, responses.EventResponseInProgress), e), source), false, nil
 
 	case *responses.ResponseFailedEvent:
 		out := StreamEvent{Type: StreamEventCompleted, Lifecycle: &Lifecycle{Scope: LifecycleScopeResponse, State: LifecycleStateFailed, Ref: StreamRef{ResponseID: e.Response.ID}}, Completed: &Completed{StopReason: llm.StopReasonError}}
@@ -31,14 +33,14 @@ func MapResponsesEvent(ev any) (StreamEvent, bool, error) {
 		if e.Response.Error != nil {
 			out.Error = &StreamError{Err: fmt.Errorf("responses response failed %s: %s", e.Response.Error.Code, e.Response.Error.Message)}
 		}
-		return withRawEventPayload(withProviderExtras(withRawEventName(out, responses.EventResponseFailed), e), e), false, nil
+		return withRawEventPayload(withProviderExtras(withRawEventName(out, responses.EventResponseFailed), e), source), false, nil
 
 	case *responses.ResponseIncompleteEvent:
 		out := StreamEvent{Type: StreamEventCompleted, Lifecycle: &Lifecycle{Scope: LifecycleScopeResponse, State: LifecycleStateIncomplete, Ref: StreamRef{ResponseID: e.Response.ID}}, Completed: &Completed{StopReason: mapResponsesIncompleteReason(e.Response.IncompleteDetails)}}
 		if u := usageFromResponses(e.Response.Usage); u != nil {
 			out.Usage = u
 		}
-		return withRawEventPayload(withProviderExtras(withRawEventName(out, responses.EventResponseIncomplete), e), e), false, nil
+		return withRawEventPayload(withProviderExtras(withRawEventName(out, responses.EventResponseIncomplete), e), source), false, nil
 
 	case *responses.OutputTextDeltaEvent:
 		ref := responsesContentRef(e.OutputIndex, e.ItemID, e.ContentIndex)
@@ -46,7 +48,7 @@ func MapResponsesEvent(ev any) (StreamEvent, bool, error) {
 		if len(e.Logprobs) > 0 {
 			out.Extras.Provider = map[string]any{"logprobs": providerMap(e.Logprobs)}
 		}
-		return withRawEventPayload(withRawEventName(out, responses.EventOutputTextDelta), e), false, nil
+		return withRawEventPayload(withRawEventName(out, responses.EventOutputTextDelta), source), false, nil
 
 	case *responses.OutputTextDoneEvent:
 		ref := responsesContentRef(e.OutputIndex, e.ItemID, e.ContentIndex)
@@ -54,146 +56,146 @@ func MapResponsesEvent(ev any) (StreamEvent, bool, error) {
 		if len(e.Logprobs) > 0 {
 			out.Extras.Provider = map[string]any{"logprobs": providerMap(e.Logprobs)}
 		}
-		return withRawEventPayload(withRawEventName(out, responses.EventOutputTextDone), e), false, nil
+		return withRawEventPayload(withRawEventName(out, responses.EventOutputTextDone), source), false, nil
 
 	case *responses.OutputTextAnnotationAddedEvent:
-		return withRawEventPayload(withRawEventName(StreamEvent{Type: StreamEventAnnotation, Annotation: &Annotation{Ref: responsesAnnotationRef(e.OutputIndex, e.ItemID, e.ContentIndex, e.AnnotationIndex), Type: e.Annotation.Type, Text: e.Annotation.Text, FileID: e.Annotation.FileID, Filename: e.Annotation.Filename, URL: e.Annotation.URL, Title: e.Annotation.Title, ContainerID: e.Annotation.ContainerID, StartIndex: e.Annotation.StartIndex, EndIndex: e.Annotation.EndIndex, Offset: e.Annotation.Offset, Index: e.Annotation.Index}}, responses.EventOutputTextAnnotationAdded), e), false, nil
+		return withRawEventPayload(withRawEventName(StreamEvent{Type: StreamEventAnnotation, Annotation: &Annotation{Ref: responsesAnnotationRef(e.OutputIndex, e.ItemID, e.ContentIndex, e.AnnotationIndex), Type: e.Annotation.Type, Text: e.Annotation.Text, FileID: e.Annotation.FileID, Filename: e.Annotation.Filename, URL: e.Annotation.URL, Title: e.Annotation.Title, ContainerID: e.Annotation.ContainerID, StartIndex: e.Annotation.StartIndex, EndIndex: e.Annotation.EndIndex, Offset: e.Annotation.Offset, Index: e.Annotation.Index}}, responses.EventOutputTextAnnotationAdded), source), false, nil
 
 	case *responses.RefusalDeltaEvent:
 		ref := responsesContentRef(e.OutputIndex, e.ItemID, e.ContentIndex)
-		return withRawEventPayload(withRawEventName(StreamEvent{Type: StreamEventContentDelta, ContentDelta: &ContentDelta{Ref: ref, Kind: ContentKindRefusal, Variant: ContentVariantPrimary, Encoding: ContentEncodingUTF8, Data: e.Delta}}, responses.EventRefusalDelta), e), false, nil
+		return withRawEventPayload(withRawEventName(StreamEvent{Type: StreamEventContentDelta, ContentDelta: &ContentDelta{Ref: ref, Kind: ContentKindRefusal, Variant: ContentVariantPrimary, Encoding: ContentEncodingUTF8, Data: e.Delta}}, responses.EventRefusalDelta), source), false, nil
 
 	case *responses.RefusalDoneEvent:
 		ref := responsesContentRef(e.OutputIndex, e.ItemID, e.ContentIndex)
-		return withRawEventPayload(withRawEventName(StreamEvent{Type: StreamEventContent, StreamContent: &StreamContent{Ref: ref, Kind: ContentKindRefusal, Variant: ContentVariantPrimary, Encoding: ContentEncodingUTF8, Data: e.Refusal}}, responses.EventRefusalDone), e), false, nil
+		return withRawEventPayload(withRawEventName(StreamEvent{Type: StreamEventContent, StreamContent: &StreamContent{Ref: ref, Kind: ContentKindRefusal, Variant: ContentVariantPrimary, Encoding: ContentEncodingUTF8, Data: e.Refusal}}, responses.EventRefusalDone), source), false, nil
 
 	case *responses.ReasoningTextDeltaEvent:
 		ref := responsesItemRef(e.OutputIndex, e.ItemID)
-		return withRawEventPayload(withRawEventName(StreamEvent{Type: StreamEventContentDelta, ContentDelta: &ContentDelta{Ref: ref, Kind: ContentKindReasoning, Variant: ContentVariantRaw, Encoding: ContentEncodingUTF8, Data: e.Delta}, Delta: &Delta{Kind: llm.DeltaKindThinking, Index: ref.ItemIndex, Thinking: e.Delta}}, responses.EventReasoningTextDelta), e), false, nil
+		return withRawEventPayload(withRawEventName(StreamEvent{Type: StreamEventContentDelta, ContentDelta: &ContentDelta{Ref: ref, Kind: ContentKindReasoning, Variant: ContentVariantRaw, Encoding: ContentEncodingUTF8, Data: e.Delta}, Delta: &Delta{Kind: llm.DeltaKindThinking, Index: ref.ItemIndex, Thinking: e.Delta}}, responses.EventReasoningTextDelta), source), false, nil
 
 	case *responses.ReasoningTextDoneEvent:
 		ref := responsesItemRef(e.OutputIndex, e.ItemID)
-		return withRawEventPayload(withRawEventName(StreamEvent{Type: StreamEventContent, StreamContent: &StreamContent{Ref: ref, Kind: ContentKindReasoning, Variant: ContentVariantRaw, Encoding: ContentEncodingUTF8, Data: e.Text}, Content: &ContentPart{Part: msg.Thinking(e.Text, ""), Index: e.OutputIndex}}, responses.EventReasoningTextDone), e), false, nil
+		return withRawEventPayload(withRawEventName(StreamEvent{Type: StreamEventContent, StreamContent: &StreamContent{Ref: ref, Kind: ContentKindReasoning, Variant: ContentVariantRaw, Encoding: ContentEncodingUTF8, Data: e.Text}, Content: &ContentPart{Part: msg.Thinking(e.Text, ""), Index: e.OutputIndex}}, responses.EventReasoningTextDone), source), false, nil
 
 	case *responses.ReasoningSummaryPartAddedEvent:
-		return withRawEventPayload(withRawEventName(StreamEvent{Type: StreamEventLifecycle, Lifecycle: &Lifecycle{Scope: LifecycleScopeSegment, State: LifecycleStateAdded, Ref: responsesSummaryRef(e.OutputIndex, e.ItemID, e.SummaryIndex), Kind: ContentKindReasoning, Variant: ContentVariantSummary}}, responses.EventReasoningSummaryPartAdded), e), false, nil
+		return withRawEventPayload(withRawEventName(StreamEvent{Type: StreamEventLifecycle, Lifecycle: &Lifecycle{Scope: LifecycleScopeSegment, State: LifecycleStateAdded, Ref: responsesSummaryRef(e.OutputIndex, e.ItemID, e.SummaryIndex), Kind: ContentKindReasoning, Variant: ContentVariantSummary}}, responses.EventReasoningSummaryPartAdded), source), false, nil
 
 	case *responses.ReasoningSummaryPartDoneEvent:
-		return withRawEventPayload(withRawEventName(StreamEvent{Type: StreamEventLifecycle, Lifecycle: &Lifecycle{Scope: LifecycleScopeSegment, State: LifecycleStateDone, Ref: responsesSummaryRef(e.OutputIndex, e.ItemID, e.SummaryIndex), Kind: ContentKindReasoning, Variant: ContentVariantSummary}}, responses.EventReasoningSummaryPartDone), e), false, nil
+		return withRawEventPayload(withRawEventName(StreamEvent{Type: StreamEventLifecycle, Lifecycle: &Lifecycle{Scope: LifecycleScopeSegment, State: LifecycleStateDone, Ref: responsesSummaryRef(e.OutputIndex, e.ItemID, e.SummaryIndex), Kind: ContentKindReasoning, Variant: ContentVariantSummary}}, responses.EventReasoningSummaryPartDone), source), false, nil
 
 	case *responses.ReasoningSummaryTextDeltaEvent:
 		ref := responsesItemRef(e.OutputIndex, e.ItemID)
-		return withRawEventPayload(withRawEventName(StreamEvent{Type: StreamEventContentDelta, ContentDelta: &ContentDelta{Ref: ref, Kind: ContentKindReasoning, Variant: ContentVariantSummary, Encoding: ContentEncodingUTF8, Data: e.Delta}, Delta: &Delta{Kind: llm.DeltaKindThinking, Index: ref.ItemIndex, Thinking: e.Delta}}, responses.EventReasoningSummaryTextDelta), e), false, nil
+		return withRawEventPayload(withRawEventName(StreamEvent{Type: StreamEventContentDelta, ContentDelta: &ContentDelta{Ref: ref, Kind: ContentKindReasoning, Variant: ContentVariantSummary, Encoding: ContentEncodingUTF8, Data: e.Delta}, Delta: &Delta{Kind: llm.DeltaKindThinking, Index: ref.ItemIndex, Thinking: e.Delta}}, responses.EventReasoningSummaryTextDelta), source), false, nil
 
 	case *responses.ReasoningSummaryTextDoneEvent:
 		ref := responsesItemRef(e.OutputIndex, e.ItemID)
-		return withRawEventPayload(withRawEventName(StreamEvent{Type: StreamEventContent, StreamContent: &StreamContent{Ref: ref, Kind: ContentKindReasoning, Variant: ContentVariantSummary, Encoding: ContentEncodingUTF8, Data: e.Text}, Content: &ContentPart{Part: msg.Thinking(e.Text, ""), Index: e.OutputIndex}}, responses.EventReasoningSummaryTextDone), e), false, nil
+		return withRawEventPayload(withRawEventName(StreamEvent{Type: StreamEventContent, StreamContent: &StreamContent{Ref: ref, Kind: ContentKindReasoning, Variant: ContentVariantSummary, Encoding: ContentEncodingUTF8, Data: e.Text}, Content: &ContentPart{Part: msg.Thinking(e.Text, ""), Index: e.OutputIndex}}, responses.EventReasoningSummaryTextDone), source), false, nil
 
 	case *responses.FunctionCallArgumentsDeltaEvent:
 		ref := responsesItemRef(e.OutputIndex, e.ItemID)
-		return withRawEventPayload(withRawEventName(StreamEvent{Type: StreamEventToolDelta, ToolDelta: &ToolDelta{Ref: ref, Kind: ToolDeltaKindFunctionArguments, Data: e.Delta}, Delta: &Delta{Kind: llm.DeltaKindTool, Index: ref.ItemIndex, ToolArgs: e.Delta}}, responses.EventFunctionCallArgumentsDelta), e), false, nil
+		return withRawEventPayload(withRawEventName(StreamEvent{Type: StreamEventToolDelta, ToolDelta: &ToolDelta{Ref: ref, Kind: ToolDeltaKindFunctionArguments, Data: e.Delta}, Delta: &Delta{Kind: llm.DeltaKindTool, Index: ref.ItemIndex, ToolArgs: e.Delta}}, responses.EventFunctionCallArgumentsDelta), source), false, nil
 
 	case *responses.FunctionCallArgumentsDoneEvent:
 		var args map[string]any
 		_ = json.Unmarshal([]byte(e.Arguments), &args)
-		return withRawEventPayload(withRawEventName(StreamEvent{Type: StreamEventToolCall, StreamToolCall: &StreamToolCall{Ref: responsesItemRef(e.OutputIndex, e.ItemID), ID: e.ItemID, Name: e.Name, RawInput: e.Arguments, Args: args}, ToolCall: &ToolCall{ID: e.ItemID, Name: e.Name, Args: args}}, responses.EventFunctionCallArgumentsDone), e), false, nil
+		return withRawEventPayload(withRawEventName(StreamEvent{Type: StreamEventToolCall, StreamToolCall: &StreamToolCall{Ref: responsesItemRef(e.OutputIndex, e.ItemID), ID: e.ItemID, Name: e.Name, RawInput: e.Arguments, Args: args}, ToolCall: &ToolCall{ID: e.ItemID, Name: e.Name, Args: args}}, responses.EventFunctionCallArgumentsDone), source), false, nil
 
 	case *responses.CustomToolCallInputDeltaEvent:
-		return withRawEventPayload(withRawEventName(StreamEvent{Type: StreamEventToolDelta, ToolDelta: &ToolDelta{Ref: responsesItemRef(e.OutputIndex, e.ItemID), Kind: ToolDeltaKindCustomInput, Data: e.Delta}}, responses.EventCustomToolCallInputDelta), e), false, nil
+		return withRawEventPayload(withRawEventName(StreamEvent{Type: StreamEventToolDelta, ToolDelta: &ToolDelta{Ref: responsesItemRef(e.OutputIndex, e.ItemID), Kind: ToolDeltaKindCustomInput, Data: e.Delta}}, responses.EventCustomToolCallInputDelta), source), false, nil
 
 	case *responses.CustomToolCallInputDoneEvent:
-		return withRawEventPayload(withRawEventName(StreamEvent{Type: StreamEventToolDelta, ToolDelta: &ToolDelta{Ref: responsesItemRef(e.OutputIndex, e.ItemID), Kind: ToolDeltaKindCustomInput, Data: e.Input, Final: true}}, responses.EventCustomToolCallInputDone), e), false, nil
+		return withRawEventPayload(withRawEventName(StreamEvent{Type: StreamEventToolDelta, ToolDelta: &ToolDelta{Ref: responsesItemRef(e.OutputIndex, e.ItemID), Kind: ToolDeltaKindCustomInput, Data: e.Input, Final: true}}, responses.EventCustomToolCallInputDone), source), false, nil
 
 	case *responses.OutputItemAddedEvent:
-		return withRawEventPayload(withProviderExtras(withRawEventName(StreamEvent{Type: StreamEventLifecycle, Lifecycle: &Lifecycle{Scope: LifecycleScopeItem, State: LifecycleStateAdded, Ref: responsesItemRef(e.OutputIndex, e.Item.ID), ItemType: e.Item.Type}}, responses.EventOutputItemAdded), map[string]any{"item": e.Item}), e), false, nil
+		return withRawEventPayload(withProviderExtras(withRawEventName(StreamEvent{Type: StreamEventLifecycle, Lifecycle: &Lifecycle{Scope: LifecycleScopeItem, State: LifecycleStateAdded, Ref: responsesItemRef(e.OutputIndex, e.Item.ID), ItemType: e.Item.Type}}, responses.EventOutputItemAdded), map[string]any{"item": e.Item}), source), false, nil
 
 	case *responses.OutputItemDoneEvent:
-		return withRawEventPayload(withProviderExtras(withRawEventName(StreamEvent{Type: StreamEventLifecycle, Lifecycle: &Lifecycle{Scope: LifecycleScopeItem, State: LifecycleStateDone, Ref: responsesItemRef(e.OutputIndex, e.Item.ID), ItemType: e.Item.Type}}, responses.EventOutputItemDone), map[string]any{"item": e.Item}), e), false, nil
+		return withRawEventPayload(withProviderExtras(withRawEventName(StreamEvent{Type: StreamEventLifecycle, Lifecycle: &Lifecycle{Scope: LifecycleScopeItem, State: LifecycleStateDone, Ref: responsesItemRef(e.OutputIndex, e.Item.ID), ItemType: e.Item.Type}}, responses.EventOutputItemDone), map[string]any{"item": e.Item}), source), false, nil
 
 	case *responses.ContentPartAddedEvent:
 		kind, variant := responsesPartKindVariant(e.Part.Type)
-		return withRawEventPayload(withProviderExtras(withRawEventName(StreamEvent{Type: StreamEventLifecycle, Lifecycle: &Lifecycle{Scope: LifecycleScopeSegment, State: LifecycleStateAdded, Ref: responsesContentRef(e.OutputIndex, e.ItemID, e.ContentIndex), Kind: kind, Variant: variant, Mime: responsesPartMime(e.Part.Type)}}, responses.EventContentPartAdded), map[string]any{"part": e.Part}), e), false, nil
+		return withRawEventPayload(withProviderExtras(withRawEventName(StreamEvent{Type: StreamEventLifecycle, Lifecycle: &Lifecycle{Scope: LifecycleScopeSegment, State: LifecycleStateAdded, Ref: responsesContentRef(e.OutputIndex, e.ItemID, e.ContentIndex), Kind: kind, Variant: variant, Mime: responsesPartMime(e.Part.Type)}}, responses.EventContentPartAdded), map[string]any{"part": e.Part}), source), false, nil
 
 	case *responses.ContentPartDoneEvent:
 		kind, variant := responsesPartKindVariant(e.Part.Type)
-		return withRawEventPayload(withProviderExtras(withRawEventName(StreamEvent{Type: StreamEventLifecycle, Lifecycle: &Lifecycle{Scope: LifecycleScopeSegment, State: LifecycleStateDone, Ref: responsesContentRef(e.OutputIndex, e.ItemID, e.ContentIndex), Kind: kind, Variant: variant, Mime: responsesPartMime(e.Part.Type)}}, responses.EventContentPartDone), map[string]any{"part": e.Part}), e), false, nil
+		return withRawEventPayload(withProviderExtras(withRawEventName(StreamEvent{Type: StreamEventLifecycle, Lifecycle: &Lifecycle{Scope: LifecycleScopeSegment, State: LifecycleStateDone, Ref: responsesContentRef(e.OutputIndex, e.ItemID, e.ContentIndex), Kind: kind, Variant: variant, Mime: responsesPartMime(e.Part.Type)}}, responses.EventContentPartDone), map[string]any{"part": e.Part}), source), false, nil
 
 	case *responses.AudioDeltaEvent:
-		return withRawEventPayload(withRawEventName(StreamEvent{Type: StreamEventContentDelta, ContentDelta: &ContentDelta{Ref: StreamRef{ResponseID: e.ResponseID}, Kind: ContentKindMedia, Variant: ContentVariantPrimary, Encoding: ContentEncodingBase64, Data: e.Delta}}, responses.EventAudioDelta), e), false, nil
+		return withRawEventPayload(withRawEventName(StreamEvent{Type: StreamEventContentDelta, ContentDelta: &ContentDelta{Ref: StreamRef{ResponseID: e.ResponseID}, Kind: ContentKindMedia, Variant: ContentVariantPrimary, Encoding: ContentEncodingBase64, Data: e.Delta}}, responses.EventAudioDelta), source), false, nil
 
 	case *responses.AudioDoneEvent:
-		return withRawEventPayload(withRawEventName(StreamEvent{Type: StreamEventContentDelta, ContentDelta: &ContentDelta{Ref: StreamRef{ResponseID: e.ResponseID}, Kind: ContentKindMedia, Variant: ContentVariantPrimary, Encoding: ContentEncodingBase64, Final: true}}, responses.EventAudioDone), e), false, nil
+		return withRawEventPayload(withRawEventName(StreamEvent{Type: StreamEventContentDelta, ContentDelta: &ContentDelta{Ref: StreamRef{ResponseID: e.ResponseID}, Kind: ContentKindMedia, Variant: ContentVariantPrimary, Encoding: ContentEncodingBase64, Final: true}}, responses.EventAudioDone), source), false, nil
 
 	case *responses.AudioTranscriptDeltaEvent:
-		return withRawEventPayload(withRawEventName(StreamEvent{Type: StreamEventContentDelta, ContentDelta: &ContentDelta{Ref: StreamRef{ResponseID: e.ResponseID}, Kind: ContentKindMedia, Variant: ContentVariantTranscript, Encoding: ContentEncodingUTF8, Data: e.Delta}}, responses.EventAudioTranscriptDelta), e), false, nil
+		return withRawEventPayload(withRawEventName(StreamEvent{Type: StreamEventContentDelta, ContentDelta: &ContentDelta{Ref: StreamRef{ResponseID: e.ResponseID}, Kind: ContentKindMedia, Variant: ContentVariantTranscript, Encoding: ContentEncodingUTF8, Data: e.Delta}}, responses.EventAudioTranscriptDelta), source), false, nil
 
 	case *responses.AudioTranscriptDoneEvent:
-		return withRawEventPayload(withRawEventName(StreamEvent{Type: StreamEventContentDelta, ContentDelta: &ContentDelta{Ref: StreamRef{ResponseID: e.ResponseID}, Kind: ContentKindMedia, Variant: ContentVariantTranscript, Encoding: ContentEncodingUTF8, Final: true}}, responses.EventAudioTranscriptDone), e), false, nil
+		return withRawEventPayload(withRawEventName(StreamEvent{Type: StreamEventContentDelta, ContentDelta: &ContentDelta{Ref: StreamRef{ResponseID: e.ResponseID}, Kind: ContentKindMedia, Variant: ContentVariantTranscript, Encoding: ContentEncodingUTF8, Final: true}}, responses.EventAudioTranscriptDone), source), false, nil
 
 	case *responses.ResponseCompletedEvent:
 		out := StreamEvent{Type: StreamEventCompleted, Lifecycle: &Lifecycle{Scope: LifecycleScopeResponse, State: LifecycleStateDone, Ref: StreamRef{ResponseID: e.Response.ID}}, Completed: &Completed{StopReason: llm.StopReasonEndTurn}}
 		if u := usageFromResponses(e.Response.Usage); u != nil {
 			out.Usage = u
 		}
-		return withRawEventPayload(withProviderExtras(withRawEventName(out, responses.EventResponseCompleted), e), e), false, nil
+		return withRawEventPayload(withProviderExtras(withRawEventName(out, responses.EventResponseCompleted), e), source), false, nil
 
 	case *responses.APIErrorEvent:
-		return withRawEventPayload(withRawEventName(StreamEvent{Type: StreamEventError, Error: &StreamError{Err: e}}, responses.EventAPIError), e), false, nil
+		return withRawEventPayload(withRawEventName(StreamEvent{Type: StreamEventError, Error: &StreamError{Err: e}}, responses.EventAPIError), source), false, nil
 
 	case *responses.FileSearchCallInProgressEvent:
-		return unknownResponsesEvent(responses.EventFileSearchCallInProgress, e), false, nil
+		return unknownResponsesEvent(responses.EventFileSearchCallInProgress, source, e), false, nil
 	case *responses.FileSearchCallSearchingEvent:
-		return unknownResponsesEvent(responses.EventFileSearchCallSearching, e), false, nil
+		return unknownResponsesEvent(responses.EventFileSearchCallSearching, source, e), false, nil
 	case *responses.FileSearchCallCompletedEvent:
-		return unknownResponsesEvent(responses.EventFileSearchCallCompleted, e), false, nil
+		return unknownResponsesEvent(responses.EventFileSearchCallCompleted, source, e), false, nil
 	case *responses.WebSearchCallInProgressEvent:
-		return unknownResponsesEvent(responses.EventWebSearchCallInProgress, e), false, nil
+		return unknownResponsesEvent(responses.EventWebSearchCallInProgress, source, e), false, nil
 	case *responses.WebSearchCallSearchingEvent:
-		return unknownResponsesEvent(responses.EventWebSearchCallSearching, e), false, nil
+		return unknownResponsesEvent(responses.EventWebSearchCallSearching, source, e), false, nil
 	case *responses.WebSearchCallCompletedEvent:
-		return unknownResponsesEvent(responses.EventWebSearchCallCompleted, e), false, nil
+		return unknownResponsesEvent(responses.EventWebSearchCallCompleted, source, e), false, nil
 	case *responses.MCPCallArgumentsDeltaEvent:
-		return unknownResponsesEvent(responses.EventMCPCallArgumentsDelta, e), false, nil
+		return unknownResponsesEvent(responses.EventMCPCallArgumentsDelta, source, e), false, nil
 	case *responses.MCPCallArgumentsDoneEvent:
-		return unknownResponsesEvent(responses.EventMCPCallArgumentsDone, e), false, nil
+		return unknownResponsesEvent(responses.EventMCPCallArgumentsDone, source, e), false, nil
 	case *responses.MCPCallCompletedEvent:
-		return unknownResponsesEvent(responses.EventMCPCallCompleted, e), false, nil
+		return unknownResponsesEvent(responses.EventMCPCallCompleted, source, e), false, nil
 	case *responses.MCPCallFailedEvent:
-		return unknownResponsesEvent(responses.EventMCPCallFailed, e), false, nil
+		return unknownResponsesEvent(responses.EventMCPCallFailed, source, e), false, nil
 	case *responses.MCPCallInProgressEvent:
-		return unknownResponsesEvent(responses.EventMCPCallInProgress, e), false, nil
+		return unknownResponsesEvent(responses.EventMCPCallInProgress, source, e), false, nil
 	case *responses.MCPListToolsCompletedEvent:
-		return unknownResponsesEvent(responses.EventMCPListToolsCompleted, e), false, nil
+		return unknownResponsesEvent(responses.EventMCPListToolsCompleted, source, e), false, nil
 	case *responses.MCPListToolsFailedEvent:
-		return unknownResponsesEvent(responses.EventMCPListToolsFailed, e), false, nil
+		return unknownResponsesEvent(responses.EventMCPListToolsFailed, source, e), false, nil
 	case *responses.MCPListToolsInProgressEvent:
-		return unknownResponsesEvent(responses.EventMCPListToolsInProgress, e), false, nil
+		return unknownResponsesEvent(responses.EventMCPListToolsInProgress, source, e), false, nil
 	case *responses.CodeInterpreterCallInProgressEvent:
-		return unknownResponsesEvent(responses.EventCodeInterpreterCallInProgress, e), false, nil
+		return unknownResponsesEvent(responses.EventCodeInterpreterCallInProgress, source, e), false, nil
 	case *responses.CodeInterpreterCallInterpretingEvent:
-		return unknownResponsesEvent(responses.EventCodeInterpreterCallInterpreting, e), false, nil
+		return unknownResponsesEvent(responses.EventCodeInterpreterCallInterpreting, source, e), false, nil
 	case *responses.CodeInterpreterCallCompletedEvent:
-		return unknownResponsesEvent(responses.EventCodeInterpreterCallCompleted, e), false, nil
+		return unknownResponsesEvent(responses.EventCodeInterpreterCallCompleted, source, e), false, nil
 	case *responses.CodeInterpreterCallCodeDeltaEvent:
-		return unknownResponsesEvent(responses.EventCodeInterpreterCallCodeDelta, e), false, nil
+		return unknownResponsesEvent(responses.EventCodeInterpreterCallCodeDelta, source, e), false, nil
 	case *responses.CodeInterpreterCallCodeDoneEvent:
-		return unknownResponsesEvent(responses.EventCodeInterpreterCallCodeDone, e), false, nil
+		return unknownResponsesEvent(responses.EventCodeInterpreterCallCodeDone, source, e), false, nil
 	case *responses.ImageGenerationCallCompletedEvent:
-		return unknownResponsesEvent(responses.EventImageGenerationCallCompleted, e), false, nil
+		return unknownResponsesEvent(responses.EventImageGenerationCallCompleted, source, e), false, nil
 	case *responses.ImageGenerationCallGeneratingEvent:
-		return unknownResponsesEvent(responses.EventImageGenerationCallGenerating, e), false, nil
+		return unknownResponsesEvent(responses.EventImageGenerationCallGenerating, source, e), false, nil
 	case *responses.ImageGenerationCallInProgressEvent:
-		return unknownResponsesEvent(responses.EventImageGenerationCallInProgress, e), false, nil
+		return unknownResponsesEvent(responses.EventImageGenerationCallInProgress, source, e), false, nil
 	case *responses.ImageGenerationCallPartialImageEvent:
-		return unknownResponsesEvent(responses.EventImageGenerationCallPartialImage, e), false, nil
+		return unknownResponsesEvent(responses.EventImageGenerationCallPartialImage, source, e), false, nil
 
 	default:
 		return StreamEvent{Type: StreamEventUnknown}, false, nil
 	}
 }
 
-func unknownResponsesEvent(name string, ev any) StreamEvent {
-	return withRawEventPayload(withProviderExtras(withRawEventName(StreamEvent{Type: StreamEventUnknown}, name), ev), ev)
+func unknownResponsesEvent(name string, source any, provider any) StreamEvent {
+	return withRawEventPayload(withProviderExtras(withRawEventName(StreamEvent{Type: StreamEventUnknown}, name), provider), source)
 }
 
 func responsesItemRef(outputIndex int, itemID string) StreamRef {

@@ -224,7 +224,9 @@ type Annotation struct {
 	Index       int
 }
 
-// EventExtras holds forward-compatible/raw event data.
+// EventExtras holds forward-compatible/raw event data. RawJSON stores the
+// original protocol payload bytes when the mapper was invoked from an
+// apicore.StreamResult-backed stream path.
 type EventExtras struct {
 	RawEventName string
 	RawJSON      json.RawMessage

@@ -75,9 +75,13 @@ func PublishToLLM(pub llm.Publisher, ev StreamEvent) error {
 		pub.Error(ev.Error.Err)
 	}
 
-	if !handled {
+	if hasUnprojectedSemanticPayload(ev) || (!handled && (ev.Extras.RawEventName != "" || len(ev.Extras.RawJSON) > 0)) {
 		pub.Debug("unified.stream_event", ev)
 	}
 
 	return nil
+}
+
+func hasUnprojectedSemanticPayload(ev StreamEvent) bool {
+	return ev.Lifecycle != nil || ev.ContentDelta != nil || ev.StreamContent != nil || ev.ToolDelta != nil || ev.StreamToolCall != nil || ev.Annotation != nil || ev.Type == StreamEventUnknown
 }

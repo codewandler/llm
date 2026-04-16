@@ -9,12 +9,14 @@ import (
 // MapCompletionsEvent converts a Chat Completions native parser event into a unified StreamEvent.
 // Returns ignored=true for explicit no-op events.
 func MapCompletionsEvent(ev any) (StreamEvent, bool, error) {
-	chunk, ok := ev.(*completions.Chunk)
+	source := ev
+	payload, _, _ := sourceEvent(ev)
+	chunk, ok := payload.(*completions.Chunk)
 	if !ok {
 		return StreamEvent{Type: StreamEventUnknown}, false, nil
 	}
 
-	out := withRawEventPayload(withProviderExtras(StreamEvent{}, chunk), chunk)
+	out := withRawEventPayload(withProviderExtras(StreamEvent{}, chunk), source)
 	if chunk.ID != "" || chunk.Model != "" {
 		out.Type = StreamEventStarted
 		out.Started = &Started{RequestID: chunk.ID, Model: chunk.Model}

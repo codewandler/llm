@@ -40,7 +40,7 @@ func ForwardCompletions(
 			return
 		}
 
-		uEv, ignored, err := MapCompletionsEvent(result.Event)
+		uEv, ignored, err := MapCompletionsEvent(result)
 		if err != nil {
 			accPub.Error(err)
 			return

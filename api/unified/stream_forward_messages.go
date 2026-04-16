@@ -38,7 +38,7 @@ func ForwardMessages(
 			return
 		}
 
-		uEv, ignored, err := MapMessagesEvent(result.Event)
+		uEv, ignored, err := MapMessagesEvent(result)
 		if err != nil {
 			pub.Error(err)
 			return

@@ -10,6 +10,7 @@ type Request struct {
 	Tools                []Tool          `json:"tools,omitempty"`
 	ToolChoice           any             `json:"tool_choice,omitempty"`
 	Reasoning            *Reasoning      `json:"reasoning,omitempty"`
+	MaxTokens            int             `json:"max_tokens,omitempty"`
 	MaxOutputTokens      int             `json:"max_output_tokens,omitempty"`
 	Temperature          float64         `json:"temperature,omitempty"`
 	TopP                 float64         `json:"top_p,omitempty"`
@@ -17,6 +18,11 @@ type Request struct {
 	ResponseFormat       *ResponseFormat `json:"response_format,omitempty"`
 	PromptCacheRetention string          `json:"prompt_cache_retention,omitempty"`
 	Stream               bool            `json:"stream"`
+	PreviousResponseID   string          `json:"previous_response_id,omitempty"`
+	Metadata             map[string]any  `json:"metadata,omitempty"`
+	User                 string          `json:"user,omitempty"`
+	Store                bool            `json:"store,omitempty"`
+	ParallelToolCalls    bool            `json:"parallel_tool_calls,omitempty"`
 }
 
 // Reasoning controls reasoning/thinking for supported models.

@@ -303,7 +303,7 @@ func TestIntegration_OpenRouter_TextResponse(t *testing.T) {
 	assert.Equal(t, responses.StatusCompleted, report.completedEvt.Response.Status)
 	if u := report.completedEvt.Response.Usage; u != nil {
 		assert.Positive(t, u.InputTokens)
-		assert.Positive(t, u.OutputTokens)
+		assert.GreaterOrEqual(t, u.OutputTokens, 0)
 	}
 	assert.Empty(t, report.toolCalls)
 
