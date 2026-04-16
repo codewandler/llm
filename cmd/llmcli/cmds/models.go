@@ -2,7 +2,9 @@ package cmds
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"os"
 	"sort"
 	"strings"
 
@@ -19,6 +21,20 @@ type modelsOptions struct {
 	provider   string
 	alias      string
 	allAliases bool
+	json       bool
+}
+
+type modelAliasKinds struct {
+	Intent    []string `json:"intent,omitempty"`
+	Friendly  []string `json:"friendly,omitempty"`
+	Synthetic []string `json:"synthetic,omitempty"`
+}
+
+type modelRecord struct {
+	Provider string           `json:"provider"`
+	ID       string           `json:"id"`
+	Name     string           `json:"name"`
+	Aliases  *modelAliasKinds `json:"aliases,omitempty"`
 }
 
 // NewModelsCmd returns the models command.
@@ -37,7 +53,8 @@ func NewModelsCmd(root *RootFlags) *cobra.Command {
 		  llmcli models                     # List aliases and grouped models
 		  llmcli models -f sonnet           # Filter by substring
 		  llmcli models --provider openai   # Only show OpenAI models
-		  llmcli models --alias sonnet      # Only models with alias 'sonnet'`,
+		  llmcli models --alias sonnet      # Only models with alias 'sonnet'
+		  llmcli models --json              # Emit machine-readable JSON`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runModels(cmd.Context(), opts, root)
 		},
@@ -47,6 +64,7 @@ func NewModelsCmd(root *RootFlags) *cobra.Command {
 	cmd.Flags().StringVarP(&opts.provider, "provider", "p", "", "Filter models by provider name/path")
 	cmd.Flags().StringVarP(&opts.alias, "alias", "a", "", "Filter models by alias (case-insensitive exact match)")
 	cmd.Flags().BoolVar(&opts.allAliases, "all-aliases", false, "Show generated provider-prefixed aliases as well")
+	cmd.Flags().BoolVar(&opts.json, "json", false, "Emit machine-readable JSON output")
 	return cmd
 }
 
@@ -59,6 +77,9 @@ func runModels(ctx context.Context, opts modelsOptions, root *RootFlags) error {
 
 	models := provider.Models()
 	models = filterModels(models, opts)
+	if opts.json {
+		return printModelsJSON(models, opts)
+	}
 
 	if !hasModelFilters(opts) {
 		printAliasesSection(models, opts.allAliases)
@@ -124,6 +145,56 @@ func matchesAlias(m llm.Model, alias string) bool {
 	return false
 }
 
+func splitAliases(aliases []string) modelAliasKinds {
+	seenIntent := make(map[string]struct{}, len(aliases))
+	seenFriendly := make(map[string]struct{}, len(aliases))
+	seenSynthetic := make(map[string]struct{}, len(aliases))
+	out := modelAliasKinds{
+		Intent:    make([]string, 0, len(aliases)),
+		Friendly:  make([]string, 0, len(aliases)),
+		Synthetic: make([]string, 0, len(aliases)),
+	}
+	for _, alias := range aliases {
+		if alias == "" {
+			continue
+		}
+		if isTopLevelAlias(alias) {
+			if _, ok := seenIntent[alias]; ok {
+				continue
+			}
+			seenIntent[alias] = struct{}{}
+			out.Intent = append(out.Intent, alias)
+			continue
+		}
+		if strings.Contains(alias, "/") {
+			if _, ok := seenSynthetic[alias]; ok {
+				continue
+			}
+			seenSynthetic[alias] = struct{}{}
+			out.Synthetic = append(out.Synthetic, alias)
+			continue
+		}
+		if _, ok := seenFriendly[alias]; ok {
+			continue
+		}
+		seenFriendly[alias] = struct{}{}
+		out.Friendly = append(out.Friendly, alias)
+	}
+	sort.Strings(out.Intent)
+	sort.Strings(out.Friendly)
+	sort.Strings(out.Synthetic)
+	if len(out.Intent) == 0 {
+		out.Intent = nil
+	}
+	if len(out.Friendly) == 0 {
+		out.Friendly = nil
+	}
+	if len(out.Synthetic) == 0 {
+		out.Synthetic = nil
+	}
+	return out
+}
+
 // buildAliasMap builds a map from alias -> []modelID from all models.
 func buildAliasMap(models []llm.Model, includeSynthetic bool) map[string][]string {
 	aliasMap := make(map[string][]string)
@@ -146,22 +217,12 @@ func isTopLevelAlias(alias string) bool {
 }
 
 func displayAliases(aliases []string, includeSynthetic bool) []string {
-	seen := make(map[string]struct{}, len(aliases))
-	out := make([]string, 0, len(aliases))
-	for _, alias := range aliases {
-		if alias == "" {
-			continue
-		}
-		if !includeSynthetic && strings.Contains(alias, "/") {
-			continue
-		}
-		if _, ok := seen[alias]; ok {
-			continue
-		}
-		seen[alias] = struct{}{}
-		out = append(out, alias)
+	parts := splitAliases(aliases)
+	out := append([]string{}, parts.Intent...)
+	out = append(out, parts.Friendly...)
+	if includeSynthetic {
+		out = append(out, parts.Synthetic...)
 	}
-	sort.Strings(out)
 	return out
 }
 
@@ -207,6 +268,32 @@ type modelGroup struct {
 	models   []llm.Model
 }
 
+func printModelsJSON(models []llm.Model, opts modelsOptions) error {
+	records := make([]modelRecord, 0, len(models))
+	for _, group := range groupModelsByProvider(models) {
+		for _, model := range group.models {
+			aliases := splitAliases(model.Aliases)
+			if !opts.allAliases {
+				aliases.Synthetic = nil
+			}
+			var aliasKinds *modelAliasKinds
+			if len(aliases.Intent) > 0 || len(aliases.Friendly) > 0 || len(aliases.Synthetic) > 0 {
+				copy := aliases
+				aliasKinds = &copy
+			}
+			records = append(records, modelRecord{
+				Provider: model.Provider,
+				ID:       model.ID,
+				Name:     model.Name,
+				Aliases:  aliasKinds,
+			})
+		}
+	}
+	enc := json.NewEncoder(os.Stdout)
+	enc.SetIndent("", "  ")
+	return enc.Encode(records)
+}
+
 func groupModelsByProvider(models []llm.Model) []modelGroup {
 	grouped := make(map[string][]llm.Model)
 	for _, model := range models {
@@ -249,9 +336,15 @@ func printModelsSection(models []llm.Model, opts modelsOptions) {
 		for _, m := range group.models {
 			fmt.Printf("    %-*s  %s\n", maxID, m.ID, m.Name)
 			if hasModelFilters(opts) {
-				aliases := displayAliases(m.Aliases, opts.allAliases)
-				if len(aliases) > 0 {
-					fmt.Printf("      aliases: %s\n", strings.Join(aliases, ", "))
+				aliases := splitAliases(m.Aliases)
+				if len(aliases.Intent) > 0 {
+					fmt.Printf("      intent aliases: %s\n", strings.Join(aliases.Intent, ", "))
+				}
+				if len(aliases.Friendly) > 0 {
+					fmt.Printf("      aliases: %s\n", strings.Join(aliases.Friendly, ", "))
+				}
+				if opts.allAliases && len(aliases.Synthetic) > 0 {
+					fmt.Printf("      generated aliases: %s\n", strings.Join(aliases.Synthetic, ", "))
 				}
 			}
 		}
