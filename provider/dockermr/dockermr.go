@@ -17,8 +17,11 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/codewandler/llm"
+	"github.com/codewandler/llm/catalog"
 	"github.com/codewandler/llm/provider/providercore"
 	"github.com/codewandler/llm/tokencount"
 	"github.com/codewandler/llm/usage"
@@ -46,11 +49,13 @@ const (
 
 // Provider implements the Docker Model Runner LLM backend.
 type Provider struct {
-	core         *providercore.Client
-	opts         *llm.Options
-	client       *http.Client
-	defaultModel string
-	models       llm.Models
+	core          *providercore.Client
+	opts          *llm.Options
+	client        *http.Client
+	defaultModel  string
+	models        llm.Models
+	modelOnce     sync.Once
+	visibleModels llm.Models
 }
 
 // New creates a Docker Model Runner provider.
@@ -98,6 +103,8 @@ func (p *Provider) WithEngine(engine string) *Provider {
 	if clone.client == nil {
 		clone.client = llm.DefaultHttpClient()
 	}
+	clone.modelOnce = sync.Once{}
+	clone.visibleModels = nil
 	clone.core = newDockermrCore(clone.defaultModel, optionsFromOptions(&optsCopy)...)
 	return &clone
 }
@@ -112,11 +119,41 @@ func (p *Provider) CostCalculator() usage.CostCalculator {
 	})
 }
 
-// Models returns the curated static list of publicly available ai/ namespace models.
-func (p *Provider) Models() llm.Models { return p.models }
+// Models returns the visible Docker Model Runner model view.
+// When runtime discovery succeeds it includes locally pulled models plus known
+// pullable ai/ models from the catalog overlay. On failure it falls back to the
+// curated visible list.
+func (p *Provider) Models() llm.Models {
+	p.modelOnce.Do(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		models, err := p.catalogModels(ctx)
+		if err == nil && len(models) > 0 {
+			p.visibleModels = models
+		}
+	})
+	if p.visibleModels != nil {
+		return p.visibleModels
+	}
+	return p.models
+}
 
-// Resolve looks up a model by ID or alias in the curated model list.
-func (p *Provider) Resolve(modelID string) (llm.Model, error) { return p.models.Resolve(modelID) }
+// Resolve looks up a model by ID or alias in the visible model list.
+func (p *Provider) Resolve(modelID string) (llm.Model, error) { return p.Models().Resolve(modelID) }
+
+func (p *Provider) catalogModels(ctx context.Context) (llm.Models, error) {
+	base, err := llm.LoadBuiltInCatalog()
+	if err != nil {
+		return nil, err
+	}
+	source := catalog.NewDockerMRRuntimeSource()
+	source.BaseURL = p.opts.BaseURL
+	source.Client = p.client
+	return llm.CatalogVisibleModelsForRuntime(ctx, base, "dockermr-local", source, llm.CatalogModelProjectionOptions{
+		ProviderName:         p.Name(),
+		ExcludeIntentAliases: true,
+	})
+}
 
 // FetchModels queries the DMR endpoint for the list of locally pulled models.
 func (p *Provider) FetchModels(ctx context.Context) ([]llm.Model, error) {

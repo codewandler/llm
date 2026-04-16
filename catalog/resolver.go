@@ -6,6 +6,11 @@ type Resolver struct {
 	Sources []RegisteredSource
 }
 
+// OverlayResolver composes runtime and local fragments on top of a base catalog.
+// Resolver is kept as a compatibility alias during the transition to the
+// standalone catalog API.
+type OverlayResolver = Resolver
+
 func (r Resolver) Resolve(ctx context.Context, base Catalog) (ResolvedCatalog, error) {
 	resolved := NewResolvedCatalog(base)
 	for _, registered := range r.Sources {

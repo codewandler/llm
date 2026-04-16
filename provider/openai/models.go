@@ -2,6 +2,8 @@ package openai
 
 import (
 	"fmt"
+	"sort"
+	"strings"
 
 	"github.com/codewandler/llm"
 )
@@ -223,6 +225,127 @@ var modelOrder = []string{
 	"o1",
 	"o1-mini",
 	"o1-pro",
+}
+
+func (p *Provider) catalogModels() llm.Models {
+	return loadOpenAIModels(p.Name(), p.codexModelsOnly)
+}
+
+func loadOpenAIModels(providerName string, codexOnly bool) llm.Models {
+	fallback := fallbackOpenAIModels(providerName, codexOnly)
+	catalogSnapshot, err := llm.LoadBuiltInCatalog()
+	if err != nil {
+		return fallback
+	}
+
+	models := llm.CatalogModelsForService(catalogSnapshot, "openai", llm.CatalogModelProjectionOptions{
+		ProviderName:         providerName,
+		ExcludeIntentAliases: true,
+	})
+	if len(models) == 0 {
+		return fallback
+	}
+
+	remaining := make(map[string]llm.Model, len(models))
+	for _, model := range models {
+		if !allowCatalogModel(model.ID, codexOnly) {
+			continue
+		}
+		if info, ok := modelRegistry[model.ID]; ok && (model.Name == "" || model.Name == model.ID) {
+			model.Name = info.Name
+		}
+		model.Aliases = mergeOpenAIAliases(policyAliasesForModel(model.ID, codexOnly), model.Aliases)
+		remaining[model.ID] = model
+	}
+	if len(remaining) == 0 {
+		return fallback
+	}
+
+	out := make(llm.Models, 0, len(remaining))
+	for _, model := range fallback {
+		if catalogModel, ok := remaining[model.ID]; ok {
+			out = append(out, catalogModel)
+			delete(remaining, model.ID)
+			continue
+		}
+		out = append(out, model)
+	}
+
+	ids := make([]string, 0, len(remaining))
+	for id := range remaining {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	for _, id := range ids {
+		out = append(out, remaining[id])
+	}
+	return out
+}
+
+func fallbackOpenAIModels(providerName string, codexOnly bool) llm.Models {
+	models := make(llm.Models, 0, len(modelOrder))
+	for _, id := range modelOrder {
+		info, ok := modelRegistry[id]
+		if !ok {
+			continue
+		}
+		if codexOnly && info.Category != categoryCodex {
+			continue
+		}
+		models = append(models, llm.Model{
+			ID:       info.ID,
+			Name:     info.Name,
+			Provider: providerName,
+			Aliases:  policyAliasesForModel(info.ID, codexOnly),
+		})
+	}
+	return models
+}
+
+func policyAliasesForModel(modelID string, codexOnly bool) []string {
+	aliases := make([]string, 0, 2)
+	if codexOnly {
+		for alias, target := range CodexModelAliases {
+			if target == modelID {
+				aliases = append(aliases, alias)
+			}
+		}
+		return aliases
+	}
+	for alias, target := range ModelAliases {
+		if target == modelID {
+			aliases = append(aliases, alias)
+		}
+	}
+	return aliases
+}
+
+func allowCatalogModel(modelID string, codexOnly bool) bool {
+	if !codexOnly {
+		return true
+	}
+	if info, err := getModelInfo(modelID); err == nil {
+		return info.Category == categoryCodex
+	}
+	return strings.Contains(modelID, "codex")
+}
+
+func mergeOpenAIAliases(a, b []string) []string {
+	seen := make(map[string]struct{}, len(a)+len(b))
+	out := make([]string, 0, len(a)+len(b))
+	for _, values := range [][]string{a, b} {
+		for _, value := range values {
+			if value == "" {
+				continue
+			}
+			if _, ok := seen[value]; ok {
+				continue
+			}
+			seen[value] = struct{}{}
+			out = append(out, value)
+		}
+	}
+	return out
 }
 
 // useResponsesAPI reports whether the given model ID should be routed to the

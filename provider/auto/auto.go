@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/codewandler/llm"
-	"github.com/codewandler/llm/provider/anthropic"
 	"github.com/codewandler/llm/provider/anthropic/claude"
 	"github.com/codewandler/llm/provider/router"
 )
@@ -168,7 +167,7 @@ func enumerateClaudeAccounts(ctx context.Context, store claude.TokenStore, httpC
 				}
 				return claude.New(claudeOpts...)
 			},
-			modelAliases: anthropic.ModelAliases,
+			modelAliases: modelAliasesForProvider(ProviderClaude),
 			hasAliases:   true,
 		})
 	}

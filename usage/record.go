@@ -97,7 +97,7 @@ type Cost struct {
 	CacheWrite float64 `json:"cache_write,omitempty"`
 
 	// Source describes how the cost was determined.
-	//   "calculated" — via CalcCost from KnownPricing or ModelDB
+	//   "calculated" — via CalcCost from KnownPricing or the built-in catalog
 	//   "reported"   — API-provided total (OpenRouter)
 	//   "estimated"  — pre-request estimate from CountTokens
 	//   ""           — no pricing available (Ollama local, unknown model)

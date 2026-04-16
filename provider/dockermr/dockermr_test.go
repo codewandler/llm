@@ -83,6 +83,40 @@ func TestModels_ContainsKnownModels(t *testing.T) {
 	assert.True(t, ids[dockermr.ModelLlama32])
 }
 
+func TestModels_VisibleRuntimeModels(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/engines/llama.cpp/v1/models", r.URL.Path)
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"data": []map[string]any{
+				{"id": "ai/qwen2.5"},
+				{"id": "ai/private-model"},
+			},
+		})
+	}))
+	defer srv.Close()
+
+	p := dockermr.New(llm.WithBaseURL(srv.URL + "/engines/llama.cpp"))
+	models := p.Models()
+
+	_, hasInstalled := models.ByID("ai/qwen2.5")
+	_, hasCustom := models.ByID("ai/private-model")
+	_, hasVisibleKnown := models.ByID("ai/llama3.2")
+	assert.True(t, hasInstalled)
+	assert.True(t, hasCustom)
+	assert.True(t, hasVisibleKnown)
+
+	resolved, err := p.Resolve("ai/llama3.2")
+	require.NoError(t, err)
+	assert.Equal(t, llm.ProviderNameDockerMR, resolved.Provider)
+}
+
+func TestResolve_UnknownReturnsError(t *testing.T) {
+	p := dockermr.New(llm.WithBaseURL("http://127.0.0.1:1/engines/llama.cpp"))
+	_, err := p.Resolve("ai/unknown-model")
+	require.Error(t, err)
+}
+
 // ---------------------------------------------------------------------------
 // FetchModels
 // ---------------------------------------------------------------------------

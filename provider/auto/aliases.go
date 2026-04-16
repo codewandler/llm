@@ -86,12 +86,14 @@ func buildAliasTargets(instanceName, providerType string) map[string]router.Alia
 // Catalog-backed factual aliases are preferred when available. Provider-local
 // fallback registries remain in place for providers not yet modeled in catalog.
 func modelAliasesForProvider(providerType string) map[string]string {
+	var aliases map[string]string
 	if c, ok := autoCatalog(); ok {
-		if aliases := modelAliasesFromCatalog(c, providerType); len(aliases) > 0 {
-			return aliases
-		}
+		aliases = mergeAliasMaps(aliases, modelAliasesFromCatalog(c, providerType))
 	}
+	return mergeAliasMaps(aliases, fallbackModelAliasesForProvider(providerType))
+}
 
+func fallbackModelAliasesForProvider(providerType string) map[string]string {
 	switch providerType {
 	case ProviderClaude, ProviderAnthropic:
 		return anthropic.ModelAliases
@@ -123,6 +125,25 @@ func modelAliasesFromCatalog(c llm.CatalogSnapshot, providerType string) map[str
 		return nil
 	}
 	return llm.CatalogFactualAliasesForService(c, serviceID)
+}
+
+func mergeAliasMaps(base, extra map[string]string) map[string]string {
+	if len(base) == 0 && len(extra) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(base)+len(extra))
+	for _, aliases := range []map[string]string{base, extra} {
+		for alias, target := range aliases {
+			if alias == "" || target == "" {
+				continue
+			}
+			if _, ok := out[alias]; ok {
+				continue
+			}
+			out[alias] = target
+		}
+	}
+	return out
 }
 
 func catalogServiceID(providerType string) (string, bool) {

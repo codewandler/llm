@@ -98,25 +98,10 @@ func (*Provider) CostCalculator() usage.CostCalculator {
 
 func (p *Provider) Resolve(modelID string) (llm.Model, error) { return p.Models().Resolve(modelID) }
 
-// Models returns a curated list of well-known OpenAI models.
+// Models returns the catalog-backed OpenAI model view.
 // When the provider was created with WithCodexModels(), only Codex-category
 // models are returned.
-func (p *Provider) Models() llm.Models {
-	models := make([]llm.Model, 0, len(modelOrder))
-	for _, id := range modelOrder {
-		if info, ok := modelRegistry[id]; ok {
-			if p.codexModelsOnly && info.Category != categoryCodex {
-				continue
-			}
-			models = append(models, llm.Model{
-				ID:       info.ID,
-				Name:     info.Name,
-				Provider: p.Name(),
-			})
-		}
-	}
-	return models
-}
+func (p *Provider) Models() llm.Models { return p.catalogModels() }
 
 // FetchModels retrieves the live list of models from the OpenAI API.
 func (p *Provider) FetchModels(ctx context.Context) ([]llm.Model, error) {

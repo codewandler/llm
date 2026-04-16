@@ -2,23 +2,49 @@ package catalog
 
 import (
 	"context"
+	"net/http"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
 
-	"github.com/codewandler/llm/catalog/modeldb"
+	"github.com/codewandler/llm/catalog/internal/source/modelsdev"
 )
 
-const modelDBSourceID = "modeldb"
+const modelsDevSourceID = "modelsdev"
 
-type ModelDBSource struct{}
+type ModelsDevSource struct {
+	Client     *http.Client
+	URL        string
+	FilePath   string
+	UseFixture bool
+}
 
-func NewModelDBSource() ModelDBSource { return ModelDBSource{} }
+func NewModelsDevSource() ModelsDevSource { return ModelsDevSource{} }
 
-func (ModelDBSource) ID() string { return modelDBSourceID }
+func NewModelsDevSourceFromFile(path string) ModelsDevSource {
+	return ModelsDevSource{FilePath: path}
+}
 
-func (ModelDBSource) Fetch(context.Context) (*Fragment, error) {
-	db, err := modeldb.Load()
+func defaultModelsDevFixture() string {
+	return filepath.Join("internal", "source", "modelsdev", "testdata", "api.json")
+}
+
+func (ModelsDevSource) ID() string { return modelsDevSourceID }
+
+func (s ModelsDevSource) Fetch(ctx context.Context) (*Fragment, error) {
+	var (
+		db  modelsdev.Database
+		err error
+	)
+	switch {
+	case s.FilePath != "":
+		db, err = modelsdev.LoadFile(s.FilePath)
+	case s.UseFixture:
+		db, err = modelsdev.LoadFile(modelsdev.DefaultFixturePath())
+	default:
+		db, err = modelsdev.Fetch(ctx, s.Client, s.URL)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -33,7 +59,7 @@ func (ModelDBSource) Fetch(context.Context) (*Fragment, error) {
 
 	for _, providerID := range providerIDs {
 		provider := db[providerID]
-		serviceID, ok := serviceIDForModelDBProvider(providerID)
+		serviceID, ok := serviceIDForModelsDevProvider(providerID)
 		if !ok {
 			continue
 		}
@@ -42,8 +68,12 @@ func (ModelDBSource) Fetch(context.Context) (*Fragment, error) {
 			Name:     provider.Name,
 			Kind:     serviceKindForSourceService(serviceID),
 			Operator: serviceOperatorForSourceService(serviceID),
+			APIURL:   provider.API,
+			DocsURL:  provider.Doc,
+			EnvVars:  normalizeStrings(provider.Env),
+			Package:  provider.NPM,
 			Provenance: []Provenance{{
-				SourceID:   modelDBSourceID,
+				SourceID:   modelsDevSourceID,
 				Authority:  string(AuthorityEnrichment),
 				ObservedAt: observedAt,
 				RawID:      providerID,
@@ -67,17 +97,21 @@ func (ModelDBSource) Fetch(context.Context) (*Fragment, error) {
 				key = NormalizeKey(key)
 			}
 			modelRecord := ModelRecord{
-				Key:       key,
-				Canonical: false,
+				Key:             key,
+				Canonical:       false,
+				Attachment:      entry.Attachment,
+				OpenWeights:     entry.OpenWeights,
+				LastUpdated:     normalizeDate(entry.LastUpdated),
+				KnowledgeCutoff: normalizeDate(entry.Knowledge),
 				Provenance: []Provenance{{
-					SourceID:   modelDBSourceID,
+					SourceID:   modelsDevSourceID,
 					Authority:  string(AuthorityEnrichment),
 					ObservedAt: observedAt,
 					RawID:      modelID,
 				}},
 			}
 			if serviceID == "anthropic" || serviceID == "openai" {
-				modelRecord.Capabilities = capabilitiesFromModelDB(entry)
+				modelRecord.Capabilities = capabilitiesFromModelsDev(entry)
 				modelRecord.InputModalities = normalizeStrings(entry.Modalities.Input)
 				modelRecord.OutputModalities = normalizeStrings(entry.Modalities.Output)
 			}
@@ -95,7 +129,7 @@ func (ModelDBSource) Fetch(context.Context) (*Fragment, error) {
 					},
 					LimitsOverride: limitsPtr(entry.Limit.Context, entry.Limit.Output),
 					Provenance: []Provenance{{
-						SourceID:   modelDBSourceID,
+						SourceID:   modelsDevSourceID,
 						Authority:  string(AuthorityEnrichment),
 						ObservedAt: observedAt,
 						RawID:      modelID,
@@ -107,7 +141,7 @@ func (ModelDBSource) Fetch(context.Context) (*Fragment, error) {
 	return fragment, nil
 }
 
-func capabilitiesFromModelDB(entry modeldb.Model) Capabilities {
+func capabilitiesFromModelsDev(entry modelsdev.Model) Capabilities {
 	return Capabilities{
 		Reasoning:           entry.Reasoning,
 		ToolUse:             entry.ToolCall,
@@ -118,7 +152,7 @@ func capabilitiesFromModelDB(entry modeldb.Model) Capabilities {
 	}
 }
 
-func serviceIDForModelDBProvider(providerID string) (string, bool) {
+func serviceIDForModelsDevProvider(providerID string) (string, bool) {
 	switch providerID {
 	case "anthropic":
 		return "anthropic", true

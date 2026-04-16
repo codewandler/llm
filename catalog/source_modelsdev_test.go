@@ -8,8 +8,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestModelDBSourceFetch(t *testing.T) {
-	fragment, err := NewModelDBSource().Fetch(context.Background())
+func TestModelsDevSourceFetch(t *testing.T) {
+	fragment, err := NewModelsDevSourceFromFile(defaultModelsDevFixture()).Fetch(context.Background())
 	require.NoError(t, err)
 	require.NotNil(t, fragment)
 	require.NotEmpty(t, fragment.Services)

@@ -6,6 +6,20 @@ type Builder struct {
 	Sources []RegisteredSource
 }
 
+func DefaultBuildSources() []RegisteredSource {
+	sources := []RegisteredSource{
+		{Stage: StageBuild, Authority: AuthorityCanonical, Source: NewAnthropicStaticSource()},
+		{Stage: StageBuild, Authority: AuthorityEnrichment, Source: NewModelsDevSource()},
+	}
+	if src := NewOpenAISourceFromEnv(); src.APIKey != "" {
+		sources = append(sources, RegisteredSource{Stage: StageBuild, Authority: AuthorityTrusted, Source: src})
+	}
+	if src := NewOpenRouterSourceFromEnv(); src.APIKey != "" {
+		sources = append(sources, RegisteredSource{Stage: StageBuild, Authority: AuthorityTrusted, Source: src})
+	}
+	return sources
+}
+
 func (b Builder) Build(ctx context.Context) (Catalog, error) {
 	catalog := NewCatalog()
 	for _, registered := range b.Sources {

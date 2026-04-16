@@ -76,13 +76,18 @@ func mergeModel(dst *Catalog, model ModelRecord) error {
 	}
 	existing.Aliases = mergeStringSlices(existing.Aliases, model.Aliases)
 	existing.Canonical = existing.Canonical || model.Canonical
+	existing.Attachment = existing.Attachment || model.Attachment
+	existing.OpenWeights = existing.OpenWeights || model.OpenWeights
 	existing.Capabilities = mergeCapabilities(existing.Capabilities, model.Capabilities)
 	if existing.Limits, err = mergeLimits(existing.Limits, model.Limits, modelID(model.Key)); err != nil {
 		return err
 	}
 	existing.InputModalities = mergeStringSlices(existing.InputModalities, model.InputModalities)
 	existing.OutputModalities = mergeStringSlices(existing.OutputModalities, model.OutputModalities)
-	if existing.KnowledgeCutoff, err = mergeStringField(existing.KnowledgeCutoff, model.KnowledgeCutoff, "model.knowledge_cutoff", modelID(model.Key)); err != nil {
+	if existing.KnowledgeCutoff, err = mergeDateField(existing.KnowledgeCutoff, model.KnowledgeCutoff, "model.knowledge_cutoff", modelID(model.Key)); err != nil {
+		return err
+	}
+	if existing.LastUpdated, err = mergeDateField(existing.LastUpdated, model.LastUpdated, "model.last_updated", modelID(model.Key)); err != nil {
 		return err
 	}
 	existing.Deprecated = existing.Deprecated || model.Deprecated
@@ -113,6 +118,16 @@ func mergeService(dst *Catalog, service Service) error {
 		return err
 	}
 	if existing.Operator, err = mergeStringField(existing.Operator, service.Operator, "service.operator", service.ID); err != nil {
+		return err
+	}
+	if existing.APIURL, err = mergeStringField(existing.APIURL, service.APIURL, "service.api_url", service.ID); err != nil {
+		return err
+	}
+	if existing.DocsURL, err = mergeStringField(existing.DocsURL, service.DocsURL, "service.docs_url", service.ID); err != nil {
+		return err
+	}
+	existing.EnvVars = mergeStringSlices(existing.EnvVars, service.EnvVars)
+	if existing.Package, err = mergeStringField(existing.Package, service.Package, "service.package", service.ID); err != nil {
 		return err
 	}
 	existing.Provenance = append(existing.Provenance, service.Provenance...)
@@ -292,6 +307,28 @@ func mergeStringField[T ~string](existing, incoming T, field, id string) (T, err
 	return existing, fmt.Errorf("%s conflict for %s: %q vs %q", field, id, existing, incoming)
 }
 
+func mergeDateField[T ~string](existing, incoming T, field, id string) (T, error) {
+	if existing == "" {
+		return incoming, nil
+	}
+	if incoming == "" || existing == incoming {
+		return existing, nil
+	}
+	if isComparableDate(string(existing)) && isComparableDate(string(incoming)) {
+		if string(incoming) > string(existing) {
+			return incoming, nil
+		}
+		return existing, nil
+	}
+	if isDatePrecisionSubset(string(existing), string(incoming)) {
+		return incoming, nil
+	}
+	if isDatePrecisionSubset(string(incoming), string(existing)) {
+		return existing, nil
+	}
+	return existing, fmt.Errorf("%s conflict for %s: %q vs %q", field, id, existing, incoming)
+}
+
 func mergeIntField(existing, incoming int, field, id string) (int, error) {
 	if existing == 0 {
 		return incoming, nil
@@ -332,6 +369,27 @@ func mergeStringSlices(a, b []string) []string {
 		}
 	}
 	return out
+}
+
+func isDatePrecisionSubset(lessSpecific, moreSpecific string) bool {
+	if lessSpecific == "" || moreSpecific == "" {
+		return false
+	}
+	if len(moreSpecific) <= len(lessSpecific) {
+		return false
+	}
+	return strings.HasPrefix(moreSpecific, lessSpecific+"-")
+}
+
+func isComparableDate(v string) bool {
+	switch len(v) {
+	case 7:
+		return v[4] == '-' && isDigits(v[:4]+v[5:7])
+	case 10:
+		return v[4] == '-' && v[7] == '-' && isDigits(v[:4]+v[5:7]+v[8:10])
+	default:
+		return false
+	}
 }
 
 func normalizeStrings(values []string) []string {

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/codewandler/llm"
+	"github.com/codewandler/llm/catalog"
 	"github.com/codewandler/llm/provider/providercore"
 	"github.com/codewandler/llm/tokencount"
 	"github.com/codewandler/llm/usage"
@@ -105,23 +106,37 @@ func (*Provider) CostCalculator() usage.CostCalculator {
 	})
 }
 
-// Models returns the list of models currently installed in Ollama.
-// On the first call it fetches the live list from the Ollama API
-// (3 s timeout); on failure it falls back to the curated list of
-// well-tested models.
+// Models returns the visible Ollama model view.
+// When runtime discovery succeeds it includes installed models plus known
+// pullable models from the catalog overlay. On failure it falls back to a
+// curated visible list of well-tested models.
 func (p *Provider) Models() llm.Models {
 	p.modelOnce.Do(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 		defer cancel()
-		models, err := p.FetchModels(ctx)
+		models, err := p.catalogModels(ctx)
 		if err == nil && len(models) > 0 {
-			p.fetchedModels = llm.Models(models)
+			p.fetchedModels = models
 		}
 	})
 	if p.fetchedModels != nil {
 		return p.fetchedModels
 	}
 	return p.curatedModels()
+}
+
+func (p *Provider) catalogModels(ctx context.Context) (llm.Models, error) {
+	base, err := llm.LoadBuiltInCatalog()
+	if err != nil {
+		return nil, err
+	}
+	source := catalog.NewOllamaRuntimeSource()
+	source.BaseURL = p.opts.BaseURL
+	source.Client = p.client
+	return llm.CatalogVisibleModelsForRuntime(ctx, base, "ollama-local", source, llm.CatalogModelProjectionOptions{
+		ProviderName:         p.Name(),
+		ExcludeIntentAliases: true,
+	})
 }
 
 // curatedModels returns a static list of tested models that are known to work

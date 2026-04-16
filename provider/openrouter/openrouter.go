@@ -51,7 +51,7 @@ func New(opts ...llm.Option) *Provider {
 		opts:         llmOpts,
 		client:       client,
 		defaultModel: DefaultModel,
-		models:       loadEmbeddedModels(),
+		models:       catalogModels(),
 	}
 	p.core = p.buildCore()
 	return p
@@ -74,6 +74,55 @@ func (*Provider) CostCalculator() usage.CostCalculator {
 
 func (p *Provider) Resolve(model string) (llm.Model, error) {
 	return p.models.Resolve(p.normalizeRequestModel(model))
+}
+
+func catalogModels() llm.Models {
+	c, err := llm.LoadBuiltInCatalog()
+	if err == nil {
+		models := llm.CatalogModelsForService(c, providerName, llm.CatalogModelProjectionOptions{
+			ProviderName:         providerName,
+			ExcludeIntentAliases: true,
+		})
+		if len(models) > 0 {
+			return ensureOpenRouterAliases(models)
+		}
+	}
+	return loadEmbeddedModels()
+}
+
+func ensureOpenRouterAliases(models llm.Models) llm.Models {
+	aliases := []string{llm.ModelDefault, "auto", llm.ModelFast}
+	for i := range models {
+		if models[i].ID != "openrouter/auto" {
+			continue
+		}
+		models[i].Aliases = mergeOpenRouterAliases(models[i].Aliases, aliases)
+		return models
+	}
+	return append(llm.Models{{
+		ID:       "openrouter/auto",
+		Name:     "OpenRouter Auto",
+		Provider: providerName,
+		Aliases:  aliases,
+	}}, models...)
+}
+
+func mergeOpenRouterAliases(existing, extra []string) []string {
+	seen := make(map[string]struct{}, len(existing)+len(extra))
+	out := make([]string, 0, len(existing)+len(extra))
+	for _, values := range [][]string{existing, extra} {
+		for _, value := range values {
+			if value == "" {
+				continue
+			}
+			if _, ok := seen[value]; ok {
+				continue
+			}
+			seen[value] = struct{}{}
+			out = append(out, value)
+		}
+	}
+	return out
 }
 
 func (p *Provider) FetchModels(ctx context.Context) ([]llm.Model, error) {

@@ -7,11 +7,14 @@ type ModelRecord struct {
 	Name             string       `json:"name,omitempty"`
 	Aliases          []string     `json:"aliases,omitempty"`
 	Canonical        bool         `json:"canonical,omitempty"`
+	Attachment       bool         `json:"attachment,omitempty"`
+	OpenWeights      bool         `json:"open_weights,omitempty"`
 	Capabilities     Capabilities `json:"capabilities,omitempty"`
 	Limits           Limits       `json:"limits,omitempty"`
 	InputModalities  []string     `json:"input_modalities,omitempty"`
 	OutputModalities []string     `json:"output_modalities,omitempty"`
 	KnowledgeCutoff  string       `json:"knowledge_cutoff,omitempty"`
+	LastUpdated      string       `json:"last_updated,omitempty"`
 	Deprecated       bool         `json:"deprecated,omitempty"`
 	ReferencePricing *Pricing     `json:"reference_pricing,omitempty"`
 	Provenance       []Provenance `json:"provenance,omitempty"`
@@ -47,6 +50,10 @@ type Service struct {
 	Name       string       `json:"name,omitempty"`
 	Kind       ServiceKind  `json:"kind,omitempty"`
 	Operator   string       `json:"operator,omitempty"`
+	APIURL     string       `json:"api_url,omitempty"`
+	DocsURL    string       `json:"docs_url,omitempty"`
+	EnvVars    []string     `json:"env_vars,omitempty"`
+	Package    string       `json:"package,omitempty"`
 	Provenance []Provenance `json:"provenance,omitempty"`
 }
 

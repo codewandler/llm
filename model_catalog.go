@@ -1,6 +1,7 @@
 package llm
 
 import (
+	"context"
 	"fmt"
 	"sort"
 	"sync"
@@ -36,17 +37,8 @@ func LoadBuiltInCatalog() (catalog.Catalog, error) {
 
 func CatalogModelsForService(c catalog.Catalog, serviceID string, opts CatalogModelProjectionOptions) Models {
 	serviceID = normalizeCatalogPart(serviceID)
-	out := make(Models, 0)
-	for _, offering := range c.OfferingsByService(serviceID) {
-		model, ok := c.Models[offering.ModelKey]
-		if !ok {
-			continue
-		}
-		providerName := firstNonEmptyString(opts.ProviderName, serviceID)
-		out = append(out, projectCatalogModel(providerName, offering, model, opts))
-	}
-	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
-	return out
+	providerName := firstNonEmptyString(opts.ProviderName, serviceID)
+	return modelsFromCatalogView(catalog.ServiceView(c, serviceID, catalog.ViewOptions{}), providerName, opts)
 }
 
 func CatalogModelsForRuntime(c catalog.ResolvedCatalog, runtimeID string, routableOnly bool, opts CatalogModelProjectionOptions) Models {
@@ -55,84 +47,30 @@ func CatalogModelsForRuntime(c catalog.ResolvedCatalog, runtimeID string, routab
 	if providerName == "" {
 		providerName = runtimeID
 	}
-	refs := make(map[catalog.OfferingRef]struct{})
-	for key, acquisition := range c.RuntimeAcquisition {
-		if key.RuntimeID != runtimeID || !acquisition.Known {
-			continue
-		}
-		if routableOnly {
-			access, ok := c.RuntimeAccess[catalog.RuntimeAccessKey{RuntimeID: runtimeID, ServiceID: acquisition.Offering.ServiceID, WireModelID: acquisition.Offering.WireModelID}]
-			if !ok || !access.Routable {
-				continue
-			}
-		}
-		refs[acquisition.Offering] = struct{}{}
+	view := catalog.RuntimeView(c, runtimeID, catalog.ViewOptions{RoutableOnly: routableOnly, VisibleOnly: !routableOnly})
+	return modelsFromCatalogView(view, providerName, opts)
+}
+
+func CatalogVisibleModelsForRuntime(ctx context.Context, base catalog.Catalog, runtimeID string, source catalog.Source, opts CatalogModelProjectionOptions) (Models, error) {
+	resolved, err := catalog.ResolveCatalog(ctx, base, catalog.RegisteredSource{
+		Stage:     catalog.StageRuntime,
+		Authority: catalog.AuthorityLocal,
+		Source:    source,
+	})
+	if err != nil {
+		return nil, err
 	}
-	out := make(Models, 0, len(refs))
-	for _, ref := range sortedCatalogOfferingRefs(refs) {
-		offering, ok := c.Offerings[ref]
-		if !ok {
-			continue
-		}
-		model, ok := c.Models[offering.ModelKey]
-		if !ok {
-			continue
-		}
-		entry := projectCatalogModel(providerName, offering, model, opts)
-		if access, ok := c.RuntimeAccess[catalog.RuntimeAccessKey{RuntimeID: runtimeID, ServiceID: ref.ServiceID, WireModelID: ref.WireModelID}]; ok && access.ResolvedWireID != "" {
-			entry.ID = access.ResolvedWireID
-		}
-		out = append(out, entry)
-	}
-	return out
+	return CatalogModelsForRuntime(resolved, runtimeID, false, opts), nil
 }
 
 func CatalogFactualAliasesForService(c catalog.Catalog, serviceID string) map[string]string {
 	serviceID = normalizeCatalogPart(serviceID)
-	result := make(map[string]string)
-	conflicts := make(map[string]struct{})
-	for _, offering := range c.OfferingsByService(serviceID) {
-		model, ok := c.Models[offering.ModelKey]
-		if !ok {
-			continue
-		}
-		for _, alias := range projectedCatalogAliases(offering, model, true) {
-			if _, conflict := conflicts[alias]; conflict {
-				continue
-			}
-			if existing, ok := result[alias]; ok && existing != offering.WireModelID {
-				delete(result, alias)
-				conflicts[alias] = struct{}{}
-				continue
-			}
-			result[alias] = offering.WireModelID
-		}
-	}
-	return result
+	return aliasMapFromView(catalog.ServiceView(c, serviceID, catalog.ViewOptions{}))
 }
 
 func CatalogFactualAliasesForRuntime(c catalog.ResolvedCatalog, runtimeID string) map[string]string {
 	runtimeID = normalizeCatalogPart(runtimeID)
-	result := make(map[string]string)
-	conflicts := make(map[string]struct{})
-	for _, offering := range c.RoutableOfferings(runtimeID) {
-		model, ok := c.Models[offering.ModelKey]
-		if !ok {
-			continue
-		}
-		for _, alias := range projectedCatalogAliases(offering, model, true) {
-			if _, conflict := conflicts[alias]; conflict {
-				continue
-			}
-			if existing, ok := result[alias]; ok && existing != offering.WireModelID {
-				delete(result, alias)
-				conflicts[alias] = struct{}{}
-				continue
-			}
-			result[alias] = offering.WireModelID
-		}
-	}
-	return result
+	return aliasMapFromView(catalog.RuntimeView(c, runtimeID, catalog.ViewOptions{RoutableOnly: true}))
 }
 
 func CatalogModelForOffering(c catalog.Catalog, ref catalog.OfferingRef, opts CatalogModelProjectionOptions) (Model, bool) {
@@ -325,6 +263,40 @@ func sortedCatalogOfferingRefs(items map[catalog.OfferingRef]struct{}) []catalog
 		return refs[i].WireModelID < refs[j].WireModelID
 	})
 	return refs
+}
+
+func modelsFromCatalogView(view catalog.View, providerName string, opts CatalogModelProjectionOptions) Models {
+	out := make(Models, 0)
+	for _, item := range view.List() {
+		entry := projectCatalogModel(providerName, item.Offering, item.Model, opts)
+		if item.Access != nil && item.Access.ResolvedWireID != "" {
+			entry.ID = item.Access.ResolvedWireID
+		}
+		out = append(out, entry)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
+	return out
+}
+
+func aliasMapFromView(view catalog.View) map[string]string {
+	result := make(map[string]string)
+	conflicts := make(map[string]struct{})
+	for _, alias := range view.AliasNames() {
+		if isIntentAlias(alias) {
+			continue
+		}
+		items := view.ResolveAll(alias)
+		if len(items) != 1 {
+			conflicts[alias] = struct{}{}
+			delete(result, alias)
+			continue
+		}
+		if _, conflict := conflicts[alias]; conflict {
+			continue
+		}
+		result[alias] = items[0].Offering.WireModelID
+	}
+	return result
 }
 
 func MustLoadBuiltInCatalog() catalog.Catalog {

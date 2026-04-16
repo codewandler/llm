@@ -34,6 +34,15 @@ func TestProvider_ResolveAutoAlias(t *testing.T) {
 	assert.Equal(t, "openrouter/auto", m.ID)
 }
 
+func TestProvider_Models_IncludeAutoIntentAliases(t *testing.T) {
+	p := New()
+	model, ok := p.Models().ByID("openrouter/auto")
+	require.True(t, ok)
+	assert.Contains(t, model.Aliases, llm.ModelDefault)
+	assert.Contains(t, model.Aliases, llm.ModelFast)
+	assert.Contains(t, model.Aliases, "auto")
+}
+
 // TestProvider_CreateStream_DefaultModelApplied verifies that when no model is
 // set the provider default ("openai/gpt-4o" here) is used in the wire request.
 // openai/* routes to /v1/responses; the test server returns a minimal

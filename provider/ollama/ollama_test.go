@@ -103,3 +103,39 @@ func TestCreateStream_ToolCallResponse(t *testing.T) {
 	assert.Equal(t, "lookup", toolCall.ToolCall.ToolName())
 	assert.Equal(t, "Berlin", toolCall.ToolCall.ToolArgs()["city"])
 }
+
+func TestModels_VisibleRuntimeModels(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/api/tags", r.URL.Path)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"models":[{"name":"qwen2.5:0.5b"},{"name":"custom-model"}]}`))
+	}))
+	defer server.Close()
+
+	p := New(llm.WithBaseURL(server.URL))
+	models := p.Models()
+
+	_, hasInstalled := models.ByID("qwen2.5:0.5b")
+	_, hasCustom := models.ByID("custom-model")
+	_, hasVisibleKnown := models.ByID("glm-4.7-flash")
+	assert.True(t, hasInstalled)
+	assert.True(t, hasCustom)
+	assert.True(t, hasVisibleKnown)
+
+	resolved, err := p.Resolve("glm-4.7-flash")
+	require.NoError(t, err)
+	assert.Equal(t, "glm-4.7-flash", resolved.ID)
+	assert.Equal(t, llm.ProviderNameOllama, resolved.Provider)
+}
+
+func TestResolve_PassthroughUnknownModel(t *testing.T) {
+	t.Parallel()
+
+	p := New(llm.WithBaseURL("http://127.0.0.1:1"))
+	resolved, err := p.Resolve("my-local-model")
+	require.NoError(t, err)
+	assert.Equal(t, "my-local-model", resolved.ID)
+	assert.Equal(t, llm.ProviderNameOllama, resolved.Provider)
+}
