@@ -6,6 +6,7 @@ import (
 	"github.com/codewandler/llm"
 	"github.com/codewandler/llm/provider/anthropic"
 	"github.com/codewandler/llm/provider/bedrock"
+	"github.com/codewandler/llm/provider/codex"
 	"github.com/codewandler/llm/provider/minimax"
 	"github.com/codewandler/llm/provider/openai"
 	"github.com/codewandler/llm/provider/router"
@@ -46,14 +47,10 @@ var builtinAliasFallbacks = map[string]builtinAliasModels{
 		normal:   minimax.ModelM27,
 		powerful: minimax.ModelM27,
 	},
-	// ChatGPT / Codex: accessed via chatgpt.com/backend-api using Codex CLI OAuth.
-	// All models are Codex-category, but they still participate in the built-in
-	// fast/default/powerful alias set.
-	ProviderChatGPT: {
-		fast:     openai.ModelGPT51CodexMini,
-		normal:   openai.ModelGPT53Codex,
-		powerful: openai.ModelGPT53Codex,
-	},
+	ProviderCodex: func() builtinAliasModels {
+		fast, normal, powerful := codex.BuiltinAliasModels()
+		return builtinAliasModels{fast: fast, normal: normal, powerful: powerful}
+	}(),
 }
 
 var (
@@ -82,7 +79,7 @@ func buildBuiltinAliasTargets(instanceName, providerType string) map[string]rout
 // modeled there. Provider-local fallback maps remain for two reasons:
 //
 //  1. Some providers are not yet catalog-backed for shorthand aliases.
-//  2. Consumer policy aliases such as OpenAI's "flagship" or ChatGPT's
+//  2. Consumer policy aliases such as OpenAI's "flagship" or Codex's
 //     Codex-only shorthands are intentionally not catalog truth.
 //
 // This function therefore merges catalog-backed factual aliases with provider
@@ -103,8 +100,8 @@ func fallbackModelAliasesForProvider(providerType string) map[string]string {
 		return openai.ModelAliases
 	case ProviderOpenRouter:
 		return nil
-	case ProviderChatGPT:
-		return openai.CodexModelAliases
+	case ProviderCodex:
+		return codex.ModelAliases()
 	case ProviderBedrock:
 		return bedrock.ModelAliases
 	case ProviderMiniMax:

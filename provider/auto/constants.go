@@ -5,7 +5,7 @@ package auto
 const (
 	ProviderClaude     = "claude"
 	ProviderBedrock    = "bedrock"
-	ProviderChatGPT    = "chatgpt"
+	ProviderCodex      = "codex"
 	ProviderOpenAI     = "openai"
 	ProviderOpenRouter = "openrouter"
 	ProviderAnthropic  = "anthropic"

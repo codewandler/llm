@@ -7,6 +7,7 @@ import (
 	"github.com/codewandler/llm/provider/anthropic"
 	"github.com/codewandler/llm/provider/anthropic/claude"
 	"github.com/codewandler/llm/provider/bedrock"
+	"github.com/codewandler/llm/provider/codex"
 	"github.com/codewandler/llm/provider/dockermr"
 	"github.com/codewandler/llm/provider/ollama"
 	"github.com/codewandler/llm/provider/openai"
@@ -77,7 +78,7 @@ func WithoutAutoDetect() Option {
 
 // WithoutBuiltinAliases disables the built-in top-level aliases
 // fast/default/powerful. Provider-scoped aliases such as openai/mini or
-// chatgpt/codex remain available.
+// codex/codex remain available.
 func WithoutBuiltinAliases() Option {
 	return func(c *config) {
 		c.builtinAliases = false
@@ -155,15 +156,13 @@ func WithClaudeLocal() Option {
 	}
 }
 
-// WithCodexLocal adds the OpenAI provider using local Codex CLI credentials
+// WithCodexLocal adds the Codex provider using local Codex CLI credentials
 // (~/.codex/auth.json). The OAuth access token is refreshed automatically
 // when it approaches expiry, so no OPENAI_API_KEY is needed.
 //
-// The provider is registered under the "chatgpt" prefix (e.g. "chatgpt/gpt-5.3-codex")
-// to avoid clashing with a regular OpenAI API key provider ("openai/...") when
-// both are active. Only Codex-category models are exposed; general-purpose GPT
-// models are omitted because the chatgpt.com/backend-api/codex/responses endpoint
-// does not accept them.
+// The provider is registered under the "codex" prefix (e.g. "codex/gpt-5.4")
+// so it stays distinct from the regular OpenAI API provider ("openai/...") when
+// both are active.
 //
 // Requests are routed to https://chatgpt.com/backend-api (not api.openai.com)
 // because the ChatGPT Plus OAuth token lacks the api.responses.write scope
@@ -172,25 +171,21 @@ func WithClaudeLocal() Option {
 // Returns a no-op option if the credentials file is absent or unreadable.
 func WithCodexLocal() Option {
 	return func(c *config) {
-		auth, err := openai.LoadCodexAuth()
+		auth, err := codex.LoadAuth()
 		if err != nil {
 			// Credentials not available — silently skip.
 			return
 		}
-		httpClient := c.httpClient
 		c.providers = append(c.providers, providerEntry{
-			name:         ProviderChatGPT,
-			providerType: ProviderChatGPT,
+			name:         ProviderCodex,
+			providerType: ProviderCodex,
 			factory: func(opts ...llm.Option) llm.Provider {
-				// Route through the Codex backend transport.
-				// Preserve any custom httpClient transport for proxy/timeout settings.
-				var base http.RoundTripper
-				if httpClient != nil {
-					base = httpClient.Transport
+				if c.httpClient != nil {
+					opts = append(opts, llm.WithHTTPClient(c.httpClient))
 				}
-				return auth.NewProvider(base)
+				return codex.New(auth, opts...)
 			},
-			modelAliases:      modelAliasesForProvider(ProviderChatGPT),
+			modelAliases:      modelAliasesForProvider(ProviderCodex),
 			hasBuiltinAliases: true,
 		})
 	}
@@ -357,12 +352,11 @@ func WithoutOllama() Option {
 	return WithoutProvider(ProviderOllama)
 }
 
-// WithoutChatGPT is a convenience shorthand for WithoutProvider(ProviderChatGPT).
-// It prevents ChatGPT/Codex from being auto-detected even when ~/.codex/auth.json
-// is present. Useful when calling WithCodexLocal() explicitly to avoid registering
-// a duplicate chatgpt-2 instance alongside the auto-detected one.
-func WithoutChatGPT() Option {
-	return WithoutProvider(ProviderChatGPT)
+// WithoutCodex is a convenience shorthand for WithoutProvider(ProviderCodex).
+// It prevents Codex from being auto-detected even when ~/.codex/auth.json is
+// present.
+func WithoutCodex() Option {
+	return WithoutProvider(ProviderCodex)
 }
 
 // WithDockerModelRunner adds the Docker Model Runner provider explicitly,

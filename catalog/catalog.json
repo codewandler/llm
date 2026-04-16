@@ -23,7 +23,7 @@
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "anthropic/claude-3.5-haiku"
         }
       ]
@@ -45,7 +45,7 @@
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "anthropic/claude-3.5-haiku"
         }
       ]
@@ -74,13 +74,13 @@
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "anthropic/claude-3.7-sonnet"
         },
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "anthropic/claude-3.7-sonnet:thinking"
         }
       ]
@@ -102,7 +102,7 @@
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "anthropic/claude-3.7-sonnet"
         }
       ]
@@ -130,7 +130,7 @@
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "anthropic/claude-3-haiku"
         }
       ]
@@ -164,19 +164,19 @@
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "anthropic.claude-3-5-haiku-20241022-v1:0"
         },
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "claude-3-5-haiku-20241022"
         },
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "claude-3-5-haiku-latest"
         }
       ]
@@ -210,13 +210,13 @@
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "anthropic.claude-3-haiku-20240307-v1:0"
         },
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "claude-3-haiku-20240307"
         }
       ]
@@ -245,7 +245,7 @@
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "anthropic/claude-haiku-4.5"
         }
       ]
@@ -298,37 +298,37 @@
         {
           "source_id": "anthropic-static",
           "authority": "canonical",
-          "observed_at": "2026-04-16T08:32:56.92200042Z",
+          "observed_at": "2026-04-16T12:39:53.295932978Z",
           "raw_id": "Claude Haiku 4.5"
         },
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "anthropic.claude-haiku-4-5-20251001-v1:0"
         },
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "eu.anthropic.claude-haiku-4-5-20251001-v1:0"
         },
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "global.anthropic.claude-haiku-4-5-20251001-v1:0"
         },
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "us.anthropic.claude-haiku-4-5-20251001-v1:0"
         },
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "claude-haiku-4-5-20251001"
         }
       ]
@@ -363,13 +363,13 @@
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "claude-haiku-4-5"
         },
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "anthropic/claude-haiku-4.5"
         }
       ]
@@ -403,13 +403,13 @@
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "anthropic.claude-3-opus-20240229-v1:0"
         },
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "claude-3-opus-20240229"
         }
       ]
@@ -438,7 +438,7 @@
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "anthropic/claude-opus-4"
         }
       ]
@@ -490,25 +490,25 @@
         {
           "source_id": "anthropic-static",
           "authority": "canonical",
-          "observed_at": "2026-04-16T08:32:56.92200042Z",
+          "observed_at": "2026-04-16T12:39:53.295932978Z",
           "raw_id": "Claude Opus 4.0"
         },
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "anthropic.claude-opus-4-20250514-v1:0"
         },
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "us.anthropic.claude-opus-4-20250514-v1:0"
         },
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "claude-opus-4-20250514"
         }
       ]
@@ -543,13 +543,13 @@
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "claude-opus-4-0"
         },
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "anthropic/claude-opus-4"
         }
       ]
@@ -579,7 +579,7 @@
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "anthropic/claude-opus-4.1"
         }
       ]
@@ -631,37 +631,37 @@
         {
           "source_id": "anthropic-static",
           "authority": "canonical",
-          "observed_at": "2026-04-16T08:32:56.92200042Z",
+          "observed_at": "2026-04-16T12:39:53.295932978Z",
           "raw_id": "Claude Opus 4.1"
         },
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "anthropic.claude-opus-4-1-20250805-v1:0"
         },
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "us.anthropic.claude-opus-4-1-20250805-v1:0"
         },
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "claude-opus-4-1"
         },
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "claude-opus-4-1-20250805"
         },
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "anthropic/claude-opus-4.1"
         }
       ]
@@ -691,7 +691,7 @@
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "anthropic/claude-opus-4.5"
         }
       ]
@@ -743,37 +743,37 @@
         {
           "source_id": "anthropic-static",
           "authority": "canonical",
-          "observed_at": "2026-04-16T08:32:56.92200042Z",
+          "observed_at": "2026-04-16T12:39:53.295932978Z",
           "raw_id": "Claude Opus 4.5"
         },
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "anthropic.claude-opus-4-5-20251101-v1:0"
         },
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "eu.anthropic.claude-opus-4-5-20251101-v1:0"
         },
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "global.anthropic.claude-opus-4-5-20251101-v1:0"
         },
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "us.anthropic.claude-opus-4-5-20251101-v1:0"
         },
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "claude-opus-4-5-20251101"
         }
       ]
@@ -808,13 +808,13 @@
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "claude-opus-4-5"
         },
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "anthropic/claude-opus-4.5"
         }
       ]
@@ -863,13 +863,13 @@
         {
           "source_id": "anthropic-static",
           "authority": "canonical",
-          "observed_at": "2026-04-16T08:32:56.92200042Z",
+          "observed_at": "2026-04-16T12:39:53.295932978Z",
           "raw_id": "Claude Opus 4.6"
         },
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "anthropic/claude-opus-4.6"
         }
       ]
@@ -898,7 +898,7 @@
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "anthropic/claude-opus-4.6-fast"
         }
       ]
@@ -933,37 +933,37 @@
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "anthropic.claude-opus-4-6-v1"
         },
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "eu.anthropic.claude-opus-4-6-v1"
         },
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "global.anthropic.claude-opus-4-6-v1"
         },
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "us.anthropic.claude-opus-4-6-v1"
         },
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "claude-opus-4-6"
         },
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "anthropic/claude-opus-4.6"
         }
       ]
@@ -997,13 +997,13 @@
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "anthropic.claude-3-5-sonnet-20240620-v1:0"
         },
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "claude-3-5-sonnet-20240620"
         }
       ]
@@ -1037,13 +1037,13 @@
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "anthropic.claude-3-5-sonnet-20241022-v2:0"
         },
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "claude-3-5-sonnet-20241022"
         }
       ]
@@ -1078,19 +1078,19 @@
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "anthropic.claude-3-7-sonnet-20250219-v1:0"
         },
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "claude-3-7-sonnet-20250219"
         },
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "claude-3-7-sonnet-latest"
         }
       ]
@@ -1124,13 +1124,13 @@
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "anthropic.claude-3-sonnet-20240229-v1:0"
         },
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "claude-3-sonnet-20240229"
         }
       ]
@@ -1159,7 +1159,7 @@
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "anthropic/claude-sonnet-4"
         }
       ]
@@ -1211,37 +1211,37 @@
         {
           "source_id": "anthropic-static",
           "authority": "canonical",
-          "observed_at": "2026-04-16T08:32:56.92200042Z",
+          "observed_at": "2026-04-16T12:39:53.295932978Z",
           "raw_id": "Claude Sonnet 4.0"
         },
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "anthropic.claude-sonnet-4-20250514-v1:0"
         },
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "eu.anthropic.claude-sonnet-4-20250514-v1:0"
         },
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "global.anthropic.claude-sonnet-4-20250514-v1:0"
         },
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "us.anthropic.claude-sonnet-4-20250514-v1:0"
         },
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "claude-sonnet-4-20250514"
         }
       ]
@@ -1276,13 +1276,13 @@
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "claude-sonnet-4-0"
         },
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "anthropic/claude-sonnet-4"
         }
       ]
@@ -1312,7 +1312,7 @@
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "anthropic/claude-sonnet-4.5"
         }
       ]
@@ -1364,49 +1364,49 @@
         {
           "source_id": "anthropic-static",
           "authority": "canonical",
-          "observed_at": "2026-04-16T08:32:56.92200042Z",
+          "observed_at": "2026-04-16T12:39:53.295932978Z",
           "raw_id": "Claude Sonnet 4.5"
         },
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "anthropic.claude-sonnet-4-5-20250929-v1:0"
         },
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "eu.anthropic.claude-sonnet-4-5-20250929-v1:0"
         },
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "global.anthropic.claude-sonnet-4-5-20250929-v1:0"
         },
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
         },
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "claude-sonnet-4-5"
         },
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "claude-sonnet-4-5-20250929"
         },
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "anthropic/claude-sonnet-4.5"
         }
       ]
@@ -1455,13 +1455,13 @@
         {
           "source_id": "anthropic-static",
           "authority": "canonical",
-          "observed_at": "2026-04-16T08:32:56.92200042Z",
+          "observed_at": "2026-04-16T12:39:53.295932978Z",
           "raw_id": "Claude Sonnet 4.6"
         },
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "anthropic/claude-sonnet-4.6"
         }
       ]
@@ -1496,38 +1496,337 @@
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "anthropic.claude-sonnet-4-6"
         },
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "eu.anthropic.claude-sonnet-4-6"
         },
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "global.anthropic.claude-sonnet-4-6"
         },
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "us.anthropic.claude-sonnet-4-6"
         },
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "claude-sonnet-4-6"
         },
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "anthropic/claude-sonnet-4.6"
+        }
+      ]
+    },
+    {
+      "key": {
+        "creator": "minimax",
+        "family": "m2",
+        "series": "standard",
+        "version": "2"
+      },
+      "name": "MiniMax M2",
+      "aliases": [
+        "minimax-m2"
+      ],
+      "canonical": true,
+      "capabilities": {
+        "reasoning": true,
+        "tool_use": true,
+        "streaming": true,
+        "temperature": true
+      },
+      "limits": {
+        "context_window": 1000000,
+        "max_output": 32000
+      },
+      "input_modalities": [
+        "text"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "reference_pricing": {
+        "input": 2.1,
+        "output": 8.4,
+        "cached_input": 0.21,
+        "cache_write": 2.625
+      },
+      "provenance": [
+        {
+          "source_id": "minimax-static",
+          "authority": "canonical",
+          "observed_at": "2026-04-16T12:39:53.295968601Z",
+          "raw_id": "MiniMax M2"
+        }
+      ]
+    },
+    {
+      "key": {
+        "creator": "minimax",
+        "family": "m2",
+        "series": "standard",
+        "version": "2.1"
+      },
+      "name": "MiniMax M2.1",
+      "aliases": [
+        "minimax-m2-1"
+      ],
+      "canonical": true,
+      "capabilities": {
+        "reasoning": true,
+        "tool_use": true,
+        "streaming": true,
+        "temperature": true
+      },
+      "limits": {
+        "context_window": 1000000,
+        "max_output": 32000
+      },
+      "input_modalities": [
+        "text"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "reference_pricing": {
+        "input": 2.1,
+        "output": 8.4,
+        "cached_input": 0.21,
+        "cache_write": 2.625
+      },
+      "provenance": [
+        {
+          "source_id": "minimax-static",
+          "authority": "canonical",
+          "observed_at": "2026-04-16T12:39:53.295968601Z",
+          "raw_id": "MiniMax M2.1"
+        }
+      ]
+    },
+    {
+      "key": {
+        "creator": "minimax",
+        "family": "m2",
+        "series": "standard",
+        "version": "2.1",
+        "variant": "highspeed"
+      },
+      "name": "MiniMax M2.1 Highspeed",
+      "canonical": true,
+      "capabilities": {
+        "reasoning": true,
+        "tool_use": true,
+        "streaming": true,
+        "temperature": true
+      },
+      "limits": {
+        "context_window": 1000000,
+        "max_output": 32000
+      },
+      "input_modalities": [
+        "text"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "reference_pricing": {
+        "input": 4.2,
+        "output": 16.8,
+        "cached_input": 0.42,
+        "cache_write": 2.625
+      },
+      "provenance": [
+        {
+          "source_id": "minimax-static",
+          "authority": "canonical",
+          "observed_at": "2026-04-16T12:39:53.295968601Z",
+          "raw_id": "MiniMax M2.1 Highspeed"
+        }
+      ]
+    },
+    {
+      "key": {
+        "creator": "minimax",
+        "family": "m2",
+        "series": "standard",
+        "version": "2.5"
+      },
+      "name": "MiniMax M2.5",
+      "aliases": [
+        "minimax-m2-5"
+      ],
+      "canonical": true,
+      "capabilities": {
+        "reasoning": true,
+        "tool_use": true,
+        "streaming": true,
+        "temperature": true
+      },
+      "limits": {
+        "context_window": 1000000,
+        "max_output": 32000
+      },
+      "input_modalities": [
+        "text"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "reference_pricing": {
+        "input": 2.1,
+        "output": 8.4,
+        "cached_input": 0.21,
+        "cache_write": 2.625
+      },
+      "provenance": [
+        {
+          "source_id": "minimax-static",
+          "authority": "canonical",
+          "observed_at": "2026-04-16T12:39:53.295968601Z",
+          "raw_id": "MiniMax M2.5"
+        }
+      ]
+    },
+    {
+      "key": {
+        "creator": "minimax",
+        "family": "m2",
+        "series": "standard",
+        "version": "2.5",
+        "variant": "highspeed"
+      },
+      "name": "MiniMax M2.5 Highspeed",
+      "canonical": true,
+      "capabilities": {
+        "reasoning": true,
+        "tool_use": true,
+        "streaming": true,
+        "temperature": true
+      },
+      "limits": {
+        "context_window": 1000000,
+        "max_output": 32000
+      },
+      "input_modalities": [
+        "text"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "reference_pricing": {
+        "input": 4.2,
+        "output": 16.8,
+        "cached_input": 0.42,
+        "cache_write": 2.625
+      },
+      "provenance": [
+        {
+          "source_id": "minimax-static",
+          "authority": "canonical",
+          "observed_at": "2026-04-16T12:39:53.295968601Z",
+          "raw_id": "MiniMax M2.5 Highspeed"
+        }
+      ]
+    },
+    {
+      "key": {
+        "creator": "minimax",
+        "family": "m2",
+        "series": "standard",
+        "version": "2.7"
+      },
+      "name": "MiniMax M2.7",
+      "aliases": [
+        "minimax-m2-7"
+      ],
+      "canonical": true,
+      "capabilities": {
+        "reasoning": true,
+        "tool_use": true,
+        "streaming": true,
+        "interleaved_thinking": true,
+        "adaptive_thinking": true,
+        "temperature": true
+      },
+      "limits": {
+        "context_window": 1000000,
+        "max_output": 32000
+      },
+      "input_modalities": [
+        "text"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "reference_pricing": {
+        "input": 2.1,
+        "output": 8.4,
+        "cached_input": 0.42,
+        "cache_write": 2.625
+      },
+      "provenance": [
+        {
+          "source_id": "minimax-static",
+          "authority": "canonical",
+          "observed_at": "2026-04-16T12:39:53.295968601Z",
+          "raw_id": "MiniMax M2.7"
+        }
+      ]
+    },
+    {
+      "key": {
+        "creator": "minimax",
+        "family": "m2",
+        "series": "standard",
+        "version": "2.7",
+        "variant": "highspeed"
+      },
+      "name": "MiniMax M2.7 Highspeed",
+      "canonical": true,
+      "capabilities": {
+        "reasoning": true,
+        "tool_use": true,
+        "streaming": true,
+        "interleaved_thinking": true,
+        "adaptive_thinking": true,
+        "temperature": true
+      },
+      "limits": {
+        "context_window": 1000000,
+        "max_output": 32000
+      },
+      "input_modalities": [
+        "text"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "reference_pricing": {
+        "input": 4.2,
+        "output": 16.8,
+        "cached_input": 0.42,
+        "cache_write": 2.625
+      },
+      "provenance": [
+        {
+          "source_id": "minimax-static",
+          "authority": "canonical",
+          "observed_at": "2026-04-16T12:39:53.295968601Z",
+          "raw_id": "MiniMax M2.7 Highspeed"
         }
       ]
     },
@@ -1554,13 +1853,13 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-3.5-turbo"
         },
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/gpt-3.5-turbo"
         }
       ]
@@ -1578,7 +1877,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-3.5-turbo-0125"
         }
       ]
@@ -1606,7 +1905,7 @@
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/gpt-3.5-turbo-0613"
         }
       ]
@@ -1624,7 +1923,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-3.5-turbo-1106"
         }
       ]
@@ -1652,13 +1951,13 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-3.5-turbo-16k"
         },
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/gpt-3.5-turbo-16k"
         }
       ]
@@ -1685,13 +1984,13 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-3.5-turbo-instruct"
         },
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/gpt-3.5-turbo-instruct"
         }
       ]
@@ -1709,7 +2008,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-3.5-turbo-instruct-0914"
         }
       ]
@@ -1738,7 +2037,7 @@
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "gpt-3.5-turbo"
         }
       ]
@@ -1765,13 +2064,13 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-4"
         },
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/gpt-4"
         }
       ]
@@ -1800,13 +2099,13 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-4.1"
         },
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/gpt-4.1"
         }
       ]
@@ -1824,7 +2123,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-4.1-2025-04-14"
         }
       ]
@@ -1854,13 +2153,13 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-4.1-mini"
         },
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/gpt-4.1-mini"
         }
       ]
@@ -1878,7 +2177,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-4.1-mini-2025-04-14"
         }
       ]
@@ -1912,13 +2211,13 @@
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "gpt-4.1-mini"
         },
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "openai/gpt-4.1-mini"
         }
       ]
@@ -1948,13 +2247,13 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-4.1-nano"
         },
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/gpt-4.1-nano"
         }
       ]
@@ -1972,7 +2271,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-4.1-nano-2025-04-14"
         }
       ]
@@ -2006,7 +2305,7 @@
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "gpt-4.1-nano"
         }
       ]
@@ -2039,13 +2338,13 @@
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "gpt-4.1"
         },
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "openai/gpt-4.1"
         }
       ]
@@ -2073,7 +2372,7 @@
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/gpt-4-0314"
         }
       ]
@@ -2091,7 +2390,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-4-0613"
         }
       ]
@@ -2119,7 +2418,7 @@
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/gpt-4-1106-preview"
         }
       ]
@@ -2148,13 +2447,13 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-4-turbo"
         },
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/gpt-4-turbo"
         }
       ]
@@ -2172,7 +2471,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-4-turbo-2024-04-09"
         }
       ]
@@ -2200,7 +2499,7 @@
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/gpt-4-turbo-preview"
         }
       ]
@@ -2233,7 +2532,7 @@
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "gpt-4-turbo"
         }
       ]
@@ -2263,7 +2562,7 @@
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "gpt-4"
         }
       ]
@@ -2292,19 +2591,19 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-4o"
         },
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/gpt-4o"
         },
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/gpt-4o:extended"
         }
       ]
@@ -2334,13 +2633,13 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-4o-2024-05-13"
         },
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/gpt-4o-2024-05-13"
         }
       ]
@@ -2374,7 +2673,7 @@
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "gpt-4o-2024-05-13"
         }
       ]
@@ -2404,13 +2703,13 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-4o-2024-08-06"
         },
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/gpt-4o-2024-08-06"
         }
       ]
@@ -2444,7 +2743,7 @@
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "gpt-4o-2024-08-06"
         }
       ]
@@ -2474,13 +2773,13 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-4o-2024-11-20"
         },
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/gpt-4o-2024-11-20"
         }
       ]
@@ -2514,7 +2813,7 @@
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "gpt-4o-2024-11-20"
         }
       ]
@@ -2544,13 +2843,13 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-4o-audio-preview"
         },
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/gpt-4o-audio-preview"
         }
       ]
@@ -2568,7 +2867,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-4o-audio-preview-2024-12-17"
         }
       ]
@@ -2586,7 +2885,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-4o-audio-preview-2025-06-03"
         }
       ]
@@ -2616,13 +2915,13 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-4o-mini"
         },
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/gpt-4o-mini"
         }
       ]
@@ -2652,13 +2951,13 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-4o-mini-2024-07-18"
         },
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/gpt-4o-mini-2024-07-18"
         }
       ]
@@ -2676,7 +2975,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-4o-mini-audio-preview"
         }
       ]
@@ -2694,7 +2993,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-4o-mini-audio-preview-2024-12-17"
         }
       ]
@@ -2712,7 +3011,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-4o-mini-realtime-preview"
         }
       ]
@@ -2730,7 +3029,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-4o-mini-realtime-preview-2024-12-17"
         }
       ]
@@ -2756,13 +3055,13 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-4o-mini-search-preview"
         },
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/gpt-4o-mini-search-preview"
         }
       ]
@@ -2780,7 +3079,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-4o-mini-search-preview-2025-03-11"
         }
       ]
@@ -2798,7 +3097,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-4o-mini-transcribe"
         }
       ]
@@ -2816,7 +3115,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-4o-mini-transcribe-2025-03-20"
         }
       ]
@@ -2834,7 +3133,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-4o-mini-transcribe-2025-12-15"
         }
       ]
@@ -2852,7 +3151,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-4o-mini-tts"
         }
       ]
@@ -2870,7 +3169,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-4o-mini-tts-2025-03-20"
         }
       ]
@@ -2888,7 +3187,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-4o-mini-tts-2025-12-15"
         }
       ]
@@ -2922,13 +3221,13 @@
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "gpt-4o-mini"
         },
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "openai/gpt-4o-mini"
         }
       ]
@@ -2946,7 +3245,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-4o-realtime-preview"
         }
       ]
@@ -2964,7 +3263,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-4o-realtime-preview-2024-12-17"
         }
       ]
@@ -2982,7 +3281,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-4o-realtime-preview-2025-06-03"
         }
       ]
@@ -3008,13 +3307,13 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-4o-search-preview"
         },
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/gpt-4o-search-preview"
         }
       ]
@@ -3032,7 +3331,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-4o-search-preview-2025-03-11"
         }
       ]
@@ -3050,7 +3349,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-4o-transcribe"
         }
       ]
@@ -3068,7 +3367,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-4o-transcribe-diarize"
         }
       ]
@@ -3101,7 +3400,7 @@
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "gpt-4o"
         }
       ]
@@ -3129,13 +3428,13 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-5"
         },
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/gpt-5"
         }
       ]
@@ -3163,13 +3462,13 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-5.1"
         },
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/gpt-5.1"
         }
       ]
@@ -3187,7 +3486,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-5.1-2025-11-13"
         }
       ]
@@ -3216,7 +3515,7 @@
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/gpt-5.1-chat"
         }
       ]
@@ -3234,7 +3533,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-5.1-chat-latest"
         }
       ]
@@ -3268,7 +3567,7 @@
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "gpt-5.1-chat-latest"
         }
       ]
@@ -3290,7 +3589,7 @@
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "openai/gpt-5.1-chat"
         }
       ]
@@ -3318,13 +3617,13 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-5.1-codex"
         },
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/gpt-5.1-codex"
         }
       ]
@@ -3352,13 +3651,13 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-5.1-codex-max"
         },
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/gpt-5.1-codex-max"
         }
       ]
@@ -3392,13 +3691,13 @@
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "gpt-5.1-codex-max"
         },
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "openai/gpt-5.1-codex-max"
         }
       ]
@@ -3426,13 +3725,13 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-5.1-codex-mini"
         },
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/gpt-5.1-codex-mini"
         }
       ]
@@ -3466,13 +3765,13 @@
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "gpt-5.1-codex-mini"
         },
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "openai/gpt-5.1-codex-mini"
         }
       ]
@@ -3506,13 +3805,13 @@
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "gpt-5.1-codex"
         },
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "openai/gpt-5.1-codex"
         }
       ]
@@ -3545,13 +3844,13 @@
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "gpt-5.1"
         },
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "openai/gpt-5.1"
         }
       ]
@@ -3579,13 +3878,13 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-5.2"
         },
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/gpt-5.2"
         }
       ]
@@ -3603,7 +3902,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-5.2-2025-12-11"
         }
       ]
@@ -3632,7 +3931,7 @@
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/gpt-5.2-chat"
         }
       ]
@@ -3650,7 +3949,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-5.2-chat-latest"
         }
       ]
@@ -3684,7 +3983,7 @@
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "gpt-5.2-chat-latest"
         }
       ]
@@ -3706,7 +4005,7 @@
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "openai/gpt-5.2-chat"
         }
       ]
@@ -3734,13 +4033,13 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-5.2-codex"
         },
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/gpt-5.2-codex"
         }
       ]
@@ -3775,7 +4074,7 @@
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "gpt-5.2-codex"
         }
       ]
@@ -3797,7 +4096,7 @@
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "openai/gpt-5.2-codex"
         }
       ]
@@ -3826,13 +4125,13 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-5.2-pro"
         },
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/gpt-5.2-pro"
         }
       ]
@@ -3850,7 +4149,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-5.2-pro-2025-12-11"
         }
       ]
@@ -3883,13 +4182,13 @@
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "gpt-5.2-pro"
         },
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "openai/gpt-5.2-pro"
         }
       ]
@@ -3922,13 +4221,13 @@
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "gpt-5.2"
         },
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "openai/gpt-5.2"
         }
       ]
@@ -3957,7 +4256,7 @@
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/gpt-5.3-chat"
         }
       ]
@@ -3975,7 +4274,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-5.3-chat-latest"
         }
       ]
@@ -4004,13 +4303,13 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-5.3-codex"
         },
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/gpt-5.3-codex"
         }
       ]
@@ -4045,7 +4344,7 @@
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "gpt-5.3-codex-spark"
         }
       ]
@@ -4080,7 +4379,7 @@
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "gpt-5.3-codex"
         }
       ]
@@ -4108,13 +4407,13 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-5.4"
         },
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/gpt-5.4"
         }
       ]
@@ -4132,7 +4431,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-5.4-2026-03-05"
         }
       ]
@@ -4161,13 +4460,13 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-5.4-mini"
         },
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/gpt-5.4-mini"
         }
       ]
@@ -4185,7 +4484,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-5.4-mini-2026-03-17"
         }
       ]
@@ -4214,13 +4513,13 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-5.4-nano"
         },
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/gpt-5.4-nano"
         }
       ]
@@ -4238,7 +4537,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-5.4-nano-2026-03-17"
         }
       ]
@@ -4267,13 +4566,13 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-5.4-pro"
         },
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/gpt-5.4-pro"
         }
       ]
@@ -4291,7 +4590,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-5.4-pro-2026-03-05"
         }
       ]
@@ -4309,7 +4608,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-5-2025-08-07"
         }
       ]
@@ -4337,7 +4636,7 @@
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/gpt-5-chat"
         }
       ]
@@ -4355,7 +4654,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-5-chat-latest"
         }
       ]
@@ -4389,7 +4688,7 @@
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "gpt-5-chat-latest"
         }
       ]
@@ -4411,7 +4710,7 @@
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "openai/gpt-5-chat"
         }
       ]
@@ -4439,13 +4738,13 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-5-codex"
         },
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/gpt-5-codex"
         }
       ]
@@ -4479,13 +4778,13 @@
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "gpt-5-codex"
         },
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "openai/gpt-5-codex"
         }
       ]
@@ -4516,7 +4815,7 @@
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/gpt-5-image"
         }
       ]
@@ -4547,7 +4846,7 @@
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/gpt-5-image-mini"
         }
       ]
@@ -4569,7 +4868,7 @@
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "openai/gpt-5-image"
         }
       ]
@@ -4598,13 +4897,13 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-5-mini"
         },
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/gpt-5-mini"
         }
       ]
@@ -4622,7 +4921,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-5-mini-2025-08-07"
         }
       ]
@@ -4656,13 +4955,13 @@
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "gpt-5-mini"
         },
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "openai/gpt-5-mini"
         }
       ]
@@ -4691,13 +4990,13 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-5-nano"
         },
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/gpt-5-nano"
         }
       ]
@@ -4715,7 +5014,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-5-nano-2025-08-07"
         }
       ]
@@ -4749,13 +5048,13 @@
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "gpt-5-nano"
         },
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "openai/gpt-5-nano"
         }
       ]
@@ -4784,13 +5083,13 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-5-pro"
         },
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/gpt-5-pro"
         }
       ]
@@ -4808,7 +5107,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-5-pro-2025-10-06"
         }
       ]
@@ -4842,13 +5141,13 @@
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "gpt-5-pro"
         },
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "openai/gpt-5-pro"
         }
       ]
@@ -4866,7 +5165,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-5-search-api"
         }
       ]
@@ -4884,7 +5183,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-5-search-api-2025-10-14"
         }
       ]
@@ -4917,13 +5216,13 @@
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "gpt-5"
         },
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "openai/gpt-5"
         }
       ]
@@ -4952,13 +5251,13 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-audio"
         },
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/gpt-audio"
         }
       ]
@@ -4976,7 +5275,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-audio-1.5"
         }
       ]
@@ -4994,7 +5293,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-audio-2025-08-28"
         }
       ]
@@ -5024,13 +5323,13 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-audio-mini"
         },
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/gpt-audio-mini"
         }
       ]
@@ -5048,7 +5347,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-audio-mini-2025-10-06"
         }
       ]
@@ -5066,7 +5365,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-audio-mini-2025-12-15"
         }
       ]
@@ -5084,7 +5383,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-image-1"
         }
       ]
@@ -5102,7 +5401,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-image-1-mini"
         }
       ]
@@ -5120,7 +5419,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-image-1.5"
         }
       ]
@@ -5148,13 +5447,13 @@
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/gpt-oss-120b:free"
         },
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/gpt-oss-120b"
         }
       ]
@@ -5175,19 +5474,19 @@
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "openai/gpt-oss-120b"
         },
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "openai/gpt-oss-120b:exacto"
         },
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "openai/gpt-oss-120b:free"
         }
       ]
@@ -5215,13 +5514,13 @@
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/gpt-oss-20b:free"
         },
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/gpt-oss-20b"
         }
       ]
@@ -5242,13 +5541,13 @@
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "openai/gpt-oss-20b"
         },
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "openai/gpt-oss-20b:free"
         }
       ]
@@ -5276,7 +5575,7 @@
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/gpt-oss-safeguard-20b"
         }
       ]
@@ -5296,7 +5595,7 @@
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "openai/gpt-oss-safeguard-20b"
         }
       ]
@@ -5313,7 +5612,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-realtime"
         }
       ]
@@ -5331,7 +5630,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-realtime-1.5"
         }
       ]
@@ -5349,7 +5648,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-realtime-2025-08-28"
         }
       ]
@@ -5367,7 +5666,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-realtime-mini"
         }
       ]
@@ -5385,7 +5684,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-realtime-mini-2025-10-06"
         }
       ]
@@ -5403,7 +5702,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-realtime-mini-2025-12-15"
         }
       ]
@@ -5431,13 +5730,13 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "o1"
         },
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/o1"
         }
       ]
@@ -5455,7 +5754,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "o1-2024-12-17"
         }
       ]
@@ -5485,7 +5784,7 @@
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "o1-mini"
         }
       ]
@@ -5515,7 +5814,7 @@
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "o1-preview"
         }
       ]
@@ -5543,13 +5842,13 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "o1-pro"
         },
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/o1-pro"
         }
       ]
@@ -5567,7 +5866,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "o1-pro-2025-03-19"
         }
       ]
@@ -5601,7 +5900,7 @@
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "o1-pro"
         }
       ]
@@ -5634,7 +5933,7 @@
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "o1"
         }
       ]
@@ -5662,13 +5961,13 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "o3"
         },
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/o3"
         }
       ]
@@ -5686,7 +5985,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "o3-2025-04-16"
         }
       ]
@@ -5716,13 +6015,13 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "o3-deep-research"
         },
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/o3-deep-research"
         }
       ]
@@ -5740,7 +6039,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "o3-deep-research-2025-06-26"
         }
       ]
@@ -5773,7 +6072,7 @@
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "o3-deep-research"
         }
       ]
@@ -5801,13 +6100,13 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "o3-mini"
         },
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/o3-mini"
         }
       ]
@@ -5825,7 +6124,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "o3-mini-2025-01-31"
         }
       ]
@@ -5853,7 +6152,7 @@
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/o3-mini-high"
         }
       ]
@@ -5884,7 +6183,7 @@
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "o3-mini"
         }
       ]
@@ -5913,13 +6212,13 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "o3-pro"
         },
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/o3-pro"
         }
       ]
@@ -5937,7 +6236,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "o3-pro-2025-06-10"
         }
       ]
@@ -5971,7 +6270,7 @@
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "o3-pro"
         }
       ]
@@ -6004,7 +6303,7 @@
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "o3"
         }
       ]
@@ -6033,13 +6332,13 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "o4-mini"
         },
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/o4-mini"
         }
       ]
@@ -6057,7 +6356,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "o4-mini-2025-04-16"
         }
       ]
@@ -6087,13 +6386,13 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "o4-mini-deep-research"
         },
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/o4-mini-deep-research"
         }
       ]
@@ -6111,7 +6410,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "o4-mini-deep-research-2025-06-26"
         }
       ]
@@ -6144,7 +6443,7 @@
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "o4-mini-deep-research"
         }
       ]
@@ -6173,7 +6472,7 @@
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/o4-mini-high"
         }
       ]
@@ -6207,13 +6506,13 @@
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "o4-mini"
         },
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "openai/o4-mini"
         }
       ]
@@ -6231,7 +6530,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "omni-moderation-2024-09-26"
         }
       ]
@@ -6249,7 +6548,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "omni-moderation-latest"
         }
       ]
@@ -6270,12 +6569,12 @@
         {
           "source_id": "anthropic-static",
           "authority": "canonical",
-          "observed_at": "2026-04-16T08:32:56.92200042Z"
+          "observed_at": "2026-04-16T12:39:53.295932978Z"
         },
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "anthropic"
         }
       ]
@@ -6296,8 +6595,21 @@
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "amazon-bedrock"
+        }
+      ]
+    },
+    {
+      "id": "minimax",
+      "name": "MiniMax",
+      "kind": "direct",
+      "operator": "minimax",
+      "provenance": [
+        {
+          "source_id": "minimax-static",
+          "authority": "canonical",
+          "observed_at": "2026-04-16T12:39:53.295968601Z"
         }
       ]
     },
@@ -6315,13 +6627,13 @@
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "openai"
         },
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z"
+          "observed_at": "2026-04-16T12:39:54.161587277Z"
         }
       ]
     },
@@ -6340,13 +6652,13 @@
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "openrouter"
         },
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z"
+          "observed_at": "2026-04-16T12:39:54.3216638Z"
         }
       ]
     }
@@ -6378,7 +6690,7 @@
         {
           "source_id": "anthropic-static",
           "authority": "canonical",
-          "observed_at": "2026-04-16T08:32:56.92200042Z",
+          "observed_at": "2026-04-16T12:39:53.295932978Z",
           "raw_id": "claude-haiku-4-5-20251001"
         }
       ]
@@ -6406,7 +6718,7 @@
         {
           "source_id": "anthropic-static",
           "authority": "canonical",
-          "observed_at": "2026-04-16T08:32:56.92200042Z",
+          "observed_at": "2026-04-16T12:39:53.295932978Z",
           "raw_id": "claude-opus-4"
         }
       ]
@@ -6434,7 +6746,7 @@
         {
           "source_id": "anthropic-static",
           "authority": "canonical",
-          "observed_at": "2026-04-16T08:32:56.92200042Z",
+          "observed_at": "2026-04-16T12:39:53.295932978Z",
           "raw_id": "claude-opus-4-1"
         }
       ]
@@ -6462,7 +6774,7 @@
         {
           "source_id": "anthropic-static",
           "authority": "canonical",
-          "observed_at": "2026-04-16T08:32:56.92200042Z",
+          "observed_at": "2026-04-16T12:39:53.295932978Z",
           "raw_id": "claude-opus-4-1-20250805"
         }
       ]
@@ -6490,7 +6802,7 @@
         {
           "source_id": "anthropic-static",
           "authority": "canonical",
-          "observed_at": "2026-04-16T08:32:56.92200042Z",
+          "observed_at": "2026-04-16T12:39:53.295932978Z",
           "raw_id": "claude-opus-4-20250514"
         }
       ]
@@ -6518,7 +6830,7 @@
         {
           "source_id": "anthropic-static",
           "authority": "canonical",
-          "observed_at": "2026-04-16T08:32:56.92200042Z",
+          "observed_at": "2026-04-16T12:39:53.295932978Z",
           "raw_id": "claude-opus-4-5"
         }
       ]
@@ -6546,7 +6858,7 @@
         {
           "source_id": "anthropic-static",
           "authority": "canonical",
-          "observed_at": "2026-04-16T08:32:56.92200042Z",
+          "observed_at": "2026-04-16T12:39:53.295932978Z",
           "raw_id": "claude-opus-4-5-20251101"
         }
       ]
@@ -6577,7 +6889,7 @@
         {
           "source_id": "anthropic-static",
           "authority": "canonical",
-          "observed_at": "2026-04-16T08:32:56.92200042Z",
+          "observed_at": "2026-04-16T12:39:53.295932978Z",
           "raw_id": "claude-opus-4-6"
         }
       ]
@@ -6605,7 +6917,7 @@
         {
           "source_id": "anthropic-static",
           "authority": "canonical",
-          "observed_at": "2026-04-16T08:32:56.92200042Z",
+          "observed_at": "2026-04-16T12:39:53.295932978Z",
           "raw_id": "claude-sonnet-4"
         }
       ]
@@ -6633,7 +6945,7 @@
         {
           "source_id": "anthropic-static",
           "authority": "canonical",
-          "observed_at": "2026-04-16T08:32:56.92200042Z",
+          "observed_at": "2026-04-16T12:39:53.295932978Z",
           "raw_id": "claude-sonnet-4-20250514"
         }
       ]
@@ -6661,7 +6973,7 @@
         {
           "source_id": "anthropic-static",
           "authority": "canonical",
-          "observed_at": "2026-04-16T08:32:56.92200042Z",
+          "observed_at": "2026-04-16T12:39:53.295932978Z",
           "raw_id": "claude-sonnet-4-5-20250929"
         }
       ]
@@ -6693,7 +7005,7 @@
         {
           "source_id": "anthropic-static",
           "authority": "canonical",
-          "observed_at": "2026-04-16T08:32:56.92200042Z",
+          "observed_at": "2026-04-16T12:39:53.295932978Z",
           "raw_id": "claude-sonnet-4-6"
         }
       ]
@@ -6722,7 +7034,7 @@
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "anthropic.claude-3-5-haiku-20241022-v1:0"
         }
       ]
@@ -6751,7 +7063,7 @@
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "anthropic.claude-3-5-sonnet-20240620-v1:0"
         }
       ]
@@ -6780,7 +7092,7 @@
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "anthropic.claude-3-5-sonnet-20241022-v2:0"
         }
       ]
@@ -6809,7 +7121,7 @@
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "anthropic.claude-3-7-sonnet-20250219-v1:0"
         }
       ]
@@ -6836,7 +7148,7 @@
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "anthropic.claude-3-haiku-20240307-v1:0"
         }
       ]
@@ -6863,7 +7175,7 @@
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "anthropic.claude-3-opus-20240229-v1:0"
         }
       ]
@@ -6890,7 +7202,7 @@
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "anthropic.claude-3-sonnet-20240229-v1:0"
         }
       ]
@@ -6919,7 +7231,7 @@
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "anthropic.claude-haiku-4-5-20251001-v1:0"
         }
       ]
@@ -6948,7 +7260,7 @@
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "anthropic.claude-opus-4-1-20250805-v1:0"
         }
       ]
@@ -6977,7 +7289,7 @@
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "anthropic.claude-opus-4-20250514-v1:0"
         }
       ]
@@ -7006,7 +7318,7 @@
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "anthropic.claude-opus-4-5-20251101-v1:0"
         }
       ]
@@ -7035,7 +7347,7 @@
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "anthropic.claude-opus-4-6-v1"
         }
       ]
@@ -7064,7 +7376,7 @@
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "anthropic.claude-sonnet-4-20250514-v1:0"
         }
       ]
@@ -7093,7 +7405,7 @@
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "anthropic.claude-sonnet-4-5-20250929-v1:0"
         }
       ]
@@ -7122,7 +7434,7 @@
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "anthropic.claude-sonnet-4-6"
         }
       ]
@@ -7151,7 +7463,7 @@
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "eu.anthropic.claude-haiku-4-5-20251001-v1:0"
         }
       ]
@@ -7180,7 +7492,7 @@
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "eu.anthropic.claude-opus-4-5-20251101-v1:0"
         }
       ]
@@ -7209,7 +7521,7 @@
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "eu.anthropic.claude-opus-4-6-v1"
         }
       ]
@@ -7238,7 +7550,7 @@
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "eu.anthropic.claude-sonnet-4-20250514-v1:0"
         }
       ]
@@ -7267,7 +7579,7 @@
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "eu.anthropic.claude-sonnet-4-5-20250929-v1:0"
         }
       ]
@@ -7296,7 +7608,7 @@
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "eu.anthropic.claude-sonnet-4-6"
         }
       ]
@@ -7325,7 +7637,7 @@
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "global.anthropic.claude-haiku-4-5-20251001-v1:0"
         }
       ]
@@ -7354,7 +7666,7 @@
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "global.anthropic.claude-opus-4-5-20251101-v1:0"
         }
       ]
@@ -7383,7 +7695,7 @@
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "global.anthropic.claude-opus-4-6-v1"
         }
       ]
@@ -7412,7 +7724,7 @@
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "global.anthropic.claude-sonnet-4-20250514-v1:0"
         }
       ]
@@ -7441,7 +7753,7 @@
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "global.anthropic.claude-sonnet-4-5-20250929-v1:0"
         }
       ]
@@ -7470,7 +7782,7 @@
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "global.anthropic.claude-sonnet-4-6"
         }
       ]
@@ -7499,7 +7811,7 @@
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "us.anthropic.claude-haiku-4-5-20251001-v1:0"
         }
       ]
@@ -7528,7 +7840,7 @@
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "us.anthropic.claude-opus-4-1-20250805-v1:0"
         }
       ]
@@ -7557,7 +7869,7 @@
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "us.anthropic.claude-opus-4-20250514-v1:0"
         }
       ]
@@ -7586,7 +7898,7 @@
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "us.anthropic.claude-opus-4-5-20251101-v1:0"
         }
       ]
@@ -7615,7 +7927,7 @@
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "us.anthropic.claude-opus-4-6-v1"
         }
       ]
@@ -7644,7 +7956,7 @@
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "us.anthropic.claude-sonnet-4-20250514-v1:0"
         }
       ]
@@ -7673,7 +7985,7 @@
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
         }
       ]
@@ -7702,8 +8014,214 @@
         {
           "source_id": "modelsdev",
           "authority": "enrichment",
-          "observed_at": "2026-04-16T08:32:56.939165436Z",
+          "observed_at": "2026-04-16T12:39:53.312940796Z",
           "raw_id": "us.anthropic.claude-sonnet-4-6"
+        }
+      ]
+    },
+    {
+      "service_id": "minimax",
+      "wire_model_id": "MiniMax-M2",
+      "model_key": {
+        "creator": "minimax",
+        "family": "m2",
+        "series": "standard",
+        "version": "2"
+      },
+      "api_types": [
+        "anthropic-messages"
+      ],
+      "pricing": {
+        "input": 2.1,
+        "output": 8.4,
+        "cached_input": 0.21,
+        "cache_write": 2.625
+      },
+      "provenance": [
+        {
+          "source_id": "minimax-static",
+          "authority": "canonical",
+          "observed_at": "2026-04-16T12:39:53.295968601Z",
+          "raw_id": "MiniMax-M2"
+        }
+      ]
+    },
+    {
+      "service_id": "minimax",
+      "wire_model_id": "MiniMax-M2.1",
+      "model_key": {
+        "creator": "minimax",
+        "family": "m2",
+        "series": "standard",
+        "version": "2.1"
+      },
+      "api_types": [
+        "anthropic-messages"
+      ],
+      "pricing": {
+        "input": 2.1,
+        "output": 8.4,
+        "cached_input": 0.21,
+        "cache_write": 2.625
+      },
+      "provenance": [
+        {
+          "source_id": "minimax-static",
+          "authority": "canonical",
+          "observed_at": "2026-04-16T12:39:53.295968601Z",
+          "raw_id": "MiniMax-M2.1"
+        }
+      ]
+    },
+    {
+      "service_id": "minimax",
+      "wire_model_id": "MiniMax-M2.1-highspeed",
+      "model_key": {
+        "creator": "minimax",
+        "family": "m2",
+        "series": "standard",
+        "version": "2.1",
+        "variant": "highspeed"
+      },
+      "aliases": [
+        "highspeed"
+      ],
+      "api_types": [
+        "anthropic-messages"
+      ],
+      "pricing": {
+        "input": 4.2,
+        "output": 16.8,
+        "cached_input": 0.42,
+        "cache_write": 2.625
+      },
+      "provenance": [
+        {
+          "source_id": "minimax-static",
+          "authority": "canonical",
+          "observed_at": "2026-04-16T12:39:53.295968601Z",
+          "raw_id": "MiniMax-M2.1-highspeed"
+        }
+      ]
+    },
+    {
+      "service_id": "minimax",
+      "wire_model_id": "MiniMax-M2.5",
+      "model_key": {
+        "creator": "minimax",
+        "family": "m2",
+        "series": "standard",
+        "version": "2.5"
+      },
+      "api_types": [
+        "anthropic-messages"
+      ],
+      "pricing": {
+        "input": 2.1,
+        "output": 8.4,
+        "cached_input": 0.21,
+        "cache_write": 2.625
+      },
+      "provenance": [
+        {
+          "source_id": "minimax-static",
+          "authority": "canonical",
+          "observed_at": "2026-04-16T12:39:53.295968601Z",
+          "raw_id": "MiniMax-M2.5"
+        }
+      ]
+    },
+    {
+      "service_id": "minimax",
+      "wire_model_id": "MiniMax-M2.5-highspeed",
+      "model_key": {
+        "creator": "minimax",
+        "family": "m2",
+        "series": "standard",
+        "version": "2.5",
+        "variant": "highspeed"
+      },
+      "aliases": [
+        "highspeed"
+      ],
+      "api_types": [
+        "anthropic-messages"
+      ],
+      "pricing": {
+        "input": 4.2,
+        "output": 16.8,
+        "cached_input": 0.42,
+        "cache_write": 2.625
+      },
+      "provenance": [
+        {
+          "source_id": "minimax-static",
+          "authority": "canonical",
+          "observed_at": "2026-04-16T12:39:53.295968601Z",
+          "raw_id": "MiniMax-M2.5-highspeed"
+        }
+      ]
+    },
+    {
+      "service_id": "minimax",
+      "wire_model_id": "MiniMax-M2.7",
+      "model_key": {
+        "creator": "minimax",
+        "family": "m2",
+        "series": "standard",
+        "version": "2.7"
+      },
+      "aliases": [
+        "default",
+        "fast",
+        "minimax"
+      ],
+      "api_types": [
+        "anthropic-messages"
+      ],
+      "pricing": {
+        "input": 2.1,
+        "output": 8.4,
+        "cached_input": 0.42,
+        "cache_write": 2.625
+      },
+      "provenance": [
+        {
+          "source_id": "minimax-static",
+          "authority": "canonical",
+          "observed_at": "2026-04-16T12:39:53.295968601Z",
+          "raw_id": "MiniMax-M2.7"
+        }
+      ]
+    },
+    {
+      "service_id": "minimax",
+      "wire_model_id": "MiniMax-M2.7-highspeed",
+      "model_key": {
+        "creator": "minimax",
+        "family": "m2",
+        "series": "standard",
+        "version": "2.7",
+        "variant": "highspeed"
+      },
+      "aliases": [
+        "highspeed"
+      ],
+      "api_types": [
+        "anthropic-messages"
+      ],
+      "pricing": {
+        "input": 4.2,
+        "output": 16.8,
+        "cached_input": 0.42,
+        "cache_write": 2.625
+      },
+      "provenance": [
+        {
+          "source_id": "minimax-static",
+          "authority": "canonical",
+          "observed_at": "2026-04-16T12:39:53.295968601Z",
+          "raw_id": "MiniMax-M2.7-highspeed"
         }
       ]
     },
@@ -7720,7 +8238,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-3.5-turbo"
         }
       ]
@@ -7738,7 +8256,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-3.5-turbo-0125"
         }
       ]
@@ -7756,7 +8274,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-3.5-turbo-1106"
         }
       ]
@@ -7774,7 +8292,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-3.5-turbo-16k"
         }
       ]
@@ -7792,7 +8310,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-3.5-turbo-instruct"
         }
       ]
@@ -7810,7 +8328,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-3.5-turbo-instruct-0914"
         }
       ]
@@ -7827,7 +8345,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-4"
         }
       ]
@@ -7845,7 +8363,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-4-0613"
         }
       ]
@@ -7863,7 +8381,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-4-turbo"
         }
       ]
@@ -7881,7 +8399,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-4-turbo-2024-04-09"
         }
       ]
@@ -7898,7 +8416,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-4.1"
         }
       ]
@@ -7916,7 +8434,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-4.1-2025-04-14"
         }
       ]
@@ -7934,7 +8452,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-4.1-mini"
         }
       ]
@@ -7952,7 +8470,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-4.1-mini-2025-04-14"
         }
       ]
@@ -7970,7 +8488,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-4.1-nano"
         }
       ]
@@ -7988,7 +8506,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-4.1-nano-2025-04-14"
         }
       ]
@@ -8005,7 +8523,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-4o"
         }
       ]
@@ -8023,7 +8541,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-4o-2024-05-13"
         }
       ]
@@ -8041,7 +8559,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-4o-2024-08-06"
         }
       ]
@@ -8059,7 +8577,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-4o-2024-11-20"
         }
       ]
@@ -8077,7 +8595,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-4o-audio-preview"
         }
       ]
@@ -8095,7 +8613,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-4o-audio-preview-2024-12-17"
         }
       ]
@@ -8113,7 +8631,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-4o-audio-preview-2025-06-03"
         }
       ]
@@ -8131,7 +8649,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-4o-mini"
         }
       ]
@@ -8149,7 +8667,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-4o-mini-2024-07-18"
         }
       ]
@@ -8167,7 +8685,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-4o-mini-audio-preview"
         }
       ]
@@ -8185,7 +8703,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-4o-mini-audio-preview-2024-12-17"
         }
       ]
@@ -8203,7 +8721,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-4o-mini-realtime-preview"
         }
       ]
@@ -8221,7 +8739,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-4o-mini-realtime-preview-2024-12-17"
         }
       ]
@@ -8239,7 +8757,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-4o-mini-search-preview"
         }
       ]
@@ -8257,7 +8775,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-4o-mini-search-preview-2025-03-11"
         }
       ]
@@ -8275,7 +8793,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-4o-mini-transcribe"
         }
       ]
@@ -8293,7 +8811,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-4o-mini-transcribe-2025-03-20"
         }
       ]
@@ -8311,7 +8829,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-4o-mini-transcribe-2025-12-15"
         }
       ]
@@ -8329,7 +8847,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-4o-mini-tts"
         }
       ]
@@ -8347,7 +8865,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-4o-mini-tts-2025-03-20"
         }
       ]
@@ -8365,7 +8883,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-4o-mini-tts-2025-12-15"
         }
       ]
@@ -8383,7 +8901,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-4o-realtime-preview"
         }
       ]
@@ -8401,7 +8919,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-4o-realtime-preview-2024-12-17"
         }
       ]
@@ -8419,7 +8937,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-4o-realtime-preview-2025-06-03"
         }
       ]
@@ -8437,7 +8955,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-4o-search-preview"
         }
       ]
@@ -8455,7 +8973,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-4o-search-preview-2025-03-11"
         }
       ]
@@ -8473,7 +8991,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-4o-transcribe"
         }
       ]
@@ -8491,7 +9009,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-4o-transcribe-diarize"
         }
       ]
@@ -8508,7 +9026,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-5"
         }
       ]
@@ -8526,7 +9044,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-5-2025-08-07"
         }
       ]
@@ -8544,7 +9062,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-5-chat-latest"
         }
       ]
@@ -8562,7 +9080,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-5-codex"
         }
       ]
@@ -8580,7 +9098,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-5-mini"
         }
       ]
@@ -8598,7 +9116,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-5-mini-2025-08-07"
         }
       ]
@@ -8616,7 +9134,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-5-nano"
         }
       ]
@@ -8634,7 +9152,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-5-nano-2025-08-07"
         }
       ]
@@ -8652,7 +9170,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-5-pro"
         }
       ]
@@ -8670,7 +9188,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-5-pro-2025-10-06"
         }
       ]
@@ -8688,7 +9206,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-5-search-api"
         }
       ]
@@ -8706,7 +9224,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-5-search-api-2025-10-14"
         }
       ]
@@ -8723,7 +9241,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-5.1"
         }
       ]
@@ -8741,7 +9259,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-5.1-2025-11-13"
         }
       ]
@@ -8759,7 +9277,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-5.1-chat-latest"
         }
       ]
@@ -8777,7 +9295,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-5.1-codex"
         }
       ]
@@ -8795,7 +9313,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-5.1-codex-max"
         }
       ]
@@ -8813,7 +9331,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-5.1-codex-mini"
         }
       ]
@@ -8830,7 +9348,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-5.2"
         }
       ]
@@ -8848,7 +9366,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-5.2-2025-12-11"
         }
       ]
@@ -8866,7 +9384,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-5.2-chat-latest"
         }
       ]
@@ -8884,7 +9402,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-5.2-codex"
         }
       ]
@@ -8902,7 +9420,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-5.2-pro"
         }
       ]
@@ -8920,7 +9438,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-5.2-pro-2025-12-11"
         }
       ]
@@ -8938,7 +9456,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-5.3-chat-latest"
         }
       ]
@@ -8956,7 +9474,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-5.3-codex"
         }
       ]
@@ -8973,7 +9491,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-5.4"
         }
       ]
@@ -8991,7 +9509,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-5.4-2026-03-05"
         }
       ]
@@ -9009,7 +9527,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-5.4-mini"
         }
       ]
@@ -9027,7 +9545,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-5.4-mini-2026-03-17"
         }
       ]
@@ -9045,7 +9563,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-5.4-nano"
         }
       ]
@@ -9063,7 +9581,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-5.4-nano-2026-03-17"
         }
       ]
@@ -9081,7 +9599,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-5.4-pro"
         }
       ]
@@ -9099,7 +9617,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-5.4-pro-2026-03-05"
         }
       ]
@@ -9116,7 +9634,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-audio"
         }
       ]
@@ -9134,7 +9652,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-audio-1.5"
         }
       ]
@@ -9152,7 +9670,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-audio-2025-08-28"
         }
       ]
@@ -9170,7 +9688,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-audio-mini"
         }
       ]
@@ -9188,7 +9706,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-audio-mini-2025-10-06"
         }
       ]
@@ -9206,7 +9724,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-audio-mini-2025-12-15"
         }
       ]
@@ -9224,7 +9742,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-image-1"
         }
       ]
@@ -9242,7 +9760,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-image-1-mini"
         }
       ]
@@ -9260,7 +9778,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-image-1.5"
         }
       ]
@@ -9277,7 +9795,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-realtime"
         }
       ]
@@ -9295,7 +9813,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-realtime-1.5"
         }
       ]
@@ -9313,7 +9831,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-realtime-2025-08-28"
         }
       ]
@@ -9331,7 +9849,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-realtime-mini"
         }
       ]
@@ -9349,7 +9867,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-realtime-mini-2025-10-06"
         }
       ]
@@ -9367,7 +9885,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "gpt-realtime-mini-2025-12-15"
         }
       ]
@@ -9384,7 +9902,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "o1"
         }
       ]
@@ -9402,7 +9920,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "o1-2024-12-17"
         }
       ]
@@ -9420,7 +9938,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "o1-pro"
         }
       ]
@@ -9438,7 +9956,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "o1-pro-2025-03-19"
         }
       ]
@@ -9455,7 +9973,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "o3"
         }
       ]
@@ -9473,7 +9991,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "o3-2025-04-16"
         }
       ]
@@ -9491,7 +10009,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "o3-deep-research"
         }
       ]
@@ -9509,7 +10027,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "o3-deep-research-2025-06-26"
         }
       ]
@@ -9527,7 +10045,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "o3-mini"
         }
       ]
@@ -9545,7 +10063,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "o3-mini-2025-01-31"
         }
       ]
@@ -9563,7 +10081,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "o3-pro"
         }
       ]
@@ -9581,7 +10099,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "o3-pro-2025-06-10"
         }
       ]
@@ -9599,7 +10117,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "o4-mini"
         }
       ]
@@ -9617,7 +10135,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "o4-mini-2025-04-16"
         }
       ]
@@ -9635,7 +10153,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "o4-mini-deep-research"
         }
       ]
@@ -9653,7 +10171,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "o4-mini-deep-research-2025-06-26"
         }
       ]
@@ -9671,7 +10189,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "omni-moderation-2024-09-26"
         }
       ]
@@ -9689,7 +10207,7 @@
         {
           "source_id": "openai-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:57.878440022Z",
+          "observed_at": "2026-04-16T12:39:54.161587277Z",
           "raw_id": "omni-moderation-latest"
         }
       ]
@@ -9716,7 +10234,7 @@
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "anthropic/claude-3-haiku"
         }
       ]
@@ -9746,7 +10264,7 @@
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "anthropic/claude-3.5-haiku"
         }
       ]
@@ -9776,7 +10294,7 @@
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "anthropic/claude-3.7-sonnet"
         }
       ]
@@ -9806,7 +10324,7 @@
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "anthropic/claude-3.7-sonnet:thinking"
         }
       ]
@@ -9836,7 +10354,7 @@
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "anthropic/claude-haiku-4.5"
         }
       ]
@@ -9866,7 +10384,7 @@
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "anthropic/claude-opus-4"
         }
       ]
@@ -9896,7 +10414,7 @@
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "anthropic/claude-opus-4.1"
         }
       ]
@@ -9926,7 +10444,7 @@
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "anthropic/claude-opus-4.5"
         }
       ]
@@ -9956,7 +10474,7 @@
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "anthropic/claude-opus-4.6"
         }
       ]
@@ -9986,7 +10504,7 @@
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "anthropic/claude-opus-4.6-fast"
         }
       ]
@@ -10016,7 +10534,7 @@
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "anthropic/claude-sonnet-4"
         }
       ]
@@ -10046,7 +10564,7 @@
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "anthropic/claude-sonnet-4.5"
         }
       ]
@@ -10076,7 +10594,7 @@
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "anthropic/claude-sonnet-4.6"
         }
       ]
@@ -10102,7 +10620,7 @@
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/gpt-3.5-turbo"
         }
       ]
@@ -10128,7 +10646,7 @@
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/gpt-3.5-turbo-0613"
         }
       ]
@@ -10154,7 +10672,7 @@
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/gpt-3.5-turbo-16k"
         }
       ]
@@ -10180,7 +10698,7 @@
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/gpt-3.5-turbo-instruct"
         }
       ]
@@ -10205,7 +10723,7 @@
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/gpt-4"
         }
       ]
@@ -10231,7 +10749,7 @@
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/gpt-4-0314"
         }
       ]
@@ -10257,7 +10775,7 @@
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/gpt-4-1106-preview"
         }
       ]
@@ -10283,7 +10801,7 @@
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/gpt-4-turbo"
         }
       ]
@@ -10309,7 +10827,7 @@
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/gpt-4-turbo-preview"
         }
       ]
@@ -10337,7 +10855,7 @@
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/gpt-4.1"
         }
       ]
@@ -10367,7 +10885,7 @@
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/gpt-4.1-mini"
         }
       ]
@@ -10397,7 +10915,7 @@
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/gpt-4.1-nano"
         }
       ]
@@ -10422,7 +10940,7 @@
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/gpt-4o"
         }
       ]
@@ -10448,7 +10966,7 @@
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/gpt-4o-2024-05-13"
         }
       ]
@@ -10475,7 +10993,7 @@
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/gpt-4o-2024-08-06"
         }
       ]
@@ -10502,7 +11020,7 @@
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/gpt-4o-2024-11-20"
         }
       ]
@@ -10528,7 +11046,7 @@
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/gpt-4o-audio-preview"
         }
       ]
@@ -10555,7 +11073,7 @@
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/gpt-4o-mini"
         }
       ]
@@ -10582,7 +11100,7 @@
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/gpt-4o-mini-2024-07-18"
         }
       ]
@@ -10611,7 +11129,7 @@
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/gpt-4o-mini-search-preview"
         }
       ]
@@ -10640,7 +11158,7 @@
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/gpt-4o-search-preview"
         }
       ]
@@ -10668,7 +11186,7 @@
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/gpt-4o:extended"
         }
       ]
@@ -10697,7 +11215,7 @@
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/gpt-5"
         }
       ]
@@ -10727,7 +11245,7 @@
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/gpt-5-chat"
         }
       ]
@@ -10754,7 +11272,7 @@
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/gpt-5-codex"
         }
       ]
@@ -10781,7 +11299,7 @@
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/gpt-5-image"
         }
       ]
@@ -10808,7 +11326,7 @@
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/gpt-5-image-mini"
         }
       ]
@@ -10838,7 +11356,7 @@
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/gpt-5-mini"
         }
       ]
@@ -10867,7 +11385,7 @@
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/gpt-5-nano"
         }
       ]
@@ -10896,7 +11414,7 @@
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/gpt-5-pro"
         }
       ]
@@ -10925,7 +11443,7 @@
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/gpt-5.1"
         }
       ]
@@ -10955,7 +11473,7 @@
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/gpt-5.1-chat"
         }
       ]
@@ -10985,7 +11503,7 @@
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/gpt-5.1-codex"
         }
       ]
@@ -11015,7 +11533,7 @@
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/gpt-5.1-codex-max"
         }
       ]
@@ -11045,7 +11563,7 @@
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/gpt-5.1-codex-mini"
         }
       ]
@@ -11074,7 +11592,7 @@
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/gpt-5.2"
         }
       ]
@@ -11104,7 +11622,7 @@
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/gpt-5.2-chat"
         }
       ]
@@ -11134,7 +11652,7 @@
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/gpt-5.2-codex"
         }
       ]
@@ -11163,7 +11681,7 @@
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/gpt-5.2-pro"
         }
       ]
@@ -11193,7 +11711,7 @@
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/gpt-5.3-chat"
         }
       ]
@@ -11223,7 +11741,7 @@
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/gpt-5.3-codex"
         }
       ]
@@ -11252,7 +11770,7 @@
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/gpt-5.4"
         }
       ]
@@ -11282,7 +11800,7 @@
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/gpt-5.4-mini"
         }
       ]
@@ -11312,7 +11830,7 @@
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/gpt-5.4-nano"
         }
       ]
@@ -11341,7 +11859,7 @@
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/gpt-5.4-pro"
         }
       ]
@@ -11366,7 +11884,7 @@
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/gpt-audio"
         }
       ]
@@ -11392,7 +11910,7 @@
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/gpt-audio-mini"
         }
       ]
@@ -11417,7 +11935,7 @@
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/gpt-oss-120b"
         }
       ]
@@ -11442,7 +11960,7 @@
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/gpt-oss-120b:free"
         }
       ]
@@ -11467,7 +11985,7 @@
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/gpt-oss-20b"
         }
       ]
@@ -11492,7 +12010,7 @@
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/gpt-oss-20b:free"
         }
       ]
@@ -11519,7 +12037,7 @@
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/gpt-oss-safeguard-20b"
         }
       ]
@@ -11548,7 +12066,7 @@
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/o1"
         }
       ]
@@ -11574,7 +12092,7 @@
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/o1-pro"
         }
       ]
@@ -11603,7 +12121,7 @@
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/o3"
         }
       ]
@@ -11633,7 +12151,7 @@
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/o3-deep-research"
         }
       ]
@@ -11663,7 +12181,7 @@
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/o3-mini"
         }
       ]
@@ -11693,7 +12211,7 @@
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/o3-mini-high"
         }
       ]
@@ -11722,7 +12240,7 @@
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/o3-pro"
         }
       ]
@@ -11752,7 +12270,7 @@
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/o4-mini"
         }
       ]
@@ -11782,7 +12300,7 @@
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/o4-mini-deep-research"
         }
       ]
@@ -11812,7 +12330,7 @@
         {
           "source_id": "openrouter-api",
           "authority": "trusted",
-          "observed_at": "2026-04-16T08:32:58.049944518Z",
+          "observed_at": "2026-04-16T12:39:54.3216638Z",
           "raw_id": "openai/o4-mini-high"
         }
       ]

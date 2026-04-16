@@ -12,6 +12,7 @@ import (
 	"github.com/codewandler/llm/provider/anthropic"
 	"github.com/codewandler/llm/provider/anthropic/claude"
 	"github.com/codewandler/llm/provider/bedrock"
+	"github.com/codewandler/llm/provider/codex"
 	"github.com/codewandler/llm/provider/dockermr"
 	"github.com/codewandler/llm/provider/ollama"
 	"github.com/codewandler/llm/provider/openai"
@@ -151,8 +152,8 @@ func TestDetectProviders_CodexLocalDetected(t *testing.T) {
 	})
 
 	require.Len(t, providers, 1)
-	assert.Equal(t, ProviderChatGPT, providers[0].name)
-	assert.Equal(t, ProviderChatGPT, providers[0].providerType)
+	assert.Equal(t, ProviderCodex, providers[0].name)
+	assert.Equal(t, ProviderCodex, providers[0].providerType)
 }
 
 func TestDetectProviders_CodexLocalNotDetected_NoFile(t *testing.T) {
@@ -184,7 +185,7 @@ func TestDetectProviders_OllamaDetected_EnvVar(t *testing.T) {
 		ProviderOpenAI:     true,
 		ProviderOpenRouter: true,
 		ProviderMiniMax:    true,
-		ProviderChatGPT:    true,
+		ProviderCodex:      true,
 		ProviderDockerMR:   true,
 	})
 
@@ -207,14 +208,14 @@ func TestDetectProviders_OllamaNotDetected_NoEnvVar(t *testing.T) {
 		ProviderOpenAI:     true,
 		ProviderOpenRouter: true,
 		ProviderMiniMax:    true,
-		ProviderChatGPT:    true,
+		ProviderCodex:      true,
 		ProviderDockerMR:   true,
 	})
 
 	require.Empty(t, providers)
 }
 
-func TestWithCodexLocal_UsesChatGPTPrefix(t *testing.T) {
+func TestWithCodexLocal_UsesCodexPrefix(t *testing.T) {
 	// Write a synthetic ~/.codex/auth.json in a temp HOME.
 	home := t.TempDir()
 	require.NoError(t, os.MkdirAll(filepath.Join(home, ".codex"), 0o755))
@@ -233,18 +234,16 @@ func TestWithCodexLocal_UsesChatGPTPrefix(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, p)
 
-	// All models should be under the "chatgpt" prefix, NOT "openai".
+	// All models should be under the "codex" prefix, not "openai".
 	models := p.Models()
 	require.NotEmpty(t, models)
 	for _, m := range models {
-		assert.Contains(t, m.ID, "chatgpt/", "model %q should have chatgpt/ prefix, got %q", m.Name, m.ID)
+		assert.Contains(t, m.ID, "codex/", "model %q should have codex/ prefix, got %q", m.Name, m.ID)
+		assert.NotContains(t, m.ID, "chatgpt/", "model %q must not have chatgpt/ prefix", m.Name)
 		assert.NotContains(t, m.ID, "openai/", "model %q must not have openai/ prefix", m.Name)
 	}
-
-	// Only Codex-category models should be present.
-	for _, m := range models {
-		assert.Contains(t, m.Name, "Codex", "non-Codex model should not appear in chatgpt provider: %q", m.Name)
-	}
+	_, err = p.Resolve("codex/codex")
+	require.NoError(t, err)
 }
 
 func TestBuildBuiltinAliasTargets(t *testing.T) {
@@ -273,9 +272,9 @@ func TestBuildBuiltinAliasTargets(t *testing.T) {
 			wantAliases:  []string{AliasFast, AliasDefault, AliasPowerful},
 		},
 		{
-			name:         "chatgpt provider builtins",
-			instanceName: "chatgpt",
-			providerType: ProviderChatGPT,
+			name:         "codex provider builtins",
+			instanceName: "codex",
+			providerType: ProviderCodex,
 			wantAliases:  []string{AliasFast, AliasDefault, AliasPowerful},
 		},
 	}
@@ -323,14 +322,15 @@ func TestModelAliasesForProvider(t *testing.T) {
 	assert.Equal(t, "o4-mini", openaiAliases["o4"])
 	assert.Equal(t, "o3", openaiAliases["o3"])
 
-	// ChatGPT provider should have only codex aliases
-	chatgptAliases := modelAliasesForProvider(ProviderChatGPT)
-	require.NotNil(t, chatgptAliases)
-	assert.Equal(t, "gpt-5.3-codex", chatgptAliases["codex"], "chatgpt/codex -> gpt-5.3-codex")
-	assert.Equal(t, "gpt-5.1-codex-mini", chatgptAliases["mini"], "chatgpt/mini -> gpt-5.1-codex-mini")
+	// Codex provider keeps provider-scoped Codex aliases out of the built-in overlay set.
+	codexAliases := modelAliasesForProvider(ProviderCodex)
+	require.NotNil(t, codexAliases)
+	assert.Equal(t, codex.DefaultModelID(), codexAliases["codex"], "codex/codex should follow the provider default")
+	assert.Equal(t, codex.FastModelID(), codexAliases["mini"], "codex/mini should target the fast Codex model")
+	assert.Equal(t, "gpt-5.3-codex-spark", codexAliases["spark"])
 	// Should NOT have general-purpose GPT or o-series aliases
-	_, hasFlagship := chatgptAliases["flagship"]
-	assert.False(t, hasFlagship, "chatgpt aliases must not include flagship (non-codex model)")
+	_, hasFlagship := codexAliases["flagship"]
+	assert.False(t, hasFlagship, "codex aliases must not include flagship (non-codex model)")
 
 	// Ollama falls through to the default: return nil branch.
 	ollamaAliases := modelAliasesForProvider(ProviderOllama)
@@ -353,14 +353,14 @@ func TestConstants(t *testing.T) {
 	// Verify constants are not empty
 	assert.NotEmpty(t, ProviderClaude)
 	assert.NotEmpty(t, ProviderBedrock)
-	assert.NotEmpty(t, ProviderChatGPT)
+	assert.NotEmpty(t, ProviderCodex)
 	assert.NotEmpty(t, ProviderOpenAI)
 	assert.NotEmpty(t, ProviderOpenRouter)
 	assert.NotEmpty(t, ProviderAnthropic)
 	assert.NotEmpty(t, ProviderOllama)
 
-	// ChatGPT and OpenAI must be distinct to avoid routing clashes
-	assert.NotEqual(t, ProviderChatGPT, ProviderOpenAI)
+	// Codex and OpenAI must be distinct to avoid routing clashes
+	assert.NotEqual(t, ProviderCodex, ProviderOpenAI)
 
 	assert.NotEmpty(t, EnvOpenAIKey)
 	assert.NotEmpty(t, EnvOpenRouterKey)
@@ -437,7 +437,7 @@ func TestWithOpenAI_UsesBuiltinAliasesLikeAutodetect(t *testing.T) {
 	assert.Equal(t, "openai/"+openai.ModelGPT54Pro, powerful.ID)
 }
 
-// --- Tests for WithOllama(), WithoutOllama(), WithoutChatGPT() ---
+// --- Tests for WithOllama(), WithoutOllama(), WithoutCodex() ---
 
 // TestWithOllama_RegistersProvider verifies that WithOllama() adds Ollama
 // to the aggregate provider even when OLLAMA_HOST is not set and auto-detection
@@ -464,7 +464,7 @@ func TestWithoutOllama_SuppressesAutoDetection(t *testing.T) {
 	providers := detectProviders(nil, nil, map[string]bool{
 		ProviderClaude: true, ProviderAnthropic: true, ProviderBedrock: true,
 		ProviderOpenAI: true, ProviderOpenRouter: true, ProviderMiniMax: true,
-		ProviderChatGPT:  true,
+		ProviderCodex:    true,
 		ProviderOllama:   true, // ← what WithoutOllama() sets in the disabled map
 		ProviderDockerMR: true,
 	})
@@ -472,10 +472,10 @@ func TestWithoutOllama_SuppressesAutoDetection(t *testing.T) {
 	require.Empty(t, providers, "WithoutOllama() must prevent Ollama detection even with OLLAMA_HOST set")
 }
 
-// TestWithoutChatGPT_SuppressesAutoDetection verifies that the disabled map entry
-// added by WithoutChatGPT() prevents ChatGPT/Codex from being detected even when
+// TestWithoutCodex_SuppressesAutoDetection verifies that the disabled map entry
+// added by WithoutCodex() prevents Codex from being detected even when
 // ~/.codex/auth.json is present.
-func TestWithoutChatGPT_SuppressesAutoDetection(t *testing.T) {
+func TestWithoutCodex_SuppressesAutoDetection(t *testing.T) {
 	home := t.TempDir()
 	require.NoError(t, os.MkdirAll(filepath.Join(home, ".codex"), 0o755))
 	require.NoError(t, os.WriteFile(
@@ -490,11 +490,11 @@ func TestWithoutChatGPT_SuppressesAutoDetection(t *testing.T) {
 		ProviderClaude: true, ProviderAnthropic: true, ProviderBedrock: true,
 		ProviderOpenAI: true, ProviderOpenRouter: true, ProviderMiniMax: true,
 		ProviderOllama:   true,
-		ProviderChatGPT:  true, // ← what WithoutChatGPT() sets in the disabled map
+		ProviderCodex:    true, // ← what WithoutCodex() sets in the disabled map
 		ProviderDockerMR: true,
 	})
 
-	require.Empty(t, providers, "WithoutChatGPT() must prevent Codex detection even with auth.json present")
+	require.Empty(t, providers, "WithoutCodex() must prevent Codex detection even with auth.json present")
 }
 
 // TestDetectProviders_DockerMRDetected verifies that Docker Model Runner is
@@ -517,7 +517,7 @@ func TestDetectProviders_DockerMRDetected(t *testing.T) {
 		ProviderOpenRouter: true,
 		ProviderMiniMax:    true,
 		ProviderOllama:     true,
-		ProviderChatGPT:    true,
+		ProviderCodex:      true,
 		// ProviderDockerMR intentionally NOT disabled
 	})
 
@@ -540,7 +540,7 @@ func TestWithoutDockerMR_SuppressesAutoDetection(t *testing.T) {
 		ProviderClaude: true, ProviderAnthropic: true, ProviderBedrock: true,
 		ProviderOpenAI: true, ProviderOpenRouter: true, ProviderMiniMax: true,
 		ProviderOllama:   true,
-		ProviderChatGPT:  true,
+		ProviderCodex:    true,
 		ProviderDockerMR: true, // ← what WithoutDockerMR() sets in the disabled map
 	})
 

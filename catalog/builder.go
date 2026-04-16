@@ -9,6 +9,7 @@ type Builder struct {
 func DefaultBuildSources() []RegisteredSource {
 	sources := []RegisteredSource{
 		{Stage: StageBuild, Authority: AuthorityCanonical, Source: NewAnthropicStaticSource()},
+		{Stage: StageBuild, Authority: AuthorityCanonical, Source: NewMiniMaxStaticSource()},
 		{Stage: StageBuild, Authority: AuthorityEnrichment, Source: NewModelsDevSource()},
 	}
 	if src := NewOpenAISourceFromEnv(); src.APIKey != "" {

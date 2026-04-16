@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/codewandler/llm/provider/anthropic"
+	"github.com/codewandler/llm/provider/codex"
 	"github.com/codewandler/llm/provider/minimax"
 	"github.com/codewandler/llm/provider/openai"
 )
@@ -27,12 +28,12 @@ func TestResolveBuiltinAliasModels_OpenAICatalogBacked(t *testing.T) {
 	assert.Equal(t, openai.ModelGPT54Pro, models.powerful)
 }
 
-func TestResolveBuiltinAliasModels_ChatGPTCatalogBacked(t *testing.T) {
-	models, ok := resolveBuiltinAliasModels(ProviderChatGPT)
+func TestResolveBuiltinAliasModels_CodexFallback(t *testing.T) {
+	models, ok := resolveBuiltinAliasModels(ProviderCodex)
 	require.True(t, ok)
-	assert.Equal(t, openai.ModelGPT51CodexMini, models.fast)
-	assert.Equal(t, openai.ModelGPT53Codex, models.normal)
-	assert.Equal(t, openai.ModelGPT53Codex, models.powerful)
+	assert.Equal(t, codex.FastModelID(), models.fast)
+	assert.Equal(t, codex.DefaultModelID(), models.normal)
+	assert.Equal(t, codex.PowerfulModelID(), models.powerful)
 }
 
 func TestResolveBuiltinAliasModels_MinimaxFallsBack(t *testing.T) {

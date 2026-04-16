@@ -3,10 +3,14 @@ package auto
 import (
 	"github.com/codewandler/llm"
 	"github.com/codewandler/llm/provider/anthropic"
+	"github.com/codewandler/llm/provider/codex"
 	"github.com/codewandler/llm/provider/openai"
 )
 
 func resolveBuiltinAliasModels(providerType string) (builtinAliasModels, bool) {
+	if providerType == ProviderCodex {
+		return selectCodexBuiltinAliases()
+	}
 	if models, ok := selectBuiltinAliasModelsFromCatalog(providerType); ok {
 		return models, true
 	}
@@ -38,8 +42,6 @@ func selectBuiltinAliasModelsFromCatalog(providerType string) (builtinAliasModel
 		return selectAnthropicBuiltinAliases(models)
 	case ProviderOpenAI:
 		return selectOpenAIBuiltinAliases(models)
-	case ProviderChatGPT:
-		return selectChatGPTBuiltinAliases(models)
 	default:
 		return builtinAliasModels{}, false
 	}
@@ -49,7 +51,7 @@ func builtinAliasServiceID(providerType string) (string, bool) {
 	switch providerType {
 	case ProviderClaude, ProviderAnthropic:
 		return "anthropic", true
-	case ProviderOpenAI, ProviderChatGPT:
+	case ProviderOpenAI:
 		return "openai", true
 	default:
 		return "", false
@@ -106,23 +108,9 @@ func selectOpenAIBuiltinAliases(models llm.Models) (builtinAliasModels, bool) {
 	return builtinAliasModels{fast: fast, normal: normal, powerful: powerful}, true
 }
 
-func selectChatGPTBuiltinAliases(models llm.Models) (builtinAliasModels, bool) {
-	fast, ok := firstPresent(models, openai.ModelGPT51CodexMini)
-	if !ok {
-		return builtinAliasModels{}, false
-	}
-	normal, ok := firstPresent(models,
-		openai.ModelGPT53Codex,
-		openai.ModelGPT51Codex,
-	)
-	if !ok {
-		return builtinAliasModels{}, false
-	}
-	powerful, ok := firstPresent(models,
-		openai.ModelGPT53Codex,
-		openai.ModelGPT51CodexMax,
-	)
-	if !ok {
+func selectCodexBuiltinAliases() (builtinAliasModels, bool) {
+	fast, normal, powerful := codex.BuiltinAliasModels()
+	if fast == "" || normal == "" || powerful == "" {
 		return builtinAliasModels{}, false
 	}
 	return builtinAliasModels{fast: fast, normal: normal, powerful: powerful}, true

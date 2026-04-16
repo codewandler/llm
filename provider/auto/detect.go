@@ -8,6 +8,7 @@ import (
 	"github.com/codewandler/llm/provider/anthropic"
 	"github.com/codewandler/llm/provider/anthropic/claude"
 	"github.com/codewandler/llm/provider/bedrock"
+	"github.com/codewandler/llm/provider/codex"
 	"github.com/codewandler/llm/provider/dockermr"
 	"github.com/codewandler/llm/provider/minimax"
 	"github.com/codewandler/llm/provider/ollama"
@@ -148,24 +149,21 @@ func detectProviders(httpClient *http.Client, llmOpts []llm.Option, disabled map
 		})
 	}
 
-	// 8. ChatGPT/Codex — detected when ~/.codex/auth.json is present and readable.
-	// auth is loaded eagerly so the factory closure captures a valid *CodexAuth,
+	// 8. Codex — detected when ~/.codex/auth.json is present and readable.
+	// auth is loaded eagerly so the factory closure captures a valid *codex.Auth,
 	// mirroring the WithCodexLocal() pattern.
-	if !disabled[ProviderChatGPT] && openai.CodexLocalAvailable() {
-		if auth, err := openai.LoadCodexAuth(); err == nil {
+	if !disabled[ProviderCodex] && codex.LocalAvailable() {
+		if auth, err := codex.LoadAuth(); err == nil {
 			providers = append(providers, providerEntry{
-				name:         ProviderChatGPT,
-				providerType: ProviderChatGPT,
+				name:         ProviderCodex,
+				providerType: ProviderCodex,
 				factory: func(opts ...llm.Option) llm.Provider {
-					// opts (llmOpts) are intentionally not forwarded: CodexAuth
-					// manages its own OAuth transport and does not accept llm.Option.
-					var base http.RoundTripper
 					if httpClient != nil {
-						base = httpClient.Transport
+						opts = append(opts, llm.WithHTTPClient(httpClient))
 					}
-					return auth.NewProvider(base)
+					return codex.New(auth, opts...)
 				},
-				modelAliases:      modelAliasesForProvider(ProviderChatGPT),
+				modelAliases:      modelAliasesForProvider(ProviderCodex),
 				hasBuiltinAliases: true,
 			})
 		}
