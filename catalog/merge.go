@@ -70,11 +70,39 @@ func mergeModel(dst *Catalog, model ModelRecord) error {
 		return nil
 	}
 
-	var err error
-	if existing.Name, err = mergeStringField(existing.Name, model.Name, "model.name", modelID(model.Key)); err != nil {
-		return err
+	// Special handling for model names: prefer non-empty, trimmed values (silent conflicts)
+	if existing.Name == "" && model.Name != "" {
+		existing.Name = model.Name
+	} else if existing.Name != "" && model.Name != "" && existing.Name != model.Name {
+		// Try trimming whitespace
+		existingTrimmed := strings.TrimSpace(existing.Name)
+		modelTrimmed := strings.TrimSpace(model.Name)
+		if existingTrimmed == modelTrimmed {
+			// They match after trimming, use the trimmed version
+			existing.Name = existingTrimmed
+		}
+		// Otherwise, keep existing without warning (expected when sources have different naming conventions)
 	}
 	existing.Aliases = mergeStringSlices(existing.Aliases, model.Aliases)
+	// Special handling for descriptions: prefer non-empty (silently ignore conflicts)
+	if existing.Description == "" && model.Description != "" {
+		existing.Description = model.Description
+	}
+	// Keep existing when both present (expected when sources have different description versions)
+
+	// Special handling for modality: prefer non-empty (silently ignore conflicts)
+	if existing.Modality == "" && model.Modality != "" {
+		existing.Modality = model.Modality
+	}
+	// Keep existing when both present (expected when sources have different modality representations)
+
+	var err error
+	if existing.Tokenizer, err = mergeStringField(existing.Tokenizer, model.Tokenizer, "model.tokenizer", modelID(model.Key)); err != nil {
+		return err
+	}
+	if existing.ExpirationDate, err = mergeDateField(existing.ExpirationDate, model.ExpirationDate, "model.expiration_date", modelID(model.Key)); err != nil {
+		return err
+	}
 	existing.Canonical = existing.Canonical || model.Canonical
 	existing.Attachment = existing.Attachment || model.Attachment
 	existing.OpenWeights = existing.OpenWeights || model.OpenWeights
@@ -141,6 +169,7 @@ func mergeOffering(dst *Catalog, offering Offering) error {
 	offering.ModelKey = NormalizeKey(offering.ModelKey)
 	offering.Aliases = normalizeStrings(offering.Aliases)
 	offering.APITypes = normalizeStrings(offering.APITypes)
+	offering.SupportedParameters = normalizeStrings(offering.SupportedParameters)
 
 	ref := OfferingRef{ServiceID: offering.ServiceID, WireModelID: offering.WireModelID}
 	existing, ok := dst.Offerings[ref]
@@ -161,6 +190,14 @@ func mergeOffering(dst *Catalog, offering Offering) error {
 	if existing.LimitsOverride, err = mergePointerField(existing.LimitsOverride, offering.LimitsOverride, "offering.limits_override", ref.ServiceID+"/"+ref.WireModelID); err != nil {
 		return err
 	}
+	existing.SupportedParameters = mergeStringSlices(existing.SupportedParameters, offering.SupportedParameters)
+	if existing.DefaultParameters, err = mergePointerField(existing.DefaultParameters, offering.DefaultParameters, "offering.default_parameters", ref.ServiceID+"/"+ref.WireModelID); err != nil {
+		return err
+	}
+	if existing.PerRequestLimits, err = mergePointerField(existing.PerRequestLimits, offering.PerRequestLimits, "offering.per_request_limits", ref.ServiceID+"/"+ref.WireModelID); err != nil {
+		return err
+	}
+	existing.IsModerated = existing.IsModerated || offering.IsModerated
 	existing.Provenance = append(existing.Provenance, offering.Provenance...)
 	dst.Offerings[ref] = existing
 	return nil
@@ -273,14 +310,20 @@ func mergeRuntimeAcquisition(dst *ResolvedCatalog, acquisition RuntimeAcquisitio
 func mergeCapabilities(a, b Capabilities) Capabilities {
 	return Capabilities{
 		Reasoning:           a.Reasoning || b.Reasoning,
+		ReasoningEffort:     a.ReasoningEffort || b.ReasoningEffort,
 		ToolUse:             a.ToolUse || b.ToolUse,
+		ParallelToolCalls:   a.ParallelToolCalls || b.ParallelToolCalls,
 		StructuredOutput:    a.StructuredOutput || b.StructuredOutput,
+		StructuredOutputs:   a.StructuredOutputs || b.StructuredOutputs,
 		Vision:              a.Vision || b.Vision,
 		Streaming:           a.Streaming || b.Streaming,
 		Caching:             a.Caching || b.Caching,
 		InterleavedThinking: a.InterleavedThinking || b.InterleavedThinking,
 		AdaptiveThinking:    a.AdaptiveThinking || b.AdaptiveThinking,
 		Temperature:         a.Temperature || b.Temperature,
+		Logprobs:            a.Logprobs || b.Logprobs,
+		Seed:                a.Seed || b.Seed,
+		WebSearch:           a.WebSearch || b.WebSearch,
 	}
 }
 

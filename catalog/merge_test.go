@@ -24,14 +24,16 @@ func TestMergeCatalogFragmentFillsEmptyFields(t *testing.T) {
 	assert.True(t, model.Canonical)
 }
 
-func TestMergeCatalogFragmentRejectsConflictingScalar(t *testing.T) {
+func TestMergeCatalogFragmentHandlesNameConflictsWithWarning(t *testing.T) {
 	key := NormalizeKey(ModelKey{Creator: "anthropic", Family: "claude", Series: "sonnet", Version: "4.6"})
 	c := NewCatalog()
 	require.NoError(t, MergeCatalogFragment(&c, &Fragment{Models: []ModelRecord{{Key: key, Name: "Claude Sonnet 4.6"}}}))
 
+	// Name conflicts are handled with warnings, keeping the original name
 	err := MergeCatalogFragment(&c, &Fragment{Models: []ModelRecord{{Key: key, Name: "Different Name"}}})
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "model.name conflict")
+	require.NoError(t, err)
+	model := c.Models[key]
+	assert.Equal(t, "Claude Sonnet 4.6", model.Name) // keeps original
 }
 
 func TestMergeCatalogFragmentUnionsAliases(t *testing.T) {

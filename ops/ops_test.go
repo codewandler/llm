@@ -15,16 +15,27 @@ import (
 // The adapter calls BuildRequest so that fn still receives a concrete
 // llm.Request, making it easy to inspect preset fields in tests.
 func makeProvider(fn func(context.Context, llm.Request) (llm.Stream, error)) llm.Provider {
-	return llm.NewProvider("test",
-		llm.WithStreamer(llm.StreamFunc(func(ctx context.Context, src llm.Buildable) (llm.Stream, error) {
+	return &testProvider{
+		streamer: llm.StreamFunc(func(ctx context.Context, src llm.Buildable) (llm.Stream, error) {
 			req, err := src.BuildRequest(ctx)
 			if err != nil {
 				return nil, err
 			}
 			return fn(ctx, req)
-		})),
-		llm.WithModels(llm.Models{{ID: "test-model", Aliases: []string{llm.ModelDefault}}}),
-	)
+		}),
+		models: llm.Models{{ID: "test-model", Aliases: []string{llm.ModelDefault}}},
+	}
+}
+
+type testProvider struct {
+	streamer llm.Streamer
+	models   llm.Models
+}
+
+func (p *testProvider) Name() string       { return "test" }
+func (p *testProvider) Models() llm.Models { return p.models }
+func (p *testProvider) CreateStream(ctx context.Context, src llm.Buildable) (llm.Stream, error) {
+	return p.streamer.CreateStream(ctx, src)
 }
 
 // textProvider returns a provider that emits a single text event.
