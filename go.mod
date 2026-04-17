@@ -8,7 +8,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/config v1.32.15
 	github.com/aws/aws-sdk-go-v2/service/bedrockruntime v1.50.4
 	github.com/codewandler/agentapis v0.2.0
-	github.com/codewandler/modeldb v0.0.0
+	github.com/codewandler/modeldb v0.7.0
 	github.com/invopop/jsonschema v0.13.0
 	github.com/klauspost/compress v1.18.5
 	github.com/matoous/go-nanoid/v2 v2.1.0
@@ -20,8 +20,6 @@ require (
 )
 
 replace github.com/codewandler/agentapis => ../agentapis
-
-replace github.com/codewandler/modeldb => ../modeldb
 
 require (
 	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.8 // indirect

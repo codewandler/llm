@@ -2,7 +2,6 @@ package llm
 
 import (
 	"context"
-	"path/filepath"
 	"testing"
 
 	modeldb "github.com/codewandler/modeldb"
@@ -11,10 +10,7 @@ import (
 )
 
 func TestCatalogModelsForService(t *testing.T) {
-	fragment, err := modeldb.NewAnthropicAPISourceFromFile(filepath.Join("catalog", modeldb.DefaultAnthropicFixturePath())).Fetch(context.Background())
-	require.NoError(t, err)
-	c := modeldb.NewCatalog()
-	require.NoError(t, modeldb.MergeCatalogFragment(&c, fragment))
+	c := testAnthropicCatalog(t)
 
 	models := CatalogModelsForService(c, "anthropic", CatalogModelProjectionOptions{IncludePricing: true, ExcludeBuiltinAliases: true})
 	require.NotEmpty(t, models)
@@ -31,10 +27,7 @@ func TestCatalogModelsForService(t *testing.T) {
 }
 
 func TestCatalogFactualAliasesForService(t *testing.T) {
-	fragment, err := modeldb.NewAnthropicAPISourceFromFile(filepath.Join("catalog", modeldb.DefaultAnthropicFixturePath())).Fetch(context.Background())
-	require.NoError(t, err)
-	c := modeldb.NewCatalog()
-	require.NoError(t, modeldb.MergeCatalogFragment(&c, fragment))
+	c := testAnthropicCatalog(t)
 
 	aliases := CatalogFactualAliasesForService(c, "anthropic")
 	assert.Equal(t, "claude-sonnet-4-6", aliases["sonnet"])
@@ -119,4 +112,36 @@ func TestResolveCatalog_WithRuntimeSource(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, resolved.Services, "codex")
 	assert.Contains(t, resolved.Runtimes, "codex-local")
+}
+
+func testAnthropicCatalog(t *testing.T) modeldb.Catalog {
+	t.Helper()
+
+	sonnetKey := modeldb.NormalizeKey(modeldb.ModelKey{Creator: "anthropic", Family: "claude", Series: "sonnet", Version: "4.6"})
+	opusKey := modeldb.NormalizeKey(modeldb.ModelKey{Creator: "anthropic", Family: "claude", Series: "opus", Version: "4.7"})
+
+	c := modeldb.NewCatalog()
+	require.NoError(t, modeldb.MergeCatalogFragment(&c, &modeldb.Fragment{
+		Services: []modeldb.Service{{ID: "anthropic", Name: "Anthropic", Kind: modeldb.ServiceKindDirect}},
+		Models: []modeldb.ModelRecord{
+			{
+				Key:              sonnetKey,
+				Name:             "Claude Sonnet 4.6",
+				Aliases:          []string{"claude-sonnet-4-6", "sonnet"},
+				Canonical:        true,
+				ReferencePricing: &modeldb.Pricing{Input: 3.0, Output: 15.0, CachedInput: 0.30, CacheWrite: 3.75},
+			},
+			{
+				Key:       opusKey,
+				Name:      "Claude Opus 4.7",
+				Aliases:   []string{"claude-opus-4-7", "opus"},
+				Canonical: true,
+			},
+		},
+		Offerings: []modeldb.Offering{
+			{ServiceID: "anthropic", WireModelID: "claude-sonnet-4-6", ModelKey: sonnetKey},
+			{ServiceID: "anthropic", WireModelID: "claude-opus-4-7", ModelKey: opusKey},
+		},
+	}))
+	return c
 }
