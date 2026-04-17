@@ -12,7 +12,7 @@ import (
 	"sync"
 
 	"github.com/codewandler/llm"
-	"github.com/codewandler/llm/provider/providercore"
+	providercore2 "github.com/codewandler/llm/internal/providercore"
 )
 
 const defaultBaseURL = "https://chatgpt.com/backend-api"
@@ -20,7 +20,7 @@ const defaultBaseURL = "https://chatgpt.com/backend-api"
 type Provider struct {
 	auth       *Auth
 	opts       *llm.Options
-	inner      *providercore.Provider
+	inner      *providercore2.Provider
 	httpClient *http.Client
 	modelOnce  sync.Once
 	models     llm.Models
@@ -43,15 +43,15 @@ func New(auth *Auth, opts ...llm.Option) *Provider {
 		httpClient: httpClient,
 	}
 
-	p.inner = providercore.NewProvider(providercore.NewOptions(
-		providercore.WithProviderName(llm.ProviderNameCodex),
-		providercore.WithBaseURL(defaultBaseURL),
-		providercore.WithBasePath("/codex/responses"),
-		providercore.WithAPIHint(llm.ApiTypeOpenAIResponses),
-		providercore.WithCachedModelsFunc(func(ctx context.Context) (llm.Models, error) {
+	p.inner = providercore2.NewProvider(providercore2.NewOptions(
+		providercore2.WithProviderName(llm.ProviderNameCodex),
+		providercore2.WithBaseURL(defaultBaseURL),
+		providercore2.WithBasePath("/codex/responses"),
+		providercore2.WithAPIHint(llm.ApiTypeOpenAIResponses),
+		providercore2.WithCachedModelsFunc(func(ctx context.Context) (llm.Models, error) {
 			return p.Models(), nil
 		}),
-		providercore.WithHeaderFunc(func(ctx context.Context, _ *llm.Request) (http.Header, error) {
+		providercore2.WithHeaderFunc(func(ctx context.Context, _ *llm.Request) (http.Header, error) {
 			token, err := auth.Token(ctx)
 			if err != nil {
 				return nil, fmt.Errorf("codex: get token: %w", err)
@@ -63,7 +63,7 @@ func New(auth *Auth, opts ...llm.Option) *Provider {
 				"originator":    {codexOriginator},
 			}, nil
 		}),
-		providercore.WithMutateRequest(func(r *http.Request) {
+		providercore2.WithMutateRequest(func(r *http.Request) {
 			if r.Body == nil || r.Header.Get("Content-Type") != "application/json" {
 				return
 			}
@@ -92,7 +92,7 @@ func New(auth *Auth, opts ...llm.Option) *Provider {
 			r.Body = io.NopCloser(bytes.NewReader(encoded))
 			r.ContentLength = int64(len(encoded))
 		}),
-		providercore.WithPreprocessRequest(func(req llm.Request) (llm.Request, string, error) {
+		providercore2.WithPreprocessRequest(func(req llm.Request) (llm.Request, string, error) {
 			original := req.Model
 			if req.Thinking.IsOff() {
 				req.Effort = llm.EffortUnspecified
@@ -109,7 +109,7 @@ func New(auth *Auth, opts ...llm.Option) *Provider {
 			}
 			return req, original, nil
 		}),
-		providercore.WithResponsesRequestTransform(func(resp *providercore.ResponsesRequest) error {
+		providercore2.WithResponsesRequestTransform(func(resp *providercore2.ResponsesRequest) error {
 			if resp.Reasoning != nil && resp.Reasoning.Effort == string(llm.EffortMax) {
 				resp.Reasoning.Effort = "xhigh"
 			}

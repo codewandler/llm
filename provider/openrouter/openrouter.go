@@ -9,9 +9,9 @@ import (
 	"strings"
 
 	"github.com/codewandler/llm"
+	providercore2 "github.com/codewandler/llm/internal/providercore"
 	"github.com/codewandler/llm/msg"
 	"github.com/codewandler/llm/provider/anthropic"
-	"github.com/codewandler/llm/provider/providercore"
 )
 
 const (
@@ -22,7 +22,7 @@ const (
 )
 
 type Provider struct {
-	inner        *providercore.Provider
+	inner        *providercore2.Provider
 	opts         *llm.Options
 	client       *http.Client
 	defaultModel string
@@ -51,17 +51,17 @@ func New(opts ...llm.Option) *Provider {
 		models:       models,
 	}
 
-	p.inner = providercore.NewProvider(providercore.NewOptions(
-		providercore.WithProviderName(providerName),
-		providercore.WithBaseURL(defaultBaseURL),
-		providercore.WithAPIHintResolver(func(req llm.Request) llm.ApiType {
+	p.inner = providercore2.NewProvider(providercore2.NewOptions(
+		providercore2.WithProviderName(providerName),
+		providercore2.WithBaseURL(defaultBaseURL),
+		providercore2.WithAPIHintResolver(func(req llm.Request) llm.ApiType {
 			_, hint := selectAPI(p.normalizeRequestModel(req.Model), req.ApiTypeHint)
 			return hint
 		}),
-		providercore.WithCachedModelsFunc(func(ctx context.Context) (llm.Models, error) {
+		providercore2.WithCachedModelsFunc(func(ctx context.Context) (llm.Models, error) {
 			return p.models, nil
 		}),
-		providercore.WithHeaderFunc(func(ctx context.Context, req *llm.Request) (http.Header, error) {
+		providercore2.WithHeaderFunc(func(ctx context.Context, req *llm.Request) (http.Header, error) {
 			key, err := p.opts.ResolveAPIKey(ctx)
 			if err != nil {
 				return nil, err
@@ -71,7 +71,7 @@ func New(opts ...llm.Option) *Provider {
 			}
 			return http.Header{"Authorization": {"Bearer " + key}}, nil
 		}),
-		providercore.WithPreprocessRequest(func(req llm.Request) (llm.Request, string, error) {
+		providercore2.WithPreprocessRequest(func(req llm.Request) (llm.Request, string, error) {
 			original := req.Model
 			normalized := p.normalizeRequestModel(req.Model)
 			req.Model = normalized
@@ -93,7 +93,7 @@ func New(opts ...llm.Option) *Provider {
 
 			return req, original, nil
 		}),
-		providercore.WithMutateRequest(func(r *http.Request) {
+		providercore2.WithMutateRequest(func(r *http.Request) {
 			if strings.HasSuffix(r.URL.Path, "/v1/messages") {
 				r.Header.Set("Anthropic-Version", anthropic.AnthropicVersion)
 				r.Header.Set("Anthropic-Beta", anthropic.BetaInterleavedThinking)

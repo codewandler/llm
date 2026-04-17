@@ -8,7 +8,7 @@ import (
 	"net/http"
 
 	"github.com/codewandler/llm"
-	"github.com/codewandler/llm/provider/providercore"
+	providercore2 "github.com/codewandler/llm/internal/providercore"
 )
 
 const (
@@ -19,7 +19,7 @@ const (
 )
 
 type Provider struct {
-	inner *providercore.Provider
+	inner *providercore2.Provider
 	opts  *llm.Options
 }
 
@@ -34,21 +34,21 @@ func New(opts ...llm.Option) *Provider {
 	allOpts := append(DefaultOptions(), opts...)
 	cfg := llm.Apply(allOpts...)
 
-	inner := providercore.NewProvider(providercore.NewOptions(
-		providercore.WithProviderName(providerName),
-		providercore.WithBaseURL(defaultBaseURL),
-		providercore.WithAPIHint(llm.ApiTypeOpenAIChatCompletion),
-		providercore.WithCachedModelsFunc(func(ctx context.Context) (llm.Models, error) {
+	inner := providercore2.NewProvider(providercore2.NewOptions(
+		providercore2.WithProviderName(providerName),
+		providercore2.WithBaseURL(defaultBaseURL),
+		providercore2.WithAPIHint(llm.ApiTypeOpenAIChatCompletion),
+		providercore2.WithCachedModelsFunc(func(ctx context.Context) (llm.Models, error) {
 			return loadOpenAIModels(providerName), nil
 		}),
-		providercore.WithHeaderFunc(func(ctx context.Context, _ *llm.Request) (http.Header, error) {
+		providercore2.WithHeaderFunc(func(ctx context.Context, _ *llm.Request) (http.Header, error) {
 			key, err := cfg.ResolveAPIKey(ctx)
 			if err != nil || key == "" {
 				return nil, llm.NewErrMissingAPIKey(providerName)
 			}
 			return http.Header{"Authorization": {"Bearer " + key}}, nil
 		}),
-		providercore.WithPreprocessRequest(func(req llm.Request) (llm.Request, string, error) {
+		providercore2.WithPreprocessRequest(func(req llm.Request) (llm.Request, string, error) {
 			original := req.Model
 			mapped, err := mapEffortAndThinking(req.Model, req.Effort, req.Thinking)
 			if err != nil {
@@ -57,17 +57,17 @@ func New(opts ...llm.Option) *Provider {
 			req.Effort = llm.Effort(mapped)
 			return req, original, nil
 		}),
-		providercore.WithAPIHintResolver(func(req llm.Request) llm.ApiType {
+		providercore2.WithAPIHintResolver(func(req llm.Request) llm.ApiType {
 			if useResponsesAPI(req.Model) {
 				return llm.ApiTypeOpenAIResponses
 			}
 			return llm.ApiTypeOpenAIChatCompletion
 		}),
-		providercore.WithHTTPErrorActionResolver(func(_ llm.Request, statusCode int, _ error) providercore.HTTPErrorAction {
+		providercore2.WithHTTPErrorActionResolver(func(_ llm.Request, statusCode int, _ error) providercore2.HTTPErrorAction {
 			if llm.IsRetriableHTTPStatus(statusCode) {
-				return providercore.HTTPErrorActionReturn
+				return providercore2.HTTPErrorActionReturn
 			}
-			return providercore.HTTPErrorActionStream
+			return providercore2.HTTPErrorActionStream
 		}),
 	), allOpts...)
 

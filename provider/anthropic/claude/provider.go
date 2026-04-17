@@ -16,8 +16,8 @@ import (
 
 	agentmessages "github.com/codewandler/agentapis/api/messages"
 	"github.com/codewandler/llm"
+	providercore2 "github.com/codewandler/llm/internal/providercore"
 	"github.com/codewandler/llm/provider/anthropic"
-	"github.com/codewandler/llm/provider/providercore"
 	"github.com/codewandler/llm/tokencount"
 )
 
@@ -64,7 +64,7 @@ type Provider struct {
 	sessionID     string
 	initErr       error
 
-	inner        *providercore.Provider
+	inner        *providercore2.Provider
 	claudeModels *claudeModels
 }
 
@@ -89,17 +89,17 @@ func New(opts ...Option) *Provider {
 
 	p.userID = p.buildUserID()
 
-	p.inner = providercore.NewProvider(providercore.NewOptions(
-		providercore.WithProviderName(providerName),
-		providercore.WithBaseURLFunc(func() string { return p.baseURL }),
-		providercore.WithAPIHint(llm.ApiTypeAnthropicMessages),
-		providercore.WithCachedModelsFunc(func(ctx context.Context) (llm.Models, error) {
+	p.inner = providercore2.NewProvider(providercore2.NewOptions(
+		providercore2.WithProviderName(providerName),
+		providercore2.WithBaseURLFunc(func() string { return p.baseURL }),
+		providercore2.WithAPIHint(llm.ApiTypeAnthropicMessages),
+		providercore2.WithCachedModelsFunc(func(ctx context.Context) (llm.Models, error) {
 			return p.claudeModels.Models(), nil
 		}),
-		providercore.WithDefaultHeaders(http.Header{
+		providercore2.WithDefaultHeaders(http.Header{
 			"Accept": {"application/json"},
 		}),
-		providercore.WithHeaderFunc(func(ctx context.Context, _ *llm.Request) (http.Header, error) {
+		providercore2.WithHeaderFunc(func(ctx context.Context, _ *llm.Request) (http.Header, error) {
 			if p.tokenProvider == nil {
 				return nil, llm.NewErrMissingAPIKey(llm.ProviderNameClaude)
 			}
@@ -109,13 +109,13 @@ func New(opts ...Option) *Provider {
 			}
 			return http.Header{"Authorization": {"Bearer " + token.AccessToken}}, nil
 		}),
-		providercore.WithMutateRequest(func(r *http.Request) {
+		providercore2.WithMutateRequest(func(r *http.Request) {
 			p.setClaudeStaticHeaders(r)
 			q := r.URL.Query()
 			q.Set("beta", "true")
 			r.URL.RawQuery = q.Encode()
 		}),
-		providercore.WithPreprocessRequest(func(req llm.Request) (llm.Request, string, error) {
+		providercore2.WithPreprocessRequest(func(req llm.Request) (llm.Request, string, error) {
 			normalizeRequest(&req)
 			original := req.Model
 			resolvedModel, err := p.claudeModels.Resolve(req.Model)
@@ -125,20 +125,20 @@ func New(opts ...Option) *Provider {
 			req.Model = resolvedModel.ID
 			return req, original, nil
 		}),
-		providercore.WithMessagesRequestTransform(func(msgReq *providercore.MessagesRequest) error {
+		providercore2.WithMessagesRequestTransform(func(msgReq *providercore2.MessagesRequest) error {
 			if err := p.augmentMessagesRequest(msgReq); err != nil {
 				return err
 			}
 			return nil
 		}),
-		providercore.WithMessagesAPITokenCounter(func(ctx context.Context, _ llm.Request, msgReq *providercore.MessagesRequest) (*tokencount.TokenCount, error) {
+		providercore2.WithMessagesAPITokenCounter(func(ctx context.Context, _ llm.Request, msgReq *providercore2.MessagesRequest) (*tokencount.TokenCount, error) {
 			count, err := p.countTokensAPI(ctx, msgReq)
 			if err != nil {
 				return nil, err
 			}
 			return &tokencount.TokenCount{InputTokens: count}, nil
 		}),
-		providercore.WithRateLimitParser(func(resp *http.Response) *llm.RateLimits {
+		providercore2.WithRateLimitParser(func(resp *http.Response) *llm.RateLimits {
 			if resp == nil {
 				return nil
 			}
@@ -150,11 +150,11 @@ func New(opts ...Option) *Provider {
 			}
 			return llm.ParseRateLimits(headers)
 		}),
-		providercore.WithHTTPErrorActionResolver(func(_ llm.Request, statusCode int, _ error) providercore.HTTPErrorAction {
+		providercore2.WithHTTPErrorActionResolver(func(_ llm.Request, statusCode int, _ error) providercore2.HTTPErrorAction {
 			if llm.IsRetriableHTTPStatus(statusCode) {
-				return providercore.HTTPErrorActionReturn
+				return providercore2.HTTPErrorActionReturn
 			}
-			return providercore.HTTPErrorActionStream
+			return providercore2.HTTPErrorActionStream
 		}),
 	), llm.WithHTTPClient(p.client), llm.WithLogger(p.log))
 
@@ -170,7 +170,7 @@ func (p *Provider) CreateStream(ctx context.Context, src llm.Buildable) (llm.Str
 	return p.inner.CreateStream(ctx, src)
 }
 
-func (p *Provider) countTokensAPI(ctx context.Context, apiReq *providercore.MessagesRequest) (int, error) {
+func (p *Provider) countTokensAPI(ctx context.Context, apiReq *providercore2.MessagesRequest) (int, error) {
 	if p.tokenProvider == nil {
 		return 0, fmt.Errorf("claude: count_tokens: missing token provider")
 	}
@@ -180,13 +180,13 @@ func (p *Provider) countTokensAPI(ctx context.Context, apiReq *providercore.Mess
 	}
 
 	countReqBody, err := json.Marshal(struct {
-		Model        string                                `json:"model"`
-		Messages     []providercore.MessagesMessage        `json:"messages"`
-		System       providercore.MessagesSystemBlocks     `json:"system,omitempty"`
-		Tools        []providercore.MessagesToolDefinition `json:"tools,omitempty"`
-		ToolChoice   any                                   `json:"tool_choice,omitempty"`
-		Thinking     *providercore.MessagesThinkingConfig  `json:"thinking,omitempty"`
-		CacheControl *providercore.MessagesCacheControl    `json:"cache_control,omitempty"`
+		Model        string                                 `json:"model"`
+		Messages     []providercore2.MessagesMessage        `json:"messages"`
+		System       providercore2.MessagesSystemBlocks     `json:"system,omitempty"`
+		Tools        []providercore2.MessagesToolDefinition `json:"tools,omitempty"`
+		ToolChoice   any                                    `json:"tool_choice,omitempty"`
+		Thinking     *providercore2.MessagesThinkingConfig  `json:"thinking,omitempty"`
+		CacheControl *providercore2.MessagesCacheControl    `json:"cache_control,omitempty"`
 	}{
 		Model:        apiReq.Model,
 		Messages:     apiReq.Messages,
@@ -255,11 +255,11 @@ func (p *Provider) setClaudeStaticHeaders(req *http.Request) {
 	req.Header.Set("Connection", "keep-alive")
 }
 
-func (p *Provider) augmentMessagesRequest(msgReq *providercore.MessagesRequest) error {
+func (p *Provider) augmentMessagesRequest(msgReq *providercore2.MessagesRequest) error {
 	if msgReq == nil {
 		return fmt.Errorf("nil messages request")
 	}
-	msgReq.System = append(providercore.MessagesSystemBlocks{
+	msgReq.System = append(providercore2.MessagesSystemBlocks{
 		&agentmessages.TextBlock{Type: agentmessages.BlockTypeText, Text: billingHeader},
 		&agentmessages.TextBlock{Type: agentmessages.BlockTypeText, Text: systemCore, CacheControl: &agentmessages.CacheControl{Type: "ephemeral", TTL: "1h"}},
 	}, msgReq.System...)

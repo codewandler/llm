@@ -4,12 +4,12 @@ import (
 	"encoding/json"
 	"testing"
 
+	providercore2 "github.com/codewandler/llm/internal/providercore"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/codewandler/agentapis/adapt"
 	"github.com/codewandler/llm"
-	"github.com/codewandler/llm/provider/providercore"
 )
 
 func TestNormalizeModel_Aliases(t *testing.T) {
@@ -113,8 +113,8 @@ func TestBuildRequest_UserSystemBlockAppended(t *testing.T) {
 	assert.Equal(t, "be helpful", last["text"])
 }
 
-func buildRequestForTest(p *Provider, llmRequest llm.Request) (*providercore.MessagesRequest, error) {
-	uReq, err := providercore.RequestToUnified(llmRequest)
+func buildRequestForTest(p *Provider, llmRequest llm.Request) (*providercore2.MessagesRequest, error) {
+	uReq, err := providercore2.RequestToUnified(llmRequest)
 	if err != nil {
 		return nil, err
 	}

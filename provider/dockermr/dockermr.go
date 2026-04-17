@@ -11,7 +11,7 @@ import (
 
 	"github.com/codewandler/llm"
 	"github.com/codewandler/llm/catalog"
-	"github.com/codewandler/llm/provider/providercore"
+	providercore2 "github.com/codewandler/llm/internal/providercore"
 )
 
 const (
@@ -22,7 +22,7 @@ const (
 )
 
 type Provider struct {
-	inner         *providercore.Provider
+	inner         *providercore2.Provider
 	client        *http.Client
 	modelOnce     sync.Once
 	visibleModels llm.Models
@@ -40,11 +40,11 @@ func New(opts ...llm.Option) *Provider {
 		client = llm.DefaultHttpClient()
 	}
 
-	inner := providercore.NewProvider(providercore.NewOptions(
-		providercore.WithProviderName(llm.ProviderNameDockerMR),
-		providercore.WithBaseURL(engineBaseURL),
-		providercore.WithAPIHint(llm.ApiTypeOpenAIChatCompletion),
-		providercore.WithCachedModelsFunc(func(ctx context.Context) (llm.Models, error) {
+	inner := providercore2.NewProvider(providercore2.NewOptions(
+		providercore2.WithProviderName(llm.ProviderNameDockerMR),
+		providercore2.WithBaseURL(engineBaseURL),
+		providercore2.WithAPIHint(llm.ApiTypeOpenAIChatCompletion),
+		providercore2.WithCachedModelsFunc(func(ctx context.Context) (llm.Models, error) {
 			models, err := catalogOverlay(ctx, client, llmOpts.BaseURL)
 			if err == nil && len(models) > 0 {
 				return models, nil

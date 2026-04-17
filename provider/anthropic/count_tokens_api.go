@@ -8,7 +8,7 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/codewandler/llm/provider/providercore"
+	"github.com/codewandler/llm/internal/providercore"
 )
 
 // countTokensRequest is the request body for /v1/messages/count_tokens.

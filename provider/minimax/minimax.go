@@ -7,8 +7,8 @@ import (
 
 	"github.com/codewandler/llm"
 	"github.com/codewandler/llm/internal/models"
+	providercore2 "github.com/codewandler/llm/internal/providercore"
 	"github.com/codewandler/llm/provider/anthropic"
-	"github.com/codewandler/llm/provider/providercore"
 )
 
 const (
@@ -17,7 +17,7 @@ const (
 )
 
 type Provider struct {
-	inner *providercore.Provider
+	inner *providercore2.Provider
 	opts  *llm.Options
 }
 
@@ -68,15 +68,15 @@ func New(opts ...Option) *Provider {
 		allLLMOpts = append(allLLMOpts, llm.WithLogger(p.opts.Logger))
 	}
 
-	p.inner = providercore.NewProvider(providercore.NewOptions(
-		providercore.WithProviderName(providerName),
-		providercore.WithBaseURL(defaultBaseURL),
-		providercore.WithAPIHint(llm.ApiTypeAnthropicMessages),
-		providercore.WithModels(allModels),
-		providercore.WithDefaultHeaders(http.Header{
+	p.inner = providercore2.NewProvider(providercore2.NewOptions(
+		providercore2.WithProviderName(providerName),
+		providercore2.WithBaseURL(defaultBaseURL),
+		providercore2.WithAPIHint(llm.ApiTypeAnthropicMessages),
+		providercore2.WithModels(allModels),
+		providercore2.WithDefaultHeaders(http.Header{
 			"Accept": {"application/json"},
 		}),
-		providercore.WithHeaderFunc(func(ctx context.Context, _ *llm.Request) (http.Header, error) {
+		providercore2.WithHeaderFunc(func(ctx context.Context, _ *llm.Request) (http.Header, error) {
 			key, err := p.opts.ResolveAPIKey(ctx)
 			if err != nil {
 				return nil, err
@@ -89,12 +89,12 @@ func New(opts ...Option) *Provider {
 				"x-api-key":     {key},
 			}, nil
 		}),
-		providercore.WithMutateRequest(func(r *http.Request) {
+		providercore2.WithMutateRequest(func(r *http.Request) {
 			r.Header.Set("Anthropic-Version", anthropic.AnthropicVersion)
 			r.Header.Set("Anthropic-Beta", anthropic.BetaInterleavedThinking)
 			r.Header.Set("Content-Type", "application/json")
 		}),
-		providercore.WithPreprocessRequest(func(req llm.Request) (llm.Request, string, error) {
+		providercore2.WithPreprocessRequest(func(req llm.Request) (llm.Request, string, error) {
 			original := req.Model
 			if original == "" {
 				return req, original, fmt.Errorf("model is required")
@@ -104,7 +104,7 @@ func New(opts ...Option) *Provider {
 			}
 			return req, original, nil
 		}),
-		providercore.WithMessagesRequestTransform(func(msgReq *providercore.MessagesRequest) error {
+		providercore2.WithMessagesRequestTransform(func(msgReq *providercore2.MessagesRequest) error {
 			msgReq.Thinking = nil
 			return nil
 		}),
