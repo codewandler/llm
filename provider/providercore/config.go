@@ -5,115 +5,261 @@ import (
 	"fmt"
 	"net/http"
 
+	completionsapi "github.com/codewandler/agentapis/api/completions"
+	messagesapi "github.com/codewandler/agentapis/api/messages"
+	responsesapi "github.com/codewandler/agentapis/api/responses"
 	"github.com/codewandler/llm"
 	"github.com/codewandler/llm/tokencount"
-	"github.com/codewandler/llm/usage"
 )
+
+type MessagesRequest = messagesapi.Request
+type MessagesMessage = messagesapi.Message
+type MessagesSystemBlocks = messagesapi.SystemBlocks
+type MessagesToolDefinition = messagesapi.ToolDefinition
+type MessagesThinkingConfig = messagesapi.ThinkingConfig
+type MessagesCacheControl = messagesapi.CacheControl
+type CompletionsRequest = completionsapi.Request
+type ResponsesRequest = responsesapi.Request
 
 // HTTPErrorAction describes how providercore should surface a non-2xx API response.
 type HTTPErrorAction int
 
 const (
-	// HTTPErrorActionReturn returns the error from Stream while keeping already
-	// published preamble events inspectable on the returned stream.
 	HTTPErrorActionReturn HTTPErrorAction = iota
-	// HTTPErrorActionStream emits the API error on the stream and returns nil.
 	HTTPErrorActionStream
 )
 
-// Config captures provider-level defaults wired into the core client.
-//
-// Provider implementations pass a Config to New and may customise it further
-// using Option helpers before constructing the client.
-type Config struct {
-	// ProviderName is the identifier exported via llm.Provider.Name().
-	ProviderName string
+// ---------------------------------------------------------------------------
+// Option — unified option type, applicable to both clientConfig and Options
+// ---------------------------------------------------------------------------
 
-	// DefaultModel is applied when the caller leaves Request.Model empty.
-	DefaultModel string
-
-	// BaseURL is used when llm.Options does not override the base endpoint.
-	BaseURL string
-
-	// BasePath overrides the default path for the selected API (e.g. /v1/chat/completions).
-	BasePath string
-
-	// APIHint selects which OpenAI-compatible API to target.
-	// Required. Use ApiTypeOpenAIChatCompletion, ApiTypeAnthropicMessages, etc.
-	APIHint llm.ApiType
-
-	// DefaultHeaders are applied to every request before per-call mutations.
-	DefaultHeaders http.Header
-
-	// CostCalculator enriches Usage records with cost data. When not supplied it
-	// defaults to usage.Default(). To disable cost entirely, use WithCostCalculator(nil).
-	CostCalculator usage.CostCalculator
-
-	// TokenCounter provides pre-request token estimates.
-	TokenCounter tokencount.TokenCounter
-
-	// APITokenCounter provides an optional exact/API-backed token estimate using
-	// the final typed wire payload about to be sent to the provider.
-	APITokenCounter func(ctx context.Context, req llm.Request, wire any) (*tokencount.TokenCount, error)
-
-	// ErrorParser converts non-2xx HTTP responses into provider-specific errors.
-	ErrorParser func(statusCode int, body []byte) error
-
-	// ResolveHTTPErrorAction customises how non-2xx HTTP responses are surfaced.
-	// Use llm.IsRetriableHTTPStatus inside the callback if a provider should
-	// return retriable API errors but stream non-retriable ones.
-	ResolveHTTPErrorAction func(req llm.Request, statusCode int, apiErr error) HTTPErrorAction
-
-	// RateLimitParser extracts rate-limit data from HTTP responses.
-	RateLimitParser func(*http.Response) *llm.RateLimits
-
-	// UsageExtras returns provider-specific metadata attached to Usage records.
-	UsageExtras func(*http.Response) map[string]any
-
-	// HeaderFunc returns per-request headers (e.g. Authorization). Called after
-	// DefaultHeaders are copied but before MutateRequest.
-	HeaderFunc func(ctx context.Context, req *llm.Request) (http.Header, error)
-
-	// MutateRequest runs after all headers are applied, allowing further
-	// adjustments (e.g. adding query params).
-	MutateRequest func(r *http.Request)
-
-	// ResolveAPIHint overrides APIHint on a per-request basis.
-	ResolveAPIHint func(req llm.Request) llm.ApiType
-
-	// ResolveUpstreamProvider sets StreamContext.UpstreamProvider.
-	ResolveUpstreamProvider func(req llm.Request) string
-
-	// ResolveCostTargets returns provider+model used for pricing lookups.
-	ResolveCostTargets func(req llm.Request) (provider string, model string)
-
-	// PreprocessRequest allows providers to adjust the built request prior to
-	// validation and wire conversion. The returned string is the "requested"
-	// model used when emitting ModelResolved events. Return an empty string to
-	// use the mutated request's Model.
-	PreprocessRequest func(req llm.Request) (llm.Request, string, error)
-
-	// TransformWireRequest mutates the typed API payload after unified
-	// conversion but before JSON marshaling. Use this to make provider-specific
-	// wire adjustments while keeping the emitted RequestEvent body in sync with
-	// the actual on-wire request body.
-	TransformWireRequest func(api llm.ApiType, wire any) (any, error)
-
-	costCalculatorSet bool
+// Option configures a providercore Provider or Client.
+type Option struct {
+	applyCC func(*clientConfig)
+	applyO  func(*Options)
 }
 
-// ApplyDefaults fills optional zero-value settings with package defaults.
-func (cfg *Config) ApplyDefaults() {
-	if !cfg.costCalculatorSet {
-		cfg.CostCalculator = usage.Default()
+func (opt Option) applyToClientConfig(cfg *clientConfig) {
+	if opt.applyCC != nil {
+		opt.applyCC(cfg)
 	}
+}
+
+func (opt Option) applyToOptions(o *Options) {
+	if opt.applyO != nil {
+		opt.applyO(o)
+	}
+}
+
+// --- Option constructors ---
+
+func WithProviderName(name string) Option {
+	return Option{
+		applyCC: func(cfg *clientConfig) { cfg.ProviderName = name },
+		applyO:  func(o *Options) { o.providerName = name },
+	}
+}
+
+func WithBaseURL(url string) Option {
+	return Option{
+		applyCC: func(cfg *clientConfig) { cfg.BaseURL = url },
+		applyO:  func(o *Options) { o.resolveBaseURL = func() string { return url } },
+	}
+}
+
+func WithBaseURLFunc(fn func() string) Option {
+	return Option{
+		applyCC: func(cfg *clientConfig) { cfg.BaseURL = fn() },
+		applyO:  func(o *Options) { o.resolveBaseURL = fn },
+	}
+}
+
+func WithAPIHint(hint llm.ApiType) Option {
+	return Option{
+		applyCC: func(cfg *clientConfig) { cfg.APIHint = hint },
+		applyO: func(o *Options) {
+			o.resolveAPIHint = func(_ llm.Request) llm.ApiType { return hint }
+		},
+	}
+}
+
+func WithAPIHintResolver(fn func(req llm.Request) llm.ApiType) Option {
+	return Option{
+		applyCC: func(cfg *clientConfig) { cfg.ResolveAPIHint = fn },
+		applyO:  func(o *Options) { o.resolveAPIHint = fn },
+	}
+}
+
+func WithDefaultHeaders(h http.Header) Option {
+	clone := h.Clone()
+	return Option{
+		applyCC: func(cfg *clientConfig) { cfg.DefaultHeaders = clone },
+		applyO:  func(o *Options) { o.defaultHeaders = clone },
+	}
+}
+
+func WithHeaderFunc(fn func(ctx context.Context, req *llm.Request) (http.Header, error)) Option {
+	return Option{
+		applyCC: func(cfg *clientConfig) { cfg.HeaderFunc = fn },
+		applyO:  func(o *Options) { o.headerFunc = fn },
+	}
+}
+
+func WithModels(models llm.Models) Option {
+	cp := make(llm.Models, len(models))
+	copy(cp, models)
+	return Option{
+		applyCC: nil,
+		applyO:  func(o *Options) { o.modelsFunc = func(_ context.Context) (llm.Models, error) { return cp, nil } },
+	}
+}
+
+func WithModelsFunc(fn func(ctx context.Context) (llm.Models, error)) Option {
+	return Option{
+		applyO: func(o *Options) {
+			o.modelsFunc = fn
+			o.cacheModels = false
+		},
+	}
+}
+
+func WithCachedModelsFunc(fn func(ctx context.Context) (llm.Models, error)) Option {
+	return Option{
+		applyO: func(o *Options) {
+			o.modelsFunc = fn
+			o.cacheModels = true
+		},
+	}
+}
+
+func WithPreprocessRequest(fn func(llm.Request) (llm.Request, string, error)) Option {
+	return Option{
+		applyCC: func(cfg *clientConfig) { cfg.PreprocessRequest = fn },
+		applyO:  func(o *Options) { o.preprocessRequest = fn },
+	}
+}
+
+func WithTransformWireRequest(fn func(llm.ApiType, any) (any, error)) Option {
+	return Option{
+		applyCC: func(cfg *clientConfig) { cfg.TransformWireRequest = fn },
+		applyO:  func(o *Options) { o.transformWireRequest = fn },
+	}
+}
+
+func WithMessagesRequestTransform(fn func(*MessagesRequest) error) Option {
+	return Option{
+		applyCC: func(cfg *clientConfig) { cfg.MessagesRequestTransform = fn },
+		applyO:  func(o *Options) { o.messagesRequestTransform = fn },
+	}
+}
+
+func WithCompletionsRequestTransform(fn func(*CompletionsRequest) error) Option {
+	return Option{
+		applyCC: func(cfg *clientConfig) { cfg.CompletionsRequestTransform = fn },
+		applyO:  func(o *Options) { o.completionsRequestTransform = fn },
+	}
+}
+
+func WithResponsesRequestTransform(fn func(*ResponsesRequest) error) Option {
+	return Option{
+		applyCC: func(cfg *clientConfig) { cfg.ResponsesRequestTransform = fn },
+		applyO:  func(o *Options) { o.responsesRequestTransform = fn },
+	}
+}
+
+func WithMutateRequest(fn func(*http.Request)) Option {
+	return Option{
+		applyCC: func(cfg *clientConfig) { cfg.MutateRequest = fn },
+		applyO:  func(o *Options) { o.mutateRequest = fn },
+	}
+}
+
+func WithErrorParser(fn func(int, []byte) error) Option {
+	return Option{
+		applyCC: func(cfg *clientConfig) { cfg.ErrorParser = fn },
+		applyO:  func(o *Options) { o.errorParser = fn },
+	}
+}
+
+func WithHTTPErrorActionResolver(fn func(llm.Request, int, error) HTTPErrorAction) Option {
+	return Option{
+		applyCC: func(cfg *clientConfig) { cfg.ResolveHTTPErrorAction = fn },
+		applyO:  func(o *Options) { o.resolveHTTPErrorAction = fn },
+	}
+}
+
+func WithRateLimitParser(fn func(*http.Response) *llm.RateLimits) Option {
+	return Option{
+		applyCC: func(cfg *clientConfig) { cfg.RateLimitParser = fn },
+		applyO:  func(o *Options) { o.rateLimitParser = fn },
+	}
+}
+
+func WithAPITokenCounter(fn func(context.Context, llm.Request, any) (*tokencount.TokenCount, error)) Option {
+	return Option{
+		applyCC: func(cfg *clientConfig) { cfg.APITokenCounter = fn },
+		applyO:  func(o *Options) { o.apiTokenCounter = fn },
+	}
+}
+
+func WithMessagesAPITokenCounter(fn func(context.Context, llm.Request, *MessagesRequest) (*tokencount.TokenCount, error)) Option {
+	return Option{
+		applyCC: func(cfg *clientConfig) { cfg.MessagesAPITokenCounter = fn },
+		applyO:  func(o *Options) { o.messagesAPITokenCounter = fn },
+	}
+}
+
+func WithUsageExtras(fn func(*http.Response) map[string]any) Option {
+	return Option{
+		applyCC: func(cfg *clientConfig) { cfg.UsageExtras = fn },
+		applyO:  func(o *Options) { o.usageExtras = fn },
+	}
+}
+
+func WithBasePath(path string) Option {
+	return Option{
+		applyCC: func(cfg *clientConfig) { cfg.BasePath = path },
+		applyO:  func(o *Options) { o.basePath = path },
+	}
+}
+
+// ---------------------------------------------------------------------------
+// clientConfig — internal wire config for the Client
+// ---------------------------------------------------------------------------
+
+type clientConfig struct {
+	ProviderName string
+	BaseURL      string
+	BasePath     string
+	APIHint      llm.ApiType
+
+	DefaultHeaders          http.Header
+	APITokenCounter         func(ctx context.Context, req llm.Request, wire any) (*tokencount.TokenCount, error)
+	MessagesAPITokenCounter func(ctx context.Context, req llm.Request, wire *MessagesRequest) (*tokencount.TokenCount, error)
+
+	ErrorParser            func(statusCode int, body []byte) error
+	ResolveHTTPErrorAction func(req llm.Request, statusCode int, apiErr error) HTTPErrorAction
+	RateLimitParser        func(*http.Response) *llm.RateLimits
+	UsageExtras            func(*http.Response) map[string]any
+
+	HeaderFunc     func(ctx context.Context, req *llm.Request) (http.Header, error)
+	MutateRequest  func(r *http.Request)
+	ResolveAPIHint func(req llm.Request) llm.ApiType
+
+	PreprocessRequest           func(req llm.Request) (llm.Request, string, error)
+	TransformWireRequest        func(api llm.ApiType, wire any) (any, error)
+	MessagesRequestTransform    func(*MessagesRequest) error
+	CompletionsRequestTransform func(*CompletionsRequest) error
+	ResponsesRequestTransform   func(*ResponsesRequest) error
+}
+
+func (cfg *clientConfig) ApplyDefaults() {
 	if cfg.DefaultHeaders == nil {
 		cfg.DefaultHeaders = make(http.Header)
 	}
 }
 
-// Validate reports invalid provider core configuration.
-func (cfg Config) Validate() error {
+func (cfg clientConfig) Validate() error {
 	if cfg.ProviderName == "" {
 		return fmt.Errorf("providercore: ProviderName must be set")
 	}
@@ -123,141 +269,60 @@ func (cfg Config) Validate() error {
 	return nil
 }
 
-// Option mutates a Config before constructing the Client.
-type Option func(*Config)
-
-// WithDefaultModel overrides the fallback model applied to empty requests.
-func WithDefaultModel(model string) Option {
-	return func(cfg *Config) {
-		cfg.DefaultModel = model
+func (cfg *clientConfig) ApplyOptions(opts ...Option) {
+	for _, opt := range opts {
+		opt.applyToClientConfig(cfg)
 	}
 }
 
-// WithBaseURL sets the default base URL used when llm.Options leaves it empty.
-func WithBaseURL(baseURL string) Option {
-	return func(cfg *Config) {
-		cfg.BaseURL = baseURL
-	}
+// ---------------------------------------------------------------------------
+// Options — the new public API for constructing a providercore.Provider
+// ---------------------------------------------------------------------------
+
+type Options struct {
+	providerName   string
+	resolveBaseURL func() string
+	basePath       string
+	resolveAPIHint func(req llm.Request) llm.ApiType
+	defaultHeaders http.Header
+	headerFunc     func(ctx context.Context, req *llm.Request) (http.Header, error)
+
+	modelsFunc  func(ctx context.Context) (llm.Models, error)
+	cacheModels bool
+
+	preprocessRequest           func(req llm.Request) (llm.Request, string, error)
+	transformWireRequest        func(api llm.ApiType, wire any) (any, error)
+	mutateRequest               func(r *http.Request)
+	messagesRequestTransform    func(*MessagesRequest) error
+	completionsRequestTransform func(*CompletionsRequest) error
+	responsesRequestTransform   func(*ResponsesRequest) error
+
+	errorParser            func(statusCode int, body []byte) error
+	resolveHTTPErrorAction func(req llm.Request, statusCode int, apiErr error) HTTPErrorAction
+	rateLimitParser        func(*http.Response) *llm.RateLimits
+
+	apiTokenCounter         func(ctx context.Context, req llm.Request, wire any) (*tokencount.TokenCount, error)
+	messagesAPITokenCounter func(ctx context.Context, req llm.Request, wire *MessagesRequest) (*tokencount.TokenCount, error)
+	usageExtras             func(*http.Response) map[string]any
 }
 
-// WithBasePath overrides the API path appended to the base URL.
-func WithBasePath(path string) Option {
-	return func(cfg *Config) {
-		cfg.BasePath = path
+func NewOptions(opts ...Option) Options {
+	o := Options{}
+	for _, opt := range opts {
+		opt.applyToOptions(&o)
 	}
+	return o
 }
 
-// WithAPIHint sets the API to target for this provider.
-func WithAPIHint(api llm.ApiType) Option {
-	return func(cfg *Config) {
-		cfg.APIHint = api
+func (o Options) Validate() error {
+	if o.providerName == "" {
+		return fmt.Errorf("providercore: WithProviderName is required")
 	}
-}
-
-// WithDefaultHeaders defines static headers applied to each request.
-func WithDefaultHeaders(headers http.Header) Option {
-	return func(cfg *Config) {
-		cfg.DefaultHeaders = headers.Clone()
+	if o.resolveAPIHint == nil {
+		return fmt.Errorf("providercore: WithAPIHint or WithAPIHintResolver is required")
 	}
-}
-
-// WithCostCalculator sets the calculator used for Usage cost enrichment.
-// Pass nil to explicitly disable cost calculation.
-func WithCostCalculator(calc usage.CostCalculator) Option {
-	return func(cfg *Config) {
-		cfg.CostCalculator = calc
-		cfg.costCalculatorSet = true
+	if o.modelsFunc == nil {
+		return fmt.Errorf("providercore: WithModels, WithModelsFunc, or WithCachedModelsFunc is required")
 	}
-}
-
-// WithTokenCounter configures pre-request token estimation.
-func WithTokenCounter(counter tokencount.TokenCounter) Option {
-	return func(cfg *Config) {
-		cfg.TokenCounter = counter
-	}
-}
-
-// WithAPITokenCounter configures an optional exact/API-backed token estimate.
-func WithAPITokenCounter(counter func(context.Context, llm.Request, any) (*tokencount.TokenCount, error)) Option {
-	return func(cfg *Config) {
-		cfg.APITokenCounter = counter
-	}
-}
-
-// WithErrorParser sets a custom HTTP error translator.
-func WithErrorParser(fn func(int, []byte) error) Option {
-	return func(cfg *Config) {
-		cfg.ErrorParser = fn
-	}
-}
-
-// WithHTTPErrorActionResolver customises how non-2xx API responses are surfaced.
-func WithHTTPErrorActionResolver(fn func(llm.Request, int, error) HTTPErrorAction) Option {
-	return func(cfg *Config) {
-		cfg.ResolveHTTPErrorAction = fn
-	}
-}
-
-// WithRateLimitParser configures rate-limit extraction from responses.
-func WithRateLimitParser(fn func(*http.Response) *llm.RateLimits) Option {
-	return func(cfg *Config) {
-		cfg.RateLimitParser = fn
-	}
-}
-
-// WithUsageExtras attaches metadata to Usage records.
-func WithUsageExtras(fn func(*http.Response) map[string]any) Option {
-	return func(cfg *Config) {
-		cfg.UsageExtras = fn
-	}
-}
-
-// WithHeaderFunc sets a callback returning per-request headers.
-func WithHeaderFunc(fn func(context.Context, *llm.Request) (http.Header, error)) Option {
-	return func(cfg *Config) {
-		cfg.HeaderFunc = fn
-	}
-}
-
-// WithRequestMutator installs a hook run after headers are applied.
-func WithRequestMutator(fn func(*http.Request)) Option {
-	return func(cfg *Config) {
-		cfg.MutateRequest = fn
-	}
-}
-
-// WithAPIHintResolver overrides API hint selection per request.
-func WithAPIHintResolver(fn func(llm.Request) llm.ApiType) Option {
-	return func(cfg *Config) {
-		cfg.ResolveAPIHint = fn
-	}
-}
-
-// WithUpstreamResolver sets a per-request upstream provider resolver.
-func WithUpstreamResolver(fn func(llm.Request) string) Option {
-	return func(cfg *Config) {
-		cfg.ResolveUpstreamProvider = fn
-	}
-}
-
-// WithCostTargetResolver customises pricing lookup identifiers.
-func WithCostTargetResolver(fn func(llm.Request) (provider string, model string)) Option {
-	return func(cfg *Config) {
-		cfg.ResolveCostTargets = fn
-	}
-}
-
-// WithPreprocessRequest installs a hook to mutate requests before they are
-// marshalled to wire format.
-func WithPreprocessRequest(fn func(llm.Request) (llm.Request, string, error)) Option {
-	return func(cfg *Config) {
-		cfg.PreprocessRequest = fn
-	}
-}
-
-// WithWireRequestTransformer mutates the typed API payload before marshaling.
-func WithWireRequestTransformer(fn func(llm.ApiType, any) (any, error)) Option {
-	return func(cfg *Config) {
-		cfg.TransformWireRequest = fn
-	}
+	return nil
 }

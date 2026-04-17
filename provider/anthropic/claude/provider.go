@@ -14,19 +14,18 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/codewandler/agentapis/adapt"
+	agentmessages "github.com/codewandler/agentapis/api/messages"
 	"github.com/codewandler/llm"
-	"github.com/codewandler/llm/api/messages"
-	"github.com/codewandler/llm/api/unified"
 	"github.com/codewandler/llm/provider/anthropic"
 	"github.com/codewandler/llm/provider/providercore"
 	"github.com/codewandler/llm/tokencount"
-	"github.com/codewandler/llm/usage"
 )
 
 const (
 	providerName    = "claude"
 	defaultBaseURL  = "https://api.anthropic.com"
-	envBaseURL      = "ANTHROPIC_BASE_URL" // override for proxy/testing
+	envBaseURL      = "ANTHROPIC_BASE_URL"
 	claudeUserAgent = "claude-cli/2.1.85 (external, sdk-cli)"
 	claudeBeta      = "claude-code-20250219,oauth-2025-04-20,interleaved-thinking-2025-05-14,context-management-2025-06-27,prompt-caching-scope-2026-01-05,effort-2025-11-24"
 
@@ -37,13 +36,10 @@ const (
 	systemCore    = "You are a Claude agent, built on Anthropic's Claude Agent SDK."
 )
 
-// supportedModels is the allowlist of model IDs that work with Claude OAuth API.
 var supportedModels = map[string]bool{
-	// Claude 4.6 (current default)
 	"claude-sonnet-4-6": true,
 	"claude-opus-4-6":   true,
 
-	// Claude 4.5
 	"claude-sonnet-4-5":          true,
 	"claude-sonnet-4-5-20250929": true,
 	"claude-opus-4-5":            true,
@@ -51,18 +47,15 @@ var supportedModels = map[string]bool{
 	"claude-haiku-4-5":           true,
 	"claude-haiku-4-5-20251001":  true,
 
-	// Claude 4.1
 	"claude-opus-4-1":          true,
 	"claude-opus-4-1-20250805": true,
 
-	// Claude 4.0
 	"claude-sonnet-4":          true,
 	"claude-sonnet-4-20250514": true,
 	"claude-opus-4":            true,
 	"claude-opus-4-20250514":   true,
 }
 
-// Provider implements Anthropic requests with Claude OAuth tokens.
 type Provider struct {
 	baseURL       string
 	client        *http.Client
@@ -70,14 +63,12 @@ type Provider struct {
 	tokenProvider TokenProvider
 	userID        string
 	sessionID     string
-	initErr       error // set when a With* option fails to initialise its token provider
+	initErr       error
 
-	*claudeModels
+	inner        *providercore.Provider
+	claudeModels *claudeModels
 }
 
-// New creates a new Claude OAuth provider.
-// By default, if local Claude Code credentials exist (~/.claude/.credentials.json),
-// they will be used automatically. Use WithTokenProvider() to override.
 func New(opts ...Option) *Provider {
 	p := &Provider{
 		baseURL:      getEnvBaseURL(),
@@ -87,51 +78,68 @@ func New(opts ...Option) *Provider {
 		log:          slog.New(slog.DiscardHandler),
 	}
 
-	// Default to local token provider if available
 	if LocalTokenProviderAvailable() {
 		if tp, err := NewLocalTokenProvider(); err == nil {
 			p.tokenProvider = tp
 		}
 	}
 
-	// Apply user options (may override token provider)
 	for _, opt := range opts {
 		opt(p)
 	}
 
 	p.userID = p.buildUserID()
 
-	return p
-}
-
-// Name returns the provider name.
-func (p *Provider) Name() string { return providerName }
-
-func (*Provider) CostCalculator() usage.CostCalculator {
-	return usage.Default()
-}
-
-// CreateStream implements llm.Provider.
-func (p *Provider) CreateStream(ctx context.Context, src llm.Buildable) (llm.Stream, error) {
-	if p.initErr != nil {
-		return nil, llm.NewErrProviderMsg(llm.ProviderNameClaude, p.initErr.Error())
-	}
-	return p.buildCore().Stream(ctx, src)
-}
-
-func (p *Provider) buildCore() *providercore.Client {
-	cfg := providercore.Config{
-		ProviderName: providerName,
-		DefaultModel: ModelDefault,
-		BaseURL:      p.baseURL,
-		BasePath:     "/v1/messages",
-		APIHint:      llm.ApiTypeAnthropicMessages,
-		DefaultHeaders: http.Header{
+	p.inner = providercore.NewProvider(providercore.NewOptions(
+		providercore.WithProviderName(providerName),
+		providercore.WithBaseURLFunc(func() string { return p.baseURL }),
+		providercore.WithAPIHint(llm.ApiTypeAnthropicMessages),
+		providercore.WithCachedModelsFunc(func(ctx context.Context) (llm.Models, error) {
+			return p.claudeModels.Models(), nil
+		}),
+		providercore.WithDefaultHeaders(http.Header{
 			"Accept": {"application/json"},
-		},
-		CostCalculator: usage.Default(),
-		TokenCounter:   p,
-		RateLimitParser: func(resp *http.Response) *llm.RateLimits {
+		}),
+		providercore.WithHeaderFunc(func(ctx context.Context, _ *llm.Request) (http.Header, error) {
+			if p.tokenProvider == nil {
+				return nil, llm.NewErrMissingAPIKey(llm.ProviderNameClaude)
+			}
+			token, err := p.tokenProvider.Token(ctx)
+			if err != nil {
+				return nil, llm.NewErrRequestFailed(llm.ProviderNameClaude, err)
+			}
+			return http.Header{"Authorization": {"Bearer " + token.AccessToken}}, nil
+		}),
+		providercore.WithMutateRequest(func(r *http.Request) {
+			p.setClaudeStaticHeaders(r)
+			q := r.URL.Query()
+			q.Set("beta", "true")
+			r.URL.RawQuery = q.Encode()
+		}),
+		providercore.WithPreprocessRequest(func(req llm.Request) (llm.Request, string, error) {
+			normalizeRequest(&req)
+			original := req.Model
+			resolvedModel, err := p.claudeModels.Resolve(req.Model)
+			if err != nil {
+				return req, original, err
+			}
+			req.Model = resolvedModel.ID
+			return req, original, nil
+		}),
+		providercore.WithMessagesRequestTransform(func(msgReq *providercore.MessagesRequest) error {
+			if err := p.augmentMessagesRequest(msgReq); err != nil {
+				return err
+			}
+			return nil
+		}),
+		providercore.WithMessagesAPITokenCounter(func(ctx context.Context, _ llm.Request, msgReq *providercore.MessagesRequest) (*tokencount.TokenCount, error) {
+			count, err := p.countTokensAPI(ctx, msgReq)
+			if err != nil {
+				return nil, err
+			}
+			return &tokencount.TokenCount{InputTokens: count}, nil
+		}),
+		providercore.WithRateLimitParser(func(resp *http.Response) *llm.RateLimits {
 			if resp == nil {
 				return nil
 			}
@@ -142,72 +150,28 @@ func (p *Provider) buildCore() *providercore.Client {
 				}
 			}
 			return llm.ParseRateLimits(headers)
-		},
-		HeaderFunc: func(ctx context.Context, _ *llm.Request) (http.Header, error) {
-			if p.tokenProvider == nil {
-				return nil, llm.NewErrMissingAPIKey(llm.ProviderNameClaude)
-			}
-			token, err := p.tokenProvider.Token(ctx)
-			if err != nil {
-				return nil, llm.NewErrRequestFailed(llm.ProviderNameClaude, err)
-			}
-			return http.Header{"Authorization": {"Bearer " + token.AccessToken}}, nil
-		},
-		MutateRequest: func(r *http.Request) {
-			p.setClaudeStaticHeaders(r)
-			q := r.URL.Query()
-			q.Set("beta", "true")
-			r.URL.RawQuery = q.Encode()
-		},
-		PreprocessRequest: func(req llm.Request) (llm.Request, string, error) {
-			normalizeRequest(&req)
-			original := req.Model
-			resolvedModel, err := p.Resolve(req.Model)
-			if err != nil {
-				return req, original, err
-			}
-			req.Model = resolvedModel.ID
-			return req, original, nil
-		},
-		TransformWireRequest: func(api llm.ApiType, wire any) (any, error) {
-			msgReq, ok := wire.(*messages.Request)
-			if !ok {
-				return nil, fmt.Errorf("unexpected messages payload %T", wire)
-			}
-			if err := p.augmentMessagesRequest(msgReq); err != nil {
-				return nil, err
-			}
-			return msgReq, nil
-		},
-		APITokenCounter: func(ctx context.Context, _ llm.Request, wire any) (*tokencount.TokenCount, error) {
-			msgReq, ok := wire.(*messages.Request)
-			if !ok {
-				return nil, fmt.Errorf("unexpected messages payload %T", wire)
-			}
-			count, err := p.countTokensAPI(ctx, msgReq)
-			if err != nil {
-				return nil, err
-			}
-			return &tokencount.TokenCount{InputTokens: count}, nil
-		},
-		ResolveHTTPErrorAction: func(_ llm.Request, statusCode int, _ error) providercore.HTTPErrorAction {
+		}),
+		providercore.WithHTTPErrorActionResolver(func(_ llm.Request, statusCode int, _ error) providercore.HTTPErrorAction {
 			if llm.IsRetriableHTTPStatus(statusCode) {
 				return providercore.HTTPErrorActionReturn
 			}
 			return providercore.HTTPErrorActionStream
-		},
-	}
+		}),
+	), llm.WithHTTPClient(p.client), llm.WithLogger(p.log))
 
-	return providercore.New(
-		cfg,
-		llm.WithBaseURL(p.baseURL),
-		llm.WithHTTPClient(p.client),
-		llm.WithLogger(p.log),
-	)
+	return p
 }
 
-// countTokensAPI calls /v1/messages/count_tokens with proper Claude OAuth headers.
-func (p *Provider) countTokensAPI(ctx context.Context, apiReq *messages.Request) (int, error) {
+func (p *Provider) Name() string       { return p.inner.Name() }
+func (p *Provider) Models() llm.Models { return p.inner.Models() }
+func (p *Provider) CreateStream(ctx context.Context, src llm.Buildable) (llm.Stream, error) {
+	if p.initErr != nil {
+		return nil, llm.NewErrProviderMsg(llm.ProviderNameClaude, p.initErr.Error())
+	}
+	return p.inner.CreateStream(ctx, src)
+}
+
+func (p *Provider) countTokensAPI(ctx context.Context, apiReq *providercore.MessagesRequest) (int, error) {
 	if p.tokenProvider == nil {
 		return 0, fmt.Errorf("claude: count_tokens: missing token provider")
 	}
@@ -217,13 +181,13 @@ func (p *Provider) countTokensAPI(ctx context.Context, apiReq *messages.Request)
 	}
 
 	countReqBody, err := json.Marshal(struct {
-		Model        string                    `json:"model"`
-		Messages     []messages.Message        `json:"messages"`
-		System       messages.SystemBlocks     `json:"system,omitempty"`
-		Tools        []messages.ToolDefinition `json:"tools,omitempty"`
-		ToolChoice   any                       `json:"tool_choice,omitempty"`
-		Thinking     *messages.ThinkingConfig  `json:"thinking,omitempty"`
-		CacheControl *messages.CacheControl    `json:"cache_control,omitempty"`
+		Model        string                                `json:"model"`
+		Messages     []providercore.MessagesMessage        `json:"messages"`
+		System       providercore.MessagesSystemBlocks     `json:"system,omitempty"`
+		Tools        []providercore.MessagesToolDefinition `json:"tools,omitempty"`
+		ToolChoice   any                                   `json:"tool_choice,omitempty"`
+		Thinking     *providercore.MessagesThinkingConfig  `json:"thinking,omitempty"`
+		CacheControl *providercore.MessagesCacheControl    `json:"cache_control,omitempty"`
 	}{
 		Model:        apiReq.Model,
 		Messages:     apiReq.Messages,
@@ -267,7 +231,6 @@ func (p *Provider) countTokensAPI(ctx context.Context, apiReq *messages.Request)
 	return result.InputTokens, nil
 }
 
-// setClaudeHeaders applies the full set of Claude OAuth headers to a request.
 func (p *Provider) setClaudeHeaders(req *http.Request, accessToken string) {
 	p.setClaudeStaticHeaders(req)
 	req.Header.Set("Authorization", "Bearer "+accessToken)
@@ -293,12 +256,12 @@ func (p *Provider) setClaudeStaticHeaders(req *http.Request) {
 	req.Header.Set("Connection", "keep-alive")
 }
 
-func (p *Provider) buildRequest(llmRequest llm.Request) (*messages.Request, error) {
-	uReq, err := unified.RequestFromLLM(llmRequest)
+func (p *Provider) buildRequest(llmRequest llm.Request) (*agentmessages.Request, error) {
+	uReq, err := providercore.RequestToUnified(llmRequest)
 	if err != nil {
 		return nil, err
 	}
-	msgReq, err := unified.BuildMessagesRequest(uReq)
+	msgReq, err := adapt.BuildMessagesRequest(uReq)
 	if err != nil {
 		return nil, err
 	}
@@ -308,16 +271,16 @@ func (p *Provider) buildRequest(llmRequest llm.Request) (*messages.Request, erro
 	return msgReq, nil
 }
 
-func (p *Provider) augmentMessagesRequest(msgReq *messages.Request) error {
+func (p *Provider) augmentMessagesRequest(msgReq *providercore.MessagesRequest) error {
 	if msgReq == nil {
 		return fmt.Errorf("nil messages request")
 	}
-	msgReq.System = append(messages.SystemBlocks{
-		&messages.TextBlock{Type: messages.BlockTypeText, Text: billingHeader},
-		&messages.TextBlock{Type: messages.BlockTypeText, Text: systemCore, CacheControl: &messages.CacheControl{Type: "ephemeral", TTL: "1h"}},
+	msgReq.System = append(providercore.MessagesSystemBlocks{
+		&agentmessages.TextBlock{Type: agentmessages.BlockTypeText, Text: billingHeader},
+		&agentmessages.TextBlock{Type: agentmessages.BlockTypeText, Text: systemCore, CacheControl: &agentmessages.CacheControl{Type: "ephemeral", TTL: "1h"}},
 	}, msgReq.System...)
 	if p.userID != "" {
-		msgReq.Metadata = &messages.Metadata{UserID: p.userID}
+		msgReq.Metadata = &agentmessages.Metadata{UserID: p.userID}
 	}
 	return nil
 }
@@ -342,7 +305,6 @@ func (p *Provider) buildUserID() string {
 		return ""
 	}
 
-	// Return JSON object format matching Claude Code
 	id := map[string]string{
 		"device_id":    cfg.UserID,
 		"account_uuid": cfg.OAuthAccount.AccountUUID,
@@ -384,8 +346,6 @@ func stainlessArch() string {
 	return "x64"
 }
 
-// getEnvBaseURL returns the base URL for API requests.
-// Uses ANTHROPIC_BASE_URL environment variable if set, otherwise defaultBaseURL.
 func getEnvBaseURL() string {
 	if url := os.Getenv(envBaseURL); url != "" {
 		return url

@@ -1,12 +1,13 @@
 module github.com/codewandler/llm
 
-go 1.25.6
+go 1.25.7
 
 require (
 	github.com/andybalholm/brotli v1.2.1
 	github.com/aws/aws-sdk-go-v2 v1.41.5
 	github.com/aws/aws-sdk-go-v2/config v1.32.14
 	github.com/aws/aws-sdk-go-v2/service/bedrockruntime v1.50.4
+	github.com/codewandler/agentapis v0.0.0
 	github.com/invopop/jsonschema v0.13.0
 	github.com/klauspost/compress v1.18.5
 	github.com/matoous/go-nanoid/v2 v2.1.0
@@ -16,6 +17,8 @@ require (
 	github.com/spf13/cobra v1.10.2
 	github.com/stretchr/testify v1.11.1
 )
+
+replace github.com/codewandler/agentapis => ../agentapis
 
 require (
 	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.8 // indirect

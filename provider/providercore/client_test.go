@@ -16,7 +16,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/codewandler/llm"
-	"github.com/codewandler/llm/api/messages"
 	"github.com/codewandler/llm/msg"
 	"github.com/codewandler/llm/tokencount"
 	"github.com/codewandler/llm/usage"
@@ -60,57 +59,37 @@ func TestClientStream_CompletionsFlow(t *testing.T) {
 	}))
 	defer server.Close()
 
-	var (
-		costProvider string
-		costModel    string
-	)
+	var cfg clientConfig
 
-	cfg := Config{
-		ProviderName: "test-provider",
-		DefaultModel: "real-model",
-		BaseURL:      server.URL,
-		APIHint:      llm.ApiTypeOpenAIChatCompletion,
-		DefaultHeaders: http.Header{
-			"X-Default": {"true"},
-		},
-		RateLimitParser: func(resp *http.Response) *llm.RateLimits {
+	cfg.ApplyOptions(
+		WithProviderName("test-provider"),
+		WithBaseURL(server.URL),
+		WithAPIHint(llm.ApiTypeOpenAIChatCompletion),
+		WithDefaultHeaders(http.Header{"X-Default": {"true"}}),
+		WithRateLimitParser(func(resp *http.Response) *llm.RateLimits {
 			return &llm.RateLimits{
 				OrganizationID: resp.Header.Get("X-Org"),
 				RequestID:      resp.Header.Get("X-Request-ID"),
 			}
-		},
-		UsageExtras: func(*http.Response) map[string]any {
-			return map[string]any{"source": "test"}
-		},
-		TokenCounter: tokencount.TokenCounterFunc(func(context.Context, tokencount.TokenCountRequest) (*tokencount.TokenCount, error) {
-			return &tokencount.TokenCount{InputTokens: 21}, nil
 		}),
-		HeaderFunc: func(context.Context, *llm.Request) (http.Header, error) {
+		WithUsageExtras(func(*http.Response) map[string]any {
+			return map[string]any{"source": "test"}
+		}),
+		WithHeaderFunc(func(context.Context, *llm.Request) (http.Header, error) {
 			return http.Header{"Authorization": {"Bearer test-token"}}, nil
-		},
-		MutateRequest: func(r *http.Request) {
+		}),
+		WithMutateRequest(func(r *http.Request) {
 			r.Header.Set("X-Mutated", "yes")
-		},
-		PreprocessRequest: func(req llm.Request) (llm.Request, string, error) {
+		}),
+		WithPreprocessRequest(func(req llm.Request) (llm.Request, string, error) {
 			original := req.Model
 			req.Model = "real-model"
 			return req, original, nil
-		},
-		ResolveAPIHint: func(llm.Request) llm.ApiType {
+		}),
+		WithAPIHintResolver(func(llm.Request) llm.ApiType {
 			return llm.ApiTypeOpenAIChatCompletion
-		},
-		ResolveUpstreamProvider: func(llm.Request) string {
-			return "openai"
-		},
-		ResolveCostTargets: func(llm.Request) (string, string) {
-			return "openai", "gpt-real"
-		},
-	}
-
-	WithCostCalculator(usage.CostCalculatorFunc(func(provider, model string, tokens usage.TokenItems) (usage.Cost, bool) {
-		costProvider, costModel = provider, model
-		return usage.Cost{Total: 0.42, Source: "calculated"}, true
-	}))(&cfg)
+		}),
+	)
 
 	client := New(cfg, llm.WithBaseURL(server.URL))
 
@@ -182,28 +161,20 @@ func TestClientStream_CompletionsFlow(t *testing.T) {
 	require.True(t, sawDelta)
 	require.True(t, sawUsage)
 	require.True(t, sawCompleted)
-	assert.Equal(t, "openai", startedProvider)
+	assert.Equal(t, "test-provider", startedProvider)
 	if assert.NotNil(t, tokenEstimate) {
-		assert.False(t, tokenEstimate.Cost.IsZero())
-		assert.InDelta(t, 0.42, tokenEstimate.Cost.Total, 1e-9)
+		assert.Greater(t, tokenEstimate.Tokens.Total(), 0, "should have token estimates")
 	}
 
 	if assert.NotNil(t, usageRecord) {
-		if assert.Equal(t, "calculated", usageRecord.Cost.Source) {
-			assert.InDelta(t, 0.42, usageRecord.Cost.Total, 1e-9)
-		}
 		if assert.NotNil(t, usageRecord.Extras) {
 			assert.Equal(t, "test", usageRecord.Extras["source"])
 			_, ok := usageRecord.Extras["rate_limits"].(*llm.RateLimits)
 			assert.True(t, ok)
 		}
-		assert.False(t, usageRecord.Cost.IsZero())
 		assert.Equal(t, "test-provider", usageRecord.Dims.Provider)
 		assert.Equal(t, "real-model", usageRecord.Dims.Model)
 	}
-
-	assert.Equal(t, "openai", costProvider)
-	assert.Equal(t, "gpt-real", costModel)
 
 	mu.Lock()
 	defer mu.Unlock()
@@ -218,9 +189,8 @@ func TestClientStream_CompletionsFlow(t *testing.T) {
 func TestClientStream_HeaderFuncMissingKey(t *testing.T) {
 	t.Parallel()
 
-	cfg := Config{
+	cfg := clientConfig{
 		ProviderName: "test",
-		DefaultModel: "m",
 		BaseURL:      "http://invalid",
 		APIHint:      llm.ApiTypeOpenAIChatCompletion,
 		HeaderFunc: func(context.Context, *llm.Request) (http.Header, error) {
@@ -246,9 +216,8 @@ func TestClientStream_ErrorParser(t *testing.T) {
 	}))
 	defer server.Close()
 
-	cfg := Config{
+	cfg := clientConfig{
 		ProviderName: "test",
-		DefaultModel: "m",
 		BaseURL:      server.URL,
 		APIHint:      llm.ApiTypeOpenAIChatCompletion,
 		ErrorParser: func(code int, body []byte) error {
@@ -286,9 +255,8 @@ func TestClientStream_HTTPErrorActionStream(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := New(Config{
+	client := New(clientConfig{
 		ProviderName: "test",
-		DefaultModel: "m",
 		BaseURL:      server.URL,
 		APIHint:      llm.ApiTypeOpenAIChatCompletion,
 		ResolveHTTPErrorAction: func(llm.Request, int, error) HTTPErrorAction {
@@ -338,14 +306,10 @@ func TestClientStream_APITokenCounterEmitsAdditionalEstimate(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := New(Config{
+	client := New(clientConfig{
 		ProviderName: "test",
-		DefaultModel: "m",
 		BaseURL:      server.URL,
 		APIHint:      llm.ApiTypeOpenAIChatCompletion,
-		TokenCounter: tokencount.TokenCounterFunc(func(context.Context, tokencount.TokenCountRequest) (*tokencount.TokenCount, error) {
-			return &tokencount.TokenCount{InputTokens: 11}, nil
-		}),
 		APITokenCounter: func(context.Context, llm.Request, any) (*tokencount.TokenCount, error) {
 			return &tokencount.TokenCount{InputTokens: 17}, nil
 		},
@@ -381,9 +345,8 @@ func TestClientStream_APIHintResolver(t *testing.T) {
 	}))
 	defer server.Close()
 
-	cfg := Config{
+	cfg := clientConfig{
 		ProviderName: "test",
-		DefaultModel: "openai/gpt-4o",
 		BaseURL:      server.URL,
 		APIHint:      llm.ApiTypeOpenAIChatCompletion,
 		ResolveAPIHint: func(req llm.Request) llm.ApiType {
@@ -396,6 +359,7 @@ func TestClientStream_APIHintResolver(t *testing.T) {
 
 	client := New(cfg, llm.WithBaseURL(server.URL))
 	stream, err := client.Stream(context.Background(), llm.Request{
+		Model:    "openai/gpt-4o",
 		Messages: msg.BuildTranscript(msg.User("hi")),
 	})
 	require.NoError(t, err)
@@ -425,9 +389,8 @@ func TestClientStream_MutateRequestMessages(t *testing.T) {
 	}))
 	defer server.Close()
 
-	cfg := Config{
+	cfg := clientConfig{
 		ProviderName: "test",
-		DefaultModel: "anthropic/claude",
 		BaseURL:      server.URL,
 		APIHint:      llm.ApiTypeOpenAIChatCompletion,
 		PreprocessRequest: func(req llm.Request) (llm.Request, string, error) {
@@ -445,6 +408,7 @@ func TestClientStream_MutateRequestMessages(t *testing.T) {
 
 	client := New(cfg, llm.WithBaseURL(server.URL))
 	stream, err := client.Stream(context.Background(), llm.Request{
+		Model:    "anthropic/claude",
 		Messages: msg.BuildTranscript(msg.User("hi")),
 	})
 	require.NoError(t, err)
@@ -475,17 +439,13 @@ func TestClientStream_TransformWireRequestUpdatesRequestEventBody(t *testing.T) 
 	}))
 	defer server.Close()
 
-	client := New(Config{
+	client := New(clientConfig{
 		ProviderName: "test",
 		BaseURL:      server.URL,
 		APIHint:      llm.ApiTypeAnthropicMessages,
-		TransformWireRequest: func(api llm.ApiType, wire any) (any, error) {
-			msgReq, ok := wire.(*messages.Request)
-			if !ok {
-				return nil, fmt.Errorf("unexpected payload %T", wire)
-			}
+		MessagesRequestTransform: func(msgReq *MessagesRequest) error {
 			msgReq.Thinking = nil
-			return msgReq, nil
+			return nil
 		},
 	}, llm.WithBaseURL(server.URL))
 
@@ -537,7 +497,7 @@ func TestClientStream_MutateRequestBody_ReflectedInRequestEvent(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := New(Config{
+	client := New(clientConfig{
 		ProviderName: "test",
 		BaseURL:      server.URL,
 		APIHint:      llm.ApiTypeOpenAIChatCompletion,
@@ -607,7 +567,7 @@ func TestClientStream_MutateRequestBody_StrippedField(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := New(Config{
+	client := New(clientConfig{
 		ProviderName: "test",
 		BaseURL:      server.URL,
 		APIHint:      llm.ApiTypeOpenAIChatCompletion,
@@ -654,41 +614,30 @@ func TestConfigApplyDefaultsAndValidate(t *testing.T) {
 	t.Run("apply defaults", func(t *testing.T) {
 		t.Parallel()
 
-		cfg := Config{}
+		cfg := clientConfig{}
 		cfg.ApplyDefaults()
 
 		require.NotNil(t, cfg.DefaultHeaders)
-		require.NotNil(t, cfg.CostCalculator)
-	})
-
-	t.Run("respect explicit nil cost calculator", func(t *testing.T) {
-		t.Parallel()
-
-		cfg := Config{}
-		WithCostCalculator(nil)(&cfg)
-		cfg.ApplyDefaults()
-
-		require.Nil(t, cfg.CostCalculator)
 	})
 
 	t.Run("validate missing provider name", func(t *testing.T) {
 		t.Parallel()
 
-		err := (Config{APIHint: llm.ApiTypeOpenAIChatCompletion}).Validate()
+		err := (clientConfig{APIHint: llm.ApiTypeOpenAIChatCompletion}).Validate()
 		require.EqualError(t, err, "providercore: ProviderName must be set")
 	})
 
 	t.Run("validate missing api hint", func(t *testing.T) {
 		t.Parallel()
 
-		err := (Config{ProviderName: "test"}).Validate()
+		err := (clientConfig{ProviderName: "test"}).Validate()
 		require.EqualError(t, err, "providercore: APIHint must be a concrete API type")
 	})
 
 	t.Run("validate success", func(t *testing.T) {
 		t.Parallel()
 
-		err := (Config{ProviderName: "test", APIHint: llm.ApiTypeOpenAIChatCompletion}).Validate()
+		err := (clientConfig{ProviderName: "test", APIHint: llm.ApiTypeOpenAIChatCompletion}).Validate()
 		require.NoError(t, err)
 	})
 }
@@ -697,6 +646,6 @@ func TestClientStream_InvalidConfig(t *testing.T) {
 	t.Parallel()
 
 	assert.PanicsWithValue(t, "providercore: ProviderName must be set", func() {
-		_ = New(Config{})
+		_ = New(clientConfig{})
 	})
 }
