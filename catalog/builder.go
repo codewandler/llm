@@ -6,6 +6,11 @@ type Builder struct {
 	Sources []RegisteredSource
 }
 
+type fetchedBuildSource struct {
+	registered RegisteredSource
+	fragment   *Fragment
+}
+
 func DefaultBuildSources() []RegisteredSource {
 	sources := []RegisteredSource{
 		{Stage: StageBuild, Authority: AuthorityCanonical, Source: NewAnthropicStaticSource()},
@@ -23,6 +28,7 @@ func DefaultBuildSources() []RegisteredSource {
 
 func (b Builder) Build(ctx context.Context) (Catalog, error) {
 	catalog := NewCatalog()
+	fetched := make([]fetchedBuildSource, 0, len(b.Sources))
 	for _, registered := range b.Sources {
 		if registered.Stage == StageRuntime {
 			continue
@@ -31,7 +37,27 @@ func (b Builder) Build(ctx context.Context) (Catalog, error) {
 		if err != nil {
 			return Catalog{}, err
 		}
-		if err := MergeCatalogFragment(&catalog, fragment); err != nil {
+		fetched = append(fetched, fetchedBuildSource{registered: registered, fragment: fragment})
+	}
+
+	creatorRoots := make(map[ModelKey]struct{})
+	for _, item := range fetched {
+		if sourceMergeRole(item.registered) != mergeRoleCreatorRoot {
+			continue
+		}
+		if err := MergeCatalogFragment(&catalog, item.fragment); err != nil {
+			return Catalog{}, err
+		}
+		recordCreatorRoots(creatorRoots, item.fragment)
+	}
+
+	creatorIndex := newCreatorRootIndex(creatorRoots)
+	for _, item := range fetched {
+		if sourceMergeRole(item.registered) != mergeRoleOfferingEnriching {
+			continue
+		}
+		rebindFragmentToCreatorRoots(item.fragment, creatorIndex)
+		if err := MergeCatalogFragment(&catalog, item.fragment); err != nil {
 			return Catalog{}, err
 		}
 	}
@@ -39,4 +65,13 @@ func (b Builder) Build(ctx context.Context) (Catalog, error) {
 		return Catalog{}, err
 	}
 	return catalog, nil
+}
+
+func recordCreatorRoots(dst map[ModelKey]struct{}, frag *Fragment) {
+	if frag == nil {
+		return
+	}
+	for _, model := range frag.Models {
+		dst[NormalizeKey(model.Key)] = struct{}{}
+	}
 }

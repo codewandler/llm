@@ -14,6 +14,15 @@ At runtime the package loads a prebuilt `catalog.json` snapshot. Build-time tool
 can refresh that snapshot from upstream sources such as `models.dev`, OpenAI, or
 OpenRouter.
 
+The current build invariant is:
+
+- creator/direct sources define root `ModelRecord`s
+- broker/platform sources primarily add `Offering`s and enrich existing roots
+- when a broker/platform source refers to a model line that already has a
+  creator root, the builder rebinds that fragment onto the creator-owned key
+- when no creator root exists yet, broker/platform sources may still create a
+  provisional non-canonical root so the catalog keeps coverage
+
 ## Architecture
 
 ```text
@@ -28,11 +37,15 @@ OpenRouter.
                  +------------+-------------+
                               |
                               v
-                      +---------------+
-                      | Builder       |
-                      | merge/validate|
-                      | emit snapshot |
-                      +-------+-------+
+                      +----------------------+
+                      | Builder              |
+                      |----------------------|
+                      | pass 1: creator roots|
+                      | pass 2: offerings +  |
+                      |         enrichment   |
+                      | canonical rebind     |
+                      | validate / emit      |
+                      +----------+-----------+
                               |
                               v
                       +---------------+
@@ -151,6 +164,20 @@ The graph is additive.
 - conflicting non-empty scalar values are validation errors
 - provenance is appended, never replaced
 
+For build-time source reconciliation, additive does not mean every source gets
+to mint an independent root model.
+
+- creator/direct sources are the authority for root `ModelRecord`s
+- broker/platform sources may enrich those roots and add service offerings
+- if a broker/platform fragment uses a line-level key and the creator source has
+  a release-specific key for that same line, the builder binds the fragment to
+  the creator release key
+- if no creator root exists for that line, the broker/platform fragment is kept
+  as a provisional root instead of being dropped
+
+This keeps cross-service offerings attached to one logical model while still
+allowing fallback coverage when creator data is unavailable.
+
 ## Alias philosophy
 
 The base catalog stores factual aliases only.
@@ -207,6 +234,18 @@ go run ./cmd/modeldb build --out catalog.json --modelsdev-file internal/source/m
 
 That keeps runtime fast and deterministic while still allowing live refreshes
 through the CLI when desired.
+
+### Build phases
+
+Snapshot generation currently happens in two conceptual passes:
+
+1. merge creator-root sources such as Anthropic, OpenAI, and MiniMax
+2. merge broker/platform and enrichment sources such as OpenRouter and
+   `models.dev`, rebinding them to creator roots when possible
+
+This is what prevents duplicates such as a broker-created line-level Claude
+model and a creator-created dated Claude release from surviving as separate root
+models in the final snapshot.
 
 ## Standalone module goal
 
