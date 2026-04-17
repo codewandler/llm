@@ -4,7 +4,7 @@ This guide is for AI coding agents working in this repository. Follow these conv
 
 ## Communication Guidelines
 
-- **DO NOT provide status summaries after completing tasks** - No "Summary", "Status", "Changes Made", or similar sections after every turn. Just do the work and move on. The user can see what was done from git/output.
+- Keep end-of-turn communication concise. Prefer a brief direct note over a long recap unless the user asks for detail.
 
 ---
 
@@ -36,6 +36,11 @@ go test -race ./...
 # Run tests with coverage
 go test -coverprofile=coverage.out ./...
 go tool cover -html=coverage.out
+
+# Prefer narrow package runs while developing
+go test ./provider/anthropic/...
+go test ./provider/openrouter/...
+go test ./integration/...
 ```
 
 ### Linting and Formatting
@@ -44,6 +49,7 @@ go fmt ./...          # format (always do before committing)
 go mod tidy           # tidy dependencies
 go vet ./...          # vet for suspicious constructs
 golangci-lint run     # if available
+task install          # install llmcli binary
 ```
 
 ### Quick Testing with llmcli
@@ -60,41 +66,55 @@ go run ./cmd/llmcli infer -v -m default "Explain Go channels"  # Verbose: tokens
 
 ```
 llm/
-├── llm.go               # Provider interface, Streamer interface
-├── event.go              # Envelope, EventType, event structs
-├── event_delta.go        # DeltaEvent, TextDelta, ReasoningDelta, ToolDelta
-├── event_publisher.go    # EventPublisher
-├── event_handler.go      # EventHandler interface
-├── event_processor.go    # StreamProcessor, NewEventProcessor, Result
-├── response.go           # StopReason, Response interface
-├── request.go           # StreamRequest, ReasoningEffort, OutputFormat
-├── message.go           # Message types: UserMsg, AssistantMsg, ToolCallResult, etc.
-├── errors.go            # ProviderError, error sentinels
-├── model.go            # Model type
-├── option.go           # Functional options (WithAPIKey, WithHTTPClient, etc.)
-├── tool/               # Tool types: NewSpec, Handle, TypedToolCall, Set, etc.
-├── llmtest/            # Test helpers: SendEvents, TextEvent, etc.
+├── api/                # Wire-protocol packages: apicore, completions, messages, responses, unified
+├── catalog/            # Built-in model catalog, sources, merge/query/view
+├── cmd/llmcli/         # CLI for inference, model inspection, auth helpers
+├── internal/models/    # Built-in catalog loading and resolution
+├── internal/providercore/ # Shared provider client/config plumbing
+├── llm.go              # Top-level package marker
+├── event.go            # Envelope, EventType, event structs
+├── event_delta.go      # DeltaEvent and delta payload types
+├── event_publisher.go  # NewEventPublisher and envelope publishing
+├── event_processor.go  # NewEventProcessor and Result implementation
+├── request.go          # Request, ThinkingMode, Effort, ApiType, validation
+├── request_builder.go  # Buildable, RequestBuilder, fluent request construction
+├── message.go          # Re-exports from msg package
+├── msg/                # Canonical message model and builders
+├── errors.go           # ProviderError and sentinel errors
+├── model.go            # Model, Models, resolver helpers
+├── model_catalog.go    # Catalog-backed model projection helpers
+├── tokencount/         # Token estimation helpers and interfaces
+├── usage/              # Pricing, records, drift, budgets, tracking
+├── tool/               # Tool definitions and typed tool handling
+├── llmtest/            # Test helpers for stream consumers
 │
 └── provider/
-    ├── anthropic/      # Direct Anthropic API
-    │   └── claude/     # OAuth-based Claude provider (token management)
+    ├── anthropic/      # Direct Anthropic Messages API
+    │   └── claude/     # OAuth-based Claude provider
+    ├── auto/           # Zero-config provider detection and selection
     ├── bedrock/        # AWS Bedrock
-    ├── minimax/        # MiniMax API (Anthropic-compatible endpoint)
-    ├── openai/         # OpenAI API (Chat Completions + Responses API)
-    ├── openrouter/     # OpenRouter proxy
+    ├── codex/          # ChatGPT/Codex auth-backed provider
+    ├── dockermr/       # Docker Model Runner
+    ├── fake/           # Test provider
+    ├── minimax/        # MiniMax Anthropic-compatible provider
     ├── ollama/         # Local Ollama
-    ├── auto/           # Zero-config multi-provider setup
-    ├── router/         # Multi-provider routing with failover
-    └── fake/           # Test provider
+    ├── openai/         # OpenAI provider
+    ├── openrouter/     # Multi-wire OpenRouter provider
+    └── router/         # Multi-provider routing with failover
 ```
 
 **Key concepts:**
-- All LLM providers implement `llm.Provider` (`CreateStream`, `Name`, `Models`)
-- Streams are `<-chan llm.Envelope` — every event has `Type EventType`, `Meta`, and `Data`
-- `provider/auto` is the primary entry point for consumers: `auto.New(ctx, ...Option)`
+- All backends implement `llm.Provider`
+- `CreateStream(ctx, src)` accepts any `llm.Buildable` (`llm.Request` or `*llm.RequestBuilder`)
+- Streams are `llm.Stream` (`<-chan llm.Envelope`)
+- Each envelope contains `Type`, `Meta`, and typed `Data`
+- `provider/auto` is the main zero-config entry point for consumers
 - `provider/router` handles multi-provider routing, failover, and alias resolution
-- Tool calling: `tool.NewSpec[T]`, `tool.Handle`, `tool.Set` for type-safe tools (from `github.com/codewandler/llm/tool`)
-- `StreamProcessor` / `NewEventProcessor()` for stream consumption with typed callbacks
+- `catalog` and `internal/models` provide built-in model metadata and aliases
+- `msg` contains the canonical message model and builders
+- `usage` and `tokencount` handle pricing, usage tracking, drift, and estimation
+- Tool calling centers on `tool.NewSpec`, `tool.Handle`, and `tool.Set`
+- `llm.NewEventProcessor(ctx, stream)` is the main stream-consumption helper
 
 ---
 
@@ -168,79 +188,65 @@ Wrap non-stream errors with `%w`:
 return nil, fmt.Errorf("anthropic request: %w", err)
 ```
 
-### Channel-Based Streaming
+### Streaming and Event Publishing
 
-All providers must use `EventStream`:
+Providers should emit `llm.Stream` values using `llm.NewEventPublisher()`:
 
 ```go
-func (p *Provider) CreateStream(ctx context.Context, opts llm.StreamRequest) (<-chan llm.StreamEvent, error) {
-    // ... build and send request ...
-
-    es := llm.NewEventStream()
-    go p.parseStream(ctx, resp.Body, es, opts)
-    return es.C(), nil
-}
-
-func (p *Provider) parseStream(ctx context.Context, body io.ReadCloser, es *llm.EventStream, opts llm.StreamRequest) {
-    defer es.Close()
-    defer body.Close()
-
-    var startEmitted bool
-    for scanner.Scan() {
-        // ... parse SSE ...
-
-        if !startEmitted {
-            startEmitted = true
-            es.Start(llm.StreamStartOpts{
-                Model:     responseModel,
-                RequestID: responseID,
-            })
-        }
-        es.Delta(llm.TextDelta(nil, text))
+func (p *Provider) CreateStream(ctx context.Context, src llm.Buildable) (llm.Stream, error) {
+    req, err := src.BuildRequest(ctx)
+    if err != nil {
+        return nil, err
     }
-    es.Done(usage)
+
+    pub, stream := llm.NewEventPublisher()
+    go func() {
+        defer resp.Body.Close()
+
+        pub.Publish(&llm.StreamStartedEvent{
+            Model:     responseModel,
+            RequestID: responseID,
+            Provider:  p.Name(),
+        })
+
+        pub.Publish(&llm.DeltaEvent{
+            Kind: llm.DeltaKindText,
+        })
+
+        pub.Publish(&llm.StreamCompletedEvent{
+            StopReason: llm.StopReasonEndTurn,
+        })
+    }()
+    return stream, nil
 }
 ```
 
 Key rules:
-- Always call `es.Close()` via defer
-- Emit `StreamEventStart` before the first content event (or at `response.completed` if no content)
-- Use `es.Start()`, `es.Delta()`, `es.ToolCall()`, `es.Done()`, `es.Error()` — not `es.Send()` directly
-- Use large scanner buffers: `scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)`
+- Publish typed events through `llm.Publisher`; do not build ad-hoc envelopes manually unless necessary
+- Streams emit `llm.Envelope` values carrying `Type`, `Meta`, and typed `Data`
+- Common event types include `started`, `usage`, `token_estimate`, `delta`, `tool_call`, `completed`, `error`, and `request`
+- Preserve upstream metadata such as provider name, request ID, model ID, and rate-limit info when available
+- Use `llm.ProviderRequestFromHTTP()` when capturing outbound request metadata for `request` events
 
 ### Delta Events
 
 Text tokens:
 ```go
-es.Delta(llm.TextDelta(nil, text))
-es.Delta(llm.TextDelta(llm.DeltaIndex(i), text)) // with block index
+pub.Publish(&llm.DeltaEvent{Kind: llm.DeltaKindText})
 ```
 
 Reasoning tokens:
 ```go
-es.Delta(llm.ReasoningDelta(nil, thinkingText))
+pub.Publish(&llm.DeltaEvent{Kind: llm.DeltaKindThinking})
 ```
 
-Tool argument fragments (streaming):
+Tool argument fragments and completed tool calls:
 ```go
-es.Delta(llm.ToolDelta(llm.DeltaIndex(i), id, name, argsFragment))
+pub.Publish(&llm.DeltaEvent{Kind: llm.DeltaKindTool})
+pub.Publish(&llm.ToolCallEvent{Call: toolCall})
 ```
 
-Completed tool calls:
-```go
-es.ToolCall(llm.ToolCall{ID: id, Name: name, Arguments: args})
-```
-
-### StreamStart Pattern
-
-```go
-es.Start(llm.StreamStartOpts{
-    Model:     responseModel,  // model ID from the API response
-    RequestID: responseID,     // request ID from the API response
-})
-```
-
-`RequestID`, `Seq`, and `Timestamp` are stamped automatically by `EventStream`. Do not set them manually.
+`Seq` and timing metadata are stamped automatically by the publisher. Do not set envelope sequencing data manually.
 
 ---
 
@@ -250,9 +256,21 @@ es.Start(llm.StreamStartOpts{
 
 ```go
 type Provider interface {
-    Name() string
-    Models() []llm.Model
-    CreateStream(ctx context.Context, opts llm.StreamRequest) (<-chan llm.StreamEvent, error)
+    llm.Named
+    llm.ModelsProvider
+    llm.Streamer
+}
+
+type ModelsProvider interface {
+    Models() llm.Models
+}
+
+type Streamer interface {
+    CreateStream(ctx context.Context, src llm.Buildable) (llm.Stream, error)
+}
+
+type Buildable interface {
+    BuildRequest(ctx context.Context) (llm.Request, error)
 }
 
 // Optional: dynamic model listing
@@ -260,6 +278,39 @@ type ModelFetcher interface {
     FetchModels(ctx context.Context) ([]llm.Model, error)
 }
 ```
+
+Notes:
+- `Models()` returns `llm.Models`, not `[]llm.Model`
+- Providers should accept either a concrete `llm.Request` or a `*llm.RequestBuilder`
+- Prefer `llm.Models` helpers for alias and ID resolution
+
+### Requests and Builders
+
+Use `llm.Request` as the canonical provider input. For complex construction, prefer `llm.NewRequestBuilder()`:
+
+```go
+req, err := llm.NewRequestBuilder().
+    Model("claude-sonnet-4-6").
+    System("You are helpful.").
+    User("Explain Go channels.").
+    Build()
+```
+
+Important request fields contributors should account for:
+- `ThinkingMode`: `auto`, `on`, `off`
+- `Effort`: `low`, `medium`, `high`, `max`
+- `ApiTypeHint`: `auto`, `openai-chat`, `openai-responses`, `anthropic-messages`
+- Prompt caching via `llm.CacheHint` / `msg.CacheHint`
+- Tool choice via `llm.ToolChoiceAuto`, `llm.ToolChoiceRequired`, `llm.ToolChoiceNone`, `llm.ToolChoiceTool`
+
+Providers should normalize unsupported options explicitly rather than ignoring them silently.
+
+### Model Catalog and Usage
+
+- Use the `catalog` package for built-in or merged model metadata
+- Prefer catalog-backed aliases and pricing when adding or updating model lists
+- Use `usage` for pricing, usage records, drift, and budget logic
+- Put generic token estimation in `tokencount`; keep provider packages focused on provider-specific behavior
 
 ### Tool Definition Pattern
 
@@ -384,10 +435,13 @@ assert.Equal(t, "claude-sonnet-4-5", events[0].Start.Model)
 
 ### Test Organization
 
-- Provider-specific tests: `provider/anthropic/anthropic_test.go`
-- Cross-provider integration tests: `integration_test.go`
+- Provider-specific tests live alongside the provider package
+- Cross-provider and environment-sensitive tests live under `integration/`
+- Prefer smoke-style integration coverage for optional credentials and local runtimes
 - Always test error paths
 - Use `t.Run` for subtests, table-driven where appropriate
+- For routed or multi-wire providers, assert emitted `request` events, resolved API type, and upstream provider metadata where relevant
+- Prefer `msg` builders and `llm.NewRequestBuilder()` for request-construction tests; use `llmtest` for stream-consumer tests
 
 ---
 
