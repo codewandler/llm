@@ -48,6 +48,47 @@ func TestStreamResponse_ReasoningAccumulation(t *testing.T) {
 	assert.Equal(t, "answer", result.Text())
 }
 
+func TestStreamResponse_ContentPartTextFallback(t *testing.T) {
+	ch := llmtest.SendEvents(
+		&llm.ContentPartEvent{Part: msg.Text("pong"), Index: 0},
+		llmtest.CompletedEvent(llm.StopReasonEndTurn),
+	)
+
+	result := llm.NewEventProcessor(context.Background(), ch).Result()
+	require.NoError(t, result.Error())
+	assert.Equal(t, "pong", result.Text())
+	assert.Equal(t, "pong", result.Message().Text())
+	assert.Equal(t, llm.StopReasonEndTurn, result.StopReason())
+}
+
+func TestStreamResponse_ContentPartReasoningFallback(t *testing.T) {
+	ch := llmtest.SendEvents(
+		&llm.ContentPartEvent{Part: msg.Thinking("step", "sig"), Index: 0},
+		llmtest.TextEvent("answer"),
+		llmtest.CompletedEvent(llm.StopReasonEndTurn),
+	)
+
+	result := llm.NewEventProcessor(context.Background(), ch).Result()
+	require.NoError(t, result.Error())
+	assert.Equal(t, "step", result.Thought())
+	assert.Equal(t, "answer", result.Text())
+	if assert.Len(t, result.Message().Parts, 2) {
+		assert.Equal(t, "sig", result.Message().Parts[0].Thinking.Signature)
+	}
+}
+
+func TestStreamResponse_ContentPartDoesNotDuplicateIndexedDelta(t *testing.T) {
+	ch := llmtest.SendEvents(
+		llm.TextDelta("pong").WithIndex(0),
+		&llm.ContentPartEvent{Part: msg.Text("pong"), Index: 0},
+		llmtest.CompletedEvent(llm.StopReasonEndTurn),
+	)
+
+	result := llm.NewEventProcessor(context.Background(), ch).Result()
+	require.NoError(t, result.Error())
+	assert.Equal(t, "pong", result.Text())
+}
+
 func TestStreamResponse_Usage(t *testing.T) {
 	ch := make(chan llm.Envelope, 10)
 	ch <- llm.Envelope{Data: &llm.StreamCreatedEvent{}}

@@ -25,6 +25,11 @@ func TestIntegrationMatrix(t *testing.T) {
 			for _, scenario := range scenarios {
 				scenario := scenario
 				t.Run(scenario.name, func(t *testing.T) {
+					if scenario.enabled != nil {
+						if ok, reason := scenario.enabled(provider); !ok {
+							t.Skip(reason)
+						}
+					}
 					run := executeMatrixScenario(t, provider, scenario)
 					scenario.assert(t, run)
 				})

@@ -22,15 +22,19 @@ type Result interface {
 }
 
 type result struct {
-	textBuffer        strings.Builder
-	thinkingBuffer    strings.Builder
-	thinkingSignature string
-	stopReason        StopReason
-	usageRecords      []usage.Record
-	estimateRecs      []usage.Record
-	toolCalls         []tool.Call
-	toolResults       []tool.Result
-	errors            []error
+	textBuffer            strings.Builder
+	thinkingBuffer        strings.Builder
+	thinkingSignature     string
+	stopReason            StopReason
+	usageRecords          []usage.Record
+	estimateRecs          []usage.Record
+	toolCalls             []tool.Call
+	toolResults           []tool.Result
+	errors                []error
+	textDeltaBlocks       map[uint32]struct{}
+	thinkingDeltaBlocks   map[uint32]struct{}
+	textContentBlocks     map[int]struct{}
+	thinkingContentBlocks map[int]struct{}
 }
 
 func (r *result) MarshalJSON() ([]byte, error) {
@@ -59,9 +63,13 @@ func (r *result) MarshalJSON() ([]byte, error) {
 
 func newResult() *result {
 	return &result{
-		toolCalls:   make([]tool.Call, 0),
-		toolResults: make([]tool.Result, 0),
-		errors:      make([]error, 0),
+		toolCalls:             make([]tool.Call, 0),
+		toolResults:           make([]tool.Result, 0),
+		errors:                make([]error, 0),
+		textDeltaBlocks:       make(map[uint32]struct{}),
+		thinkingDeltaBlocks:   make(map[uint32]struct{}),
+		textContentBlocks:     make(map[int]struct{}),
+		thinkingContentBlocks: make(map[int]struct{}),
 	}
 }
 
@@ -142,11 +150,47 @@ func (r *result) addError(err error) {
 func (r *result) applyDelta(ev *DeltaEvent) {
 	switch ev.Kind {
 	case DeltaKindText:
+		if ev.Index != nil {
+			r.textDeltaBlocks[*ev.Index] = struct{}{}
+		}
 		r.textBuffer.WriteString(ev.Text)
 	case DeltaKindThinking:
+		if ev.Index != nil {
+			r.thinkingDeltaBlocks[*ev.Index] = struct{}{}
+		}
 		r.thinkingBuffer.WriteString(ev.Thinking)
 	case DeltaKindTool:
 		// TODO: write partial tool data
+	}
+}
+
+func (r *result) applyContentPart(ev *ContentPartEvent) {
+	switch ev.Part.Type {
+	case msg.PartTypeText:
+		if _, ok := r.textContentBlocks[ev.Index]; ok {
+			return
+		}
+		if _, ok := r.textDeltaBlocks[uint32(ev.Index)]; ok {
+			return
+		}
+		r.textContentBlocks[ev.Index] = struct{}{}
+		r.textBuffer.WriteString(ev.Part.Text)
+
+	case msg.PartTypeThinking:
+		if ev.Part.Thinking == nil {
+			return
+		}
+		if ev.Part.Thinking.Signature != "" {
+			r.thinkingSignature = ev.Part.Thinking.Signature
+		}
+		if _, ok := r.thinkingContentBlocks[ev.Index]; ok {
+			return
+		}
+		if _, ok := r.thinkingDeltaBlocks[uint32(ev.Index)]; ok {
+			return
+		}
+		r.thinkingContentBlocks[ev.Index] = struct{}{}
+		r.thinkingBuffer.WriteString(ev.Part.Thinking.Text)
 	}
 }
 
@@ -400,10 +444,7 @@ func (r *StreamProcessor) processEvent(e Envelope) {
 		r.result.addError(actual.Error)
 		r.result.stopReason = StopReasonError
 	case *ContentPartEvent:
-		switch actual.Part.Type {
-		case msg.PartTypeThinking:
-			r.result.thinkingSignature = actual.Part.Thinking.Signature
-		}
+		r.result.applyContentPart(actual)
 
 	}
 

@@ -13,6 +13,7 @@ import (
 type matrixScenario struct {
 	name    string
 	request func(model string) llm.Request
+	enabled func(provider matrixProvider) (bool, string)
 	assert  func(t *testing.T, run matrixRun)
 }
 
@@ -23,29 +24,65 @@ func matrixScenarios() []matrixScenario {
 			request: func(model string) llm.Request {
 				return llm.Request{
 					Model:     model,
-					MaxTokens: 32,
+					MaxTokens: 64,
+					Thinking:  llm.ThinkingOff,
 					Messages: msg.BuildTranscript(
-						msg.User("Reply with exactly the word pong."),
+						msg.User("Reply with pong."),
 					),
 				}
 			},
-			assert: assertTextContains("pong"),
+			enabled: alwaysEnabled,
+			assert:  assertTextContains("pong"),
 		},
 		{
 			name: "system_prompt_kiwi",
 			request: func(model string) llm.Request {
 				return llm.Request{
 					Model:     model,
-					MaxTokens: 32,
+					MaxTokens: 64,
+					Thinking:  llm.ThinkingOff,
 					Messages: msg.BuildTranscript(
 						msg.System("Reply with exactly the word kiwi."),
 						msg.User("What should you reply with?"),
 					),
 				}
 			},
-			assert: assertTextContains("kiwi"),
+			enabled: alwaysEnabled,
+			assert:  assertTextContains("kiwi"),
+		},
+		{
+			name: "thinking_text_comet",
+			request: func(model string) llm.Request {
+				return llm.Request{
+					Model:     model,
+					MaxTokens: 256,
+					Thinking:  llm.ThinkingOn,
+					Effort:    llm.EffortHigh,
+					Messages: msg.BuildTranscript(
+						msg.System("If reasoning is available, use it briefly before the final answer."),
+						msg.User("Reply with the final word comet."),
+					),
+				}
+			},
+			enabled: requiresReasoningSupport,
+			assert:  assertReasoningScenario("comet"),
 		},
 	}
+}
+
+func alwaysEnabled(provider matrixProvider) (bool, string) {
+	return true, ""
+}
+
+func requiresReasoningSupport(provider matrixProvider) (bool, string) {
+	if provider.supportsReasoning == nil {
+		return false, "provider does not advertise reasoning support"
+	}
+	req := llm.Request{Model: provider.model, Thinking: llm.ThinkingOn, Effort: llm.EffortHigh}
+	if !provider.supportsReasoning(req) {
+		return false, "provider/model does not expose reasoning for this scenario"
+	}
+	return true, ""
 }
 
 func assertTextContains(want string) func(t *testing.T, run matrixRun) {
@@ -54,8 +91,8 @@ func assertTextContains(want string) func(t *testing.T, run matrixRun) {
 	return func(t *testing.T, run matrixRun) {
 		t.Helper()
 
-		if run.deltaCount == 0 {
-			t.Fatalf("expected at least one delta event, got event types %s", run.eventTypesString())
+		if run.textStreamCount() == 0 {
+			t.Fatalf("expected streamed text events, got %s", run.streamSummary())
 		}
 
 		text := strings.ToLower(run.result.Text())
@@ -69,6 +106,22 @@ func assertTextContains(want string) func(t *testing.T, run matrixRun) {
 		}
 		if !strings.Contains(strings.ToLower(message.Text()), want) {
 			t.Fatalf("expected processed assistant message to contain %q, got %q", want, message.Text())
+		}
+	}
+}
+
+func assertReasoningScenario(want string) func(t *testing.T, run matrixRun) {
+	textAssert := assertTextContains(want)
+
+	return func(t *testing.T, run matrixRun) {
+		t.Helper()
+
+		textAssert(t, run)
+		if run.provider.supportsReasoning == nil || !run.provider.supportsReasoning(run.request) {
+			return
+		}
+		if run.reasoningStreamCount() == 0 && strings.TrimSpace(run.result.Thought()) == "" {
+			t.Fatalf("expected reasoning events for %s, got %s", run.provider.name, run.streamSummary())
 		}
 	}
 }

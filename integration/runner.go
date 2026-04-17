@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	agentunified "github.com/codewandler/agentapis/api/unified"
 	"github.com/codewandler/llm"
 	"github.com/codewandler/llm/msg"
 )
@@ -16,18 +17,22 @@ import (
 const matrixScenarioTimeout = 90 * time.Second
 
 type matrixRun struct {
-	provider       matrixProvider
-	scenario       matrixScenario
-	request        llm.Request
-	envelopes      []llm.Envelope
-	requestEvent   *llm.RequestEvent
-	startedEvent   *llm.StreamStartedEvent
-	completedEvent *llm.CompletedEvent
-	deltaCount     int
-	usageCount     int
-	contentParts   int
-	toolCallCount  int
-	result         llm.Result
+	provider                  matrixProvider
+	scenario                  matrixScenario
+	request                   llm.Request
+	envelopes                 []llm.Envelope
+	requestEvent              *llm.RequestEvent
+	startedEvent              *llm.StreamStartedEvent
+	completedEvent            *llm.CompletedEvent
+	textDeltaCount            int
+	reasoningDeltaCount       int
+	usageCount                int
+	contentParts              int
+	textContentPartCount      int
+	reasoningContentPartCount int
+	toolCallCount             int
+	debugSummaries            []string
+	result                    llm.Result
 }
 
 func executeMatrixScenario(t *testing.T, provider matrixProvider, scenario matrixScenario) matrixRun {
@@ -37,6 +42,9 @@ func executeMatrixScenario(t *testing.T, provider matrixProvider, scenario matri
 		provider: provider,
 		scenario: scenario,
 		request:  scenario.request(provider.model),
+	}
+	if provider.prepareRequest != nil {
+		run.request = provider.prepareRequest(run.request)
 	}
 
 	p, err := provider.newProvider()
@@ -73,7 +81,10 @@ func executeMatrixScenario(t *testing.T, provider matrixProvider, scenario matri
 				t.Fatalf("delta event payload = %T, want *llm.DeltaEvent", env.Data)
 			}
 			if deltaEv.Kind == llm.DeltaKindText {
-				run.deltaCount++
+				run.textDeltaCount++
+			}
+			if deltaEv.Kind == llm.DeltaKindThinking {
+				run.reasoningDeltaCount++
 			}
 		case llm.StreamEventUsageUpdated:
 			if _, ok := env.Data.(*llm.UsageUpdatedEvent); !ok {
@@ -81,10 +92,17 @@ func executeMatrixScenario(t *testing.T, provider matrixProvider, scenario matri
 			}
 			run.usageCount++
 		case llm.StreamEventContentPart:
-			if _, ok := env.Data.(*llm.ContentPartEvent); !ok {
+			contentEv, ok := env.Data.(*llm.ContentPartEvent)
+			if !ok {
 				t.Fatalf("content part payload = %T, want *llm.ContentPartEvent", env.Data)
 			}
 			run.contentParts++
+			switch contentEv.Part.Type {
+			case msg.PartTypeText:
+				run.textContentPartCount++
+			case msg.PartTypeThinking:
+				run.reasoningContentPartCount++
+			}
 		case llm.StreamEventToolCall:
 			if _, ok := env.Data.(*llm.ToolCallEvent); !ok {
 				t.Fatalf("tool call payload = %T, want *llm.ToolCallEvent", env.Data)
@@ -96,6 +114,12 @@ func executeMatrixScenario(t *testing.T, provider matrixProvider, scenario matri
 				t.Fatalf("completed event payload = %T, want *llm.CompletedEvent", env.Data)
 			}
 			run.completedEvent = completedEv
+		case llm.StreamEventDebug:
+			debugEv, ok := env.Data.(*llm.DebugEvent)
+			if !ok {
+				t.Fatalf("debug event payload = %T, want *llm.DebugEvent", env.Data)
+			}
+			run.debugSummaries = append(run.debugSummaries, summarizeDebugEvent(debugEv))
 		case llm.StreamEventError:
 			errEv, ok := env.Data.(*llm.ErrorEvent)
 			if !ok {
@@ -160,11 +184,56 @@ func assertMatrixBase(t *testing.T, run matrixRun) {
 		t.Fatal("expected ProcessEvents() to produce a next transcript")
 	}
 	if run.result.Text() == "" {
-		t.Fatalf("expected ProcessEvents() to produce text, got empty result (event types %s)", run.eventTypesString())
+		t.Fatalf("expected ProcessEvents() to produce text, got empty result (%s)", run.streamSummary())
 	}
 	if run.result.StopReason() != run.completedEvent.StopReason {
 		t.Fatalf("ProcessEvents() stop reason = %q, completed event stop reason = %q", run.result.StopReason(), run.completedEvent.StopReason)
 	}
+}
+
+func (r matrixRun) textStreamCount() int {
+	return r.textDeltaCount + r.textContentPartCount
+}
+
+func (r matrixRun) reasoningStreamCount() int {
+	return r.reasoningDeltaCount + r.reasoningContentPartCount
+}
+
+func (r matrixRun) streamSummary() string {
+	if len(r.debugSummaries) == 0 {
+		return fmt.Sprintf("event types %s, stop_reason=%q, text_deltas=%d, text_parts=%d, reasoning_deltas=%d, reasoning_parts=%d", r.eventTypesString(), r.completedStopReason(), r.textDeltaCount, r.textContentPartCount, r.reasoningDeltaCount, r.reasoningContentPartCount)
+	}
+	return fmt.Sprintf("event types %s, stop_reason=%q, text_deltas=%d, text_parts=%d, reasoning_deltas=%d, reasoning_parts=%d, debug=%s", r.eventTypesString(), r.completedStopReason(), r.textDeltaCount, r.textContentPartCount, r.reasoningDeltaCount, r.reasoningContentPartCount, strings.Join(r.debugSummaries, " | "))
+}
+
+func (r matrixRun) completedStopReason() llm.StopReason {
+	if r.completedEvent == nil {
+		return ""
+	}
+	return r.completedEvent.StopReason
+}
+
+func summarizeDebugEvent(debugEv *llm.DebugEvent) string {
+	if debugEv == nil {
+		return "<nil>"
+	}
+	if ev, ok := debugEv.Data.(agentunified.StreamEvent); ok {
+		parts := []string{fmt.Sprintf("debug:%s type=%s", debugEv.Message, ev.Type)}
+		if ev.ContentDelta != nil {
+			parts = append(parts, fmt.Sprintf("content_delta(kind=%s data=%q)", ev.ContentDelta.Kind, ev.ContentDelta.Data))
+		}
+		if ev.StreamContent != nil {
+			parts = append(parts, fmt.Sprintf("stream_content(kind=%s data=%q)", ev.StreamContent.Kind, ev.StreamContent.Data))
+		}
+		if ev.Content != nil {
+			parts = append(parts, fmt.Sprintf("content_part(type=%s text=%q)", ev.Content.Part.Type, ev.Content.Part.Text))
+		}
+		if ev.Delta != nil {
+			parts = append(parts, fmt.Sprintf("delta(kind=%s text=%q thinking=%q)", ev.Delta.Kind, ev.Delta.Text, ev.Delta.Thinking))
+		}
+		return strings.Join(parts, " ")
+	}
+	return fmt.Sprintf("debug:%s %T", debugEv.Message, debugEv.Data)
 }
 
 func (r matrixRun) eventTypesString() string {

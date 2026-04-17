@@ -17,11 +17,13 @@ import (
 )
 
 type matrixProvider struct {
-	name            string
-	model           string
-	available       func() (bool, string)
-	newProvider     func() (llm.Provider, error)
-	expectedAPIType func(req llm.Request) llm.ApiType
+	name              string
+	model             string
+	available         func() (bool, string)
+	newProvider       func() (llm.Provider, error)
+	expectedAPIType   func(req llm.Request) llm.ApiType
+	supportsReasoning func(req llm.Request) bool
+	prepareRequest    func(req llm.Request) llm.Request
 }
 
 func matrixProviders() []matrixProvider {
@@ -43,6 +45,9 @@ func matrixProviders() []matrixProvider {
 				}
 				return llm.ApiTypeOpenAIResponses
 			},
+			supportsReasoning: func(req llm.Request) bool {
+				return req.ApiTypeHint == llm.ApiTypeAnthropicMessages || strings.HasPrefix(req.Model, "anthropic/")
+			},
 		},
 		{
 			name:      "claude",
@@ -53,6 +58,9 @@ func matrixProviders() []matrixProvider {
 			},
 			expectedAPIType: func(req llm.Request) llm.ApiType {
 				return llm.ApiTypeAnthropicMessages
+			},
+			supportsReasoning: func(req llm.Request) bool {
+				return true
 			},
 		},
 		{
@@ -72,6 +80,15 @@ func matrixProviders() []matrixProvider {
 				}
 				return llm.ApiTypeOpenAIChatCompletion
 			},
+			supportsReasoning: func(req llm.Request) bool {
+				return false
+			},
+			prepareRequest: func(req llm.Request) llm.Request {
+				if req.MaxTokens < 1024 {
+					req.MaxTokens = 1024
+				}
+				return req
+			},
 		},
 		{
 			name:      "anthropic",
@@ -87,6 +104,9 @@ func matrixProviders() []matrixProvider {
 			expectedAPIType: func(req llm.Request) llm.ApiType {
 				return llm.ApiTypeAnthropicMessages
 			},
+			supportsReasoning: func(req llm.Request) bool {
+				return true
+			},
 		},
 		{
 			name:      "minimax",
@@ -101,6 +121,9 @@ func matrixProviders() []matrixProvider {
 			},
 			expectedAPIType: func(req llm.Request) llm.ApiType {
 				return llm.ApiTypeAnthropicMessages
+			},
+			supportsReasoning: func(req llm.Request) bool {
+				return false
 			},
 		},
 		{
@@ -120,6 +143,9 @@ func matrixProviders() []matrixProvider {
 			},
 			expectedAPIType: func(req llm.Request) llm.ApiType {
 				return llm.ApiTypeOpenAIResponses
+			},
+			supportsReasoning: func(req llm.Request) bool {
+				return false
 			},
 		},
 	}
