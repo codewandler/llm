@@ -139,13 +139,6 @@ func WithPreprocessRequest(fn func(llm.Request) (llm.Request, string, error)) Op
 	}
 }
 
-func WithTransformWireRequest(fn func(llm.ApiType, any) (any, error)) Option {
-	return Option{
-		applyCC: func(cfg *clientConfig) { cfg.TransformWireRequest = fn },
-		applyO:  func(o *Options) { o.transformWireRequest = fn },
-	}
-}
-
 func WithMessagesRequestTransform(fn func(*MessagesRequest) error) Option {
 	return Option{
 		applyCC: func(cfg *clientConfig) { cfg.MessagesRequestTransform = fn },
@@ -195,13 +188,6 @@ func WithRateLimitParser(fn func(*http.Response) *llm.RateLimits) Option {
 	}
 }
 
-func WithAPITokenCounter(fn func(context.Context, llm.Request, any) (*tokencount.TokenCount, error)) Option {
-	return Option{
-		applyCC: func(cfg *clientConfig) { cfg.APITokenCounter = fn },
-		applyO:  func(o *Options) { o.apiTokenCounter = fn },
-	}
-}
-
 func WithMessagesAPITokenCounter(fn func(context.Context, llm.Request, *MessagesRequest) (*tokencount.TokenCount, error)) Option {
 	return Option{
 		applyCC: func(cfg *clientConfig) { cfg.MessagesAPITokenCounter = fn },
@@ -234,7 +220,6 @@ type clientConfig struct {
 	APIHint      llm.ApiType
 
 	DefaultHeaders          http.Header
-	APITokenCounter         func(ctx context.Context, req llm.Request, wire any) (*tokencount.TokenCount, error)
 	MessagesAPITokenCounter func(ctx context.Context, req llm.Request, wire *MessagesRequest) (*tokencount.TokenCount, error)
 
 	ErrorParser            func(statusCode int, body []byte) error
@@ -247,7 +232,6 @@ type clientConfig struct {
 	ResolveAPIHint func(req llm.Request) llm.ApiType
 
 	PreprocessRequest           func(req llm.Request) (llm.Request, string, error)
-	TransformWireRequest        func(api llm.ApiType, wire any) (any, error)
 	MessagesRequestTransform    func(*MessagesRequest) error
 	CompletionsRequestTransform func(*CompletionsRequest) error
 	ResponsesRequestTransform   func(*ResponsesRequest) error
@@ -291,7 +275,6 @@ type Options struct {
 	cacheModels bool
 
 	preprocessRequest           func(req llm.Request) (llm.Request, string, error)
-	transformWireRequest        func(api llm.ApiType, wire any) (any, error)
 	mutateRequest               func(r *http.Request)
 	messagesRequestTransform    func(*MessagesRequest) error
 	completionsRequestTransform func(*CompletionsRequest) error
@@ -301,7 +284,6 @@ type Options struct {
 	resolveHTTPErrorAction func(req llm.Request, statusCode int, apiErr error) HTTPErrorAction
 	rateLimitParser        func(*http.Response) *llm.RateLimits
 
-	apiTokenCounter         func(ctx context.Context, req llm.Request, wire any) (*tokencount.TokenCount, error)
 	messagesAPITokenCounter func(ctx context.Context, req llm.Request, wire *MessagesRequest) (*tokencount.TokenCount, error)
 	usageExtras             func(*http.Response) map[string]any
 }

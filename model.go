@@ -15,13 +15,6 @@ const (
 )
 
 type (
-	// ModelResolver resolves a model alias or ToolCallID to its full Model representation.
-	ModelResolver interface {
-		// Resolve returns the Model for the given model ToolCallID or alias.
-		// Returns an error if the model is not recognized.
-		Resolve(modelID string) (Model, error)
-	}
-
 	// ModelFetcher is an optional interface providers can implement to list
 	// models dynamically from their API instead of returning a static list.
 	ModelFetcher interface {
@@ -32,10 +25,6 @@ type (
 		Models() Models
 	}
 )
-
-type ModelResolveFunc func(modelID string) (Model, error)
-
-func (f ModelResolveFunc) Resolve(modelID string) (Model, error) { return f(modelID) }
 
 // Model represents an LLM model.
 type Model struct {
@@ -92,34 +81,4 @@ func (m Models) ByAlias(alias string) (Model, bool) {
 		}
 	}
 	return Model{}, false
-}
-
-type AliasResolvingProvider struct {
-	ModelResolver
-	Provider
-}
-
-func ProviderWithAliasResolver(p Provider) *AliasResolvingProvider {
-	return &AliasResolvingProvider{
-		Provider: p,
-		ModelResolver: ModelResolveFunc(func(modelID string) (Model, error) {
-			found, ok := p.Models().ByAlias(modelID)
-			if !ok {
-				return Model{}, NewErrUnknownModel(p.Name(), modelID)
-			}
-			return found, nil
-		}),
-	}
-}
-
-// ModelListCalculator returns a CostCalculator backed by a dynamically-fetched model list.
-func ModelListCalculator(models Models) usage.CostCalculator {
-	return usage.CostCalculatorFunc(func(_, model string, tokens usage.TokenItems) (usage.Cost, bool) {
-		for _, m := range models {
-			if m.ID == model && m.Pricing != nil {
-				return usage.CalcCost(tokens, *m.Pricing), true
-			}
-		}
-		return usage.Cost{}, false
-	})
 }

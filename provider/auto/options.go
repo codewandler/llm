@@ -124,10 +124,12 @@ func WithClaudeAccount(name string, store claude.TokenStore) Option {
 			name:         name,
 			providerType: ProviderClaude,
 			factory: func(opts ...llm.Option) llm.Provider {
-				claudeOpts := []claude.Option{claude.WithManagedTokenProvider(name, store, nil)}
+				shared := append([]llm.Option{}, c.llmOpts...)
+				shared = append(shared, opts...)
 				if httpClient != nil {
-					claudeOpts = append(claudeOpts, claude.WithLLMOptions(llm.WithHTTPClient(httpClient)))
+					shared = append(shared, llm.WithHTTPClient(httpClient))
 				}
+				claudeOpts := []claude.Option{claude.WithManagedTokenProvider(name, store, nil), claude.WithLLMOptions(shared...)}
 				return claude.New(claudeOpts...)
 			},
 			modelAliases:      modelAliasesForProvider(ProviderClaude),
@@ -144,10 +146,12 @@ func WithClaudeLocal() Option {
 			name:         ProviderClaude,
 			providerType: ProviderClaude,
 			factory: func(opts ...llm.Option) llm.Provider {
-				claudeOpts := []claude.Option{claude.WithLocalTokenProvider()}
+				shared := append([]llm.Option{}, c.llmOpts...)
+				shared = append(shared, opts...)
 				if httpClient != nil {
-					claudeOpts = append(claudeOpts, claude.WithLLMOptions(llm.WithHTTPClient(httpClient)))
+					shared = append(shared, llm.WithHTTPClient(httpClient))
 				}
+				claudeOpts := []claude.Option{claude.WithLocalTokenProvider(), claude.WithLLMOptions(shared...)}
 				return claude.New(claudeOpts...)
 			},
 			modelAliases:      modelAliasesForProvider(ProviderClaude),
@@ -180,10 +184,12 @@ func WithCodexLocal() Option {
 			name:         ProviderCodex,
 			providerType: ProviderCodex,
 			factory: func(opts ...llm.Option) llm.Provider {
+				allOpts := append([]llm.Option{}, c.llmOpts...)
+				allOpts = append(allOpts, opts...)
 				if c.httpClient != nil {
-					opts = append(opts, llm.WithHTTPClient(c.httpClient))
+					allOpts = append(allOpts, llm.WithHTTPClient(c.httpClient))
 				}
-				return codex.New(auth, opts...)
+				return codex.New(auth, allOpts...)
 			},
 			modelAliases:      modelAliasesForProvider(ProviderCodex),
 			hasBuiltinAliases: true,
@@ -199,11 +205,12 @@ func WithBedrock() Option {
 			name:         ProviderBedrock,
 			providerType: ProviderBedrock,
 			factory: func(opts ...llm.Option) llm.Provider {
-				var bedrockOpts []bedrock.Option
+				shared := append([]llm.Option{}, c.llmOpts...)
+				shared = append(shared, opts...)
 				if httpClient != nil {
-					bedrockOpts = append(bedrockOpts, bedrock.WithLLMOptions(llm.WithHTTPClient(httpClient)))
+					shared = append(shared, llm.WithHTTPClient(httpClient))
 				}
-				return bedrock.New(bedrockOpts...)
+				return bedrock.New(bedrock.WithLLMOptions(shared...))
 			},
 			modelAliases:      modelAliasesForProvider(ProviderBedrock),
 			hasBuiltinAliases: true,
@@ -220,10 +227,12 @@ func WithOpenAI() Option {
 			name:         ProviderOpenAI,
 			providerType: ProviderOpenAI,
 			factory: func(opts ...llm.Option) llm.Provider {
+				allOpts := append([]llm.Option{}, c.llmOpts...)
+				allOpts = append(allOpts, opts...)
 				if httpClient != nil {
-					opts = append(opts, llm.WithHTTPClient(httpClient))
+					allOpts = append(allOpts, llm.WithHTTPClient(httpClient))
 				}
-				return openai.New(opts...)
+				return openai.New(allOpts...)
 			},
 			modelAliases:      modelAliasesForProvider(ProviderOpenAI),
 			hasBuiltinAliases: true,
@@ -241,6 +250,8 @@ func WithOpenRouter() Option {
 			providerType: ProviderOpenRouter,
 			factory: func(opts ...llm.Option) llm.Provider {
 				routerOpts := []llm.Option{llm.APIKeyFromEnv(EnvOpenRouterKey)}
+				routerOpts = append(routerOpts, c.llmOpts...)
+				routerOpts = append(routerOpts, opts...)
 				if httpClient != nil {
 					routerOpts = append(routerOpts, llm.WithHTTPClient(httpClient))
 				}
@@ -262,6 +273,8 @@ func WithAnthropic() Option {
 			providerType: ProviderAnthropic,
 			factory: func(opts ...llm.Option) llm.Provider {
 				anthropicOpts := []llm.Option{llm.APIKeyFromEnv(EnvAnthropicKey)}
+				anthropicOpts = append(anthropicOpts, c.llmOpts...)
+				anthropicOpts = append(anthropicOpts, opts...)
 				if httpClient != nil {
 					anthropicOpts = append(anthropicOpts, llm.WithHTTPClient(httpClient))
 				}
@@ -333,11 +346,13 @@ func WithOllama() Option {
 			name:         ProviderOllama,
 			providerType: ProviderOllama,
 			factory: func(opts ...llm.Option) llm.Provider {
-				opts = append(opts, llm.WithBaseURL(baseURL))
+				allOpts := append([]llm.Option{}, c.llmOpts...)
+				allOpts = append(allOpts, opts...)
+				allOpts = append(allOpts, llm.WithBaseURL(baseURL))
 				if httpClient != nil {
-					opts = append(opts, llm.WithHTTPClient(httpClient))
+					allOpts = append(allOpts, llm.WithHTTPClient(httpClient))
 				}
-				return ollama.New(opts...)
+				return ollama.New(allOpts...)
 			},
 			modelAliases:      nil,
 			hasBuiltinAliases: false,
@@ -387,7 +402,9 @@ func WithDockerModelRunner(opts ...llm.Option) Option {
 				// Caller-supplied opts take precedence; shared httpClient is
 				// appended last so it does not override an explicit WithHTTPClient
 				// passed by the caller.
-				allOpts := append(opts, extraOpts...)
+				allOpts := append([]llm.Option{}, c.llmOpts...)
+				allOpts = append(allOpts, opts...)
+				allOpts = append(allOpts, extraOpts...)
 				if httpClient != nil {
 					allOpts = append(allOpts, llm.WithHTTPClient(httpClient))
 				}

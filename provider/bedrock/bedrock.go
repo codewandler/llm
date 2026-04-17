@@ -45,7 +45,6 @@ var DefaultModel = ModelSonnetLatest
 type Provider struct {
 	region              string
 	regionPrefix        string // inference profile prefix: PrefixEU, PrefixUS, PrefixAPAC, or PrefixGlobal
-	defaultModel        string
 	profile             string // AWS profile name (optional)
 	credentialsProvider aws.CredentialsProvider
 	httpClient          *http.Client // HTTP client passed to the AWS SDK
@@ -101,13 +100,6 @@ func WithRegionFromEnv() Option {
 func WithProfile(profile string) Option {
 	return func(p *Provider) {
 		p.profile = profile
-	}
-}
-
-// WithDefaultModel sets the default model ID.
-func WithDefaultModel(model string) Option {
-	return func(p *Provider) {
-		p.defaultModel = model
 	}
 }
 
@@ -169,16 +161,12 @@ func getRegionFromEnv() string {
 //	    bedrock.WithRegion(bedrock.RegionEUWest1),
 //	)
 //
-//	// Specify default model
-//	p := bedrock.New(bedrock.WithDefaultModel(bedrock.ModelHaikuLatest))
-//
 //	// Use custom credentials provider (lazy initialization)
 //	p := bedrock.New(bedrock.WithCredentialsProvider(myProvider))
 func New(opts ...Option) *Provider {
 	p := &Provider{
-		region:       getRegionFromEnv(),
-		defaultModel: DefaultModel,
-		httpClient:   llm.DefaultHttpClient(),
+		region:     getRegionFromEnv(),
+		httpClient: llm.DefaultHttpClient(),
 	}
 
 	for _, opt := range opts {
@@ -215,19 +203,7 @@ func New(opts ...Option) *Provider {
 
 func (p *Provider) Name() string { return providerName }
 
-// CostCalculator returns the default cost calculator for Bedrock.
-func (*Provider) CostCalculator() usage.CostCalculator {
-	return usage.Default()
-}
-
-// DefaultModel returns the configured default model ID.
-func (p *Provider) DefaultModel() string {
-	return p.defaultModel
-}
-
-// Models returns a curated list of popular Bedrock models.
-func (p *Provider) Models() llm.Models                      { return models() }
-func (p *Provider) Resolve(model string) (llm.Model, error) { return p.Models().Resolve(model) }
+func (p *Provider) Models() llm.Models { return models() }
 
 // initClient creates the AWS client lazily if not already initialized.
 // Thread-safe: uses mutex to ensure only one goroutine creates the client.
@@ -349,10 +325,8 @@ func (p *Provider) CreateStream(ctx context.Context, src llm.Buildable) (llm.Str
 	pub, ch := llm.NewEventPublisher()
 
 	// Emit token estimates (primary + per-segment breakdown)
-	if est, err := p.CountTokens(ctx, tokencount.TokenCountRequest{
-		Model: opts.Model, Messages: opts.Messages, Tools: opts.Tools,
-	}); err == nil {
-		for _, rec := range tokencount.EstimateRecords(est, llm.ProviderNameBedrock, opts.Model, "heuristic", usage.Default()) {
+	if est := tokencount.Estimate(ctx, llm.ProviderNameBedrock, opts); est != nil {
+		for _, rec := range tokencount.EstimateRecords(&tokencount.TokenCount{InputTokens: est.Tokens.Count(usage.KindInput), Encoder: est.Encoder}, llm.ProviderNameBedrock, opts.Model, "heuristic", usage.Default()) {
 			pub.TokenEstimate(rec)
 		}
 	}

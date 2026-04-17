@@ -47,7 +47,6 @@ func TestNew_DefaultCredentials(t *testing.T) {
 	p := New()
 
 	assert.Equal(t, DefaultRegion, p.region)
-	assert.Equal(t, DefaultModel, p.defaultModel)
 	// Client should be created (or clientErr set if no AWS config available)
 	// We can't assert client != nil because it depends on environment
 }
@@ -56,11 +55,6 @@ func TestNew_WithRegion(t *testing.T) {
 	p := New(WithRegion(RegionEUWest1))
 	assert.Equal(t, RegionEUWest1, p.region)
 	assert.Equal(t, PrefixEU, p.regionPrefix)
-}
-
-func TestNew_WithDefaultModel(t *testing.T) {
-	p := New(WithDefaultModel("my-model"))
-	assert.Equal(t, "my-model", p.defaultModel)
 }
 
 func TestNew_WithCredentialsProvider_DefersClientCreation(t *testing.T) {
@@ -180,11 +174,6 @@ func TestInitClient_OnlyOnce(t *testing.T) {
 func TestProvider_Name(t *testing.T) {
 	p := New()
 	assert.Equal(t, "bedrock", p.Name())
-}
-
-func TestProvider_DefaultModel(t *testing.T) {
-	p := New(WithDefaultModel("custom-model"))
-	assert.Equal(t, "custom-model", p.DefaultModel())
 }
 
 func TestNew_ReadsRegionFromEnv(t *testing.T) {

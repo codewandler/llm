@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"github.com/codewandler/llm"
-	"github.com/codewandler/llm/usage"
 )
 
 const defaultName = "router"
@@ -269,23 +268,6 @@ func mergeAliases(a, b []string) []string {
 func (p *Provider) Name() string       { return p.name }
 func (p *Provider) Models() llm.Models { return p.models }
 
-// CostCalculator returns a composite calculator that delegates to each
-// sub-provider's CostCalculator (if it implements CostCalculatorProvider),
-// falling back to usage.Default() for providers without a custom calculator.
-func (p *Provider) CostCalculator() usage.CostCalculator {
-	var calculators []usage.CostCalculator
-	for _, prov := range p.providers {
-		if cp, ok := prov.(llm.CostCalculatorProvider); ok {
-			calculators = append(calculators, cp.CostCalculator())
-		}
-	}
-	// Always include the default as a fallback for providers that don't
-	// implement CostCalculatorProvider (e.g. OpenRouter via live pricing).
-	calculators = append(calculators, usage.Default())
-	return usage.Compose(calculators...)
-}
-
-// Resolve implements llm.Resolver.
 func (p *Provider) Resolve(modelID string) (llm.Model, error) {
 	targets, ok := p.aliasMap[modelID]
 	if !ok || len(targets) == 0 {

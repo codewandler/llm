@@ -289,18 +289,21 @@ func TestClientStream_HTTPErrorActionStream(t *testing.T) {
 	assert.True(t, sawError)
 }
 
-func TestClientStream_APITokenCounterEmitsAdditionalEstimate(t *testing.T) {
+func TestClientStream_MessagesAPITokenCounterEmitsAdditionalEstimate(t *testing.T) {
 	t.Parallel()
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		defer r.Body.Close()
 		w.Header().Set("Content-Type", "text/event-stream")
 		_, _ = io.WriteString(w, strings.Join([]string{
-			`data: {"id":"chatcmpl-1","choices":[{"index":0,"delta":{"role":"assistant","content":"hello"}}]}`,
+			`event: message_start`,
+			`data: {"message":{"id":"msg-1","model":"claude-test","usage":{"input_tokens":10}}}`,
 			"",
-			`data: {"id":"chatcmpl-1","choices":[{"index":0,"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":10,"completion_tokens":3}}`,
+			`event: message_delta`,
+			`data: {"delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":3}}`,
 			"",
-			"data: [DONE]",
+			`event: message_stop`,
+			`data: {"type":"message_stop"}`,
 			"",
 		}, "\n"))
 	}))
@@ -309,14 +312,14 @@ func TestClientStream_APITokenCounterEmitsAdditionalEstimate(t *testing.T) {
 	client := New(clientConfig{
 		ProviderName: "test",
 		BaseURL:      server.URL,
-		APIHint:      llm.ApiTypeOpenAIChatCompletion,
-		APITokenCounter: func(context.Context, llm.Request, any) (*tokencount.TokenCount, error) {
+		APIHint:      llm.ApiTypeAnthropicMessages,
+		MessagesAPITokenCounter: func(context.Context, llm.Request, *MessagesRequest) (*tokencount.TokenCount, error) {
 			return &tokencount.TokenCount{InputTokens: 17}, nil
 		},
 	}, llm.WithBaseURL(server.URL))
 
 	stream, err := client.Stream(context.Background(), llm.Request{
-		Model:    "m",
+		Model:    "claude-test",
 		Messages: llm.Messages{llm.User("hi")},
 	})
 	require.NoError(t, err)
@@ -420,7 +423,7 @@ func TestClientStream_MutateRequestMessages(t *testing.T) {
 	assert.Equal(t, "claude", capturedBody["model"])
 }
 
-func TestClientStream_TransformWireRequestUpdatesRequestEventBody(t *testing.T) {
+func TestClientStream_MessagesRequestTransformUpdatesRequestEventBody(t *testing.T) {
 	t.Parallel()
 
 	var gotBody map[string]any

@@ -50,7 +50,7 @@ func New(ctx context.Context, opts ...Option) (*router.Provider, error) {
 
 	// Add providers from Claude stores (enumerate accounts)
 	for _, storeEntry := range cfg.claudeStores {
-		entries := enumerateClaudeAccounts(ctx, storeEntry.store, cfg.httpClient)
+		entries := enumerateClaudeAccounts(ctx, storeEntry.store, cfg.httpClient, cfg.llmOpts)
 		allProviders = append(allProviders, entries...)
 	}
 
@@ -141,7 +141,7 @@ func parseAliasTarget(target string) router.AliasTarget {
 }
 
 // enumerateClaudeAccounts lists all accounts from a TokenStore and creates provider entries.
-func enumerateClaudeAccounts(ctx context.Context, store claude.TokenStore, httpClient *http.Client) []providerEntry {
+func enumerateClaudeAccounts(ctx context.Context, store claude.TokenStore, httpClient *http.Client, llmOpts []llm.Option) []providerEntry {
 	keys, err := store.List(ctx)
 	if err != nil {
 		return nil
@@ -157,10 +157,12 @@ func enumerateClaudeAccounts(ctx context.Context, store claude.TokenStore, httpC
 			name:         accountKey,
 			providerType: ProviderClaude,
 			factory: func(opts ...llm.Option) llm.Provider {
-				claudeOpts := []claude.Option{claude.WithManagedTokenProvider(accountKey, store, nil)}
+				shared := append([]llm.Option{}, llmOpts...)
+				shared = append(shared, opts...)
 				if httpClient != nil {
-					claudeOpts = append(claudeOpts, claude.WithLLMOptions(llm.WithHTTPClient(httpClient)))
+					shared = append(shared, llm.WithHTTPClient(httpClient))
 				}
+				claudeOpts := []claude.Option{claude.WithManagedTokenProvider(accountKey, store, nil), claude.WithLLMOptions(shared...)}
 				return claude.New(claudeOpts...)
 			},
 			modelAliases:      modelAliasesForProvider(ProviderClaude),

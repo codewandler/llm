@@ -29,26 +29,26 @@ type localModelsResponse struct {
 }
 
 type localModelInfo struct {
-	Slug                     string                   `json:"slug"`
-	DisplayName              string                   `json:"display_name"`
-	Description              *string                  `json:"description,omitempty"`
-	DefaultReasoningLevel    *string                  `json:"default_reasoning_level,omitempty"`
-	SupportedReasoningLevels []localReasoningPreset   `json:"supported_reasoning_levels,omitempty"`
-	Visibility               string                   `json:"visibility"`
-	SupportedInAPI           bool                     `json:"supported_in_api"`
-	AvailableInPlans         []string                 `json:"available_in_plans,omitempty"`
-	Priority                 int                      `json:"priority"`
-	AdditionalSpeedTiers     []string                 `json:"additional_speed_tiers,omitempty"`
-	SupportVerbosity         bool                     `json:"support_verbosity,omitempty"`
-	DefaultVerbosity         *string                  `json:"default_verbosity,omitempty"`
-	SupportsReasoningSummary bool                     `json:"supports_reasoning_summaries,omitempty"`
-	DefaultReasoningSummary  *string                  `json:"default_reasoning_summary,omitempty"`
-	ContextWindow            int                      `json:"context_window,omitempty"`
-	InputModalities          []string                 `json:"input_modalities,omitempty"`
-	OutputModalities         []string                 `json:"output_modalities,omitempty"`
-	Deprecated               bool                     `json:"deprecated,omitempty"`
-	SupportsParallelTools    bool                     `json:"supports_parallel_tool_calls,omitempty"`
-	TruncationPolicy         *localTruncationPolicy   `json:"truncation_policy,omitempty"`
+	Slug                     string                 `json:"slug"`
+	DisplayName              string                 `json:"display_name"`
+	Description              *string                `json:"description,omitempty"`
+	DefaultReasoningLevel    *string                `json:"default_reasoning_level,omitempty"`
+	SupportedReasoningLevels []localReasoningPreset `json:"supported_reasoning_levels,omitempty"`
+	Visibility               string                 `json:"visibility"`
+	SupportedInAPI           bool                   `json:"supported_in_api"`
+	AvailableInPlans         []string               `json:"available_in_plans,omitempty"`
+	Priority                 int                    `json:"priority"`
+	AdditionalSpeedTiers     []string               `json:"additional_speed_tiers,omitempty"`
+	SupportVerbosity         bool                   `json:"support_verbosity,omitempty"`
+	DefaultVerbosity         *string                `json:"default_verbosity,omitempty"`
+	SupportsReasoningSummary bool                   `json:"supports_reasoning_summaries,omitempty"`
+	DefaultReasoningSummary  *string                `json:"default_reasoning_summary,omitempty"`
+	ContextWindow            int                    `json:"context_window,omitempty"`
+	InputModalities          []string               `json:"input_modalities,omitempty"`
+	OutputModalities         []string               `json:"output_modalities,omitempty"`
+	Deprecated               bool                   `json:"deprecated,omitempty"`
+	SupportsParallelTools    bool                   `json:"supports_parallel_tool_calls,omitempty"`
+	TruncationPolicy         *localTruncationPolicy `json:"truncation_policy,omitempty"`
 }
 
 type localReasoningPreset struct {

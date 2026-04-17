@@ -14,7 +14,7 @@ import (
 
 func TestProvider_ResolveDefaultModel(t *testing.T) {
 	p := NewProvider()
-	m, err := p.Resolve(llm.ModelDefault)
+	m, err := p.Models().Resolve(llm.ModelDefault)
 	require.NoError(t, err)
 	assert.Equal(t, Model1ID, m.ID)
 }

@@ -1,7 +1,6 @@
 package openrouter
 
 import (
-	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -15,21 +14,19 @@ import (
 	"github.com/codewandler/llm"
 	"github.com/codewandler/llm/msg"
 	"github.com/codewandler/llm/provider/anthropic"
-	"github.com/codewandler/llm/tokencount"
-	"github.com/codewandler/llm/tool"
 	"github.com/codewandler/llm/usage"
 )
 
 func TestProvider_ResolveDefaultModel(t *testing.T) {
 	p := New()
-	m, err := p.Resolve(llm.ModelDefault)
+	m, err := p.Models().Resolve(llm.ModelDefault)
 	require.NoError(t, err)
 	assert.Equal(t, "openrouter/auto", m.ID)
 }
 
 func TestProvider_ResolveAutoAlias(t *testing.T) {
 	p := New()
-	m, err := p.Resolve("auto")
+	m, err := p.Models().Resolve("auto")
 	require.NoError(t, err)
 	assert.Equal(t, "openrouter/auto", m.ID)
 }
@@ -67,10 +64,10 @@ func TestProvider_CreateStream_DefaultModelApplied(t *testing.T) {
 	}))
 	defer server.Close()
 
-	p := New(llm.WithBaseURL(server.URL), llm.WithAPIKey("test-key")).
-		WithDefaultModel("openai/gpt-4o")
+	p := New(llm.WithBaseURL(server.URL), llm.WithAPIKey("test-key"))
 
 	stream, err := p.CreateStream(t.Context(), llm.Request{
+		Model:    "openai/gpt-4o",
 		Messages: msg.BuildTranscript(msg.User("Hello")),
 	})
 	require.NoError(t, err)
@@ -359,54 +356,4 @@ func TestSelectAPI(t *testing.T) {
 			assert.Equal(t, tc.wantType, gotType, "resolved ApiType")
 		})
 	}
-}
-
-func TestUpstreamProviderFromModel(t *testing.T) {
-	tests := []struct{ model, want string }{
-		{"anthropic/claude-opus-4-5", "anthropic"},
-		{"openai/gpt-4o", "openai"},
-		{"meta-llama/llama-4-maverick", "meta-llama"},
-		{"auto", providerName},
-		{"gpt-4o", providerName},
-	}
-	for _, tc := range tests {
-		t.Run(tc.model, func(t *testing.T) {
-			assert.Equal(t, tc.want, upstreamProviderFromModel(tc.model))
-		})
-	}
-}
-
-func TestProvider_CountTokens_NormalizesProviderPrefix(t *testing.T) {
-	p := New()
-	req := tokencount.TokenCountRequest{
-		Model:    "openai/gpt-4o",
-		Messages: msg.BuildTranscript(msg.User("Count these tokens carefully.")),
-		Tools: []tool.Definition{
-			tool.DefinitionFor[struct {
-				Location string `json:"location" jsonschema:"required"`
-			}]("get_weather", "Get weather"),
-		},
-	}
-
-	got, err := p.CountTokens(context.Background(), req)
-	require.NoError(t, err)
-
-	expected := &tokencount.TokenCount{}
-	err = tokencount.CountMessagesAndTools(expected, tokencount.TokenCountRequest{
-		Model:    "gpt-4o",
-		Messages: req.Messages,
-		Tools:    req.Tools,
-	}, tokencount.CountOpts{Encoding: tokencount.EncodingO200K})
-	require.NoError(t, err)
-
-	assert.Equal(t, expected.InputTokens, got.InputTokens)
-}
-
-func TestProvider_CountTokens_UsesDefaultModelWhenEmpty(t *testing.T) {
-	p := New().WithDefaultModel("openai/gpt-4o")
-	got, err := p.CountTokens(context.Background(), tokencount.TokenCountRequest{
-		Messages: msg.BuildTranscript(msg.User("Hello")),
-	})
-	require.NoError(t, err)
-	assert.Positive(t, got.InputTokens)
 }

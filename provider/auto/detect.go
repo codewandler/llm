@@ -28,10 +28,12 @@ func detectProviders(httpClient *http.Client, llmOpts []llm.Option, disabled map
 			name:         "local",
 			providerType: ProviderClaude,
 			factory: func(opts ...llm.Option) llm.Provider {
-				claudeOpts := []claude.Option{claude.WithLocalTokenProvider()}
+				shared := append([]llm.Option{}, llmOpts...)
+				shared = append(shared, opts...)
 				if httpClient != nil {
-					claudeOpts = append(claudeOpts, claude.WithLLMOptions(llm.WithHTTPClient(httpClient)))
+					shared = append(shared, llm.WithHTTPClient(httpClient))
 				}
+				claudeOpts := []claude.Option{claude.WithLocalTokenProvider(), claude.WithLLMOptions(shared...)}
 				return claude.New(claudeOpts...)
 			},
 			modelAliases:      modelAliasesForProvider(ProviderClaude),
@@ -46,6 +48,8 @@ func detectProviders(httpClient *http.Client, llmOpts []llm.Option, disabled map
 			providerType: ProviderAnthropic,
 			factory: func(opts ...llm.Option) llm.Provider {
 				anthropicOpts := []llm.Option{llm.APIKeyFromEnv(EnvAnthropicKey)}
+				anthropicOpts = append(anthropicOpts, llmOpts...)
+				anthropicOpts = append(anthropicOpts, opts...)
 				if httpClient != nil {
 					anthropicOpts = append(anthropicOpts, llm.WithHTTPClient(httpClient))
 				}
@@ -84,10 +88,12 @@ func detectProviders(httpClient *http.Client, llmOpts []llm.Option, disabled map
 			name:         ProviderOpenAI,
 			providerType: ProviderOpenAI,
 			factory: func(opts ...llm.Option) llm.Provider {
+				allOpts := append([]llm.Option{}, llmOpts...)
+				allOpts = append(allOpts, opts...)
 				if httpClient != nil {
-					opts = append(opts, llm.WithHTTPClient(httpClient))
+					allOpts = append(allOpts, llm.WithHTTPClient(httpClient))
 				}
-				return openai.New(opts...)
+				return openai.New(allOpts...)
 			},
 			modelAliases:      modelAliasesForProvider(ProviderOpenAI),
 			hasBuiltinAliases: true,
@@ -101,6 +107,8 @@ func detectProviders(httpClient *http.Client, llmOpts []llm.Option, disabled map
 			providerType: ProviderOpenRouter,
 			factory: func(opts ...llm.Option) llm.Provider {
 				routerOpts := []llm.Option{llm.APIKeyFromEnv(EnvOpenRouterKey)}
+				routerOpts = append(routerOpts, llmOpts...)
+				routerOpts = append(routerOpts, opts...)
 				if httpClient != nil {
 					routerOpts = append(routerOpts, llm.WithHTTPClient(httpClient))
 				}
@@ -138,11 +146,13 @@ func detectProviders(httpClient *http.Client, llmOpts []llm.Option, disabled map
 			name:         ProviderOllama,
 			providerType: ProviderOllama,
 			factory: func(opts ...llm.Option) llm.Provider {
-				opts = append(opts, llm.WithBaseURL(baseURL))
+				allOpts := append([]llm.Option{}, llmOpts...)
+				allOpts = append(allOpts, opts...)
+				allOpts = append(allOpts, llm.WithBaseURL(baseURL))
 				if httpClient != nil {
-					opts = append(opts, llm.WithHTTPClient(httpClient))
+					allOpts = append(allOpts, llm.WithHTTPClient(httpClient))
 				}
-				return ollama.New(opts...)
+				return ollama.New(allOpts...)
 			},
 			modelAliases:      nil,
 			hasBuiltinAliases: false,
@@ -158,10 +168,12 @@ func detectProviders(httpClient *http.Client, llmOpts []llm.Option, disabled map
 				name:         ProviderCodex,
 				providerType: ProviderCodex,
 				factory: func(opts ...llm.Option) llm.Provider {
+					allOpts := append([]llm.Option{}, llmOpts...)
+					allOpts = append(allOpts, opts...)
 					if httpClient != nil {
-						opts = append(opts, llm.WithHTTPClient(httpClient))
+						allOpts = append(allOpts, llm.WithHTTPClient(httpClient))
 					}
-					return codex.New(auth, opts...)
+					return codex.New(auth, allOpts...)
 				},
 				modelAliases:      modelAliasesForProvider(ProviderCodex),
 				hasBuiltinAliases: true,
@@ -185,10 +197,12 @@ func detectProviders(httpClient *http.Client, llmOpts []llm.Option, disabled map
 				name:         ProviderDockerMR,
 				providerType: ProviderDockerMR,
 				factory: func(opts ...llm.Option) llm.Provider {
+					allOpts := append([]llm.Option{}, llmOpts...)
+					allOpts = append(allOpts, opts...)
 					if httpClient != nil {
-						opts = append(opts, llm.WithHTTPClient(httpClient))
+						allOpts = append(allOpts, llm.WithHTTPClient(httpClient))
 					}
-					return dockermr.New(opts...)
+					return dockermr.New(allOpts...)
 				},
 				modelAliases:      nil,
 				hasBuiltinAliases: false,

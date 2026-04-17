@@ -206,13 +206,6 @@ func selectAPI(model string, hint llm.ApiType) (orAPIBackend, llm.ApiType) {
 	return orResponses, llm.ApiTypeOpenAIResponses
 }
 
-func upstreamProviderFromModel(model string) string {
-	if i := strings.IndexByte(model, '/'); i > 0 {
-		return model[:i]
-	}
-	return providerName
-}
-
 func (p *Provider) normalizeRequestModel(model string) string {
 	switch model {
 	case "", llm.ModelDefault:

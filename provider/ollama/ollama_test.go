@@ -17,7 +17,7 @@ func TestCreateStream_TextResponse(t *testing.T) {
 	t.Parallel()
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(t, responsesPath, r.URL.Path)
+		assert.Equal(t, "/v1/responses", r.URL.Path)
 		w.Header().Set("Content-Type", "text/event-stream")
 		_, _ = w.Write([]byte(
 			"event: response.created\ndata: {\"response\":{\"id\":\"resp_1\",\"model\":\"llama3.2\"}}\n\n" +

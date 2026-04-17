@@ -177,16 +177,6 @@ func (c *Client) emitTokenEstimates(ctx context.Context, pub llm.Publisher, req 
 		}
 		return
 	}
-	if c.cfg.APITokenCounter == nil {
-		return
-	}
-	count, err := c.cfg.APITokenCounter(ctx, req, nil)
-	if err != nil || count == nil {
-		return
-	}
-	for _, rec := range tokencount.EstimateRecords(count, c.cfg.ProviderName, req.Model, "api", usage.Default()) {
-		pub.TokenEstimate(rec)
-	}
 }
 
 func applyDefaults(cfg *clientConfig) {

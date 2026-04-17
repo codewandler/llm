@@ -2,7 +2,6 @@ package providercore
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 
 	completionsapi "github.com/codewandler/agentapis/api/completions"
@@ -37,17 +36,6 @@ func (c *Client) buildAgentClient(originalReq, resolvedReq llm.Request, apiHint 
 			if c.cfg.MessagesRequestTransform != nil {
 				return c.cfg.MessagesRequestTransform(wire)
 			}
-			if c.cfg.TransformWireRequest != nil {
-				next, err := c.cfg.TransformWireRequest(llm.ApiTypeAnthropicMessages, wire)
-				if err != nil {
-					return err
-				}
-				typed, ok := next.(*messagesapi.Request)
-				if !ok {
-					return fmt.Errorf("unexpected transformed wire request %T", next)
-				}
-				*wire = *typed
-			}
 			return nil
 		}),
 		messagesapi.WithHTTPRequestMutator(func(ctx context.Context, httpReq *http.Request, _ *messagesapi.Request) error {
@@ -79,17 +67,6 @@ func (c *Client) buildAgentClient(originalReq, resolvedReq llm.Request, apiHint 
 			if c.cfg.CompletionsRequestTransform != nil {
 				return c.cfg.CompletionsRequestTransform(wire)
 			}
-			if c.cfg.TransformWireRequest != nil {
-				next, err := c.cfg.TransformWireRequest(llm.ApiTypeOpenAIChatCompletion, wire)
-				if err != nil {
-					return err
-				}
-				typed, ok := next.(*completionsapi.Request)
-				if !ok {
-					return fmt.Errorf("unexpected transformed wire request %T", next)
-				}
-				*wire = *typed
-			}
 			return nil
 		}),
 		completionsapi.WithHTTPRequestMutator(func(ctx context.Context, httpReq *http.Request, _ *completionsapi.Request) error {
@@ -120,17 +97,6 @@ func (c *Client) buildAgentClient(originalReq, resolvedReq llm.Request, apiHint 
 		responsesapi.WithRequestTransform(func(ctx context.Context, wire *responsesapi.Request) error {
 			if c.cfg.ResponsesRequestTransform != nil {
 				return c.cfg.ResponsesRequestTransform(wire)
-			}
-			if c.cfg.TransformWireRequest != nil {
-				next, err := c.cfg.TransformWireRequest(llm.ApiTypeOpenAIResponses, wire)
-				if err != nil {
-					return err
-				}
-				typed, ok := next.(*responsesapi.Request)
-				if !ok {
-					return fmt.Errorf("unexpected transformed wire request %T", next)
-				}
-				*wire = *typed
 			}
 			return nil
 		}),

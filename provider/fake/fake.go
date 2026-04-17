@@ -22,32 +22,23 @@ var (
 		Provider: ProviderName,
 		Aliases:  []string{llm.ModelDefault},
 	}
-	fakeModelList = []llm.Model{
+	fakeModelList = llm.Models{
 		defaultModel,
 	}
 )
 
-// Provider is a test-only provider that returns a single tool call
-// on the first request and a text-only response on subsequent requests.
 type Provider struct {
 	called bool
 }
 
-// NewProvider returns a test-only provider.
-func NewProvider(opts ...llm.ProviderOpt) llm.Provider {
-	p := &Provider{}
-	return llm.NewProvider(
-		ProviderName,
-		llm.WithStreamer(p),
-		llm.WithModels(fakeModelList),
-		llm.WithProviderOpts(opts...),
-	)
+func NewProvider() *Provider {
+	return &Provider{}
 }
 
-// fakePricing is used to generate non-zero cost on fake usage records so that
-// consumers testing cost-conditional display paths (e.g. printUsageRecord)
-// exercise the cost branch without requiring a real provider.
-var fakePricing = usage.Pricing{Input: 5.0, Output: 15.0} // arbitrary; matches Sonnet-class rates
+func (p *Provider) Name() string       { return ProviderName }
+func (p *Provider) Models() llm.Models { return fakeModelList }
+
+var fakePricing = usage.Pricing{Input: 5.0, Output: 15.0}
 
 func fakeUsageRecord() usage.Record {
 	tokens := usage.TokenItems{
@@ -61,7 +52,7 @@ func fakeUsageRecord() usage.Record {
 		RecordedAt: time.Now(),
 	}
 }
-func (f *Provider) CreateStream(_ context.Context, _ llm.Buildable) (llm.Stream, error) {
+func (p *Provider) CreateStream(_ context.Context, _ llm.Buildable) (llm.Stream, error) {
 	pub, ch := llm.NewEventPublisher()
 	go func() {
 		defer pub.Close()
@@ -72,8 +63,8 @@ func (f *Provider) CreateStream(_ context.Context, _ llm.Buildable) (llm.Stream,
 			Provider:  "fake",
 		})
 
-		if !f.called {
-			f.called = true
+		if !p.called {
+			p.called = true
 			pub.ToolCall(tool.NewToolCall("bash-1", "bash", map[string]any{"command": "echo hello"}))
 			pub.UsageRecord(fakeUsageRecord())
 			pub.Completed(llm.CompletedEvent{StopReason: llm.StopReasonToolUse})

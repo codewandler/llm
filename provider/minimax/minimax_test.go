@@ -108,14 +108,13 @@ func TestResolve_Aliases(t *testing.T) {
 	}{
 		{"default alias", llm.ModelDefault, ModelM27, false},
 		{"fast alias", llm.ModelFast, ModelM27, false},
-		{"minimax alias", "minimax", ModelM27, false},
 		{"exact model ID", ModelM27, ModelM27, false},
 		{"unknown model", "MiniMax-Future-99", "", true},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			resolved, err := p.Resolve(tt.input)
+			resolved, err := p.Models().Resolve(tt.input)
 			if tt.wantErr {
 				require.Error(t, err)
 			} else {

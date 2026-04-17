@@ -61,7 +61,7 @@ func TestCreateStream_UsesResponsesRequestBody(t *testing.T) {
 	for range stream {
 	}
 
-	assert.Equal(t, responsesPath, gotPath)
+	assert.Equal(t, "/v1/responses", gotPath)
 	require.NotNil(t, gotBody)
 	assert.Equal(t, "llama3.2", gotBody["model"])
 	assert.Equal(t, float64(128), gotBody["max_output_tokens"])
