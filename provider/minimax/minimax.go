@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"sort"
 
 	"github.com/codewandler/llm"
 	"github.com/codewandler/llm/internal/models"
@@ -35,10 +36,17 @@ var allModels = func() llm.Models {
 	if err != nil {
 		return nil
 	}
-	return llm.CatalogModelsForService(c, providerName, llm.CatalogModelProjectionOptions{
+	models := llm.CatalogModelsForService(c, providerName, llm.CatalogModelProjectionOptions{
 		ProviderName:          providerName,
-		ExcludeBuiltinAliases: false,
+		ExcludeBuiltinAliases: true,
 	})
+	for i := range models {
+		models[i].Aliases = mergeMiniMaxAliases(policyAliasesForModel(models[i].ID), models[i].Aliases)
+	}
+	sort.Slice(models, func(i, j int) bool {
+		return models[i].ID < models[j].ID
+	})
+	return models
 }()
 
 func New(opts ...Option) *Provider {
@@ -128,4 +136,39 @@ func (p *Provider) Name() string       { return p.inner.Name() }
 func (p *Provider) Models() llm.Models { return p.inner.Models() }
 func (p *Provider) CreateStream(ctx context.Context, src llm.Buildable) (llm.Stream, error) {
 	return p.inner.CreateStream(ctx, src)
+}
+
+func policyAliasesForModel(modelID string) []string {
+	aliases := make([]string, 0, 2)
+	for alias, target := range ModelAliases {
+		if target != modelID {
+			continue
+		}
+		if idx := len(providerName) + 1; len(alias) > idx && alias[:idx] == providerName+":" {
+			alias = alias[idx:]
+		}
+		aliases = append(aliases, alias)
+	}
+	if modelID == ModelM27 {
+		aliases = append(aliases, llm.ModelDefault, llm.ModelFast)
+	}
+	return aliases
+}
+
+func mergeMiniMaxAliases(a, b []string) []string {
+	seen := make(map[string]struct{}, len(a)+len(b))
+	out := make([]string, 0, len(a)+len(b))
+	for _, values := range [][]string{a, b} {
+		for _, value := range values {
+			if value == "" {
+				continue
+			}
+			if _, ok := seen[value]; ok {
+				continue
+			}
+			seen[value] = struct{}{}
+			out = append(out, value)
+		}
+	}
+	return out
 }

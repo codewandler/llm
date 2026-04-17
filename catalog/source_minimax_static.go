@@ -60,7 +60,7 @@ func (MiniMaxStaticSource) Fetch(context.Context) (*Fragment, error) {
 			limits:  Limits{ContextWindow: 1000000, MaxOutput: 32000},
 			pricing: &Pricing{Input: 2.1, Output: 8.4, CachedInput: 0.42, CacheWrite: 2.625},
 			offerings: []staticOffering{
-				{wireID: "MiniMax-M2.7", aliases: []string{"default", "fast", "minimax"}},
+				{wireID: "MiniMax-M2.7", aliases: []string{"minimax"}},
 				{wireID: "MiniMax-M2.7-highspeed", aliases: []string{"highspeed"}},
 			},
 		},

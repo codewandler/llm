@@ -9,7 +9,7 @@ import (
 )
 
 func TestServiceViewResolve(t *testing.T) {
-	fragment, err := NewAnthropicStaticSource().Fetch(context.Background())
+	fragment, err := NewAnthropicAPISourceFromFile(DefaultAnthropicFixturePath()).Fetch(context.Background())
 	require.NoError(t, err)
 	c := NewCatalog()
 	require.NoError(t, MergeCatalogFragment(&c, fragment))

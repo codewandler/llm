@@ -11,7 +11,7 @@ import (
 
 func TestBuilder_RebindsOpenRouterOfferingToCanonicalAnthropicRelease(t *testing.T) {
 	built, err := Builder{Sources: []RegisteredSource{
-		{Stage: StageBuild, Authority: AuthorityCanonical, Source: NewAnthropicStaticSource()},
+		creatorSource(anthropicSourceID, &Fragment{Models: []ModelRecord{{Key: NormalizeKey(ModelKey{Creator: "anthropic", Family: "claude", Series: "sonnet", Version: "4.5", ReleaseDate: "2025-09-29"}), Name: "Claude Sonnet 4.5", Canonical: true, Provenance: []Provenance{{SourceID: anthropicSourceID, Authority: string(AuthorityCanonical), RawID: "claude-sonnet-4-5-20250929"}}}}}),
 		{
 			Stage:     StageBuild,
 			Authority: AuthorityTrusted,

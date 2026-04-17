@@ -5,6 +5,8 @@
 ### Changed
 
 - Builder snapshot generation is now creator-first.
+- Anthropic creator models now come from the live `/v1/models` schema, with a
+  checked-in fixture used for deterministic offline snapshot builds.
 - Creator/direct sources define root `ModelRecord`s.
 - Broker/platform sources such as OpenRouter and `models.dev` now rebind onto
   creator-owned roots when a matching creator model line already exists.
@@ -22,6 +24,8 @@
 ### Model Changes
 
 - `catalog.json` was regenerated with creator-root rebinding enabled.
+- Anthropic root models now reflect the real `/v1/models` payload, including the
+  new `claude-opus-4-7` entry and current creator capability flags.
 - Root model count dropped from `583` to `526` because duplicate broker-derived
   roots were collapsed onto creator-owned canonical roots.
 - Anthropic-backed offerings across `anthropic`, `bedrock`, and `openrouter`

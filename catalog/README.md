@@ -29,7 +29,7 @@ The current build invariant is:
                  +--------------------------+
                  | Build Sources            |
                  |--------------------------|
-                 | Anthropic static         |
+| Anthropic API            |
                  | OpenAI API               |
                  | OpenRouter API           |
                  | models.dev               |
@@ -229,7 +229,7 @@ go generate ./...
 The current directive runs:
 
 ```bash
-go run ./cmd/modeldb build --out catalog.json --modelsdev-file internal/source/modelsdev/testdata/api.json
+go run ./cmd/modeldb build --out catalog.json --anthropic-file internal/source/anthropic/testdata/models.json --modelsdev-file internal/source/modelsdev/testdata/api.json
 ```
 
 That keeps runtime fast and deterministic while still allowing live refreshes

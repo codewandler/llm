@@ -303,7 +303,7 @@ func TestModelAliasesForProvider(t *testing.T) {
 	claudeAliases := modelAliasesForProvider(ProviderClaude)
 	require.NotNil(t, claudeAliases)
 	assert.Equal(t, anthropic.ModelSonnet, claudeAliases["sonnet"])
-	assert.Equal(t, anthropic.ModelOpus, claudeAliases["opus"])
+	assert.Equal(t, "claude-opus-4-7", claudeAliases["opus"])
 	assert.Equal(t, anthropic.ModelHaiku, claudeAliases["haiku"])
 
 	// Anthropic should have same aliases

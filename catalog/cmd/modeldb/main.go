@@ -48,11 +48,19 @@ func model(args []string) {
 func build(args []string) {
 	fs := flag.NewFlagSet("build", flag.ExitOnError)
 	outPath := fs.String("out", "catalog.json", "output catalog JSON path")
+	anthropicFile := fs.String("anthropic-file", "", "optional local Anthropics models payload path")
 	modelsDevFile := fs.String("modelsdev-file", "", "optional local models.dev payload path")
 	useFixture := fs.Bool("modelsdev-fixture", false, "use bundled models.dev fixture instead of live fetch")
 	_ = fs.Parse(args)
 
 	sources := catalog.DefaultBuildSources()
+	if *anthropicFile != "" {
+		for i := range sources {
+			if _, ok := sources[i].Source.(catalog.AnthropicAPISource); ok {
+				sources[i].Source = catalog.NewAnthropicAPISourceFromFile(*anthropicFile)
+			}
+		}
+	}
 	if *modelsDevFile != "" || *useFixture {
 		for i := range sources {
 			if _, ok := sources[i].Source.(catalog.ModelsDevSource); ok {

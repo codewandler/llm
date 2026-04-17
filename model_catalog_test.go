@@ -2,6 +2,7 @@ package llm
 
 import (
 	"context"
+	"path/filepath"
 	"testing"
 
 	"github.com/codewandler/llm/catalog"
@@ -10,7 +11,7 @@ import (
 )
 
 func TestCatalogModelsForService(t *testing.T) {
-	fragment, err := catalog.NewAnthropicStaticSource().Fetch(context.Background())
+	fragment, err := catalog.NewAnthropicAPISourceFromFile(filepath.Join("catalog", catalog.DefaultAnthropicFixturePath())).Fetch(context.Background())
 	require.NoError(t, err)
 	c := catalog.NewCatalog()
 	require.NoError(t, catalog.MergeCatalogFragment(&c, fragment))
@@ -30,14 +31,14 @@ func TestCatalogModelsForService(t *testing.T) {
 }
 
 func TestCatalogFactualAliasesForService(t *testing.T) {
-	fragment, err := catalog.NewAnthropicStaticSource().Fetch(context.Background())
+	fragment, err := catalog.NewAnthropicAPISourceFromFile(filepath.Join("catalog", catalog.DefaultAnthropicFixturePath())).Fetch(context.Background())
 	require.NoError(t, err)
 	c := catalog.NewCatalog()
 	require.NoError(t, catalog.MergeCatalogFragment(&c, fragment))
 
 	aliases := CatalogFactualAliasesForService(c, "anthropic")
 	assert.Equal(t, "claude-sonnet-4-6", aliases["sonnet"])
-	assert.Equal(t, "claude-opus-4-6", aliases["opus"])
+	assert.Equal(t, "claude-opus-4-7", aliases["opus"])
 	_, hasDefault := aliases[ModelDefault]
 	_, hasFast := aliases[ModelFast]
 	_, hasPowerful := aliases[ModelPowerful]
