@@ -10,8 +10,8 @@ import (
 	"sync"
 
 	"github.com/codewandler/llm"
-	"github.com/codewandler/llm/catalog"
 	providercore2 "github.com/codewandler/llm/internal/providercore"
+	modeldb "github.com/codewandler/modeldb"
 )
 
 const (
@@ -127,7 +127,7 @@ func catalogOverlay(ctx context.Context, client *http.Client, baseURL string) (l
 	if err != nil {
 		return nil, err
 	}
-	source := catalog.NewDockerMRRuntimeSource()
+	source := modeldb.NewDockerMRRuntimeSource()
 	source.BaseURL = baseURL
 	source.Client = client
 	return llm.CatalogVisibleModelsForRuntime(ctx, base, "dockermr-local", source, llm.CatalogModelProjectionOptions{

@@ -11,8 +11,8 @@ import (
 	"sync"
 
 	"github.com/codewandler/llm"
-	"github.com/codewandler/llm/catalog"
 	providercore2 "github.com/codewandler/llm/internal/providercore"
+	modeldb "github.com/codewandler/modeldb"
 )
 
 const (
@@ -199,7 +199,7 @@ func catalogOverlay(ctx context.Context, client *http.Client, baseURL string) (l
 	if err != nil {
 		return nil, err
 	}
-	source := catalog.NewOllamaRuntimeSource()
+	source := modeldb.NewOllamaRuntimeSource()
 	source.BaseURL = baseURL
 	source.Client = client
 	return llm.CatalogVisibleModelsForRuntime(ctx, base, "ollama-local", source, llm.CatalogModelProjectionOptions{

@@ -5,8 +5,8 @@ import (
 	"time"
 
 	"github.com/codewandler/llm"
-	"github.com/codewandler/llm/catalog"
 	"github.com/codewandler/llm/usage"
+	modeldb "github.com/codewandler/modeldb"
 )
 
 type EstimateResult struct {
@@ -75,7 +75,7 @@ func (p tokenProfile) CountOpts() CountOpts {
 }
 
 func profileForProvider(provider, model string) tokenProfile {
-	cat, err := catalog.LoadBuiltIn()
+	cat, err := modeldb.LoadBuiltIn()
 	if err != nil {
 		return profileFromModelID(model)
 	}

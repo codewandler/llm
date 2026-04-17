@@ -3,10 +3,9 @@ package usage
 import (
 	"testing"
 
+	modeldb "github.com/codewandler/modeldb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	"github.com/codewandler/llm/catalog"
 )
 
 func TestCalcCost(t *testing.T) {
@@ -165,7 +164,7 @@ func TestInferPricingModelKey_OpenAIDottedVersions(t *testing.T) {
 }
 
 func TestDefault_CodexOpenAIFallback(t *testing.T) {
-	c, err := catalog.LoadBuiltIn()
+	c, err := modeldb.LoadBuiltIn()
 	require.NoError(t, err)
 
 	anthropicOfferings := c.OfferingsByService("anthropic")
@@ -176,7 +175,7 @@ func TestDefault_CodexOpenAIFallback(t *testing.T) {
 
 	found := false
 	for _, offering := range anthropicOfferings {
-		modelKey := catalog.LineID(offering.ModelKey)
+		modelKey := modeldb.LineID(offering.ModelKey)
 		cost, ok := calc.Calculate("anthropic", offering.WireModelID, tokens)
 		if ok && cost.Total > 0 {
 			found = true

@@ -4,7 +4,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/codewandler/llm/catalog"
+	modeldb "github.com/codewandler/modeldb"
 )
 
 var providerAliases = map[string]string{
@@ -59,7 +59,7 @@ func Default() CostCalculator {
 }
 
 func newCatalogCalculator() CostCalculator {
-	c, err := catalog.LoadBuiltIn()
+	c, err := modeldb.LoadBuiltIn()
 	if err != nil {
 		return CostCalculatorFunc(func(string, string, TokenItems) (Cost, bool) {
 			return Cost{}, false
@@ -211,7 +211,7 @@ func allDigits(s string) bool {
 	return true
 }
 
-func toUsagePricing(p *catalog.Pricing) Pricing {
+func toUsagePricing(p *modeldb.Pricing) Pricing {
 	if p == nil {
 		return Pricing{}
 	}

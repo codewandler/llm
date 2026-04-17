@@ -4,26 +4,26 @@ import (
 	"context"
 	"sync"
 
-	"github.com/codewandler/llm/catalog"
+	modeldb "github.com/codewandler/modeldb"
 )
 
 var (
 	builtInOnce sync.Once
-	builtIn     catalog.Catalog
+	builtIn     modeldb.Catalog
 	builtInErr  error
 )
 
-func LoadBuiltIn() (catalog.Catalog, error) {
+func LoadBuiltIn() (modeldb.Catalog, error) {
 	builtInOnce.Do(func() {
-		builtIn, builtInErr = catalog.LoadBuiltIn()
+		builtIn, builtInErr = modeldb.LoadBuiltIn()
 	})
 	if builtInErr != nil {
-		return catalog.Catalog{}, builtInErr
+		return modeldb.Catalog{}, builtInErr
 	}
 	return builtIn, nil
 }
 
-func MustLoadBuiltIn() catalog.Catalog {
+func MustLoadBuiltIn() modeldb.Catalog {
 	c, err := LoadBuiltIn()
 	if err != nil {
 		panic(err)
@@ -31,14 +31,14 @@ func MustLoadBuiltIn() catalog.Catalog {
 	return c
 }
 
-func Resolve(ctx context.Context, sources ...catalog.RegisteredSource) (catalog.ResolvedCatalog, error) {
+func Resolve(ctx context.Context, sources ...modeldb.RegisteredSource) (modeldb.ResolvedCatalog, error) {
 	base, err := LoadBuiltIn()
 	if err != nil {
-		return catalog.ResolvedCatalog{}, err
+		return modeldb.ResolvedCatalog{}, err
 	}
 	return ResolveWithBase(ctx, base, sources...)
 }
 
-func ResolveWithBase(ctx context.Context, base catalog.Catalog, sources ...catalog.RegisteredSource) (catalog.ResolvedCatalog, error) {
-	return catalog.ResolveCatalog(ctx, base, sources...)
+func ResolveWithBase(ctx context.Context, base modeldb.Catalog, sources ...modeldb.RegisteredSource) (modeldb.ResolvedCatalog, error) {
+	return modeldb.ResolveCatalog(ctx, base, sources...)
 }

@@ -4,9 +4,9 @@ import (
 	"context"
 	"sort"
 
-	"github.com/codewandler/llm/catalog"
 	internalmodels "github.com/codewandler/llm/internal/models"
 	"github.com/codewandler/llm/usage"
+	modeldb "github.com/codewandler/modeldb"
 )
 
 type CatalogModelProjectionOptions struct {
@@ -15,37 +15,37 @@ type CatalogModelProjectionOptions struct {
 	ExcludeBuiltinAliases bool
 }
 
-type CatalogSnapshot = catalog.Catalog
-type ResolvedCatalogSnapshot = catalog.ResolvedCatalog
+type CatalogSnapshot = modeldb.Catalog
+type ResolvedCatalogSnapshot = modeldb.ResolvedCatalog
 
-func LoadBuiltInCatalog() (catalog.Catalog, error) {
+func LoadBuiltInCatalog() (modeldb.Catalog, error) {
 	return internalmodels.LoadBuiltIn()
 }
 
-func ResolveCatalog(ctx context.Context, sources ...catalog.RegisteredSource) (catalog.ResolvedCatalog, error) {
+func ResolveCatalog(ctx context.Context, sources ...modeldb.RegisteredSource) (modeldb.ResolvedCatalog, error) {
 	return internalmodels.Resolve(ctx, sources...)
 }
 
-func CatalogModelsForService(c catalog.Catalog, serviceID string, opts CatalogModelProjectionOptions) Models {
+func CatalogModelsForService(c modeldb.Catalog, serviceID string, opts CatalogModelProjectionOptions) Models {
 	serviceID = normalizeCatalogPart(serviceID)
 	providerName := firstNonEmptyString(opts.ProviderName, serviceID)
-	return modelsFromCatalogView(catalog.ServiceView(c, serviceID, catalog.ViewOptions{}), providerName, opts)
+	return modelsFromCatalogView(modeldb.ServiceView(c, serviceID, modeldb.ViewOptions{}), providerName, opts)
 }
 
-func CatalogModelsForRuntime(c catalog.ResolvedCatalog, runtimeID string, routableOnly bool, opts CatalogModelProjectionOptions) Models {
+func CatalogModelsForRuntime(c modeldb.ResolvedCatalog, runtimeID string, routableOnly bool, opts CatalogModelProjectionOptions) Models {
 	runtimeID = normalizeCatalogPart(runtimeID)
 	providerName := opts.ProviderName
 	if providerName == "" {
 		providerName = runtimeID
 	}
-	view := catalog.RuntimeView(c, runtimeID, catalog.ViewOptions{RoutableOnly: routableOnly, VisibleOnly: !routableOnly})
+	view := modeldb.RuntimeView(c, runtimeID, modeldb.ViewOptions{RoutableOnly: routableOnly, VisibleOnly: !routableOnly})
 	return modelsFromCatalogView(view, providerName, opts)
 }
 
-func CatalogVisibleModelsForRuntime(ctx context.Context, base catalog.Catalog, runtimeID string, source catalog.Source, opts CatalogModelProjectionOptions) (Models, error) {
-	resolved, err := internalmodels.ResolveWithBase(ctx, base, catalog.RegisteredSource{
-		Stage:     catalog.StageRuntime,
-		Authority: catalog.AuthorityLocal,
+func CatalogVisibleModelsForRuntime(ctx context.Context, base modeldb.Catalog, runtimeID string, source modeldb.Source, opts CatalogModelProjectionOptions) (Models, error) {
+	resolved, err := internalmodels.ResolveWithBase(ctx, base, modeldb.RegisteredSource{
+		Stage:     modeldb.StageRuntime,
+		Authority: modeldb.AuthorityLocal,
 		Source:    source,
 	})
 	if err != nil {
@@ -54,17 +54,17 @@ func CatalogVisibleModelsForRuntime(ctx context.Context, base catalog.Catalog, r
 	return CatalogModelsForRuntime(resolved, runtimeID, false, opts), nil
 }
 
-func CatalogFactualAliasesForService(c catalog.Catalog, serviceID string) map[string]string {
+func CatalogFactualAliasesForService(c modeldb.Catalog, serviceID string) map[string]string {
 	serviceID = normalizeCatalogPart(serviceID)
-	return aliasMapFromView(catalog.ServiceView(c, serviceID, catalog.ViewOptions{}))
+	return aliasMapFromView(modeldb.ServiceView(c, serviceID, modeldb.ViewOptions{}))
 }
 
-func CatalogFactualAliasesForRuntime(c catalog.ResolvedCatalog, runtimeID string) map[string]string {
+func CatalogFactualAliasesForRuntime(c modeldb.ResolvedCatalog, runtimeID string) map[string]string {
 	runtimeID = normalizeCatalogPart(runtimeID)
-	return aliasMapFromView(catalog.RuntimeView(c, runtimeID, catalog.ViewOptions{RoutableOnly: true}))
+	return aliasMapFromView(modeldb.RuntimeView(c, runtimeID, modeldb.ViewOptions{RoutableOnly: true}))
 }
 
-func CatalogModelForOffering(c catalog.Catalog, ref catalog.OfferingRef, opts CatalogModelProjectionOptions) (Model, bool) {
+func CatalogModelForOffering(c modeldb.Catalog, ref modeldb.OfferingRef, opts CatalogModelProjectionOptions) (Model, bool) {
 	offering, ok := c.OfferingByRef(ref)
 	if !ok {
 		return Model{}, false
@@ -77,7 +77,7 @@ func CatalogModelForOffering(c catalog.Catalog, ref catalog.OfferingRef, opts Ca
 	return projectCatalogModel(providerName, offering, model, opts), true
 }
 
-func CatalogCostCalculator(c catalog.Catalog) usage.CostCalculator {
+func CatalogCostCalculator(c modeldb.Catalog) usage.CostCalculator {
 	pricingByProvider := make(map[string]map[string]usage.Pricing)
 	for ref, offering := range c.Offerings {
 		pricing := offering.Pricing
@@ -126,7 +126,7 @@ func BuiltInCatalogCostCalculator() usage.CostCalculator {
 	return CatalogCostCalculator(c)
 }
 
-func projectCatalogModel(providerName string, offering catalog.Offering, model catalog.ModelRecord, opts CatalogModelProjectionOptions) Model {
+func projectCatalogModel(providerName string, offering modeldb.Offering, model modeldb.ModelRecord, opts CatalogModelProjectionOptions) Model {
 	entry := Model{
 		ID:       offering.WireModelID,
 		Name:     firstNonEmptyString(model.Name, offering.WireModelID),
@@ -151,7 +151,7 @@ func projectCatalogModel(providerName string, offering catalog.Offering, model c
 	return entry
 }
 
-func projectedCatalogAliases(offering catalog.Offering, model catalog.ModelRecord, excludeBuiltin bool) []string {
+func projectedCatalogAliases(offering modeldb.Offering, model modeldb.ModelRecord, excludeBuiltin bool) []string {
 	aliases := mergeAliasesSlices(nil, offering.Aliases)
 	aliases = mergeAliasesSlices(aliases, model.Aliases)
 	if !excludeBuiltin {
@@ -242,8 +242,8 @@ func canonicalPricingProvider(provider string) string {
 	}
 }
 
-func sortedCatalogOfferingRefs(items map[catalog.OfferingRef]struct{}) []catalog.OfferingRef {
-	refs := make([]catalog.OfferingRef, 0, len(items))
+func sortedCatalogOfferingRefs(items map[modeldb.OfferingRef]struct{}) []modeldb.OfferingRef {
+	refs := make([]modeldb.OfferingRef, 0, len(items))
 	for ref := range items {
 		refs = append(refs, ref)
 	}
@@ -256,7 +256,7 @@ func sortedCatalogOfferingRefs(items map[catalog.OfferingRef]struct{}) []catalog
 	return refs
 }
 
-func modelsFromCatalogView(view catalog.View, providerName string, opts CatalogModelProjectionOptions) Models {
+func modelsFromCatalogView(view modeldb.View, providerName string, opts CatalogModelProjectionOptions) Models {
 	out := make(Models, 0)
 	for _, item := range view.List() {
 		entry := projectCatalogModel(providerName, item.Offering, item.Model, opts)
@@ -269,7 +269,7 @@ func modelsFromCatalogView(view catalog.View, providerName string, opts CatalogM
 	return out
 }
 
-func aliasMapFromView(view catalog.View) map[string]string {
+func aliasMapFromView(view modeldb.View) map[string]string {
 	result := make(map[string]string)
 	conflicts := make(map[string]struct{})
 	for _, alias := range view.AliasNames() {
@@ -290,6 +290,6 @@ func aliasMapFromView(view catalog.View) map[string]string {
 	return result
 }
 
-func MustLoadBuiltInCatalog() catalog.Catalog {
+func MustLoadBuiltInCatalog() modeldb.Catalog {
 	return internalmodels.MustLoadBuiltIn()
 }
