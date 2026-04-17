@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 
+	modeldbcli "github.com/codewandler/modeldb/cli"
 	"github.com/spf13/cobra"
 
 	"github.com/codewandler/llm/cmd/llmcli/cmds"
@@ -43,7 +44,7 @@ Currently supports Claude OAuth authentication.`,
 	rootCmd.AddCommand(cmds.NewAuthCmd())
 	rootCmd.AddCommand(cmds.NewClaudeCmd())
 	rootCmd.AddCommand(cmds.NewInferCmd(rootFlags))
-	rootCmd.AddCommand(cmds.NewModelsCmd(rootFlags))
+	rootCmd.AddCommand(modeldbcli.NewModelsCommand(modeldbcli.ModelsCommandOptions{}))
 
 	return rootCmd.ExecuteContext(ctx)
 }
