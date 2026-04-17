@@ -1,7 +1,6 @@
 package anthropic
 
 import (
-	"bytes"
 	"context"
 	"net/http"
 	"strings"
@@ -107,17 +106,4 @@ func (p *Provider) Name() string       { return p.inner.Name() }
 func (p *Provider) Models() llm.Models { return p.inner.Models() }
 func (p *Provider) CreateStream(ctx context.Context, src llm.Buildable) (llm.Stream, error) {
 	return p.inner.CreateStream(ctx, src)
-}
-
-func (p *Provider) newAPIRequest(ctx context.Context, apiKey string, body []byte) (*http.Request, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, p.opts.BaseURL+"/v1/messages", bytes.NewReader(body))
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept", "application/json")
-	req.Header.Set("Anthropic-Version", anthropicVersion)
-	req.Header.Set("Anthropic-Beta", BetaInterleavedThinking)
-	req.Header.Set("x-api-key", apiKey)
-	return req, nil
 }

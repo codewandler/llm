@@ -2,12 +2,15 @@ package anthropic
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
+	agentmessages "github.com/codewandler/agentapis/api/messages"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -64,21 +67,35 @@ func TestCreateStream_NetworkError(t *testing.T) {
 }
 
 func TestCreateStream_HappyPath(t *testing.T) {
-	sseBody := buildSSEBody(
-		MessageStartEvent{Message: MessageStartPayload{
-			ID: "msg_01", Model: "claude-sonnet-4-5",
-			Usage: MessageUsage{InputTokens: 10},
+	// Fill the stop reason and usage explicitly after construction because the
+	// generated struct uses embedded anonymous fields for those JSON sections.
+	var messageDelta agentmessages.MessageDeltaEvent
+	messageDelta.Delta.StopReason = agentmessages.StopReasonEndTurn
+	messageDelta.Usage.OutputTokens = 3
+	rawSSE, err := io.ReadAll(buildMessagesSSE(
+		agentmessages.EventMessageStart,
+		agentmessages.MessageStartEvent{Message: agentmessages.MessageStartPayload{
+			ID:    "msg_01",
+			Model: "claude-sonnet-4-5",
+			Usage: agentmessages.MessageUsage{InputTokens: 10},
 		}},
-		ContentBlockStartEvent{Index: 0, ContentBlock: ContentBlock{Type: "text"}},
-		ContentBlockDeltaEvent{Index: 0, Delta: ContentBlockDelta{Type: "text_delta", Text: "Hello!"}},
-		ContentBlockStopEvent{Index: 0},
-		MessageDeltaEvent{
-			Delta: MessageDelta{StopReason: "end_turn"},
-			Usage: OutputUsage{OutputTokens: 3},
+		agentmessages.EventContentBlockStart,
+		agentmessages.ContentBlockStartEvent{
+			Index:        0,
+			ContentBlock: json.RawMessage(`{"type":"text","text":""}`),
 		},
-		MessageStopEvent{},
-	)
-	rawSSE, err := io.ReadAll(sseBody)
+		agentmessages.EventContentBlockDelta,
+		agentmessages.ContentBlockDeltaEvent{
+			Index: 0,
+			Delta: agentmessages.Delta{Type: agentmessages.DeltaTypeText, Text: "Hello!"},
+		},
+		agentmessages.EventContentBlockStop,
+		agentmessages.ContentBlockStopEvent{Index: 0},
+		agentmessages.EventMessageDelta,
+		messageDelta,
+		agentmessages.EventMessageStop,
+		agentmessages.MessageStopEvent{},
+	))
 	require.NoError(t, err)
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -112,4 +129,23 @@ type errorTransport struct{}
 
 func (errorTransport) RoundTrip(*http.Request) (*http.Response, error) {
 	return nil, fmt.Errorf("simulated network failure")
+}
+
+func buildMessagesSSE(parts ...any) io.ReadCloser {
+	if len(parts)%2 != 0 {
+		panic("buildMessagesSSE expects alternating event names and payloads")
+	}
+	var b strings.Builder
+	for i := 0; i < len(parts); i += 2 {
+		name, ok := parts[i].(string)
+		if !ok {
+			panic(fmt.Sprintf("buildMessagesSSE event name must be string, got %T", parts[i]))
+		}
+		data, err := json.Marshal(parts[i+1])
+		if err != nil {
+			panic(fmt.Sprintf("buildMessagesSSE marshal %s: %v", name, err))
+		}
+		fmt.Fprintf(&b, "event: %s\ndata: %s\n\n", name, data)
+	}
+	return io.NopCloser(strings.NewReader(b.String()))
 }

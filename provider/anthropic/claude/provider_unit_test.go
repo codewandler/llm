@@ -7,7 +7,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/codewandler/agentapis/adapt"
 	"github.com/codewandler/llm"
+	"github.com/codewandler/llm/provider/providercore"
 )
 
 func TestNormalizeModel_Aliases(t *testing.T) {
@@ -60,7 +62,7 @@ func TestBuildRequest_PrependsBillingAndSystemBlocks(t *testing.T) {
 		sessionID: "test-session",
 	}
 
-	body, err := p.buildRequest(llm.Request{
+	body, err := buildRequestForTest(p, llm.Request{
 		Model:    "claude-sonnet-4-6",
 		Messages: llm.Messages{llm.User("hello")},
 	})
@@ -89,7 +91,7 @@ func TestBuildRequest_PrependsBillingAndSystemBlocks(t *testing.T) {
 func TestBuildRequest_UserSystemBlockAppended(t *testing.T) {
 	p := &Provider{baseURL: defaultBaseURL, sessionID: "s"}
 
-	body, err := p.buildRequest(llm.Request{
+	body, err := buildRequestForTest(p, llm.Request{
 		Model: "claude-sonnet-4-6",
 		Messages: llm.Messages{
 			llm.System("be helpful"),
@@ -109,4 +111,19 @@ func TestBuildRequest_UserSystemBlockAppended(t *testing.T) {
 
 	last := blocks[len(blocks)-1].(map[string]any)
 	assert.Equal(t, "be helpful", last["text"])
+}
+
+func buildRequestForTest(p *Provider, llmRequest llm.Request) (*providercore.MessagesRequest, error) {
+	uReq, err := providercore.RequestToUnified(llmRequest)
+	if err != nil {
+		return nil, err
+	}
+	msgReq, err := adapt.BuildMessagesRequest(uReq)
+	if err != nil {
+		return nil, err
+	}
+	if err := p.augmentMessagesRequest(msgReq); err != nil {
+		return nil, err
+	}
+	return msgReq, nil
 }

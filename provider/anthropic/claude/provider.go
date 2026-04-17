@@ -14,7 +14,6 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/codewandler/agentapis/adapt"
 	agentmessages "github.com/codewandler/agentapis/api/messages"
 	"github.com/codewandler/llm"
 	"github.com/codewandler/llm/provider/anthropic"
@@ -254,21 +253,6 @@ func (p *Provider) setClaudeStaticHeaders(req *http.Request) {
 	req.Header.Set("X-Stainless-Runtime-Version", stainlessNodeVer)
 	req.Header.Set("X-Stainless-Timeout", "600")
 	req.Header.Set("Connection", "keep-alive")
-}
-
-func (p *Provider) buildRequest(llmRequest llm.Request) (*agentmessages.Request, error) {
-	uReq, err := providercore.RequestToUnified(llmRequest)
-	if err != nil {
-		return nil, err
-	}
-	msgReq, err := adapt.BuildMessagesRequest(uReq)
-	if err != nil {
-		return nil, err
-	}
-	if err := p.augmentMessagesRequest(msgReq); err != nil {
-		return nil, err
-	}
-	return msgReq, nil
 }
 
 func (p *Provider) augmentMessagesRequest(msgReq *providercore.MessagesRequest) error {

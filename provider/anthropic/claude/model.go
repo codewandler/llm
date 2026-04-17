@@ -52,7 +52,6 @@ func newClaudeModels() *claudeModels {
 func (m *claudeModels) Models() llm.Models                        { return m.models }
 func (m *claudeModels) Resolve(modelID string) (llm.Model, error) { return m.models.Resolve(modelID) }
 
-var _ llm.ModelResolver = (*claudeModels)(nil)
 var _ llm.ModelsProvider = (*claudeModels)(nil)
 
 func getClaudeModels() []llm.Model {
