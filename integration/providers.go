@@ -23,6 +23,7 @@ type matrixProvider struct {
 	newProvider       func() (llm.Provider, error)
 	expectedAPIType   func(req llm.Request) llm.ApiType
 	supportsReasoning func(req llm.Request) bool
+	supportsEffort    func(req llm.Request) bool
 	prepareRequest    func(req llm.Request) llm.Request
 }
 
@@ -146,6 +147,9 @@ func matrixProviders() []matrixProvider {
 			},
 			supportsReasoning: func(req llm.Request) bool {
 				return false
+			},
+			supportsEffort: func(req llm.Request) bool {
+				return true
 			},
 		},
 	}

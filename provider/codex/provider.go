@@ -78,9 +78,11 @@ func New(auth *Auth, opts ...llm.Option) *Provider {
 				return
 			}
 			payload["store"] = false
+			// The Codex API does not accept these parameters; strip them
+			// from the wire body so the request is not rejected.
+			// NOTE: prompt_cache_retention IS supported and must be kept.
 			delete(payload, "max_tokens")
 			delete(payload, "max_output_tokens")
-			delete(payload, "prompt_cache_retention")
 			delete(payload, "temperature")
 			delete(payload, "top_p")
 			delete(payload, "top_k")
@@ -94,9 +96,15 @@ func New(auth *Auth, opts ...llm.Option) *Provider {
 		}),
 		providercore2.WithPreprocessRequest(func(req llm.Request) (llm.Request, string, error) {
 			original := req.Model
-			if req.Thinking.IsOff() {
-				req.Effort = llm.EffortUnspecified
-			}
+			// Map effort for the Codex API. All Codex models support the
+			// same reasoning effort levels (low, medium, high, xhigh).
+			// Unlike the blunt "clear effort when thinking is off" approach,
+			// we preserve effort regardless of ThinkingMode because the
+			// Codex API treats reasoning depth (effort) and thinking
+			// visibility as independent concerns.
+			// EffortMax → xhigh is handled by the ResponsesRequestTransform.
+			req.Effort = mapCodexEffort(req.Effort, req.Thinking)
+
 			hasSystem := false
 			for _, m := range req.Messages {
 				if m.IsSystem() {
@@ -179,4 +187,26 @@ func (p *Provider) FetchModels(ctx context.Context) ([]llm.Model, error) {
 
 func (p *Provider) CreateStream(ctx context.Context, src llm.Buildable) (llm.Stream, error) {
 	return p.inner.CreateStream(ctx, src)
+}
+
+// mapCodexEffort maps the user-requested Effort and ThinkingMode to a valid
+// Codex reasoning_effort value. All Codex models support the same levels:
+// low, medium, high, xhigh (mapped from EffortMax by ResponsesRequestTransform).
+//
+// Unlike the legacy approach that cleared effort when thinking was off, this
+// function preserves effort regardless of ThinkingMode. The Codex API treats
+// reasoning depth (effort) and thinking visibility as independent concerns —
+// a user can request high effort without visible thinking output.
+func mapCodexEffort(effort llm.Effort, thinking llm.ThinkingMode) llm.Effort {
+	// Thinking explicitly on but no effort specified → default to high.
+	if thinking.IsOn() && effort.IsEmpty() {
+		return llm.EffortHigh
+	}
+
+	// All other cases: pass effort through as-is.
+	// - ThinkingOff + effort set → preserve effort (reasoning depth is independent).
+	// - ThinkingOff + no effort  → omit, let API use its default (medium).
+	// - ThinkingAuto + effort    → preserve effort.
+	// - No effort at all         → omit, let API use its default.
+	return effort
 }
