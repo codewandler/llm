@@ -4,6 +4,8 @@ import (
 	"sort"
 
 	"github.com/codewandler/llm"
+	modelcatalog "github.com/codewandler/llm/internal/modelcatalog"
+	modelcatalogview "github.com/codewandler/llm/internal/modelview"
 )
 
 // Model ID constants for programmatic use.
@@ -53,12 +55,12 @@ var fallbackModelsByID = func() map[string]llm.Model {
 var allModelsWithAliases = loadAnthropicModels()
 
 func loadAnthropicModels() llm.Models {
-	catalogSnapshot, err := llm.LoadBuiltInCatalog()
+	catalogSnapshot, err := modelcatalog.LoadBuiltIn()
 	if err != nil {
 		return fallbackModels
 	}
 
-	models := llm.CatalogModelsForService(catalogSnapshot, providerName, llm.CatalogModelProjectionOptions{
+	models := modelcatalogview.ModelsForService(catalogSnapshot, providerName, modelcatalogview.ProjectionOptions{
 		ProviderName:          providerName,
 		ExcludeBuiltinAliases: true,
 	})

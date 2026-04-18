@@ -3,7 +3,8 @@ package auto
 import (
 	"sync"
 
-	"github.com/codewandler/llm"
+	modelcatalog "github.com/codewandler/llm/internal/modelcatalog"
+	modelcatalogview "github.com/codewandler/llm/internal/modelview"
 	"github.com/codewandler/llm/provider/anthropic"
 	"github.com/codewandler/llm/provider/bedrock"
 	"github.com/codewandler/llm/provider/codex"
@@ -55,7 +56,7 @@ var builtinAliasFallbacks = map[string]builtinAliasModels{
 
 var (
 	builtinCatalogOnce sync.Once
-	builtinCatalog     llm.CatalogSnapshot
+	builtinCatalog     modelcatalog.Snapshot
 	builtinCatalogErr  error
 )
 
@@ -111,19 +112,19 @@ func fallbackModelAliasesForProvider(providerType string) map[string]string {
 	}
 }
 
-func autoCatalog() (llm.CatalogSnapshot, bool) {
+func autoCatalog() (modelcatalog.Snapshot, bool) {
 	builtinCatalogOnce.Do(func() {
-		builtinCatalog, builtinCatalogErr = llm.LoadBuiltInCatalog()
+		builtinCatalog, builtinCatalogErr = modelcatalog.LoadBuiltIn()
 	})
 	return builtinCatalog, builtinCatalogErr == nil
 }
 
-func modelAliasesFromCatalog(c llm.CatalogSnapshot, providerType string) map[string]string {
+func modelAliasesFromCatalog(c modelcatalog.Snapshot, providerType string) map[string]string {
 	serviceID, ok := catalogServiceID(providerType)
 	if !ok {
 		return nil
 	}
-	return llm.CatalogFactualAliasesForService(c, serviceID)
+	return modelcatalogview.FactualAliasesForService(c, serviceID)
 }
 
 func mergeAliasMaps(base, extra map[string]string) map[string]string {

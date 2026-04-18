@@ -9,6 +9,8 @@ import (
 	"strings"
 
 	"github.com/codewandler/llm"
+	modelcatalog "github.com/codewandler/llm/internal/modelcatalog"
+	modelcatalogview "github.com/codewandler/llm/internal/modelview"
 	providercore2 "github.com/codewandler/llm/internal/providercore"
 	"github.com/codewandler/llm/msg"
 	"github.com/codewandler/llm/provider/anthropic"
@@ -148,9 +150,9 @@ func (p *Provider) FetchModels(ctx context.Context) ([]llm.Model, error) {
 }
 
 func catalogModels() llm.Models {
-	c, err := llm.LoadBuiltInCatalog()
+	c, err := modelcatalog.LoadBuiltIn()
 	if err == nil {
-		models := llm.CatalogModelsForService(c, providerName, llm.CatalogModelProjectionOptions{
+		models := modelcatalogview.ModelsForService(c, providerName, modelcatalogview.ProjectionOptions{
 			ProviderName:          providerName,
 			ExcludeBuiltinAliases: true,
 		})

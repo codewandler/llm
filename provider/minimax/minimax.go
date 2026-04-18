@@ -7,7 +7,8 @@ import (
 	"sort"
 
 	"github.com/codewandler/llm"
-	"github.com/codewandler/llm/internal/models"
+	modelcatalog "github.com/codewandler/llm/internal/modelcatalog"
+	modelcatalogview "github.com/codewandler/llm/internal/modelview"
 	providercore2 "github.com/codewandler/llm/internal/providercore"
 	"github.com/codewandler/llm/provider/anthropic"
 )
@@ -32,11 +33,11 @@ func DefaultOptions() []llm.Option {
 }
 
 var allModels = func() llm.Models {
-	c, err := models.LoadBuiltIn()
+	c, err := modelcatalog.LoadBuiltIn()
 	if err != nil {
 		return nil
 	}
-	models := llm.CatalogModelsForService(c, providerName, llm.CatalogModelProjectionOptions{
+	models := modelcatalogview.ModelsForService(c, providerName, modelcatalogview.ProjectionOptions{
 		ProviderName:          providerName,
 		ExcludeBuiltinAliases: true,
 	})

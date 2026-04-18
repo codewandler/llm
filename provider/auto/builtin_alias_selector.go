@@ -2,6 +2,7 @@ package auto
 
 import (
 	"github.com/codewandler/llm"
+	modelcatalogview "github.com/codewandler/llm/internal/modelview"
 	"github.com/codewandler/llm/provider/anthropic"
 	"github.com/codewandler/llm/provider/codex"
 	"github.com/codewandler/llm/provider/openai"
@@ -30,7 +31,7 @@ func selectBuiltinAliasModelsFromCatalog(providerType string) (builtinAliasModel
 	if !ok {
 		return builtinAliasModels{}, false
 	}
-	models := llm.CatalogModelsForService(catalogSnapshot, serviceID, llm.CatalogModelProjectionOptions{
+	models := modelcatalogview.ModelsForService(catalogSnapshot, serviceID, modelcatalogview.ProjectionOptions{
 		ProviderName:          providerType,
 		ExcludeBuiltinAliases: true,
 	})

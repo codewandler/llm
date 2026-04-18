@@ -5,6 +5,8 @@ import (
 	"sort"
 
 	"github.com/codewandler/llm"
+	modelcatalog "github.com/codewandler/llm/internal/modelcatalog"
+	modelcatalogview "github.com/codewandler/llm/internal/modelview"
 )
 
 // Model ID constants for programmatic use.
@@ -224,12 +226,12 @@ func (p *Provider) catalogModels() llm.Models {
 
 func loadOpenAIModels(providerName string) llm.Models {
 	fallback := fallbackOpenAIModels(providerName)
-	catalogSnapshot, err := llm.LoadBuiltInCatalog()
+	catalogSnapshot, err := modelcatalog.LoadBuiltIn()
 	if err != nil {
 		return fallback
 	}
 
-	models := llm.CatalogModelsForService(catalogSnapshot, "openai", llm.CatalogModelProjectionOptions{
+	models := modelcatalogview.ModelsForService(catalogSnapshot, "openai", modelcatalogview.ProjectionOptions{
 		ProviderName:          providerName,
 		ExcludeBuiltinAliases: true,
 	})

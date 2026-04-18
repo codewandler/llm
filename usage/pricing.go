@@ -4,20 +4,8 @@ import (
 	"strings"
 	"sync"
 
-	modeldb "github.com/codewandler/modeldb"
+	modelcatalog "github.com/codewandler/llm/internal/modelcatalog"
 )
-
-var providerAliases = map[string]string{
-	"claude": "anthropic",
-	"codex":  "openai",
-}
-
-func canonicalProvider(provider string) string {
-	if p, ok := providerAliases[provider]; ok {
-		return p
-	}
-	return provider
-}
 
 type pricingByModelKey struct {
 	Creator string
@@ -59,7 +47,7 @@ func Default() CostCalculator {
 }
 
 func newCatalogCalculator() CostCalculator {
-	c, err := modeldb.LoadBuiltIn()
+	c, err := modelcatalog.LoadBuiltIn()
 	if err != nil {
 		return CostCalculatorFunc(func(string, string, TokenItems) (Cost, bool) {
 			return Cost{}, false
@@ -86,7 +74,13 @@ func newCatalogCalculator() CostCalculator {
 		if calc.byServiceModel[ref.ServiceID] == nil {
 			calc.byServiceModel[ref.ServiceID] = make(map[string]Pricing)
 		}
-		calc.byServiceModel[ref.ServiceID][ref.WireModelID] = toUsagePricing(pricing)
+		calc.byServiceModel[ref.ServiceID][ref.WireModelID] = Pricing{
+			Input:       pricing.Input,
+			Output:      pricing.Output,
+			CachedInput: pricing.CachedInput,
+			CacheWrite:  pricing.CacheWrite,
+			Reasoning:   pricing.Reasoning,
+		}
 
 		lineKey := pricingByModelKey{
 			Creator: offering.ModelKey.Creator,
@@ -97,13 +91,19 @@ func newCatalogCalculator() CostCalculator {
 		}
 		if !lineKey.isZero() {
 			if _, exists := calc.byModelKey[lineKey]; !exists {
-				calc.byModelKey[lineKey] = toUsagePricing(pricing)
+				calc.byModelKey[lineKey] = Pricing{
+					Input:       pricing.Input,
+					Output:      pricing.Output,
+					CachedInput: pricing.CachedInput,
+					CacheWrite:  pricing.CacheWrite,
+					Reasoning:   pricing.Reasoning,
+				}
 			}
 		}
 	}
 
 	return CostCalculatorFunc(func(provider, model string, tokens TokenItems) (Cost, bool) {
-		provider = canonicalProvider(provider)
+		provider = modelcatalog.CanonicalProvider(provider)
 
 		if byModel, ok := calc.byServiceModel[provider]; ok {
 			if p, ok := byModel[model]; ok {
@@ -209,19 +209,6 @@ func allDigits(s string) bool {
 		}
 	}
 	return true
-}
-
-func toUsagePricing(p *modeldb.Pricing) Pricing {
-	if p == nil {
-		return Pricing{}
-	}
-	return Pricing{
-		Input:       p.Input,
-		Output:      p.Output,
-		CachedInput: p.CachedInput,
-		CacheWrite:  p.CacheWrite,
-		Reasoning:   p.Reasoning,
-	}
 }
 
 type Pricing struct {

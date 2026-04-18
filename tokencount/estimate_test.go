@@ -99,3 +99,20 @@ func TestEstimateRecords_BreakdownsHaveNoCost(t *testing.T) {
 	assert.True(t, recs[1].Cost.IsZero(), "breakdown should not have cost")
 	assert.True(t, recs[2].Cost.IsZero(), "breakdown should not have cost")
 }
+
+func TestProfileForProvider_UsesCatalogCanonicalProviderAliases(t *testing.T) {
+	claudeProfile := profileForProvider("claude", "claude-sonnet-4-6")
+	assert.Equal(t, EncodingCL100K, claudeProfile.Encoding)
+	assert.True(t, claudeProfile.AnthropicTools)
+
+	codexProfile := profileForProvider("codex", "gpt-5.4-mini")
+	assert.Equal(t, 4, codexProfile.PerMsgOverhead)
+	assert.Equal(t, 3, codexProfile.ReplyPriming)
+	assert.False(t, codexProfile.AnthropicTools)
+}
+
+func TestProfileForProvider_FallsBackWhenCatalogLookupFails(t *testing.T) {
+	got := profileForProvider("unknown-provider", "gpt-4o")
+	want := profileFromModelID("gpt-4o")
+	assert.Equal(t, want, got)
+}

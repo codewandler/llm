@@ -11,8 +11,8 @@ import (
 	"sync"
 
 	"github.com/codewandler/llm"
+	modelcatalogview "github.com/codewandler/llm/internal/modelview"
 	providercore2 "github.com/codewandler/llm/internal/providercore"
-	modeldb "github.com/codewandler/modeldb"
 )
 
 const (
@@ -195,14 +195,7 @@ var curatedModelList = llm.Models{
 }
 
 func catalogOverlay(ctx context.Context, client *http.Client, baseURL string) (llm.Models, error) {
-	base, err := llm.LoadBuiltInCatalog()
-	if err != nil {
-		return nil, err
-	}
-	source := modeldb.NewOllamaRuntimeSource()
-	source.BaseURL = baseURL
-	source.Client = client
-	return llm.CatalogVisibleModelsForRuntime(ctx, base, "ollama-local", source, llm.CatalogModelProjectionOptions{
+	return modelcatalogview.VisibleModelsForOllamaRuntime(ctx, client, baseURL, modelcatalogview.ProjectionOptions{
 		ProviderName:          llm.ProviderNameOllama,
 		ExcludeBuiltinAliases: true,
 	})

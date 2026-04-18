@@ -4,6 +4,8 @@ import (
 	"sort"
 
 	"github.com/codewandler/llm"
+	modelcatalog "github.com/codewandler/llm/internal/modelcatalog"
+	modelcatalogview "github.com/codewandler/llm/internal/modelview"
 )
 
 const (
@@ -55,11 +57,11 @@ func (m *claudeModels) Resolve(modelID string) (llm.Model, error) { return m.mod
 var _ llm.ModelsProvider = (*claudeModels)(nil)
 
 func getClaudeModels() []llm.Model {
-	catalogSnapshot, err := llm.LoadBuiltInCatalog()
+	catalogSnapshot, err := modelcatalog.LoadBuiltIn()
 	if err != nil {
 		return preferredModels
 	}
-	models := llm.CatalogModelsForService(catalogSnapshot, "anthropic", llm.CatalogModelProjectionOptions{
+	models := modelcatalogview.ModelsForService(catalogSnapshot, "anthropic", modelcatalogview.ProjectionOptions{
 		ProviderName:          providerName,
 		ExcludeBuiltinAliases: true,
 	})

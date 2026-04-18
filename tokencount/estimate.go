@@ -5,8 +5,8 @@ import (
 	"time"
 
 	"github.com/codewandler/llm"
+	modelcatalog "github.com/codewandler/llm/internal/modelcatalog"
 	"github.com/codewandler/llm/usage"
-	modeldb "github.com/codewandler/modeldb"
 )
 
 type EstimateResult struct {
@@ -75,18 +75,13 @@ func (p tokenProfile) CountOpts() CountOpts {
 }
 
 func profileForProvider(provider, model string) tokenProfile {
-	cat, err := modeldb.LoadBuiltIn()
-	if err != nil {
-		return profileFromModelID(model)
-	}
-
-	rec, ok := cat.ResolveWireModel(provider, model)
+	identity, ok := modelcatalog.ResolveWireModelIdentity(provider, model)
 	if !ok {
 		return profileFromModelID(model)
 	}
 
-	creator := rec.Key.Creator
-	family := rec.Key.Family
+	creator := identity.Creator
+	family := identity.Family
 
 	switch {
 	case creator == "anthropic" && family == "claude":
