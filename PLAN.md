@@ -21,7 +21,7 @@ A concise target statement:
 - **catalog owns model truth**
 - **registry owns provider construction**
 - **auto owns composition defaults**
-- **router owns resolution + failover**
+- **service owns resolution + failover**
 - **the public API should feel predictable, discoverable, and boring**
 
 ---
@@ -246,7 +246,7 @@ without needing to know about `modeldb`.
 
 ## 4.2 `router` UX goals
 
-`router` is an internal mechanism, but its behavior is user-visible through model resolution.
+`Service` owns runtime resolution behavior.
 
 ### Desired experience
 
@@ -335,7 +335,7 @@ These should not be bundled unless needed:
               |
               v
 +-----------------------------+
-| provider/auto               |
+| auto               |
 | - ergonomic defaults        |
 | - explicit preferences      |
 | - instance composition      |
@@ -352,14 +352,15 @@ These should not be bundled unless needed:
               |
               v
 +-----------------------------+
-| provider/router             |
-| - clear resolution rules    |
-| - good ambiguity errors     |
-| - failover                  |
++-----------------------------+
+| llm.Service                  |
+| - clear resolution rules     |
+| - good ambiguity errors      |
+| - failover                   |
 +-----------------------------+
 
 +-----------------------------+
-| internal/modelcatalog            |
+| internal/modelcatalog        |
 | - model truth               |
 | - factual aliases           |
 | - pricing/profile lookups   |
@@ -396,7 +397,7 @@ UX reason:
 
 - providers feel consistent instead of each one having slightly different behavior
 
-### `provider/auto`
+### `auto`
 Owns:
 
 - merging explicit + detected instances
@@ -409,11 +410,11 @@ UX reason:
 
 - this becomes the place where “sensible defaults” and “my explicit preferences” are reconciled
 
-### `provider/router`
+### `llm.Service`
 Owns:
 
-- indexing concrete instances
-- expanding alias tables into resolvers
+- model resolution
+- candidate generation and ranking
 - request-time target resolution
 - retry/failover sequencing
 
@@ -1772,22 +1773,22 @@ This section is intentionally more tactical.
 
 ## Auto
 
-### `provider/auto/options.go`
+### `auto/options.go`
 
 - [ ] Refactor options to produce normalized requested instances rather than embedded provider constructor closures
 - [ ] Keep public option compatibility
 
-### `provider/auto/detect.go`
+### `auto/detect.go`
 
 - [ ] Shrink to a thin registry call or remove entirely
 - [ ] Preserve current detection order semantics
 
-### `provider/auto/aliases.go`
+### `auto/aliases.go`
 
 - [ ] Reduce to composition policy helper if metadata now comes from registry/catalog
 - [ ] Keep built-in alias assembly behavior easy to understand
 
-### `provider/auto/auto.go`
+### `auto/auto.go`
 
 - [ ] Make it a thin orchestration flow
 - [ ] Remove factory-key generation
@@ -1795,18 +1796,18 @@ This section is intentionally more tactical.
 
 ## Router
 
-### `provider/router/config.go`
+### `router (removed)/config.go`
 
 - [ ] Replace or slim down current factory-oriented config shape
 - [ ] Center the package around instance-oriented inputs
 
-### `provider/router/router.go`
+### `router (removed)/router.go`
 
 - [ ] Stop instantiating providers
 - [ ] Keep index-building and routing behavior
 - [ ] Improve ambiguity and missing-provider error messages
 
-### `provider/router/routing.go`
+### `router (removed)/routing.go`
 
 - [ ] Keep retry/failover behavior intact
 - [ ] Improve user-facing resolution errors where appropriate
@@ -2545,8 +2546,8 @@ To avoid too much disruption, migrate in phases.
 - [ ] Add `Service` type and `llm.New(opts...)`
 - [ ] Add internal service package if desired (`internal/service`)
 - [ ] Add `providerregistry.Registry`
-- [ ] Move autodetect logic out of `provider/auto/detect.go`
-- [ ] Move provider build logic out of `provider/auto/options.go`
+- [ ] Move autodetect logic out of `auto/detect.go`
+- [ ] Move provider build logic out of `auto/options.go`
 - [ ] Introduce `RegisteredProvider`
 - [ ] Introduce intent alias support at service layer
 - [ ] Introduce candidate generation from catalog offerings + registered providers
@@ -2641,11 +2642,11 @@ Additional progress after the first model-catalog pass:
 - `llm.Service` now exists as the main orchestration runtime
 - `llm.New(opts...)` now builds a `Service`
 - `internal/providerregistry` exists and drives provider autodetect/building for `Service`
-- `provider/auto.New(...)` now returns `*llm.Service` and acts as a thin convenience wrapper over `llm.New(...)`
+- `auto.New(...)` now returns `*llm.Service` and acts as a thin convenience wrapper over `llm.New(...)`
 - service resolution now produces `ResolvedModelSpec` and `OfferingCandidate` values
 - candidate ranking now supports basic `PreferenceRule`s
 - `Service.ExplainModel(...)` exists as an initial debug/explain surface
-- `provider/router` still exists in the repository, but it is no longer the preferred runtime direction and should be treated as legacy/transitional
+- `router (removed)` has been removed; `llm.Service` is the only runtime orchestration path
 
 This means the plan should now assume:
 
@@ -2659,8 +2660,8 @@ This means the plan should now assume:
 Additional migration progress:
 
 - `cmd/llmcli` now uses `*llm.Service` directly instead of treating `auto.New(...)` as returning a router-backed provider
-- `provider/auto` no longer needs router alias target types for built-in aliases; those are now expressed as service intent selectors
-- `provider/router` remains in the repository mainly as legacy/transitional code and tests, not as the preferred runtime path
+- `auto` no longer needs router alias target types for built-in aliases; those are now expressed as service intent selectors
+- `router (removed)` has been removed from the repository; `llm.Service` is the only runtime orchestration path
 
 Next cleanup target:
 
@@ -2669,10 +2670,14 @@ Next cleanup target:
 
 ## Status update: router audit result
 
-A runtime audit now shows:
+A runtime audit showed no remaining non-test runtime imports of `router (removed)`, and the package has now been removed.
 
-- no non-test runtime package imports `provider/router`
-- `cmd/llmcli` no longer depends on router-backed provider behavior
-- `provider/router` currently remains only as a legacy/transitional package plus its own tests
 
-That means router removal can now be treated as a cleanup/deprecation task rather than a blocker for the new service architecture.
+## Status update: real CLI sanity check
+
+A real end-to-end CLI smoke test now succeeds through the new architecture:
+
+- `go run ./cmd/llmcli infer -m anthropic/claude-sonnet-4-6 "say exactly: sanity-check-ok"`
+- observed output: `sanity-check-ok`
+
+This confirms that the current `llm.Service` + `auto` + registry-based runtime path works in practice against a real provider.

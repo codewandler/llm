@@ -72,6 +72,7 @@ llm/
 ├── internal/modelcatalog/ # Built-in catalog loading and canonicalization
 ├── internal/modelview/ # Catalog projections and visible-model views
 ├── internal/providerregistry/ # Provider detect/build registry
+├── auto/               # Convenience service builder
 ├── internal/providercore/ # Shared provider client/config plumbing
 ├── llm.go              # Top-level package marker
 ├── event.go            # Envelope, EventType, event structs
@@ -93,7 +94,6 @@ llm/
 └── provider/
     ├── anthropic/      # Direct Anthropic Messages API
     │   └── claude/     # OAuth-based Claude provider
-    ├── auto/           # Zero-config provider detection and selection
     ├── bedrock/        # AWS Bedrock
     ├── codex/          # ChatGPT/Codex auth-backed provider
     ├── dockermr/       # Docker Model Runner
@@ -102,7 +102,6 @@ llm/
     ├── ollama/         # Local Ollama
     ├── openai/         # OpenAI provider
     ├── openrouter/     # Multi-wire OpenRouter provider
-    └── router/         # Legacy/transitional routing package
 ```
 
 **Key concepts:**
@@ -111,8 +110,7 @@ llm/
 - `CreateStream(ctx, src)` accepts any `llm.Buildable` (`llm.Request` or `*llm.RequestBuilder`)
 - Streams are `llm.Stream` (`<-chan llm.Envelope`)
 - Each envelope contains `Type`, `Meta`, and typed `Data`
-- `provider/auto` is the main zero-config convenience layer for consumers and returns `*llm.Service`
-- `provider/router` is legacy/transitional, not the preferred runtime path
+- `auto` is the main zero-config convenience layer for consumers and returns `*llm.Service`
 - `internal/modelcatalog` and `internal/modelview` provide built-in model metadata, aliases, and projections
 - `internal/providerregistry` owns provider autodetection and build definitions
 - `msg` contains the canonical message model and builders
@@ -138,7 +136,7 @@ import (
 
     // 3. Internal packages (alphabetical)
     "github.com/codewandler/llm"
-    "github.com/codewandler/llm/provider/auto"
+    "github.com/codewandler/llm/auto"
 )
 ```
 

@@ -10,7 +10,7 @@ A unified Go library for interacting with multiple LLM providers through a consi
 - **Tool calling** — consistent tool/function calling across providers
 - **Reasoning support** — Anthropic, OpenAI reasoning models, Bedrock-compatible providers
 - **Prompt caching** — transparent cache control where supported
-- **Zero-config setup** — `provider/auto` builds a ready-to-use `*llm.Service`
+- **Zero-config setup** — `auto` builds a ready-to-use `*llm.Service`
 - **Model catalog integration** — catalog-backed model resolution, aliases, and preference-aware routing
 
 ## Supported Providers
@@ -108,12 +108,12 @@ Recommended reference ladder:
 - `instance/provider/model` — exact instance targeting, e.g. `work/anthropic/claude-sonnet-4-6`
 - bare IDs only when convenient and unambiguous
 
-## `provider/auto`
+## `auto`
 
-`provider/auto` is now a convenience layer over `llm.New(...)`.
+`auto` is now a convenience layer over `llm.New(...)`.
 
 ```go
-import "github.com/codewandler/llm/provider/auto"
+import "github.com/codewandler/llm/auto"
 
 svc, err := auto.New(ctx)
 
@@ -187,8 +187,8 @@ llm/
 ├── internal/modelcatalog/  # Built-in catalog loading + canonicalization
 ├── internal/modelview/     # Catalog projections and visible-model views
 ├── internal/providerregistry/ # Provider detect/build registry
+├── auto/                  # Convenience service builder
 └── provider/
-    ├── auto/               # Convenience service builder
     ├── anthropic/
     ├── bedrock/
     ├── codex/
@@ -198,7 +198,6 @@ llm/
     ├── ollama/
     ├── openai/
     ├── openrouter/
-    └── router/             # legacy/transitional package, not the preferred runtime path
 ```
 
 ## CLI

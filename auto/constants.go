@@ -1,4 +1,4 @@
-// Package auto provides zero-config multi-provider setup for LLM providers.
+// Package auto provides zero-config service construction on top of llm.Service.
 package auto
 
 // Provider type names.

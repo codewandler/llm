@@ -8,8 +8,8 @@ import (
 	"os"
 
 	"github.com/codewandler/llm"
+	"github.com/codewandler/llm/auto"
 	"github.com/codewandler/llm/cmd/llmcli/store"
-	"github.com/codewandler/llm/provider/auto"
 )
 
 // RootFlags holds flags defined on the root command that are shared across
@@ -73,7 +73,7 @@ func (f *RootFlags) BuildLLMOptions(handler *httpLogHandler) []llm.Option {
 	return []llm.Option{llm.WithLogger(logger)}
 }
 
-// createProvider builds the aggregate provider from available credentials.
+// createProvider builds the service from available credentials.
 // httpClient overrides the default transport (e.g. for logging); pass nil to
 // use llm.DefaultHttpClient(). llmOpts are passed to providers that log
 // outside the HTTP transport layer (e.g. Bedrock).

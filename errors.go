@@ -20,7 +20,6 @@ const (
 	ProviderNameDockerMR   = "dockermr"
 	ProviderNameOpenAI     = "openai"
 	ProviderNameOpenRouter = "openrouter"
-	ProviderNameRouter     = "router"
 )
 
 // Sentinel errors for use with errors.Is. Each ProviderError wraps one of
