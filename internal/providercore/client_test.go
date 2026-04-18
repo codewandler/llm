@@ -652,3 +652,47 @@ func TestClientStream_InvalidConfig(t *testing.T) {
 		_ = New(clientConfig{})
 	})
 }
+
+func TestClientStream_AdaptiveThinkingCoercesTemperature(t *testing.T) {
+	t.Parallel()
+
+	var gotBody map[string]any
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer r.Body.Close()
+		bodyBytes, err := io.ReadAll(r.Body)
+		require.NoError(t, err)
+		require.NoError(t, json.Unmarshal(bodyBytes, &gotBody))
+
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = io.WriteString(w,
+			"event: message_start\ndata: {\"message\":{\"id\":\"m1\",\"model\":\"claude-sonnet-4-6\",\"usage\":{\"input_tokens\":1}}}\n\n"+
+				"event: message_stop\ndata: {\"type\":\"message_stop\"}\n\n",
+		)
+	}))
+	defer server.Close()
+
+	client := New(clientConfig{
+		ProviderName: "test",
+		BaseURL:      server.URL,
+		APIHint:      llm.ApiTypeAnthropicMessages,
+	}, llm.WithBaseURL(server.URL))
+
+	stream, err := client.Stream(context.Background(), llm.Request{
+		Model:       "claude-sonnet-4-6",
+		Messages:    msg.BuildTranscript(msg.User("hi")),
+		Temperature: 0.7,
+	})
+	require.NoError(t, err)
+
+	for range stream {
+	}
+
+	require.NotNil(t, gotBody)
+
+	// With adaptive thinking enabled (default for 4.6 models), temperature
+	// must be coerced to 1 by the adapt layer.
+	temp, ok := gotBody["temperature"].(float64)
+	require.True(t, ok, "expected temperature in request body")
+	assert.Equal(t, 1.0, temp, "adaptive thinking should coerce temperature to 1")
+}
