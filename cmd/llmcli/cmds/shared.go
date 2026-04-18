@@ -10,7 +10,6 @@ import (
 	"github.com/codewandler/llm"
 	"github.com/codewandler/llm/cmd/llmcli/store"
 	"github.com/codewandler/llm/provider/auto"
-	"github.com/codewandler/llm/provider/router"
 )
 
 // RootFlags holds flags defined on the root command that are shared across
@@ -78,7 +77,7 @@ func (f *RootFlags) BuildLLMOptions(handler *httpLogHandler) []llm.Option {
 // httpClient overrides the default transport (e.g. for logging); pass nil to
 // use llm.DefaultHttpClient(). llmOpts are passed to providers that log
 // outside the HTTP transport layer (e.g. Bedrock).
-func createProvider(ctx context.Context, httpClient *http.Client, llmOpts ...llm.Option) (*router.Provider, error) {
+func createProvider(ctx context.Context, httpClient *http.Client, llmOpts ...llm.Option) (*llm.Service, error) {
 	tokenStore, err := getTokenStore()
 	if err != nil {
 		return nil, err

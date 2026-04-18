@@ -1964,3 +1964,715 @@ The first-pass centralization is now in place:
   - `cmd/llmcli/main.go` (intentional CLI exception for now)
 
 This means the plan should now treat public `llm` catalog wrappers as removed, not as a target state.
+
+---
+
+# 19. Revised concrete design: replace auto/router-as-provider with llm.Service
+
+This section supersedes the earlier direction that treated `auto` and `router`
+as provider-shaped runtime objects.
+
+## 19.1 Core decision
+
+`auto` and `router` should no longer be modeled as `llm.Provider` implementations.
+
+Instead:
+
+- actual providers remain implementations of `llm.Provider`
+- orchestration moves into a new `llm.Service`
+- `llm.New(opts...)` becomes the main constructor for end users
+- autodetect, provider preference, intent aliases, retry, and fallback become
+  service concerns rather than synthetic provider concerns
+
+## 19.2 Target public API
+
+The intended public API should converge toward:
+
+```go
+svc, err := llm.New(
+    llm.WithAutoDetect(),
+    llm.WithProvider(openai.New(...)),
+    llm.WithProviderNamed("work", anthropic.New(...)),
+    llm.WithIntentAlias("fast", llm.IntentSelector{Model: "openai/gpt-4o-mini"}),
+)
+```
+
+The service should then be used for execution.
+
+Two compatibility options are acceptable during migration:
+
+### Option A: Service itself satisfies the execution surface
+
+```go
+stream, err := svc.CreateStream(ctx, req)
+```
+
+### Option B: New top-level helpers accept service
+
+```go
+resp, err := llm.GenerateText(ctx, svc, ...)
+```
+
+Either is fine short term. The main architectural requirement is that users hold
+`Service`, not synthetic routed providers.
+
+---
+
+## 19.3 New main runtime object: `llm.Service`
+
+### Responsibilities
+
+`Service` owns:
+
+- registered provider instances
+- provider registry access for autodetection/building
+- model string resolution
+- intent alias resolution
+- provider preference ordering
+- same-request candidate generation
+- cross-provider fallback sequencing
+- provider wrappers/middleware application
+- service-level retry/fallback policy
+
+### Non-responsibilities
+
+`Service` should not:
+
+- implement a real backend provider protocol itself
+- pretend to be a catalog-backed provider
+- expose provider-construction hacks like factory maps or synthetic type keys
+
+### Suggested shape
+
+```go
+type Service struct {
+    registry     *providerregistry.Registry
+    providers    []RegisteredProvider
+    intents      IntentResolver
+    preferences  PreferencePolicy
+    wrappers     []ProviderWrapper
+    retryPolicy  RetryPolicy
+    logger       Logger
+}
+```
+
+This shape can evolve, but the ownership split is the key point.
+
+---
+
+## 19.4 New constructor flow: `llm.New(opts...)`
+
+### Goal
+
+Users should have one clear entry point.
+
+```go
+svc, err := llm.New(opts...)
+```
+
+Internally this should delegate to a dedicated service constructor, for example:
+
+```go
+service.NewService(opts...)
+```
+
+### High-level construction flow
+
+1. collect service options
+2. instantiate or use a provider registry
+3. collect explicit provider requests
+4. run autodetection if enabled
+5. build concrete provider instances
+6. register providers with service metadata
+7. compile intent aliases and preference rules
+8. attach wrappers/middleware
+9. return `*llm.Service`
+
+---
+
+## 19.5 Provider registry design
+
+The provider registry should become the single owner of:
+
+- provider kind definitions
+- autodetectors
+- provider builders
+
+It should not own routing.
+
+### Suggested internal package
+
+- `internal/providerregistry`
+
+### Suggested types
+
+```go
+type Registry struct {
+    defs map[string]Definition
+}
+
+type Definition struct {
+    Type string
+
+    Detect func(ctx context.Context, env DetectEnv) ([]DetectedProvider, error)
+    Build  func(ctx context.Context, cfg BuildConfig) (llm.Provider, error)
+}
+
+type DetectEnv struct {
+    HTTPClient *http.Client
+    LLMOptions []llm.Option
+}
+
+type BuildConfig struct {
+    Name       string
+    Type       string
+    Params     map[string]any
+    HTTPClient *http.Client
+    LLMOptions []llm.Option
+}
+
+type DetectedProvider struct {
+    Name   string
+    Type   string
+    Params map[string]any
+    Order  int
+}
+```
+
+### Design rule
+
+A provider kind should be definable in one place.
+
+Adding a provider should mostly mean:
+
+- add a registry definition
+- add tests for detection/build behavior
+- optionally add docs
+
+not editing many files in `auto`.
+
+---
+
+## 19.6 Registered provider model
+
+The service needs richer metadata than plain `llm.Provider`.
+
+### Suggested type
+
+```go
+type RegisteredProvider struct {
+    Name      string // instance name, e.g. "work"
+    ServiceID string // modelcatalog service id, e.g. "openai", "anthropic"
+    Provider  llm.Provider
+
+    Priority   int
+    Tags       map[string]string
+    Wrappers   []ProviderWrapper
+    Preference ProviderPreference
+}
+```
+
+### Why this matters
+
+The service needs to know:
+
+- which modelcatalog service each provider maps to
+- whether a provider is a named instance
+- how to rank it relative to others
+- what wrappers should apply to it
+
+---
+
+## 19.7 Explicit model reference semantics
+
+The system should preserve the current three-level user model, but service-owned
+resolution should replace router-owned string tables.
+
+### Level 1: intent aliases
+
+Examples:
+
+- `fast`
+- `default`
+- `powerful`
+- app-defined aliases like `draft`, `review`
+
+These are service policy.
+
+### Level 2: provider-scoped references
+
+Examples:
+
+- `openai/gpt-4o`
+- `anthropic/sonnet`
+- `bedrock/claude-sonnet-4-6`
+
+These constrain candidate generation to one service family.
+
+### Level 3: instance-scoped references
+
+Examples:
+
+- `work/openai/gpt-4o`
+- `personal/claude/sonnet`
+
+These constrain candidate generation to one registered provider instance.
+
+### Bare model IDs
+
+Examples:
+
+- `gpt-4o`
+- `sonnet`
+- `claude-sonnet-4-6`
+
+These remain supported as convenience selectors, but should only resolve when
+unambiguous or when service policy explicitly defines ordering.
+
+---
+
+## 19.8 Intent alias design
+
+Intent aliases should be a first-class service concern.
+
+### Suggested type
+
+```go
+type IntentSelector struct {
+    Model          string
+    PreferredKinds []string
+    PreferredNames []string
+    Tags           map[string]string
+}
+```
+
+### Examples
+
+```go
+llm.WithIntentAlias("fast", llm.IntentSelector{Model: "openai/gpt-4o-mini"})
+llm.WithIntentAlias("review", llm.IntentSelector{Model: "work/anthropic/sonnet"})
+llm.WithIntentAlias("cheap", llm.IntentSelector{Model: "openrouter/auto"})
+```
+
+### Rule
+
+Intent aliases should resolve before catalog candidate generation, so they act
+as policy shortcuts rather than provider-local aliases.
+
+---
+
+## 19.9 Request resolution and execution flow
+
+This is the core algorithm.
+
+### Step 1: normalize input
+
+The service should accept either:
+
+- `llm.Request`
+- any value that can build into `llm.Request`
+
+Result: one normalized request.
+
+### Step 2: resolve the raw model string once
+
+Given `req.Model`, service should:
+
+1. check explicit instance-prefixed form
+2. check explicit provider-prefixed form
+3. check configured intent aliases
+4. use `internal/modelcatalog` + `internal/modelview` to resolve factual aliases,
+   offerings, and service candidates
+5. apply controlled provider-policy alias fallback only if needed
+
+This produces a normalized `ResolvedModelSpec`.
+
+### Suggested type
+
+```go
+type ResolvedModelSpec struct {
+    RawModel       string
+    ExactName      string // instance name if explicitly targeted
+    ExactServiceID string // service id if explicitly targeted
+    RequestedModel string // normalized requested model string
+    Offerings      []OfferingCandidate
+    FromIntent     string
+}
+```
+
+### Offering candidate type
+
+```go
+type OfferingCandidate struct {
+    Ref       modeldb.OfferingRef
+    ServiceID string
+    WireModel string
+    Aliases   []string
+}
+```
+
+### Step 3: intersect with registered providers
+
+From the resolved offerings, service finds which registered providers can serve
+those services.
+
+This becomes a list of execution candidates.
+
+### Step 4: rank candidates
+
+Ranking should consider, in order:
+
+1. explicit instance targeting
+2. explicit provider/service targeting
+3. configured service preferences
+4. configured instance preferences
+5. default detection/registration order
+
+### Step 5: execute candidates in order
+
+For each candidate:
+
+1. derive the provider-specific model ID to send
+2. apply wrappers/middleware
+3. execute request
+4. if success, return
+5. if same-provider retry is allowed, retry per policy
+6. if cross-provider fallback is allowed and error is retryable/fallbackable, continue
+7. otherwise stop and return error
+
+---
+
+## 19.10 Retry vs fallback
+
+These should be explicitly separate concepts.
+
+### Same-provider retry
+
+Definition:
+
+- retry the same provider and same offering for transient errors
+
+Examples:
+
+- HTTP 429
+- HTTP 503
+- temporary overloaded backend
+
+This can be implemented as a wrapper/middleware.
+
+### Cross-provider fallback
+
+Definition:
+
+- after one provider candidate fails, try the next ranked candidate
+
+Examples:
+
+- Anthropic direct fails, try Bedrock Claude
+- Bedrock fails, try OpenRouter/OpenAI equivalent if policy allows
+
+This belongs in `Service`, not middleware.
+
+---
+
+## 19.11 Provider wrappers / middleware
+
+Wrappers are still a good idea, but should be scoped carefully.
+
+### Good wrapper concerns
+
+- logging
+- metrics
+- tracing
+- timeout enforcement
+- same-provider retry
+- circuit breaking
+- request/response hooks
+
+### Not wrapper concerns
+
+- cross-provider fallback
+- intent alias resolution
+- multi-provider candidate ranking
+
+Those require service-wide context and therefore belong in `Service`.
+
+### Suggested wrapper shape
+
+```go
+type ProviderWrapper func(RegisteredProvider, Executor) Executor
+
+type Executor interface {
+    CreateStream(ctx context.Context, req llm.Request) (llm.Stream, error)
+}
+```
+
+Exact types can vary. The key point is:
+
+- wrappers wrap one provider execution path
+- service orchestrates across providers
+
+---
+
+## 19.12 Options design for `llm.New(...)`
+
+The public options should be user-task oriented.
+
+### Suggested public options
+
+```go
+func WithAutoDetect() Option
+func WithoutAutoDetect() Option
+func WithProvider(p llm.Provider) Option
+func WithProviderNamed(name string, p llm.Provider, opts ...ProviderOption) Option
+func WithProviderType(typeName string, opts ...ProviderBuildOption) Option
+func WithIntentAlias(name string, sel IntentSelector) Option
+func WithPreference(pref PreferenceRule) Option
+func WithWrapper(w ProviderWrapper) Option
+func WithHTTPClient(c *http.Client) Option
+func WithLLMOptions(opts ...llm.Option) Option
+```
+
+### Notes
+
+- `WithProvider(...)` is for already-built providers
+- `WithProviderType(...)` is for registry-driven construction
+- `WithAutoDetect()` is the default-friendly switch
+- intent aliases and preference rules live on service options, not provider options
+
+---
+
+## 19.13 Preferences design
+
+The system needs explicit ranking policy instead of hidden router registration order.
+
+### Suggested type
+
+```go
+type PreferenceRule struct {
+    Intent         string
+    ServiceIDs     []string
+    ProviderNames  []string
+    PreferLocal    bool
+    PreferCheapest bool
+}
+```
+
+### Rule
+
+Default behavior may still use registration order, but preferences should make
+that policy explicit and configurable.
+
+---
+
+## 19.14 What happens to current `auto`
+
+`auto` should stop being a runtime provider object.
+
+### New role for `auto`
+
+It should become one of these:
+
+1. option helpers for `llm.New(...)`, or
+2. an internal implementation detail under service/providerregistry
+
+### Acceptable short-term shape
+
+Keep existing user-facing `auto.WithX(...)` helpers, but make them produce
+service/provider requests instead of `providerEntry` and `router.Config` data.
+
+### End state
+
+Users should not need to hold an `auto.Provider` value at runtime.
+
+---
+
+## 19.15 What happens to current `router`
+
+`router` should stop being a provider-shaped runtime abstraction.
+
+### Likely outcomes
+
+- remove it entirely as a public/internal runtime type, or
+- keep only tiny reusable helper logic during migration
+
+But the conceptual owner of routing/fallback should be `Service`.
+
+### End state
+
+Users should not depend on a router provider object.
+
+---
+
+## 19.16 Compatibility strategy
+
+To avoid too much disruption, migrate in phases.
+
+### Phase A: introduce `Service`
+
+- add `llm.New(opts...)`
+- add `Service`
+- keep existing providers unchanged
+- keep old auto/router code available temporarily
+
+### Phase B: add provider registry
+
+- centralize detector/build logic
+- migrate existing auto-detect behavior into registry definitions
+
+### Phase C: move candidate generation and fallback into `Service`
+
+- service resolves model strings
+- service creates ranked provider candidates
+- service executes them in order
+
+### Phase D: deprecate synthetic provider abstractions
+
+- stop returning `*router.Provider` from user-facing constructors
+- shrink/remove `auto` and `router` as runtime types
+
+### Phase E: wrap providers cleanly
+
+- add wrappers for logging/metrics/retry/tracing
+- keep fallback in service layer
+
+---
+
+## 19.17 Concrete migration checklist
+
+### Required
+
+- [ ] Add `Service` type and `llm.New(opts...)`
+- [ ] Add internal service package if desired (`internal/service`)
+- [ ] Add `providerregistry.Registry`
+- [ ] Move autodetect logic out of `provider/auto/detect.go`
+- [ ] Move provider build logic out of `provider/auto/options.go`
+- [ ] Introduce `RegisteredProvider`
+- [ ] Introduce intent alias support at service layer
+- [ ] Introduce candidate generation from catalog offerings + registered providers
+- [ ] Move cross-provider fallback into service execution loop
+- [ ] Remove synthetic factory key logic entirely
+- [ ] Stop modelling `auto` and `router` as providers
+
+### Strongly recommended
+
+- [ ] Add same-provider retry wrapper
+- [ ] Add logging/metrics wrapper hooks
+- [ ] Add better ambiguity and unavailable-provider errors from service resolution
+- [ ] Add tests for candidate ranking and fallback ordering
+
+---
+
+## 19.18 Tests to add for the new design
+
+### Service construction tests
+
+- `WithAutoDetect()` builds expected provider set
+- explicit providers override or coexist with detected providers predictably
+- duplicate instance naming is deterministic
+
+### Resolution tests
+
+- `fast/default/powerful` resolve through intent aliases
+- `provider/model` restricts to one service
+- `instance/provider/model` restricts to one instance
+- ambiguous bare model IDs return actionable errors
+
+### Candidate generation tests
+
+- offerings are intersected correctly with registered providers
+- preference rules change ranking as expected
+- explicit targeting beats general preference rules
+
+### Execution tests
+
+- same-provider retry happens before cross-provider fallback
+- retryable provider failure falls through to next candidate when configured
+- fatal non-retryable error stops execution
+- wrappers are applied in configured order
+
+---
+
+## 19.19 Recommended target package layout
+
+One reasonable destination layout is:
+
+```text
+llm/
+  llm.go                # llm.New(...)
+  service.go            # public service surface if kept in root package
+  option.go             # service/user-facing options
+
+internal/
+  modelcatalog/
+  modelview/
+  providerregistry/
+  service/
+    service.go
+    resolve.go
+    candidates.go
+    execute.go
+    wrappers.go
+```
+
+This is only a suggested organization, but the separation of concerns should
+look roughly like this.
+
+---
+
+## 19.20 Final target mental model
+
+After this redesign, the system should be explainable in one paragraph:
+
+- providers are real backend implementations
+- the provider registry knows how to detect and build them
+- the service resolves a requested model once against catalog truth and intent aliases
+- the service finds matching registered providers, ranks them, and tries them in order
+- wrappers add logging/metrics/retry around provider execution
+- cross-provider fallback is owned by the service, not by a fake router provider
+
+That is the architecture this plan should now target.
+
+
+## Status update: service/runtime migration progress
+
+Additional progress after the first model-catalog pass:
+
+- `llm.Service` now exists as the main orchestration runtime
+- `llm.New(opts...)` now builds a `Service`
+- `internal/providerregistry` exists and drives provider autodetect/building for `Service`
+- `provider/auto.New(...)` now returns `*llm.Service` and acts as a thin convenience wrapper over `llm.New(...)`
+- service resolution now produces `ResolvedModelSpec` and `OfferingCandidate` values
+- candidate ranking now supports basic `PreferenceRule`s
+- `Service.ExplainModel(...)` exists as an initial debug/explain surface
+- `provider/router` still exists in the repository, but it is no longer the preferred runtime direction and should be treated as legacy/transitional
+
+This means the plan should now assume:
+
+- `Service` is the target runtime abstraction
+- `auto` is a convenience configuration layer
+- `router` should be removed or reduced to migration-only compatibility code
+
+
+## Status update: router deprecation progress
+
+Additional migration progress:
+
+- `cmd/llmcli` now uses `*llm.Service` directly instead of treating `auto.New(...)` as returning a router-backed provider
+- `provider/auto` no longer needs router alias target types for built-in aliases; those are now expressed as service intent selectors
+- `provider/router` remains in the repository mainly as legacy/transitional code and tests, not as the preferred runtime path
+
+Next cleanup target:
+
+- remove or quarantine remaining router-only package usage and tests once no runtime entrypoints depend on it
+
+
+## Status update: router audit result
+
+A runtime audit now shows:
+
+- no non-test runtime package imports `provider/router`
+- `cmd/llmcli` no longer depends on router-backed provider behavior
+- `provider/router` currently remains only as a legacy/transitional package plus its own tests
+
+That means router removal can now be treated as a cleanup/deprecation task rather than a blocker for the new service architecture.

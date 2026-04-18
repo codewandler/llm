@@ -69,7 +69,9 @@ llm/
 ├── api/                # Wire-protocol packages: apicore, completions, messages, responses, unified
 ├── catalog/            # Built-in model catalog, sources, merge/query/view
 ├── cmd/llmcli/         # CLI for inference, model inspection, auth helpers
-├── internal/models/    # Built-in catalog loading and resolution
+├── internal/modelcatalog/ # Built-in catalog loading and canonicalization
+├── internal/modelview/ # Catalog projections and visible-model views
+├── internal/providerregistry/ # Provider detect/build registry
 ├── internal/providercore/ # Shared provider client/config plumbing
 ├── llm.go              # Top-level package marker
 ├── event.go            # Envelope, EventType, event structs
@@ -82,7 +84,7 @@ llm/
 ├── msg/                # Canonical message model and builders
 ├── errors.go           # ProviderError and sentinel errors
 ├── model.go            # Model, Models, resolver helpers
-├── model_catalog.go    # Catalog-backed model projection helpers
+├── service.go         # llm.Service, llm.New(...), service options
 ├── tokencount/         # Token estimation helpers and interfaces
 ├── usage/              # Pricing, records, drift, budgets, tracking
 ├── tool/               # Tool definitions and typed tool handling
@@ -100,17 +102,19 @@ llm/
     ├── ollama/         # Local Ollama
     ├── openai/         # OpenAI provider
     ├── openrouter/     # Multi-wire OpenRouter provider
-    └── router/         # Multi-provider routing with failover
+    └── router/         # Legacy/transitional routing package
 ```
 
 **Key concepts:**
-- All backends implement `llm.Provider`
+- Real backend providers implement `llm.Provider`
+- `llm.Service` is now the preferred runtime orchestration object
 - `CreateStream(ctx, src)` accepts any `llm.Buildable` (`llm.Request` or `*llm.RequestBuilder`)
 - Streams are `llm.Stream` (`<-chan llm.Envelope`)
 - Each envelope contains `Type`, `Meta`, and typed `Data`
-- `provider/auto` is the main zero-config entry point for consumers
-- `provider/router` handles multi-provider routing, failover, and alias resolution
-- `catalog` and `internal/models` provide built-in model metadata and aliases
+- `provider/auto` is the main zero-config convenience layer for consumers and returns `*llm.Service`
+- `provider/router` is legacy/transitional, not the preferred runtime path
+- `internal/modelcatalog` and `internal/modelview` provide built-in model metadata, aliases, and projections
+- `internal/providerregistry` owns provider autodetection and build definitions
 - `msg` contains the canonical message model and builders
 - `usage` and `tokencount` handle pricing, usage tracking, drift, and estimation
 - Tool calling centers on `tool.NewSpec`, `tool.Handle`, and `tool.Set`
@@ -148,7 +152,7 @@ import (
 - `provider.go`, `stream.go`, `anthropic.go`
 
 **Packages:** Lowercase, single word, matching directory
-- `package llm`, `package router`, `package anthropic`
+- `package llm`, `package anthropic`, `package auto`
 
 **Types:** PascalCase, descriptive
 - `Provider`, `StreamEvent`, `ProviderError`
@@ -160,7 +164,7 @@ import (
 
 **Variables:** camelCase
 - Standard: `ctx`, `opts`, `req`, `resp`, `err`, `cfg`
-- Receivers: single letter (`p *Provider`, `r *Router`)
+- Receivers: single letter (`p *Provider`, `s *Service`)
 
 **Constants:** camelCase unexported, PascalCase exported. No SCREAMING_SNAKE_CASE.
 
@@ -173,6 +177,8 @@ func New(opts ...llm.Option) *Provider {
     return &Provider{opts: cfg, client: &http.Client{}}
 }
 ```
+
+For the high-level runtime, prefer `llm.New(opts...)` which returns `*llm.Service`.
 
 ### Error Handling
 

@@ -3,6 +3,7 @@ package auto
 import (
 	"sync"
 
+	"github.com/codewandler/llm"
 	modelcatalog "github.com/codewandler/llm/internal/modelcatalog"
 	modelcatalogview "github.com/codewandler/llm/internal/modelview"
 	"github.com/codewandler/llm/provider/anthropic"
@@ -10,7 +11,6 @@ import (
 	"github.com/codewandler/llm/provider/codex"
 	"github.com/codewandler/llm/provider/minimax"
 	"github.com/codewandler/llm/provider/openai"
-	"github.com/codewandler/llm/provider/router"
 )
 
 // builtinAliasModels defines which model to use for each built-in top-level alias per provider.
@@ -60,17 +60,20 @@ var (
 	builtinCatalogErr  error
 )
 
-// buildBuiltinAliasTargets creates the built-in top-level alias targets for a provider instance.
-func buildBuiltinAliasTargets(instanceName, providerType string) map[string]router.AliasTarget {
+// buildBuiltinAliasTargets creates built-in intent alias selectors.
+func buildBuiltinAliasTargets(instanceName, providerType string) map[string]llm.IntentSelector {
 	models, ok := resolveBuiltinAliasModels(providerType)
 	if !ok {
 		return nil
 	}
-
-	return map[string]router.AliasTarget{
-		AliasFast:     {Provider: instanceName, Model: models.fast},
-		AliasDefault:  {Provider: instanceName, Model: models.normal},
-		AliasPowerful: {Provider: instanceName, Model: models.powerful},
+	prefix := providerType
+	if instanceName != "" && instanceName != providerType {
+		prefix = instanceName + "/" + providerType
+	}
+	return map[string]llm.IntentSelector{
+		AliasFast:     {Model: prefix + "/" + models.fast},
+		AliasDefault:  {Model: prefix + "/" + models.normal},
+		AliasPowerful: {Model: prefix + "/" + models.powerful},
 	}
 }
 

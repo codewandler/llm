@@ -104,7 +104,7 @@ func runInfer(ctx context.Context, opts inferOpts, root *RootFlags) error {
 	if err != nil {
 		return err
 	}
-	var provider llm.Provider = concreteProvider
+	service := concreteProvider
 
 	// Messages
 	// System prompt: explicit --system takes precedence; demo-tools fills the gap.
@@ -145,7 +145,7 @@ func runInfer(ctx context.Context, opts inferOpts, root *RootFlags) error {
 
 	verbose := opts.Verbose
 
-	stream, err := provider.CreateStream(ctx, req)
+	stream, err := service.CreateStream(ctx, req)
 	if err != nil {
 		return fmt.Errorf("create stream: %w", err)
 	}
