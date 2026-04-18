@@ -143,7 +143,7 @@ func inferPricingModelKey(provider, model string) pricingByModelKey {
 
 	if len(parts) >= 3 && len(parts[len(parts)-1]) == 8 && allDigits(parts[len(parts)-1]) {
 		version := parts[len(parts)-3] + "." + parts[len(parts)-2]
-		if len(parts) == 4 {
+		if len(parts) <= 4 {
 			return pricingByModelKey{
 				Creator: provider,
 				Family:  family,

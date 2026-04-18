@@ -2,7 +2,6 @@ package tool
 
 import (
 	"context"
-	"errors"
 	"sync"
 )
 
@@ -67,7 +66,6 @@ type AsyncDispatcher struct {
 
 func (d *AsyncDispatcher) Dispatch(ctx context.Context, toolCalls ...Call) ([]Result, error) {
 	results := make([]Result, len(toolCalls))
-	errCh := make(chan error, len(toolCalls))
 	var wg sync.WaitGroup
 
 	for i, tc := range toolCalls {
@@ -84,12 +82,6 @@ func (d *AsyncDispatcher) Dispatch(ctx context.Context, toolCalls ...Call) ([]Re
 	}
 
 	wg.Wait()
-	close(errCh)
 
-	var errs []error
-	for err := range errCh {
-		errs = append(errs, err)
-	}
-
-	return results, errors.Join(errs...)
+	return results, nil
 }

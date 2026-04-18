@@ -121,6 +121,11 @@ func New(auth *Auth, opts ...llm.Option) *Provider {
 			if resp.Reasoning != nil && resp.Reasoning.Effort == string(llm.EffortMax) {
 				resp.Reasoning.Effort = "xhigh"
 			}
+			// Codex backend requires explicit summary to stream reasoning text.
+			// Standard OpenAI API does this by default; Codex defaults to "none".
+			if resp.Reasoning != nil && resp.Reasoning.Summary == "" {
+				resp.Reasoning.Summary = "auto"
+			}
 			return nil
 		}),
 	), allOpts...)
