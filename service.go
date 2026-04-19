@@ -298,23 +298,40 @@ func (s *Service) resolveOfferingCandidates(requestedModel string) []OfferingCan
 	seen := map[string]struct{}{}
 	var out []OfferingCandidate
 	for _, p := range s.providers {
-		serviceID := modelcatalog.CanonicalProvider(p.ServiceID)
-		if _, ok := cat.ResolveWireModel(serviceID, requestedModel); ok {
-			key := p.ServiceID + "|" + requestedModel
-			if _, exists := seen[key]; !exists {
-				seen[key] = struct{}{}
-				out = append(out, OfferingCandidate{ServiceID: p.ServiceID, WireModel: requestedModel, Source: "catalog-wire"})
+		lookupServices := modelcatalog.LookupServices(p.ServiceID)
+		matchedWire := false
+		for i, serviceID := range lookupServices {
+			if _, ok := cat.ResolveWireModel(serviceID, requestedModel); ok {
+				key := p.ServiceID + "|" + requestedModel
+				if _, exists := seen[key]; !exists {
+					seen[key] = struct{}{}
+					source := "catalog-wire"
+					if i > 0 {
+						source = "catalog-wire-basis"
+					}
+					out = append(out, OfferingCandidate{ServiceID: p.ServiceID, WireModel: requestedModel, Source: source})
+				}
+				matchedWire = true
+				break
 			}
+		}
+		if matchedWire {
 			continue
 		}
-		for _, offering := range cat.OfferingsByService(serviceID) {
-			if offering.WireModelID == requestedModel || containsString(offering.Aliases, requestedModel) || offeringModelHasAlias(cat, offering.ModelKey, requestedModel) {
-				key := p.ServiceID + "|" + offering.WireModelID
-				if _, exists := seen[key]; exists {
-					continue
+		for i, serviceID := range lookupServices {
+			for _, offering := range cat.OfferingsByService(serviceID) {
+				if offering.WireModelID == requestedModel || containsString(offering.Aliases, requestedModel) || offeringModelHasAlias(cat, offering.ModelKey, requestedModel) {
+					key := p.ServiceID + "|" + offering.WireModelID
+					if _, exists := seen[key]; exists {
+						continue
+					}
+					seen[key] = struct{}{}
+					source := "catalog-alias"
+					if i > 0 {
+						source = "catalog-alias-basis"
+					}
+					out = append(out, OfferingCandidate{ServiceID: p.ServiceID, WireModel: offering.WireModelID, Source: source})
 				}
-				seen[key] = struct{}{}
-				out = append(out, OfferingCandidate{ServiceID: p.ServiceID, WireModel: offering.WireModelID, Source: "catalog-alias"})
 			}
 		}
 	}
