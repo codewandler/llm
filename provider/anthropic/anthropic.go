@@ -72,6 +72,11 @@ func New(opts ...llm.Option) *Provider {
 			}
 			return req, original, nil
 		}),
+
+		providercore2.WithMessagesRequestTransform(func(msgReq *providercore2.MessagesRequest) error {
+			CoerceAnthropicThinkingTemperature(msgReq)
+			return nil
+		}),
 		providercore2.WithMessagesAPITokenCounter(func(ctx context.Context, _ llm.Request, msgReq *providercore2.MessagesRequest) (*tokencount.TokenCount, error) {
 			count, err := p.CountTokensAPI(ctx, msgReq)
 			if err != nil {

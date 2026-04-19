@@ -126,6 +126,7 @@ func New(opts ...Option) *Provider {
 			return req, original, nil
 		}),
 		providercore2.WithMessagesRequestTransform(func(msgReq *providercore2.MessagesRequest) error {
+			anthropic.CoerceAnthropicThinkingTemperature(msgReq)
 			if err := p.augmentMessagesRequest(msgReq); err != nil {
 				return err
 			}

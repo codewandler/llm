@@ -132,7 +132,7 @@ func New(opts ...ServiceOption) (*Service, error) {
 		}
 		cfg.Providers = append(cfg.Providers, RegisteredProvider{
 			Name:      d.Name,
-			ServiceID: modelcatalog.CanonicalProvider(d.Type),
+			ServiceID: d.Type,
 			Provider:  provider,
 		})
 	}
@@ -144,7 +144,7 @@ func New(opts ...ServiceOption) (*Service, error) {
 		}
 		serviceID := strings.TrimSpace(p.ServiceID)
 		if serviceID == "" {
-			serviceID = modelcatalog.CanonicalProvider(p.Provider.Name())
+			serviceID = strings.TrimSpace(p.Provider.Name())
 		}
 		providers = append(providers, RegisteredProvider{
 			Name:      strings.TrimSpace(p.Name),
@@ -241,7 +241,7 @@ func (s *Service) resolveModelSpec(model string) (ResolvedModelSpec, error) {
 		resolved.RequestedModel = strings.TrimSpace(intent.Model)
 	}
 
-	name, serviceID, requestedModel := parseModelRef(resolved.RequestedModel)
+	name, serviceID, requestedModel := s.parseModelRef(resolved.RequestedModel)
 	resolved.ExactName = name
 	resolved.ExactServiceID = serviceID
 	resolved.RequestedModel = requestedModel
@@ -434,16 +434,46 @@ func containsString(items []string, want string) bool {
 	return false
 }
 
-func parseModelRef(model string) (name, serviceID, requestedModel string) {
+func (s *Service) parseModelRef(model string) (name, serviceID, requestedModel string) {
 	parts := strings.Split(model, "/")
 	switch len(parts) {
 	case 1:
 		return "", "", parts[0]
 	case 2:
+		if s.hasServiceID(parts[0]) {
+			return "", parts[0], parts[1]
+		}
+		if s.hasProviderName(parts[0]) {
+			return parts[0], "", parts[1]
+		}
 		return "", parts[0], parts[1]
 	default:
+		if s.hasServiceID(parts[0]) {
+			return "", parts[0], strings.Join(parts[1:], "/")
+		}
 		return parts[0], parts[1], strings.Join(parts[2:], "/")
 	}
+}
+
+func (s *Service) hasServiceID(serviceID string) bool {
+	for _, p := range s.providers {
+		if p.ServiceID == serviceID {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *Service) hasProviderName(name string) bool {
+	if name == "" {
+		return false
+	}
+	for _, p := range s.providers {
+		if p.Name == name {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Service) shouldFallback(err error) bool {

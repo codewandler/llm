@@ -192,9 +192,9 @@ func TestCreateStream_RequestHeadersAndBody(t *testing.T) {
 	assert.Equal(t, ModelM27, gotBody["model"])
 	assert.Equal(t, true, gotBody["stream"])
 	_, hasThinking := gotBody["thinking"]
-	assert.False(t, hasThinking, "thinking field must be omitted")
+	assert.True(t, hasThinking, "thinking field should be preserved for MiniMax")
 	_, requestHasThinking := requestBody["thinking"]
-	assert.False(t, requestHasThinking, "request event body must also omit thinking")
+	assert.True(t, requestHasThinking, "request event body should also preserve thinking")
 	assert.Equal(t, gotBody, requestBody)
 	if assert.NotNil(t, estimate) {
 		assert.False(t, estimate.Estimate.Cost.IsZero())
@@ -253,7 +253,7 @@ func TestCreateStream_RequestBodyPreservesUnifiedMessagesFields(t *testing.T) {
 	assert.Equal(t, ModelM27, gotBody["model"])
 	assert.Equal(t, 0.2, gotBody["temperature"])
 	_, hasThinking := gotBody["thinking"]
-	assert.False(t, hasThinking, "thinking should be stripped for MiniMax")
+	assert.True(t, hasThinking, "thinking should be preserved for MiniMax")
 	_, hasTopLevelCache := gotBody["cache_control"]
 	assert.False(t, hasTopLevelCache, "top-level cache_control should be omitted when per-message cache exists")
 

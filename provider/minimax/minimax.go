@@ -114,7 +114,10 @@ func New(opts ...Option) *Provider {
 			return req, original, nil
 		}),
 		providercore2.WithMessagesRequestTransform(func(msgReq *providercore2.MessagesRequest) error {
-			msgReq.Thinking = nil
+			// Preserve the thinking block on the wire. MiniMax appears to accept
+			// Anthropic-style reasoning requests, and removing the field makes it
+			// impossible to validate whether reasoning/effort controls influence
+			// output budget or final-answer behavior.
 			return nil
 		}),
 	), allLLMOpts...)

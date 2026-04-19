@@ -11,15 +11,18 @@ import (
 
 	agentunified "github.com/codewandler/agentapis/api/unified"
 	"github.com/codewandler/llm"
+	"github.com/codewandler/llm/auto"
 	"github.com/codewandler/llm/msg"
 )
 
 const matrixScenarioTimeout = 90 * time.Second
 
-type matrixRun struct {
-	provider                  matrixProvider
-	scenario                  matrixScenario
+type integrationRun struct {
+	target                    integrationTarget
+	scenario                  integrationScenario
 	request                   llm.Request
+	resolved                  llm.ResolvedModelSpec
+	candidates                []llm.RegisteredProvider
 	envelopes                 []llm.Envelope
 	requestEvent              *llm.RequestEvent
 	startedEvent              *llm.StreamStartedEvent
@@ -35,33 +38,28 @@ type matrixRun struct {
 	result                    llm.Result
 }
 
-func executeMatrixScenario(t *testing.T, provider matrixProvider, scenario matrixScenario) matrixRun {
+func executeIntegrationScenario(t *testing.T, target integrationTarget, scenario integrationScenario) integrationRun {
 	t.Helper()
-
-	run := matrixRun{
-		provider: provider,
-		scenario: scenario,
-		request:  scenario.request(provider.model),
-	}
-	if provider.prepareRequest != nil {
-		run.request = provider.prepareRequest(run.request)
-	}
-
-	p, err := provider.newProvider()
-	if err != nil {
-		t.Fatalf("newProvider() error = %v", err)
-	}
 	ctx, cancel := context.WithTimeout(context.Background(), matrixScenarioTimeout)
 	defer cancel()
-
-	stream, err := p.CreateStream(ctx, run.request)
+	svc, err := auto.New(ctx)
+	if err != nil {
+		t.Fatalf("auto.New() error = %v", err)
+	}
+	run := integrationRun{target: target, scenario: scenario, request: scenario.request(target.model)}
+	if target.prepareRequest != nil {
+		run.request = target.prepareRequest(run.request)
+	}
+	run.resolved, run.candidates, err = svc.ExplainModel(run.request.Model)
+	if err != nil {
+		t.Fatalf("ExplainModel() error = %v", err)
+	}
+	stream, err := svc.CreateStream(ctx, run.request)
 	if err != nil {
 		t.Fatalf("CreateStream() error = %v", err)
 	}
-
 	for env := range stream {
 		run.envelopes = append(run.envelopes, env)
-
 		switch env.Type {
 		case llm.StreamEventRequest:
 			reqEv, ok := env.Data.(*llm.RequestEvent)
@@ -128,9 +126,8 @@ func executeMatrixScenario(t *testing.T, provider matrixProvider, scenario matri
 			t.Fatalf("unexpected stream error: %v (event types %s)", errEv.Error, run.eventTypesString())
 		}
 	}
-
 	run.result = replayProcessedResult(run.envelopes)
-	assertMatrixBase(t, run)
+	assertIntegrationBase(t, run)
 	return run
 }
 
@@ -143,9 +140,8 @@ func replayProcessedResult(envelopes []llm.Envelope) llm.Result {
 	return llm.ProcessEvents(context.Background(), replay)
 }
 
-func assertMatrixBase(t *testing.T, run matrixRun) {
+func assertIntegrationBase(t *testing.T, run integrationRun) {
 	t.Helper()
-
 	if len(run.envelopes) == 0 {
 		t.Fatal("expected at least one event envelope")
 	}
@@ -158,19 +154,28 @@ func assertMatrixBase(t *testing.T, run matrixRun) {
 	if run.completedEvent == nil {
 		t.Fatalf("expected a completed event, got event types %s", run.eventTypesString())
 	}
-
-	wantAPI := run.provider.expectedAPIType(run.request)
-	if run.requestEvent.ResolvedApiType != wantAPI {
-		t.Fatalf("ResolvedApiType = %q, want %q", run.requestEvent.ResolvedApiType, wantAPI)
+	if run.target.expect.ServiceID != "" {
+		if len(run.candidates) == 0 {
+			t.Fatalf("expected at least one candidate for %s", run.target.name)
+		}
+		if run.candidates[0].ServiceID != run.target.expect.ServiceID {
+			t.Fatalf("candidate[0].ServiceID = %q, want %q", run.candidates[0].ServiceID, run.target.expect.ServiceID)
+		}
 	}
-
+	if run.target.expect.ProviderName != "" {
+		if len(run.candidates) == 0 || run.candidates[0].Name != run.target.expect.ProviderName {
+			t.Fatalf("candidate[0].Name = %q, want %q", firstCandidateName(run.candidates), run.target.expect.ProviderName)
+		}
+	}
+	if run.requestEvent.ResolvedApiType != run.target.expect.APIType {
+		t.Fatalf("ResolvedApiType = %q, want %q", run.requestEvent.ResolvedApiType, run.target.expect.APIType)
+	}
 	if run.requestEvent.ProviderRequest.Method == "" {
 		t.Fatal("expected provider request method on request event")
 	}
 	if run.requestEvent.ProviderRequest.URL == "" {
 		t.Fatal("expected provider request URL on request event")
 	}
-
 	if err := run.result.Error(); err != nil {
 		t.Fatalf("ProcessEvents() error = %v", err)
 	}
@@ -191,28 +196,28 @@ func assertMatrixBase(t *testing.T, run matrixRun) {
 	}
 }
 
-func (r matrixRun) textStreamCount() int {
-	return r.textDeltaCount + r.textContentPartCount
+func firstCandidateName(candidates []llm.RegisteredProvider) string {
+	if len(candidates) == 0 {
+		return ""
+	}
+	return candidates[0].Name
 }
-
-func (r matrixRun) reasoningStreamCount() int {
+func (r integrationRun) textStreamCount() int { return r.textDeltaCount + r.textContentPartCount }
+func (r integrationRun) reasoningStreamCount() int {
 	return r.reasoningDeltaCount + r.reasoningContentPartCount
 }
-
-func (r matrixRun) streamSummary() string {
+func (r integrationRun) streamSummary() string {
 	if len(r.debugSummaries) == 0 {
 		return fmt.Sprintf("event types %s, stop_reason=%q, text_deltas=%d, text_parts=%d, reasoning_deltas=%d, reasoning_parts=%d", r.eventTypesString(), r.completedStopReason(), r.textDeltaCount, r.textContentPartCount, r.reasoningDeltaCount, r.reasoningContentPartCount)
 	}
 	return fmt.Sprintf("event types %s, stop_reason=%q, text_deltas=%d, text_parts=%d, reasoning_deltas=%d, reasoning_parts=%d, debug=%s", r.eventTypesString(), r.completedStopReason(), r.textDeltaCount, r.textContentPartCount, r.reasoningDeltaCount, r.reasoningContentPartCount, strings.Join(r.debugSummaries, " | "))
 }
-
-func (r matrixRun) completedStopReason() llm.StopReason {
+func (r integrationRun) completedStopReason() llm.StopReason {
 	if r.completedEvent == nil {
 		return ""
 	}
 	return r.completedEvent.StopReason
 }
-
 func summarizeDebugEvent(debugEv *llm.DebugEvent) string {
 	if debugEv == nil {
 		return "<nil>"
@@ -235,8 +240,7 @@ func summarizeDebugEvent(debugEv *llm.DebugEvent) string {
 	}
 	return fmt.Sprintf("debug:%s %T", debugEv.Message, debugEv.Data)
 }
-
-func (r matrixRun) eventTypesString() string {
+func (r integrationRun) eventTypesString() string {
 	if len(r.envelopes) == 0 {
 		return "<none>"
 	}

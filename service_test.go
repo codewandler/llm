@@ -187,3 +187,45 @@ func TestServiceExplainModel(t *testing.T) {
 	require.Len(t, candidates, 1)
 	assert.Equal(t, "anthropic", candidates[0].ServiceID)
 }
+
+func TestServiceExplicitServiceRef_DoesNotFallThroughToCanonicalSibling(t *testing.T) {
+	openaiP := serviceTestProvider{name: "openai", models: Models{{ID: "gpt-4o", Name: "GPT-4o", Provider: "openai"}}, stream: completedStream}
+	codexP := serviceTestProvider{name: "codex", models: Models{{ID: "gpt-5.4", Name: "GPT-5.4", Provider: "codex"}}, stream: func(context.Context, Buildable) (Stream, error) {
+		t.Fatal("codex should not be selected for explicit openai target")
+		return nil, nil
+	}}
+	svc, err := New(
+		WithRegisteredProvider(RegisteredProvider{ServiceID: "openai", Provider: openaiP}),
+		WithRegisteredProvider(RegisteredProvider{ServiceID: "codex", Provider: codexP}),
+	)
+	require.NoError(t, err)
+	resolved, candidates, err := svc.ExplainModel("openai/gpt-4o")
+	require.NoError(t, err)
+	require.Len(t, candidates, 1)
+	assert.Equal(t, "openai", candidates[0].ServiceID)
+	assert.Equal(t, "openai", resolved.ExactServiceID)
+}
+
+func TestServiceParseModelRef_ServiceWithNestedModelPath(t *testing.T) {
+	svc, err := New(
+		WithRegisteredProvider(RegisteredProvider{ServiceID: "openrouter", Provider: serviceTestProvider{name: "openrouter", models: nil, stream: completedStream}}),
+	)
+	require.NoError(t, err)
+	resolved, _, err := svc.ExplainModel("openrouter/openai/gpt-4o-mini")
+	require.NoError(t, err)
+	assert.Equal(t, "openrouter", resolved.ExactServiceID)
+	assert.Equal(t, "openai/gpt-4o-mini", resolved.RequestedModel)
+}
+
+func TestServiceParseModelRef_ClaudeServiceRemainsDistinctFromAnthropic(t *testing.T) {
+	svc, err := New(
+		WithRegisteredProvider(RegisteredProvider{ServiceID: "claude", Provider: serviceTestProvider{name: "claude", models: nil, stream: completedStream}}),
+		WithRegisteredProvider(RegisteredProvider{ServiceID: "anthropic", Provider: serviceTestProvider{name: "anthropic", models: nil, stream: completedStream}}),
+	)
+	require.NoError(t, err)
+	resolved, candidates, err := svc.ExplainModel("claude/claude-sonnet-4-6")
+	require.NoError(t, err)
+	assert.Equal(t, "claude", resolved.ExactServiceID)
+	require.Len(t, candidates, 1)
+	assert.Equal(t, "claude", candidates[0].ServiceID)
+}

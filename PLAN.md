@@ -2681,3 +2681,641 @@ A real end-to-end CLI smoke test now succeeds through the new architecture:
 - observed output: `sanity-check-ok`
 
 This confirms that the current `llm.Service` + `auto` + registry-based runtime path works in practice against a real provider.
+
+---
+
+# 20. Integration test redesign: scenarios should target service-resolved model sets, not provider packages
+
+This section captures the next major testing shift after the service/runtime rewrite.
+
+## 20.1 Core decision
+
+Integration tests should stop binding scenarios directly to concrete provider
+packages from `provider/`.
+
+Instead, integration tests should:
+
+- run through `llm.Service`
+- express scenarios in terms of model selectors / model sets
+- let the service resolve the selector to the correct provider/service/offering
+- assert both behavior and routing correctness
+
+In short:
+
+- test **scenario × target model set**
+- not **scenario × provider package constructor**
+
+---
+
+## 20.2 Why the current integration model is no longer the right abstraction
+
+The current matrix is built around `matrixProvider`, which assumes:
+
+- each scenario is tied to a provider package constructor
+- the provider package is the main runtime abstraction
+- model selection is mostly a provider concern
+
+That no longer matches the architecture.
+
+Now:
+
+- `Service` owns runtime resolution and fallback
+- provider registry owns detect/build
+- modelcatalog/modelview own model truth
+- `auto` is a convenience service builder
+
+Therefore, integration tests should validate the same path end users actually use.
+
+---
+
+## 20.3 New integration testing model
+
+The integration suite should be split into two layers:
+
+### Layer A: scenario
+
+A scenario describes:
+
+- the request shape
+- required capabilities
+- output assertions
+- request-shape/API assertions
+
+### Layer B: target / model set entry
+
+A target describes:
+
+- the model string the scenario should use
+- environment availability requirements
+- what the service is expected to resolve to
+- optional request preparation quirks for that target
+
+This yields a matrix of:
+
+- `scenario × integrationTarget`
+
+rather than:
+
+- `scenario × matrixProvider`
+
+---
+
+## 20.4 Proposed scenario type
+
+The current `matrixScenario` shape is already close to what is needed.
+
+Recommended shape:
+
+```go
+type integrationScenario struct {
+    Name string
+
+    Request func(model string) llm.Request
+
+    Enabled func(target integrationTarget) (bool, string)
+
+    Assert func(t *testing.T, run integrationRun)
+}
+```
+
+This keeps scenario concerns clean and mostly provider-agnostic.
+
+---
+
+## 20.5 Proposed target type
+
+This replaces the old `matrixProvider` model.
+
+```go
+type integrationTarget struct {
+    Name  string
+    Model string
+
+    Available func() (bool, string)
+
+    Expect struct {
+        ServiceID    string
+        ProviderName string
+        WireModel    string
+        APIType      llm.ApiType
+    }
+
+    Supports struct {
+        Reasoning bool
+        Effort    bool
+    }
+
+    PrepareRequest func(req llm.Request) llm.Request
+}
+```
+
+### Meaning of fields
+
+- `Model` is the model selector sent to the service
+- `Expect.ServiceID` is the catalog/service namespace expected to serve it
+- `Expect.ProviderName` is optional and useful for multi-instance assertions
+- `Expect.WireModel` is the exact provider-side wire model expected after resolution
+- `Expect.APIType` validates provider request shaping
+- `Supports` controls scenario gating
+
+---
+
+## 20.6 Optional model-set grouping
+
+To avoid repeating target lists across scenarios, group targets into model sets.
+
+```go
+type ModelSet struct {
+    Name   string
+    Models []integrationTarget
+}
+```
+
+Examples:
+
+- `core_text_models`
+- `reasoning_models`
+- `tool_models`
+- `json_models`
+
+Scenarios can then declare either:
+
+- compatible target sets, or
+- capabilities they require (`Reasoning`, `Effort`, etc.)
+
+---
+
+## 20.7 New runner design
+
+The integration runner should now run through a real `Service`.
+
+### Proposed runner flow
+
+```go
+func executeIntegrationScenario(t *testing.T, svc *llm.Service, target integrationTarget, scenario integrationScenario) integrationRun {
+    req := scenario.Request(target.Model)
+    if target.PrepareRequest != nil {
+        req = target.PrepareRequest(req)
+    }
+
+    resolved, candidates, err := svc.ExplainModel(req.Model)
+    require.NoError(t, err)
+
+    stream, err := svc.CreateStream(ctx, req)
+    require.NoError(t, err)
+
+    // collect envelopes, result, request/start/completed events...
+    // assert expected service/provider/offering/API behavior...
+}
+```
+
+### Important rule
+
+The runner should exercise the same path users rely on:
+
+- model selector
+u2192 service resolution
+u2192 candidate generation/ranking
+u2192 provider request
+u2192 stream processing
+
+---
+
+## 20.8 Proposed integration run record
+
+The run record should store not just stream data, but also service-resolution data.
+
+```go
+type integrationRun struct {
+    Target    integrationTarget
+    Scenario  integrationScenario
+    Request   llm.Request
+
+    Resolved   llm.ResolvedModelSpec
+    Candidates []llm.RegisteredProvider
+
+    Envelopes []llm.Envelope
+
+    RequestEvent   *llm.RequestEvent
+    StartedEvent   *llm.StreamStartedEvent
+    CompletedEvent *llm.CompletedEvent
+
+    Result llm.Result
+}
+```
+
+This makes failures much easier to localize.
+
+---
+
+## 20.9 What integration tests should assert now
+
+Each run should validate both behavior and routing.
+
+## A. Behavioral assertions
+
+Same as today:
+
+- response text contains expected token/phrase
+- reasoning text exists when expected
+- request wire body preserves effort/thinking settings
+- tool calls / usage / stop reason are correct
+
+## B. Routing assertions
+
+New and important:
+
+- the model selector resolved to the expected service
+- if configured, the expected provider instance was selected
+- if configured, the expected wire model was used
+- the expected API type was used
+
+### Priority of routing assertions
+
+1. `Expect.ServiceID` — most important and stable
+2. `Expect.ProviderName` — useful for multi-instance/service preference tests
+3. `Expect.WireModel` — useful when exact routing matters
+4. `Expect.APIType` — validates wire-protocol choice
+
+---
+
+## 20.10 Explain-model based assertions
+
+`Service.ExplainModel(...)` should become part of the integration runner before
+actual execution.
+
+### Why this is valuable
+
+It lets tests distinguish failures in:
+
+1. model resolution
+2. candidate ranking
+3. provider request shaping
+4. provider streaming behavior
+
+### Expected usage
+
+Before calling `CreateStream(...)`, the runner should capture:
+
+- `ResolvedModelSpec`
+- candidate list
+
+and compare them against `integrationTarget.Expect`.
+
+---
+
+## 20.11 Expected runtime evidence of actual provider choice
+
+The test should not only assert what *would* resolve, but also what *did* happen.
+
+## Best currently available evidence
+
+- `RequestEvent`
+  - resolved API type
+  - provider request URL/body
+- `StreamStartedEvent`
+  - provider/model metadata
+- `ResolvedModelSpec` and ranked candidates from `ExplainModel(...)`
+
+## Future improvement
+
+Consider adding a dedicated service-owned event such as:
+
+```go
+type CandidateSelectedEvent struct {
+    ServiceID    string
+    ProviderName string
+    WireModel    string
+}
+```
+
+This would make runtime assertions cleaner, but is not required for the first redesign phase.
+
+---
+
+## 20.12 What should happen to the current `matrixProvider` model
+
+It should be removed or reduced to a tiny provider-contract smoke layer.
+
+### Keep only a small direct-provider smoke layer
+
+There is still value in a few direct-provider tests that answer:
+
+- does this provider package basically still work on its own?
+- does request parsing / stream parsing still work directly?
+
+But that should be a much smaller set than the main integration matrix.
+
+### Main matrix should become service-first
+
+The main matrix should no longer call provider constructors directly.
+
+---
+
+## 20.13 Concrete target examples
+
+### Example: direct anthropic target
+
+```go
+{
+    Name:  "anthropic-sonnet",
+    Model: "anthropic/claude-sonnet-4-6",
+    Available: requireEnv("ANTHROPIC_API_KEY"),
+    Expect: Expectation{
+        ServiceID: "anthropic",
+        APIType:   llm.ApiTypeAnthropicMessages,
+        WireModel: "claude-sonnet-4-6",
+    },
+    Supports: Capabilities{
+        Reasoning: true,
+        Effort:    true,
+    },
+}
+```
+
+### Example: OpenRouter target
+
+```go
+{
+    Name:  "openrouter-openai-mini",
+    Model: "openrouter/openai/gpt-4o-mini",
+    Available: requireEnv("OPENROUTER_API_KEY"),
+    Expect: Expectation{
+        ServiceID: "openrouter",
+        APIType:   llm.ApiTypeOpenAIResponses,
+    },
+}
+```
+
+### Example: Codex target
+
+```go
+{
+    Name:  "codex-default",
+    Model: "codex/gpt-5.4",
+    Available: requireCodexAuth,
+    Expect: Expectation{
+        ServiceID: "codex",
+        APIType:   llm.ApiTypeOpenAIResponses,
+    },
+    Supports: Capabilities{
+        Effort: true,
+    },
+}
+```
+
+---
+
+## 20.14 Capability-driven scenario gating
+
+Scenario enable checks should become target/capability-based.
+
+Instead of asking:
+
+- does this provider package support X?
+
+ask:
+
+- does this target advertise support for X?
+
+Examples:
+
+```go
+func requiresReasoningSupport(target integrationTarget) (bool, string)
+func requiresEffortSupport(target integrationTarget) (bool, string)
+```
+
+This keeps scenarios provider-agnostic.
+
+---
+
+## 20.15 Phased implementation plan
+
+## Phase 1 — service-first target model
+
+- [ ] Introduce `integrationTarget`
+- [ ] Replace `matrixProviders()` with `integrationTargets()` or model sets
+- [ ] Keep scenarios mostly as-is
+- [ ] Update runner to use `*llm.Service`
+- [ ] Use `ExplainModel(...)` before `CreateStream(...)`
+- [ ] Assert expected `ServiceID` + `APIType`
+
+## Phase 2 — stronger routing assertions
+
+- [ ] Assert `ProviderName` where meaningful
+- [ ] Assert exact `WireModel` where useful
+- [ ] Add richer run record with resolved spec and candidates
+
+## Phase 3 — smaller direct-provider smokes
+
+- [ ] Reduce old direct-provider matrix assumptions
+- [ ] Keep only minimal per-provider contract smoke tests
+- [ ] Make the service-first matrix the primary integration signal
+
+---
+
+## 20.16 Acceptance criteria
+
+The integration redesign is successful when:
+
+- scenarios no longer depend on provider package constructors
+- the main integration matrix runs through `llm.Service`
+- every target can declare the expected service/provider/offering outcome
+- failures can be localized to resolution vs provider execution vs stream parsing
+- provider regressions become easier to diagnose from one test run
+
+---
+
+## 20.17 Why this matters
+
+This redesign directly validates the architecture we now want to keep.
+
+Instead of testing legacy provider-oriented entry points, the integration suite will test:
+
+- selector resolution
+- service candidate generation/ranking
+- provider request shaping
+- actual streamed behavior
+
+That is the correct long-term integration surface for the rewritten system.
+
+---
+
+# 21. Implemented state, known gaps, and resume-here checklist
+
+This section is intentionally operational. It exists so work can pause and
+resume later without needing to reconstruct the current architecture from git
+history or long-form design notes.
+
+## 21.1 Implemented state
+
+The following is already true in the codebase:
+
+### Runtime architecture
+
+- `llm.Service` exists and is now the main orchestration runtime
+- `llm.New(opts...)` exists and returns `*llm.Service`
+- service owns:
+  - model resolution
+  - candidate generation
+  - candidate ranking
+  - fallback sequencing
+  - wrapper application
+- `provider/router` has been removed entirely
+- `provider/auto` has been moved to top-level `auto/`
+- `auto.New(ctx, ...)` now returns `*llm.Service`
+- `auto` is now a convenience service builder, not a provider
+
+### Internal architecture
+
+- runtime catalog/modeldb ownership is centralized in:
+  - `internal/modelcatalog`
+  - `internal/modelview`
+- `internal/providerregistry` exists for provider detect/build logic
+- public llm catalog helper surface has been removed
+- CLI (`cmd/llmcli`) uses `*llm.Service` directly
+
+### Service capabilities already present
+
+- explicit provider registration
+- detected provider registration via registry
+- intent alias application
+- provider wrappers
+- retry/fallback policy hook
+- `ExplainModel(...)` exists as an initial debug/explain surface
+- candidate generation is now more catalog/offering-driven than provider-list-driven
+- preference-based ranking exists in an initial form via `PreferenceRule`
+
+### Validation already performed
+
+- migrated package/unit tests pass for the new runtime path
+- a real CLI sanity check succeeded via Anthropic:
+  - `go run ./cmd/llmcli infer -m anthropic/claude-sonnet-4-6 "say exactly: sanity-check-ok"`
+  - observed output: `sanity-check-ok`
+
+---
+
+## 21.2 Known gaps / known rough edges
+
+The architecture is in the right shape, but several important areas still need refinement.
+
+### Service resolution and UX
+
+- ambiguity detection is still incomplete / conservative
+- ambiguity errors are not yet as strong as the desired UX spec
+- `ExplainModel(...)` exists but is still a basic debug surface
+- candidate ranking is still intentionally simple
+- explicit preference handling is not yet rich enough for all intended cases
+
+### Provider verification
+
+The new architecture exists, but we still need to make sure actual providers work reliably again through it.
+
+Priority order for verification/fixes:
+
+1. **Codex**
+2. **OpenRouter**
+3. **Anthropic**
+4. then other providers as needed
+
+### Integration tests
+
+- integration tests are still based on the old provider-oriented matrix model
+- scenarios are still tied too closely to direct provider package construction
+- the main integration suite does not yet fully validate the `Service` runtime path
+- the new service-first integration design has been written down in this plan but not yet implemented
+
+### Auto package cleanup
+
+- `auto/` is in the right place now, but some internals are still transitional
+- more provider-specific alias/default policy may be moved into provider registry later
+- built-in alias behavior should continue to be simplified toward service policy rather than package-local heuristics
+
+---
+
+## 21.3 Immediate next priorities
+
+If work resumes later, this is the intended sequence.
+
+### Priority 1 — integration redesign phase 1
+
+Implement the first phase of the new integration test model:
+
+- introduce `integrationTarget`
+- replace provider-oriented matrix entries with service-oriented targets
+- update runner to execute scenarios through `*llm.Service`
+- use `Service.ExplainModel(...)` before `CreateStream(...)`
+- assert expected:
+  - `ServiceID`
+  - `APIType`
+
+### Priority 2 — provider validation through the new matrix
+
+Once the service-first integration runner exists, use it to validate/fix providers in this order:
+
+1. Codex
+2. OpenRouter
+3. Anthropic
+4. then others as needed
+
+Goal:
+
+- validate providers through the real runtime path, not just direct provider constructors
+
+### Priority 3 — service ambiguity and error improvements
+
+Improve:
+
+- ambiguity detection
+- ambiguity error messages
+- provider-not-configured messages
+- explain/debug output from `ExplainModel(...)`
+
+### Priority 4 — preference and ranking refinement
+
+Improve:
+
+- intent-specific preference rules
+- service vs instance preference handling
+- eventual local/cloud/cost-aware preferences if needed
+
+---
+
+## 21.4 Resume here
+
+If resuming work in a future session, start here:
+
+1. read section **20. Integration test redesign**
+2. implement **Phase 1** of that redesign
+3. use the new service-first integration matrix to validate:
+   - Codex
+   - OpenRouter
+   - Anthropic
+4. then improve service ambiguity/errors and `ExplainModel(...)`
+
+That is the cleanest continuation path from the current codebase state.
+
+
+## Status update: provider verification and matrix artifacts
+
+The service-first integration matrix is now green for the currently supported targets/capabilities.
+
+### Verified through the service-first integration matrix
+
+- Claude local: green
+- Anthropic API: green
+- OpenRouter: green for its currently advertised scenario set
+- OpenAI: green for the current `gpt-4o` target / chat-completions expectation
+- Codex: green
+- MiniMax: green for the currently advertised scenario set
+
+### Important findings captured by this work
+
+- integration tests now execute through `llm.Service`, not direct provider constructors
+- integration runs can emit machine-readable and human-readable artifacts via:
+  - `MATRIX_RESULTS_JSON`
+  - `MATRIX_RESULTS_MD`
+- the generated matrix report now provides a stable summary of target/scenario pass/skip/fail status
+- MiniMax reasoning reliability improved once Anthropic-style thinking budget derivation was made adaptive to `max_tokens`
+- generic `temperature=1` coercion in `agentapis` was the wrong abstraction boundary and has been removed from the generic bridge
+- Anthropic-specific thinking/temperature policy now lives in the Anthropic providers, where it belongs

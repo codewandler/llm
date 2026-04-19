@@ -11,26 +11,19 @@ import (
 	"github.com/codewandler/llm/msg"
 )
 
-type matrixScenario struct {
+type integrationScenario struct {
 	name    string
 	request func(model string) llm.Request
-	enabled func(provider matrixProvider) (bool, string)
-	assert  func(t *testing.T, run matrixRun)
+	enabled func(target integrationTarget) (bool, string)
+	assert  func(t *testing.T, run integrationRun)
 }
 
-func matrixScenarios() []matrixScenario {
-	return []matrixScenario{
+func integrationScenarios() []integrationScenario {
+	return []integrationScenario{
 		{
 			name: "plain_text_pong",
 			request: func(model string) llm.Request {
-				return llm.Request{
-					Model:     model,
-					MaxTokens: 64,
-					Thinking:  llm.ThinkingOff,
-					Messages: msg.BuildTranscript(
-						msg.User("Reply with pong."),
-					),
-				}
+				return llm.Request{Model: model, MaxTokens: 64, Thinking: llm.ThinkingOff, Messages: msg.BuildTranscript(msg.User("Reply with pong."))}
 			},
 			enabled: alwaysEnabled,
 			assert:  assertTextContains("pong"),
@@ -38,47 +31,31 @@ func matrixScenarios() []matrixScenario {
 		{
 			name: "system_prompt_kiwi",
 			request: func(model string) llm.Request {
-				return llm.Request{
-					Model:     model,
-					MaxTokens: 64,
-					Thinking:  llm.ThinkingOff,
-					Messages: msg.BuildTranscript(
-						msg.System("Reply with exactly the word kiwi."),
-						msg.User("What should you reply with?"),
-					),
-				}
+				return llm.Request{Model: model, MaxTokens: 64, Thinking: llm.ThinkingOff, Messages: msg.BuildTranscript(msg.System("Reply with exactly the word kiwi."), msg.User("What should you reply with?"))}
 			},
 			enabled: alwaysEnabled,
 			assert:  assertTextContains("kiwi"),
 		},
 		{
-			name: "effort_high_thinking_off",
+			name: "effort_high_preserved",
 			request: func(model string) llm.Request {
-				return llm.Request{
-					Model:    model,
-					Thinking: llm.ThinkingOff,
-					Effort:   llm.EffortHigh,
-					Messages: msg.BuildTranscript(
-						msg.User("Reply with exactly the word aurora."),
-					),
-				}
+				return llm.Request{Model: model, Effort: llm.EffortHigh, Messages: msg.BuildTranscript(msg.User("Reply with exactly the word aurora."))}
 			},
 			enabled: requiresEffortSupport,
 			assert:  assertEffortPreserved("aurora", llm.EffortHigh),
 		},
 		{
+			name: "thinking_off_respected",
+			request: func(model string) llm.Request {
+				return llm.Request{Model: model, Thinking: llm.ThinkingOff, Messages: msg.BuildTranscript(msg.User("Reply with exactly the word ember."))}
+			},
+			enabled: requiresThinkingToggleSupport,
+			assert:  assertThinkingOffRespected("ember"),
+		},
+		{
 			name: "thinking_text_comet",
 			request: func(model string) llm.Request {
-				return llm.Request{
-					Model:     model,
-					MaxTokens: 256,
-					Thinking:  llm.ThinkingOn,
-					Effort:    llm.EffortHigh,
-					Messages: msg.BuildTranscript(
-						msg.System("If reasoning is available, use it briefly before the final answer."),
-						msg.User("Reply with the final word comet."),
-					),
-				}
+				return llm.Request{Model: model, MaxTokens: 256, Thinking: llm.ThinkingOn, Effort: llm.EffortHigh, Messages: msg.BuildTranscript(msg.System("If reasoning is available, use it briefly before the final answer."), msg.User("Reply with the final word comet."))}
 			},
 			enabled: requiresReasoningSupport,
 			assert:  assertReasoningScenario("comet"),
@@ -86,36 +63,37 @@ func matrixScenarios() []matrixScenario {
 	}
 }
 
-func alwaysEnabled(provider matrixProvider) (bool, string) {
-	return true, ""
-}
-
-func requiresReasoningSupport(provider matrixProvider) (bool, string) {
-	if provider.supportsReasoning == nil {
-		return false, "provider does not advertise reasoning support"
-	}
-	req := llm.Request{Model: provider.model, Thinking: llm.ThinkingOn, Effort: llm.EffortHigh}
-	if !provider.supportsReasoning(req) {
-		return false, "provider/model does not expose reasoning for this scenario"
+func alwaysEnabled(target integrationTarget) (bool, string) { return true, "" }
+func requiresReasoningSupport(target integrationTarget) (bool, string) {
+	if !target.supports.Reasoning {
+		return false, "target does not advertise reasoning support"
 	}
 	return true, ""
 }
+func requiresThinkingToggleSupport(target integrationTarget) (bool, string) {
+	if !target.supports.ThinkingToggle {
+		return false, "target does not advertise thinking toggle support"
+	}
+	return true, ""
+}
+func requiresEffortSupport(target integrationTarget) (bool, string) {
+	if !target.supports.Effort {
+		return false, "target does not advertise effort support"
+	}
+	return true, ""
+}
 
-func assertTextContains(want string) func(t *testing.T, run matrixRun) {
+func assertTextContains(want string) func(t *testing.T, run integrationRun) {
 	want = strings.ToLower(want)
-
-	return func(t *testing.T, run matrixRun) {
+	return func(t *testing.T, run integrationRun) {
 		t.Helper()
-
 		if run.textStreamCount() == 0 {
 			t.Fatalf("expected streamed text events, got %s", run.streamSummary())
 		}
-
 		text := strings.ToLower(run.result.Text())
 		if !strings.Contains(text, want) {
 			t.Fatalf("expected processed text to contain %q, got %q (event types %s)", want, run.result.Text(), run.eventTypesString())
 		}
-
 		message := run.result.Message()
 		if message.Role != msg.RoleAssistant {
 			t.Fatalf("processed message role = %q, want %q", message.Role, msg.RoleAssistant)
@@ -126,26 +104,10 @@ func assertTextContains(want string) func(t *testing.T, run matrixRun) {
 	}
 }
 
-func requiresEffortSupport(provider matrixProvider) (bool, string) {
-	if provider.supportsEffort == nil {
-		return false, "provider does not advertise effort support"
-	}
-	req := llm.Request{Model: provider.model, Effort: llm.EffortHigh, Thinking: llm.ThinkingOff}
-	if !provider.supportsEffort(req) {
-		return false, "provider/model does not support effort control"
-	}
-	return true, ""
-}
-
-func assertEffortPreserved(wantText string, wantEffort llm.Effort) func(t *testing.T, run matrixRun) {
+func assertEffortPreserved(wantText string, wantEffort llm.Effort) func(t *testing.T, run integrationRun) {
 	textAssert := assertTextContains(wantText)
-
-	return func(t *testing.T, run matrixRun) {
-		t.Helper()
-
+	return func(t *testing.T, run integrationRun) {
 		textAssert(t, run)
-
-		// Verify the wire request actually contains the reasoning effort.
 		if run.requestEvent == nil {
 			t.Fatal("expected a request event to inspect wire body")
 		}
@@ -153,49 +115,53 @@ func assertEffortPreserved(wantText string, wantEffort llm.Effort) func(t *testi
 		if len(body) == 0 {
 			t.Fatal("expected non-empty provider request body")
 		}
-
 		var wire struct {
 			Reasoning *struct {
 				Effort string `json:"effort"`
 			} `json:"reasoning"`
+			OutputConfig *struct {
+				Effort string `json:"effort"`
+			} `json:"output_config"`
 		}
 		if err := json.Unmarshal(body, &wire); err != nil {
 			t.Fatalf("unmarshal wire body: %v", err)
 		}
-		if wire.Reasoning == nil {
-			t.Fatalf("expected reasoning field in wire request body, got: %s", string(body))
+		gotEffort := ""
+		if wire.Reasoning != nil && wire.Reasoning.Effort != "" {
+			gotEffort = wire.Reasoning.Effort
 		}
-		if wire.Reasoning.Effort == "" {
-			t.Fatalf("expected reasoning.effort to be set in wire request, got empty; body: %s", string(body))
+		if gotEffort == "" && wire.OutputConfig != nil && wire.OutputConfig.Effort != "" {
+			gotEffort = wire.OutputConfig.Effort
 		}
-
-		// The wire effort may be a provider-specific mapping (e.g. "max" → "xhigh"),
-		// so we only verify it is non-empty, not the exact string. But it must not be
-		// a lower effort than requested (sanity check for the common case).
+		if gotEffort == "" {
+			t.Fatalf("expected effort in wire request body, got: %s", string(body))
+		}
 		effortOrder := map[string]int{"low": 1, "medium": 2, "high": 3, "xhigh": 4, "max": 4}
-		gotRank := effortOrder[wire.Reasoning.Effort]
-		wantRank := effortOrder[string(wantEffort)]
-		if gotRank < wantRank {
-			t.Fatalf("wire reasoning.effort = %q (rank %d) is lower than requested %q (rank %d)",
-				wire.Reasoning.Effort, gotRank, wantEffort, wantRank)
+		if effortOrder[gotEffort] < effortOrder[string(wantEffort)] {
+			t.Fatalf("wire effort = %q is lower than requested %q", gotEffort, wantEffort)
 		}
-
-		t.Logf("wire reasoning.effort = %q (requested %q)", wire.Reasoning.Effort, wantEffort)
 	}
 }
 
-func assertReasoningScenario(want string) func(t *testing.T, run matrixRun) {
+func assertReasoningScenario(want string) func(t *testing.T, run integrationRun) {
 	textAssert := assertTextContains(want)
-
-	return func(t *testing.T, run matrixRun) {
-		t.Helper()
-
+	return func(t *testing.T, run integrationRun) {
 		textAssert(t, run)
-		if run.provider.supportsReasoning == nil || !run.provider.supportsReasoning(run.request) {
+		if !run.target.supports.Reasoning {
 			return
 		}
 		if run.reasoningStreamCount() == 0 && strings.TrimSpace(run.result.Thought()) == "" {
-			t.Fatalf("expected reasoning events for %s, got %s", run.provider.name, run.streamSummary())
+			t.Fatalf("expected reasoning events for %s, got %s", run.target.name, run.streamSummary())
+		}
+	}
+}
+
+func assertThinkingOffRespected(want string) func(t *testing.T, run integrationRun) {
+	textAssert := assertTextContains(want)
+	return func(t *testing.T, run integrationRun) {
+		textAssert(t, run)
+		if run.reasoningStreamCount() > 0 || strings.TrimSpace(run.result.Thought()) != "" {
+			t.Fatalf("expected no reasoning output when thinking is disabled, got %s", run.streamSummary())
 		}
 	}
 }
