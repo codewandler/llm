@@ -104,17 +104,23 @@ func newCatalogCalculator() CostCalculator {
 
 	return CostCalculatorFunc(func(provider, model string, tokens TokenItems) (Cost, bool) {
 		provider = modelcatalog.CanonicalProvider(provider)
-
-		if byModel, ok := calc.byServiceModel[provider]; ok {
-			if p, ok := byModel[model]; ok {
-				return CalcCost(tokens, p), true
-			}
+		providers := []string{provider}
+		if basis := modelcatalog.BasisProvider(provider); basis != "" && basis != provider {
+			providers = append(providers, basis)
 		}
 
-		lineKey := inferPricingModelKey(provider, model)
-		if lineKey != (pricingByModelKey{}) {
-			if p, ok := calc.byModelKey[lineKey]; ok {
-				return CalcCost(tokens, p), true
+		for _, serviceID := range providers {
+			if byModel, ok := calc.byServiceModel[serviceID]; ok {
+				if p, ok := byModel[model]; ok {
+					return CalcCost(tokens, p), true
+				}
+			}
+
+			lineKey := inferPricingModelKey(serviceID, model)
+			if lineKey != (pricingByModelKey{}) {
+				if p, ok := calc.byModelKey[lineKey]; ok {
+					return CalcCost(tokens, p), true
+				}
 			}
 		}
 

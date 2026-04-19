@@ -33,6 +33,9 @@ func (c *Client) buildAgentClient(originalReq, resolvedReq llm.Request, apiHint 
 			return c.resolveHeaders(ctx, resolvedReq, apiHint)
 		}),
 		messagesapi.WithRequestTransform(func(ctx context.Context, wire *messagesapi.Request) error {
+			if wire != nil && wire.Thinking != nil && wire.Thinking.Type == "adaptive" && wire.Temperature != 0 && wire.Temperature != 1 {
+				wire.Temperature = 1
+			}
 			if c.cfg.MessagesRequestTransform != nil {
 				return c.cfg.MessagesRequestTransform(wire)
 			}

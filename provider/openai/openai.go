@@ -1,12 +1,14 @@
 package openai
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 
+	responsesapi "github.com/codewandler/agentapis/api/responses"
 	"github.com/codewandler/llm"
 	providercore2 "github.com/codewandler/llm/internal/providercore"
 )
@@ -15,7 +17,8 @@ const (
 	defaultBaseURL = "https://api.openai.com"
 	providerName   = "openai"
 
-	DefaultModel = "gpt-4o-mini"
+	DefaultModel               = "gpt-4o-mini"
+	internalReasoningEffortKey = "__openai_reasoning_effort"
 )
 
 type Provider struct {
@@ -54,7 +57,18 @@ func New(opts ...llm.Option) *Provider {
 			if err != nil {
 				return req, original, err
 			}
-			req.Effort = llm.Effort(mapped)
+			if mapped == "none" {
+				req.Effort = llm.EffortUnspecified
+				if req.RequestMeta == nil {
+					req.RequestMeta = &llm.RequestMeta{}
+				}
+				if req.RequestMeta.Metadata == nil {
+					req.RequestMeta.Metadata = map[string]any{}
+				}
+				req.RequestMeta.Metadata[internalReasoningEffortKey] = mapped
+			} else {
+				req.Effort = llm.Effort(mapped)
+			}
 			return req, original, nil
 		}),
 		providercore2.WithAPIHintResolver(func(req llm.Request) llm.ApiType {
@@ -62,6 +76,57 @@ func New(opts ...llm.Option) *Provider {
 				return llm.ApiTypeOpenAIResponses
 			}
 			return llm.ApiTypeOpenAIChatCompletion
+		}),
+		providercore2.WithResponsesRequestTransform(func(resp *providercore2.ResponsesRequest) error {
+			if resp == nil {
+				return nil
+			}
+			if resp.MaxOutputTokens == 0 && resp.MaxTokens > 0 {
+				resp.MaxOutputTokens = resp.MaxTokens
+				resp.MaxTokens = 0
+			}
+			if resp.Metadata != nil {
+				if value, ok := resp.Metadata[internalReasoningEffortKey].(string); ok && value != "" {
+					if resp.Reasoning == nil {
+						resp.Reasoning = &responsesapi.Reasoning{}
+					}
+					resp.Reasoning.Effort = value
+				}
+			}
+			if resp.Reasoning != nil && resp.Reasoning.Summary == "" {
+				resp.Reasoning.Summary = "auto"
+			}
+			return nil
+		}),
+		providercore2.WithMutateRequest(func(r *http.Request) {
+			if r.Body == nil || r.Header.Get("Content-Type") != "application/json" {
+				return
+			}
+			body, err := io.ReadAll(r.Body)
+			r.Body.Close()
+			if err != nil {
+				return
+			}
+			var payload map[string]any
+			if err := json.Unmarshal(body, &payload); err != nil {
+				r.Body = io.NopCloser(bytes.NewReader(body))
+				return
+			}
+			if meta, ok := payload["metadata"].(map[string]any); ok {
+				delete(meta, internalReasoningEffortKey)
+				if len(meta) == 0 {
+					delete(payload, "metadata")
+				} else {
+					payload["metadata"] = meta
+				}
+			}
+			encoded, err := json.Marshal(payload)
+			if err != nil {
+				r.Body = io.NopCloser(bytes.NewReader(body))
+				return
+			}
+			r.Body = io.NopCloser(bytes.NewReader(encoded))
+			r.ContentLength = int64(len(encoded))
 		}),
 		providercore2.WithHTTPErrorActionResolver(func(_ llm.Request, statusCode int, _ error) providercore2.HTTPErrorAction {
 			if llm.IsRetriableHTTPStatus(statusCode) {

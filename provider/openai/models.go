@@ -119,7 +119,7 @@ var modelRegistry = map[string]modelInfo{
 	"gpt-5.2-codex": {ID: "gpt-5.2-codex", Name: "GPT-5.2 Codex", Category: categoryCodex, SupportsExtendedCache: true},
 
 	// GPT-5.1 series
-	"gpt-5.1":            {ID: "gpt-5.1", Name: "GPT-5.1", Category: categoryGPT51, SupportsExtendedCache: true},
+	"gpt-5.1":            {ID: "gpt-5.1", Name: "GPT-5.1", Category: categoryGPT51, SupportsExtendedCache: true, UseResponsesAPI: true},
 	"gpt-5.1-codex":      {ID: "gpt-5.1-codex", Name: "GPT-5.1 Codex", Category: categoryCodex, SupportsExtendedCache: true},
 	"gpt-5.1-codex-max":  {ID: "gpt-5.1-codex-max", Name: "GPT-5.1 Codex Max", Category: categoryCodex, SupportsExtendedCache: true},
 	"gpt-5.1-codex-mini": {ID: "gpt-5.1-codex-mini", Name: "GPT-5.1 Codex Mini", Category: categoryCodex, SupportsExtendedCache: true},

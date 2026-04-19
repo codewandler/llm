@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-04-19T03:36:10.90599731+02:00",
+  "generated_at": "2026-04-19T17:36:39.058259237+02:00",
   "entries": [
     {
       "target": "anthropic_api_sonnet",
@@ -9,7 +9,7 @@
       "service_id": "anthropic",
       "provider": "anthropic",
       "api_type": "anthropic-messages",
-      "completed_at": "2026-04-19T03:35:56.259738505+02:00"
+      "completed_at": "2026-04-19T17:36:10.491061803+02:00"
     },
     {
       "target": "anthropic_api_sonnet",
@@ -19,7 +19,7 @@
       "service_id": "anthropic",
       "provider": "anthropic",
       "api_type": "anthropic-messages",
-      "completed_at": "2026-04-19T03:35:53.221999388+02:00"
+      "completed_at": "2026-04-19T17:36:04.284193455+02:00"
     },
     {
       "target": "anthropic_api_sonnet",
@@ -29,7 +29,7 @@
       "service_id": "anthropic",
       "provider": "anthropic",
       "api_type": "anthropic-messages",
-      "completed_at": "2026-04-19T03:35:55.125528536+02:00"
+      "completed_at": "2026-04-19T17:36:05.724246439+02:00"
     },
     {
       "target": "anthropic_api_sonnet",
@@ -39,7 +39,7 @@
       "service_id": "anthropic",
       "provider": "anthropic",
       "api_type": "anthropic-messages",
-      "completed_at": "2026-04-19T03:35:57.641741811+02:00"
+      "completed_at": "2026-04-19T17:36:12.192107623+02:00"
     },
     {
       "target": "anthropic_api_sonnet",
@@ -49,7 +49,7 @@
       "service_id": "anthropic",
       "provider": "anthropic",
       "api_type": "anthropic-messages",
-      "completed_at": "2026-04-19T03:35:59.581726992+02:00"
+      "completed_at": "2026-04-19T17:36:17.302467144+02:00"
     },
     {
       "target": "claude_sonnet",
@@ -59,7 +59,7 @@
       "service_id": "claude",
       "provider": "local",
       "api_type": "anthropic-messages",
-      "completed_at": "2026-04-19T03:35:45.083778781+02:00"
+      "completed_at": "2026-04-19T17:35:35.081633982+02:00"
     },
     {
       "target": "claude_sonnet",
@@ -69,7 +69,7 @@
       "service_id": "claude",
       "provider": "local",
       "api_type": "anthropic-messages",
-      "completed_at": "2026-04-19T03:35:42.277576375+02:00"
+      "completed_at": "2026-04-19T17:35:31.303733267+02:00"
     },
     {
       "target": "claude_sonnet",
@@ -79,7 +79,7 @@
       "service_id": "claude",
       "provider": "local",
       "api_type": "anthropic-messages",
-      "completed_at": "2026-04-19T03:35:43.547519088+02:00"
+      "completed_at": "2026-04-19T17:35:33.870851184+02:00"
     },
     {
       "target": "claude_sonnet",
@@ -89,7 +89,7 @@
       "service_id": "claude",
       "provider": "local",
       "api_type": "anthropic-messages",
-      "completed_at": "2026-04-19T03:35:46.269809897+02:00"
+      "completed_at": "2026-04-19T17:35:36.997693003+02:00"
     },
     {
       "target": "claude_sonnet",
@@ -99,55 +99,57 @@
       "service_id": "claude",
       "provider": "local",
       "api_type": "anthropic-messages",
-      "completed_at": "2026-04-19T03:35:50.471406621+02:00"
+      "completed_at": "2026-04-19T17:35:39.379943639+02:00"
     },
     {
-      "target": "codex_default",
+      "target": "codex_gpt54",
       "scenario": "effort_high_preserved",
       "status": "pass",
       "model": "codex/gpt-5.4",
       "service_id": "codex",
       "provider": "codex",
       "api_type": "openai-responses",
-      "completed_at": "2026-04-19T03:36:09.085624172+02:00"
+      "completed_at": "2026-04-19T17:36:30.616635714+02:00"
     },
     {
-      "target": "codex_default",
+      "target": "codex_gpt54",
       "scenario": "plain_text_pong",
       "status": "pass",
       "model": "codex/gpt-5.4",
       "service_id": "codex",
       "provider": "codex",
       "api_type": "openai-responses",
-      "completed_at": "2026-04-19T03:36:06.869225224+02:00"
+      "completed_at": "2026-04-19T17:36:28.231490687+02:00"
     },
     {
-      "target": "codex_default",
+      "target": "codex_gpt54",
       "scenario": "system_prompt_kiwi",
       "status": "pass",
       "model": "codex/gpt-5.4",
       "service_id": "codex",
       "provider": "codex",
       "api_type": "openai-responses",
-      "completed_at": "2026-04-19T03:36:07.712616941+02:00"
+      "completed_at": "2026-04-19T17:36:29.169448854+02:00"
     },
     {
-      "target": "codex_default",
+      "target": "codex_gpt54",
       "scenario": "thinking_off_respected",
-      "status": "skip",
-      "reason": "target does not advertise thinking toggle support",
-      "model": "codex/gpt-5.4",
-      "completed_at": "2026-04-19T03:36:09.085664277+02:00"
-    },
-    {
-      "target": "codex_default",
-      "scenario": "thinking_text_comet",
-      "status": "fail",
+      "status": "pass",
       "model": "codex/gpt-5.4",
       "service_id": "codex",
       "provider": "codex",
       "api_type": "openai-responses",
-      "completed_at": "2026-04-19T03:36:10.905935965+02:00"
+      "completed_at": "2026-04-19T17:36:31.982512547+02:00"
+    },
+    {
+      "target": "codex_gpt54",
+      "scenario": "thinking_text_comet",
+      "status": "pass",
+      "model": "codex/gpt-5.4",
+      "service_id": "codex",
+      "provider": "codex",
+      "api_type": "openai-responses",
+      "completed_at": "2026-04-19T17:36:39.05823723+02:00"
     },
     {
       "target": "minimax_m27",
@@ -155,7 +157,7 @@
       "status": "skip",
       "reason": "target does not advertise effort support",
       "model": "minimax/MiniMax-M2.7",
-      "completed_at": "2026-04-19T03:36:04.706175643+02:00"
+      "completed_at": "2026-04-19T17:36:20.108020854+02:00"
     },
     {
       "target": "minimax_m27",
@@ -165,7 +167,7 @@
       "service_id": "minimax",
       "provider": "minimax",
       "api_type": "anthropic-messages",
-      "completed_at": "2026-04-19T03:36:03.995707647+02:00"
+      "completed_at": "2026-04-19T17:36:19.396230114+02:00"
     },
     {
       "target": "minimax_m27",
@@ -175,7 +177,7 @@
       "service_id": "minimax",
       "provider": "minimax",
       "api_type": "anthropic-messages",
-      "completed_at": "2026-04-19T03:36:04.705993651+02:00"
+      "completed_at": "2026-04-19T17:36:20.107979777+02:00"
     },
     {
       "target": "minimax_m27",
@@ -183,7 +185,7 @@
       "status": "skip",
       "reason": "target does not advertise thinking toggle support",
       "model": "minimax/MiniMax-M2.7",
-      "completed_at": "2026-04-19T03:36:04.706291748+02:00"
+      "completed_at": "2026-04-19T17:36:20.10803682+02:00"
     },
     {
       "target": "minimax_m27",
@@ -193,95 +195,295 @@
       "service_id": "minimax",
       "provider": "minimax",
       "api_type": "anthropic-messages",
-      "completed_at": "2026-04-19T03:36:05.939669144+02:00"
+      "completed_at": "2026-04-19T17:36:27.129318881+02:00"
     },
     {
-      "target": "openai_default",
+      "target": "openai_gpt4o",
       "scenario": "effort_high_preserved",
       "status": "skip",
       "reason": "target does not advertise effort support",
       "model": "openai/gpt-4o",
-      "completed_at": "2026-04-19T03:35:51.798203331+02:00"
+      "completed_at": "2026-04-19T17:35:41.362045718+02:00"
     },
     {
-      "target": "openai_default",
+      "target": "openai_gpt4o",
       "scenario": "plain_text_pong",
       "status": "pass",
       "model": "openai/gpt-4o",
       "service_id": "openai",
       "provider": "openai",
       "api_type": "openai-chat",
-      "completed_at": "2026-04-19T03:35:51.358185914+02:00"
+      "completed_at": "2026-04-19T17:35:40.25132132+02:00"
     },
     {
-      "target": "openai_default",
+      "target": "openai_gpt4o",
       "scenario": "system_prompt_kiwi",
       "status": "pass",
       "model": "openai/gpt-4o",
       "service_id": "openai",
       "provider": "openai",
       "api_type": "openai-chat",
-      "completed_at": "2026-04-19T03:35:51.798149843+02:00"
+      "completed_at": "2026-04-19T17:35:41.361999283+02:00"
     },
     {
-      "target": "openai_default",
+      "target": "openai_gpt4o",
       "scenario": "thinking_off_respected",
       "status": "skip",
       "reason": "target does not advertise thinking toggle support",
       "model": "openai/gpt-4o",
-      "completed_at": "2026-04-19T03:35:51.798224692+02:00"
+      "completed_at": "2026-04-19T17:35:41.362067829+02:00"
     },
     {
-      "target": "openai_default",
+      "target": "openai_gpt4o",
       "scenario": "thinking_text_comet",
       "status": "skip",
       "reason": "target does not advertise reasoning support",
       "model": "openai/gpt-4o",
-      "completed_at": "2026-04-19T03:35:51.798238454+02:00"
+      "completed_at": "2026-04-19T17:35:41.362081636+02:00"
     },
     {
-      "target": "openrouter_openai_mini",
+      "target": "openai_gpt51",
+      "scenario": "effort_high_preserved",
+      "status": "pass",
+      "model": "openai/gpt-5.1",
+      "service_id": "openai",
+      "provider": "openai",
+      "api_type": "openai-responses",
+      "completed_at": "2026-04-19T17:35:46.727759736+02:00"
+    },
+    {
+      "target": "openai_gpt51",
+      "scenario": "plain_text_pong",
+      "status": "pass",
+      "model": "openai/gpt-5.1",
+      "service_id": "openai",
+      "provider": "openai",
+      "api_type": "openai-responses",
+      "completed_at": "2026-04-19T17:35:42.33431997+02:00"
+    },
+    {
+      "target": "openai_gpt51",
+      "scenario": "system_prompt_kiwi",
+      "status": "pass",
+      "model": "openai/gpt-5.1",
+      "service_id": "openai",
+      "provider": "openai",
+      "api_type": "openai-responses",
+      "completed_at": "2026-04-19T17:35:43.132174979+02:00"
+    },
+    {
+      "target": "openai_gpt51",
+      "scenario": "thinking_off_respected",
+      "status": "pass",
+      "model": "openai/gpt-5.1",
+      "service_id": "openai",
+      "provider": "openai",
+      "api_type": "openai-responses",
+      "completed_at": "2026-04-19T17:35:47.535384478+02:00"
+    },
+    {
+      "target": "openai_gpt51",
+      "scenario": "thinking_text_comet",
+      "status": "pass",
+      "model": "openai/gpt-5.1",
+      "service_id": "openai",
+      "provider": "openai",
+      "api_type": "openai-responses",
+      "completed_at": "2026-04-19T17:35:52.091867083+02:00"
+    },
+    {
+      "target": "openai_gpt54",
+      "scenario": "effort_high_preserved",
+      "status": "pass",
+      "model": "openai/gpt-5.4",
+      "service_id": "openai",
+      "provider": "openai",
+      "api_type": "openai-responses",
+      "completed_at": "2026-04-19T17:35:56.856410239+02:00"
+    },
+    {
+      "target": "openai_gpt54",
+      "scenario": "plain_text_pong",
+      "status": "pass",
+      "model": "openai/gpt-5.4",
+      "service_id": "openai",
+      "provider": "openai",
+      "api_type": "openai-responses",
+      "completed_at": "2026-04-19T17:35:53.226559187+02:00"
+    },
+    {
+      "target": "openai_gpt54",
+      "scenario": "system_prompt_kiwi",
+      "status": "pass",
+      "model": "openai/gpt-5.4",
+      "service_id": "openai",
+      "provider": "openai",
+      "api_type": "openai-responses",
+      "completed_at": "2026-04-19T17:35:54.263220425+02:00"
+    },
+    {
+      "target": "openai_gpt54",
+      "scenario": "thinking_off_respected",
+      "status": "pass",
+      "model": "openai/gpt-5.4",
+      "service_id": "openai",
+      "provider": "openai",
+      "api_type": "openai-responses",
+      "completed_at": "2026-04-19T17:35:57.698346507+02:00"
+    },
+    {
+      "target": "openai_gpt54",
+      "scenario": "thinking_text_comet",
+      "status": "pass",
+      "model": "openai/gpt-5.4",
+      "service_id": "openai",
+      "provider": "openai",
+      "api_type": "openai-responses",
+      "completed_at": "2026-04-19T17:36:02.409422297+02:00"
+    },
+    {
+      "target": "openrouter_openai_gpt4o_mini",
       "scenario": "effort_high_preserved",
       "status": "skip",
       "reason": "target does not advertise effort support",
       "model": "openrouter/openai/gpt-4o-mini",
-      "completed_at": "2026-04-19T03:35:40.359862199+02:00"
+      "completed_at": "2026-04-19T17:35:05.493664596+02:00"
     },
     {
-      "target": "openrouter_openai_mini",
+      "target": "openrouter_openai_gpt4o_mini",
       "scenario": "plain_text_pong",
       "status": "pass",
       "model": "openrouter/openai/gpt-4o-mini",
       "service_id": "openrouter",
       "provider": "openrouter",
       "api_type": "openai-responses",
-      "completed_at": "2026-04-19T03:35:39.804529717+02:00"
+      "completed_at": "2026-04-19T17:35:04.767452257+02:00"
     },
     {
-      "target": "openrouter_openai_mini",
+      "target": "openrouter_openai_gpt4o_mini",
       "scenario": "system_prompt_kiwi",
       "status": "pass",
       "model": "openrouter/openai/gpt-4o-mini",
       "service_id": "openrouter",
       "provider": "openrouter",
       "api_type": "openai-responses",
-      "completed_at": "2026-04-19T03:35:40.359776627+02:00"
+      "completed_at": "2026-04-19T17:35:05.493607292+02:00"
     },
     {
-      "target": "openrouter_openai_mini",
+      "target": "openrouter_openai_gpt4o_mini",
       "scenario": "thinking_off_respected",
       "status": "skip",
       "reason": "target does not advertise thinking toggle support",
       "model": "openrouter/openai/gpt-4o-mini",
-      "completed_at": "2026-04-19T03:35:40.359910381+02:00"
+      "completed_at": "2026-04-19T17:35:05.493685825+02:00"
     },
     {
-      "target": "openrouter_openai_mini",
+      "target": "openrouter_openai_gpt4o_mini",
       "scenario": "thinking_text_comet",
       "status": "skip",
       "reason": "target does not advertise reasoning support",
       "model": "openrouter/openai/gpt-4o-mini",
-      "completed_at": "2026-04-19T03:35:40.359939235+02:00"
+      "completed_at": "2026-04-19T17:35:05.493709798+02:00"
+    },
+    {
+      "target": "openrouter_openai_gpt51",
+      "scenario": "effort_high_preserved",
+      "status": "pass",
+      "model": "openrouter/openai/gpt-5.1",
+      "service_id": "openrouter",
+      "provider": "openrouter",
+      "api_type": "openai-responses",
+      "completed_at": "2026-04-19T17:35:09.457754208+02:00"
+    },
+    {
+      "target": "openrouter_openai_gpt51",
+      "scenario": "plain_text_pong",
+      "status": "pass",
+      "model": "openrouter/openai/gpt-5.1",
+      "service_id": "openrouter",
+      "provider": "openrouter",
+      "api_type": "openai-responses",
+      "completed_at": "2026-04-19T17:35:06.660673311+02:00"
+    },
+    {
+      "target": "openrouter_openai_gpt51",
+      "scenario": "system_prompt_kiwi",
+      "status": "pass",
+      "model": "openrouter/openai/gpt-5.1",
+      "service_id": "openrouter",
+      "provider": "openrouter",
+      "api_type": "openai-responses",
+      "completed_at": "2026-04-19T17:35:07.985594659+02:00"
+    },
+    {
+      "target": "openrouter_openai_gpt51",
+      "scenario": "thinking_off_respected",
+      "status": "pass",
+      "model": "openrouter/openai/gpt-5.1",
+      "service_id": "openrouter",
+      "provider": "openrouter",
+      "api_type": "openai-responses",
+      "completed_at": "2026-04-19T17:35:10.973605466+02:00"
+    },
+    {
+      "target": "openrouter_openai_gpt51",
+      "scenario": "thinking_text_comet",
+      "status": "pass",
+      "model": "openrouter/openai/gpt-5.1",
+      "service_id": "openrouter",
+      "provider": "openrouter",
+      "api_type": "openai-responses",
+      "completed_at": "2026-04-19T17:35:16.566703351+02:00"
+    },
+    {
+      "target": "openrouter_openai_gpt54",
+      "scenario": "effort_high_preserved",
+      "status": "pass",
+      "model": "openrouter/openai/gpt-5.4",
+      "service_id": "openrouter",
+      "provider": "openrouter",
+      "api_type": "openai-responses",
+      "completed_at": "2026-04-19T17:35:20.355640655+02:00"
+    },
+    {
+      "target": "openrouter_openai_gpt54",
+      "scenario": "plain_text_pong",
+      "status": "pass",
+      "model": "openrouter/openai/gpt-5.4",
+      "service_id": "openrouter",
+      "provider": "openrouter",
+      "api_type": "openai-responses",
+      "completed_at": "2026-04-19T17:35:17.741898166+02:00"
+    },
+    {
+      "target": "openrouter_openai_gpt54",
+      "scenario": "system_prompt_kiwi",
+      "status": "pass",
+      "model": "openrouter/openai/gpt-5.4",
+      "service_id": "openrouter",
+      "provider": "openrouter",
+      "api_type": "openai-responses",
+      "completed_at": "2026-04-19T17:35:18.802095312+02:00"
+    },
+    {
+      "target": "openrouter_openai_gpt54",
+      "scenario": "thinking_off_respected",
+      "status": "pass",
+      "model": "openrouter/openai/gpt-5.4",
+      "service_id": "openrouter",
+      "provider": "openrouter",
+      "api_type": "openai-responses",
+      "completed_at": "2026-04-19T17:35:21.427172284+02:00"
+    },
+    {
+      "target": "openrouter_openai_gpt54",
+      "scenario": "thinking_text_comet",
+      "status": "pass",
+      "model": "openrouter/openai/gpt-5.4",
+      "service_id": "openrouter",
+      "provider": "openrouter",
+      "api_type": "openai-responses",
+      "completed_at": "2026-04-19T17:35:29.465516098+02:00"
     }
   ]
 }

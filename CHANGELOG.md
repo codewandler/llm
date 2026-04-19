@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+## v0.40.0 - 2026-04-19
+
+### Changed
+
+- Upgrade `modeldb` to `v0.11.4` and rely on built-in OpenAI/Codex/OpenRouter exposure data instead of llm-local overlay merges.
+- Refine integration targets and capability detection to derive reasoning/effort/toggle support from `modeldb` exposures.
+- Regenerate the integration matrix artifacts with the latest GPT-5/OpenRouter/Codex coverage.
+
+### Fixed
+
+- OpenAI GPT-5.1 now routes via Responses API and correctly handles `thinking=off` / `reasoning.effort=none` without invalid generic request state.
+- Anthropic adaptive-thinking requests now coerce non-default temperatures to `1` at the provider core request-transform layer.
+- Pricing lookup now falls back from exact provider to basis provider where appropriate (for example Codex reusing OpenAI pricing).
+- Integration reasoning scenarios now tolerate providers that request reasoning correctly but do not always emit visible reasoning summaries.
+
 ### Added
 
 - `provider/auto`: auto-detect Ollama when `OLLAMA_HOST` is set or

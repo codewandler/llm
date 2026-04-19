@@ -35,47 +35,50 @@ type integrationTarget struct {
 	prepareRequest func(req llm.Request) llm.Request
 }
 
-func providerCapabilities(serviceID, model string) targetCapabilities {
-	caps := targetCapabilities{}
+func providerCapabilities(serviceID, model string, apiType llm.ApiType) targetCapabilities {
 	cat, err := modelcatalog.LoadMergedBuiltIn()
 	if err != nil {
-		return caps
+		return targetCapabilities{}
 	}
-	wireModelID := model
-	if serviceID != "openrouter" {
-		wireModelID = stripProviderPrefix(model)
+	wireModelID := stripProviderPrefix(model)
+	if serviceID == "openrouter" {
+		wireModelID = strings.TrimPrefix(model, "openrouter/")
 	}
 	offering, ok := cat.OfferingByRef(modeldb.OfferingRef{ServiceID: serviceID, WireModelID: wireModelID})
 	if !ok {
-		return caps
+		return targetCapabilities{}
 	}
-	caps.Reasoning = containsString(offering.SupportedParameters, "reasoning") || containsString(offering.SupportedParameters, "include_reasoning") || containsString(offering.SupportedParameters, "reasoning_effort")
-	caps.Effort = containsString(offering.SupportedParameters, "reasoning_effort")
-	for prefix, enabled := range providerThinkingToggleSupport[serviceID] {
-		if strings.HasPrefix(model, prefix) || strings.HasPrefix(stripProviderPrefix(model), prefix) {
-			caps.ThinkingToggle = enabled
-			break
-		}
+	exposure := offering.Exposure(modelDBAPIType(apiType))
+	if exposure == nil || exposure.ExposedCapabilities == nil || exposure.ExposedCapabilities.Reasoning == nil {
+		return targetCapabilities{}
 	}
+	r := exposure.ExposedCapabilities.Reasoning
+	caps := targetCapabilities{Reasoning: r.Available}
+	caps.Effort = exposure.SupportsParameter(modeldb.ParamReasoningEffort)
+	caps.ThinkingToggle = containsMode(r.Modes, modeldb.ReasoningModeOff) || exposure.SupportsParameterValue(string(modeldb.ParamReasoningEffort), string(modeldb.ReasoningEffortNone))
 	return caps
 }
 
-var providerThinkingToggleSupport = map[string]map[string]bool{
-	"openai": {
-		"gpt-5.1": true,
-	},
-	"openrouter": {
-		"openrouter/openai/gpt-5.1": true,
-	},
-}
-
-func containsString(items []string, want string) bool {
-	for _, item := range items {
-		if item == want {
+func containsMode(modes []modeldb.ReasoningMode, want modeldb.ReasoningMode) bool {
+	for _, mode := range modes {
+		if mode == want {
 			return true
 		}
 	}
 	return false
+}
+
+func modelDBAPIType(apiType llm.ApiType) modeldb.APIType {
+	switch apiType {
+	case llm.ApiTypeOpenAIResponses:
+		return modeldb.APITypeOpenAIResponses
+	case llm.ApiTypeOpenAIChatCompletion:
+		return modeldb.APITypeOpenAIChat
+	case llm.ApiTypeAnthropicMessages:
+		return modeldb.APITypeAnthropicMessages
+	default:
+		return modeldb.APITypeDefault
+	}
 }
 
 func stripProviderPrefix(model string) string {
@@ -89,43 +92,46 @@ func stripProviderPrefix(model string) string {
 
 func integrationTargets() []integrationTarget {
 	openrouterModel := envOr("OPENROUTER_MODEL", "openrouter/openai/gpt-4o-mini")
-	openrouterCaps := providerCapabilities("openrouter", openrouterModel)
+	openrouterCaps := providerCapabilities("openrouter", openrouterModel, llm.ApiTypeOpenAIResponses)
 	openaiModel := envOr("OPENAI_MODEL", "openai/gpt-4o")
-	openaiCaps := providerCapabilities("openai", openaiModel)
+	openaiCaps := providerCapabilities("openai", openaiModel, llm.ApiTypeOpenAIChatCompletion)
 	codexModel := envOr("CODEX_MODEL", "codex/gpt-5.4")
-	codexCaps := providerCapabilities("codex", codexModel)
+	codexCaps := providerCapabilities("codex", codexModel, llm.ApiTypeOpenAIResponses)
 	return []integrationTarget{
 		{
-			name:      "openrouter_openai_mini",
+			name:      "openrouter_openai_gpt4o_mini",
 			model:     openrouterModel,
 			available: requireEnv("OPENROUTER_API_KEY"),
-			expect: targetExpectation{
-				ServiceID: "openrouter",
-				APIType:   llm.ApiTypeOpenAIResponses,
-			},
-			supports: targetCapabilities{Reasoning: openrouterCaps.Reasoning, Effort: openrouterCaps.Effort, ThinkingToggle: openrouterCaps.ThinkingToggle},
+			expect:    targetExpectation{ServiceID: "openrouter", APIType: llm.ApiTypeOpenAIResponses},
+			supports:  openrouterCaps,
+		},
+		{
+			name:      "openrouter_openai_gpt51",
+			model:     "openrouter/openai/gpt-5.1",
+			available: requireEnv("OPENROUTER_API_KEY"),
+			expect:    targetExpectation{ServiceID: "openrouter", APIType: llm.ApiTypeOpenAIResponses},
+			supports:  providerCapabilities("openrouter", "openrouter/openai/gpt-5.1", llm.ApiTypeOpenAIResponses),
+		},
+		{
+			name:      "openrouter_openai_gpt54",
+			model:     "openrouter/openai/gpt-5.4",
+			available: requireEnv("OPENROUTER_API_KEY"),
+			expect:    targetExpectation{ServiceID: "openrouter", APIType: llm.ApiTypeOpenAIResponses},
+			supports:  providerCapabilities("openrouter", "openrouter/openai/gpt-5.4", llm.ApiTypeOpenAIResponses),
 		},
 		{
 			name:      "claude_sonnet",
 			model:     envOr("CLAUDE_MODEL", "claude/claude-sonnet-4-6"),
 			available: requireClaudeTokenProvider,
-			expect: targetExpectation{
-				ServiceID: "claude",
-				APIType:   llm.ApiTypeAnthropicMessages,
-			},
-			supports: targetCapabilities{Reasoning: true, Effort: true, ThinkingToggle: true},
+			expect:    targetExpectation{ServiceID: "claude", APIType: llm.ApiTypeAnthropicMessages},
+			supports:  targetCapabilities{Reasoning: true, Effort: true, ThinkingToggle: true},
 		},
 		{
-			name:      "openai_default",
+			name:      "openai_gpt4o",
 			model:     openaiModel,
 			available: requireAnyEnv("OPENAI_API_KEY", "OPENAI_KEY"),
-			expect: targetExpectation{
-				ServiceID: "openai",
-				// gpt-4o currently goes through chat completions; newer responses-only
-				// models should use a dedicated target instead of overloading this one.
-				APIType: llm.ApiTypeOpenAIChatCompletion,
-			},
-			supports: targetCapabilities{Reasoning: openaiCaps.Reasoning, Effort: openaiCaps.Effort, ThinkingToggle: openaiCaps.ThinkingToggle},
+			expect:    targetExpectation{ServiceID: "openai", APIType: llm.ApiTypeOpenAIChatCompletion},
+			supports:  openaiCaps,
 			prepareRequest: func(req llm.Request) llm.Request {
 				if req.MaxTokens < 1024 {
 					req.MaxTokens = 1024
@@ -134,24 +140,32 @@ func integrationTargets() []integrationTarget {
 			},
 		},
 		{
+			name:      "openai_gpt51",
+			model:     "openai/gpt-5.1",
+			available: requireAnyEnv("OPENAI_API_KEY", "OPENAI_KEY"),
+			expect:    targetExpectation{ServiceID: "openai", APIType: llm.ApiTypeOpenAIResponses},
+			supports:  providerCapabilities("openai", "openai/gpt-5.1", llm.ApiTypeOpenAIResponses),
+		},
+		{
+			name:      "openai_gpt54",
+			model:     "openai/gpt-5.4",
+			available: requireAnyEnv("OPENAI_API_KEY", "OPENAI_KEY"),
+			expect:    targetExpectation{ServiceID: "openai", APIType: llm.ApiTypeOpenAIResponses},
+			supports:  providerCapabilities("openai", "openai/gpt-5.4", llm.ApiTypeOpenAIResponses),
+		},
+		{
 			name:      "anthropic_api_sonnet",
 			model:     envOr("ANTHROPIC_MODEL", "anthropic/claude-sonnet-4-6"),
 			available: requireEnv("ANTHROPIC_API_KEY"),
-			expect: targetExpectation{
-				ServiceID: "anthropic",
-				APIType:   llm.ApiTypeAnthropicMessages,
-			},
-			supports: targetCapabilities{Reasoning: true, Effort: true, ThinkingToggle: true},
+			expect:    targetExpectation{ServiceID: "anthropic", APIType: llm.ApiTypeAnthropicMessages},
+			supports:  targetCapabilities{Reasoning: true, Effort: true, ThinkingToggle: true},
 		},
 		{
 			name:      "minimax_m27",
 			model:     envOr("MINIMAX_MODEL", "minimax/MiniMax-M2.7"),
 			available: requireEnv("MINIMAX_API_KEY"),
-			expect: targetExpectation{
-				ServiceID: "minimax",
-				APIType:   llm.ApiTypeAnthropicMessages,
-			},
-			supports: targetCapabilities{Reasoning: true, Effort: false, ThinkingToggle: false},
+			expect:    targetExpectation{ServiceID: "minimax", APIType: llm.ApiTypeAnthropicMessages},
+			supports:  targetCapabilities{Reasoning: true, Effort: false, ThinkingToggle: false},
 			prepareRequest: func(req llm.Request) llm.Request {
 				if req.MaxTokens < 4096 {
 					req.MaxTokens = 4096
@@ -160,14 +174,11 @@ func integrationTargets() []integrationTarget {
 			},
 		},
 		{
-			name:      "codex_default",
+			name:      "codex_gpt54",
 			model:     codexModel,
 			available: requireCodexAuth,
-			expect: targetExpectation{
-				ServiceID: "codex",
-				APIType:   llm.ApiTypeOpenAIResponses,
-			},
-			supports: targetCapabilities{Reasoning: codexCaps.Reasoning, Effort: codexCaps.Effort, ThinkingToggle: codexCaps.ThinkingToggle},
+			expect:    targetExpectation{ServiceID: "codex", APIType: llm.ApiTypeOpenAIResponses},
+			supports:  codexCaps,
 		},
 	}
 }

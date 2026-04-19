@@ -39,7 +39,7 @@ func integrationScenarios() []integrationScenario {
 		{
 			name: "effort_high_preserved",
 			request: func(model string) llm.Request {
-				return llm.Request{Model: model, Effort: llm.EffortHigh, Messages: msg.BuildTranscript(msg.User("Reply with exactly the word aurora."))}
+				return llm.Request{Model: model, MaxTokens: 128, Effort: llm.EffortHigh, Messages: msg.BuildTranscript(msg.User("Reply with exactly the word aurora."))}
 			},
 			enabled: requiresEffortSupport,
 			assert:  assertEffortPreserved("aurora", llm.EffortHigh),
@@ -47,7 +47,7 @@ func integrationScenarios() []integrationScenario {
 		{
 			name: "thinking_off_respected",
 			request: func(model string) llm.Request {
-				return llm.Request{Model: model, Thinking: llm.ThinkingOff, Messages: msg.BuildTranscript(msg.User("Reply with exactly the word ember."))}
+				return llm.Request{Model: model, MaxTokens: 128, Thinking: llm.ThinkingOff, Messages: msg.BuildTranscript(msg.User("Reply with exactly the word ember."))}
 			},
 			enabled: requiresThinkingToggleSupport,
 			assert:  assertThinkingOffRespected("ember"),
@@ -55,10 +55,10 @@ func integrationScenarios() []integrationScenario {
 		{
 			name: "thinking_text_comet",
 			request: func(model string) llm.Request {
-				return llm.Request{Model: model, MaxTokens: 256, Thinking: llm.ThinkingOn, Effort: llm.EffortHigh, Messages: msg.BuildTranscript(msg.System("If reasoning is available, use it briefly before the final answer."), msg.User("Reply with the final word comet."))}
+				return llm.Request{Model: model, MaxTokens: 2048, Thinking: llm.ThinkingOn, Effort: llm.EffortHigh, Messages: msg.BuildTranscript(msg.System("Solve carefully. If reasoning summaries are supported, provide a detailed reasoning summary before the final answer."), msg.User("Solve this carefully. First reason briefly, then give the final answer only as a number. What is 37 * 43 - 17?"))}
 			},
 			enabled: requiresReasoningSupport,
-			assert:  assertReasoningScenario("comet"),
+			assert:  assertReasoningScenario("1574"),
 		},
 	}
 }
@@ -150,10 +150,44 @@ func assertReasoningScenario(want string) func(t *testing.T, run integrationRun)
 		if !run.target.supports.Reasoning {
 			return
 		}
-		if run.reasoningStreamCount() == 0 && strings.TrimSpace(run.result.Thought()) == "" {
-			t.Fatalf("expected reasoning events for %s, got %s", run.target.name, run.streamSummary())
+		if run.reasoningStreamCount() > 0 || strings.TrimSpace(run.result.Thought()) != "" {
+			return
+		}
+		if !reasoningRequestedOnWire(run.requestEvent) {
+			t.Fatalf("expected reasoning to be requested on wire for %s, got %s", run.target.name, run.streamSummary())
 		}
 	}
+}
+
+func reasoningRequestedOnWire(reqEv *llm.RequestEvent) bool {
+	if reqEv == nil || len(reqEv.ProviderRequest.Body) == 0 {
+		return false
+	}
+	var wire struct {
+		Reasoning *struct {
+			Effort  string `json:"effort"`
+			Summary string `json:"summary"`
+		} `json:"reasoning"`
+		Thinking *struct {
+			Type string `json:"type"`
+		} `json:"thinking"`
+		OutputConfig *struct {
+			Effort string `json:"effort"`
+		} `json:"output_config"`
+	}
+	if err := json.Unmarshal(reqEv.ProviderRequest.Body, &wire); err != nil {
+		return false
+	}
+	if wire.Reasoning != nil && (wire.Reasoning.Effort != "" || wire.Reasoning.Summary != "") {
+		return true
+	}
+	if wire.Thinking != nil && wire.Thinking.Type != "" && wire.Thinking.Type != "disabled" {
+		return true
+	}
+	if wire.OutputConfig != nil && wire.OutputConfig.Effort != "" {
+		return true
+	}
+	return false
 }
 
 func assertThinkingOffRespected(want string) func(t *testing.T, run integrationRun) {

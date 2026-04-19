@@ -8,7 +8,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/config v1.32.15
 	github.com/aws/aws-sdk-go-v2/service/bedrockruntime v1.50.4
 	github.com/codewandler/agentapis v0.2.2
-	github.com/codewandler/modeldb v0.9.0
+	github.com/codewandler/modeldb v0.11.4
 	github.com/invopop/jsonschema v0.13.0
 	github.com/klauspost/compress v1.18.5
 	github.com/matoous/go-nanoid/v2 v2.1.0
