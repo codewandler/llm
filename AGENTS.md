@@ -52,6 +52,30 @@ golangci-lint run     # if available
 task install          # install llmcli binary
 ```
 
+
+### Integration matrix testing
+
+The main integration suite is now **service-first**.
+
+- Run with: `RUN_INTEGRATION=1 go test -tags integration ./integration -run TestIntegrationMatrix -v`
+- The matrix executes scenarios through `llm.Service` / `auto.New(...)`, not by constructing provider packages directly.
+- Matrix targets declare:
+  - model selector
+  - expected resolved service/provider/API type
+  - capability flags (reasoning / effort / thinking toggle)
+- The runner calls `Service.ExplainModel(...)` before `CreateStream(...)` and asserts routing expectations as well as output behavior.
+
+You can emit artifacts for review:
+
+```bash
+RUN_INTEGRATION=1 MATRIX_RESULTS_JSON=docs/integration-matrix.json MATRIX_RESULTS_MD=docs/integration-matrix.md go test -tags integration ./integration -run TestIntegrationMatrix -v
+```
+
+Notes:
+- `docs/integration-matrix.md` is the human-readable snapshot
+- `docs/integration-matrix.json` is the machine-readable snapshot
+- Use these artifacts to track provider health across Anthropic, Claude, OpenAI, OpenRouter, Codex, and MiniMax
+
 ### Quick Testing with llmcli
 
 ```bash

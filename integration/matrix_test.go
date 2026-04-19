@@ -86,7 +86,7 @@ func writeMatrixReports(t *testing.T) {
 			fmt.Fprintf(&b, "| %s | %s | %s | %s | %s | %s | %s |\n",
 				e.Target,
 				e.Scenario,
-				e.Status,
+				statusEmoji(e.Status),
 				emptyDash(e.ServiceID),
 				emptyDash(e.Provider),
 				emptyDash(e.APIType),
@@ -113,6 +113,19 @@ func sanitizeCell(v string) string {
 		return "-"
 	}
 	return v
+}
+
+func statusEmoji(status string) string {
+	switch status {
+	case "pass":
+		return "✅"
+	case "fail":
+		return "❌"
+	case "skip":
+		return "⏭️"
+	default:
+		return "❓"
+	}
 }
 
 func TestIntegrationMatrix(t *testing.T) {
