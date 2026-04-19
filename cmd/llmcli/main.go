@@ -7,6 +7,8 @@ import (
 	"os"
 	"os/signal"
 
+	modelcatalog "github.com/codewandler/llm/internal/modelcatalog"
+	modeldb "github.com/codewandler/modeldb"
 	modeldbcli "github.com/codewandler/modeldb/cli"
 	"github.com/spf13/cobra"
 
@@ -44,7 +46,7 @@ Currently supports Claude OAuth authentication.`,
 	rootCmd.AddCommand(cmds.NewAuthCmd())
 	rootCmd.AddCommand(cmds.NewClaudeCmd())
 	rootCmd.AddCommand(cmds.NewInferCmd(rootFlags))
-	rootCmd.AddCommand(modeldbcli.NewModelsCommand(modeldbcli.ModelsCommandOptions{}))
+	rootCmd.AddCommand(modeldbcli.NewModelsCommand(modeldbcli.ModelsCommandOptions{LoadBaseCatalog: func(ctx context.Context) (modeldb.Catalog, error) { return modelcatalog.LoadMergedBuiltIn() }}))
 
 	return rootCmd.ExecuteContext(ctx)
 }

@@ -9,7 +9,8 @@ import (
 
 func TestCanonicalProvider(t *testing.T) {
 	assert.Equal(t, "anthropic", CanonicalProvider("claude"))
-	assert.Equal(t, "openai", CanonicalProvider("codex"))
+	assert.Equal(t, "codex", CanonicalProvider("codex"))
+	assert.Equal(t, "openai", BasisProvider("codex"))
 	assert.Equal(t, "openai", CanonicalProvider("openai"))
 	assert.Equal(t, "ollama", CanonicalProvider("ollama"))
 }

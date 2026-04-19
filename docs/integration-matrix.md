@@ -1,6 +1,6 @@
 # Integration Matrix Results
 
-Generated: 2026-04-19T02:24:30+02:00
+Generated: 2026-04-19T03:36:10+02:00
 
 | Target | Scenario | Status | Service | Provider | API | Reason |
 |---|---|---|---|---|---|---|
@@ -18,7 +18,7 @@ Generated: 2026-04-19T02:24:30+02:00
 | codex_default | plain_text_pong | ✅ | codex | codex | openai-responses | - |
 | codex_default | system_prompt_kiwi | ✅ | codex | codex | openai-responses | - |
 | codex_default | thinking_off_respected | ⏭️ | - | - | - | target does not advertise thinking toggle support |
-| codex_default | thinking_text_comet | ⏭️ | - | - | - | target does not advertise reasoning support |
+| codex_default | thinking_text_comet | ❌ | codex | codex | openai-responses | - |
 | minimax_m27 | effort_high_preserved | ⏭️ | - | - | - | target does not advertise effort support |
 | minimax_m27 | plain_text_pong | ✅ | minimax | minimax | anthropic-messages | - |
 | minimax_m27 | system_prompt_kiwi | ✅ | minimax | minimax | anthropic-messages | - |

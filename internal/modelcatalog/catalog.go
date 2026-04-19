@@ -59,11 +59,34 @@ func CanonicalProvider(provider string) string {
 	switch provider {
 	case "claude":
 		return "anthropic"
-	case "codex":
-		return "openai"
 	default:
 		return provider
 	}
+}
+
+// BasisProvider returns the creator/basis service used when a provider exposes
+// another service's models without owning the canonical offering metadata.
+// For example, the codex provider offers OpenAI-created models but remains a
+// distinct service/provider for routing and capability overlay purposes.
+func BasisProvider(provider string) string {
+	switch provider {
+	case "codex":
+		return "openai"
+	default:
+		return CanonicalProvider(provider)
+	}
+}
+
+// LookupServices returns catalog service IDs to consult for a configured
+// provider/service. The exact service is checked first; if a basis service is
+// different, it is appended as a fallback instead of collapsing them.
+func LookupServices(provider string) []string {
+	exact := CanonicalProvider(provider)
+	basis := BasisProvider(provider)
+	if basis == "" || basis == exact {
+		return []string{exact}
+	}
+	return []string{exact, basis}
 }
 
 func ResolveWireModelIdentity(provider, model string) (WireModelIdentity, bool) {
@@ -75,17 +98,20 @@ func ResolveWireModelIdentity(provider, model string) (WireModelIdentity, bool) 
 }
 
 func ResolveWireModelIdentityFromCatalog(cat modeldb.Catalog, provider, model string) (WireModelIdentity, bool) {
-	rec, ok := cat.ResolveWireModel(CanonicalProvider(provider), model)
-	if !ok {
-		return WireModelIdentity{}, false
+	for _, serviceID := range LookupServices(provider) {
+		rec, ok := cat.ResolveWireModel(serviceID, model)
+		if !ok {
+			continue
+		}
+		return WireModelIdentity{
+			Creator: rec.Key.Creator,
+			Family:  rec.Key.Family,
+			Series:  rec.Key.Series,
+			Version: rec.Key.Version,
+			Variant: rec.Key.Variant,
+		}, true
 	}
-	return WireModelIdentity{
-		Creator: rec.Key.Creator,
-		Family:  rec.Key.Family,
-		Series:  rec.Key.Series,
-		Version: rec.Key.Version,
-		Variant: rec.Key.Variant,
-	}, true
+	return WireModelIdentity{}, false
 }
 
 func NewOllamaRuntimeSource(client *http.Client, baseURL string) modeldb.Source {

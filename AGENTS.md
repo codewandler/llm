@@ -64,6 +64,7 @@ The main integration suite is now **service-first**.
   - expected resolved service/provider/API type
   - capability flags (reasoning / effort / thinking toggle)
 - The runner calls `Service.ExplainModel(...)` before `CreateStream(...)` and asserts routing expectations as well as output behavior.
+- To run integration tests with your interactive fish environment, invoke fish explicitly and use the same working Go binary path, e.g. `fish -lc "cd /home/timo/projects/llm; set -x RUN_INTEGRATION 1; go test ./integration -tags integration -run TestIntegrationMatrix -count=1 -v"`. If fish picks a mismatched Go toolchain, pass the absolute bash-resolved Go path instead (for example `/usr/bin/go`).
 
 You can emit artifacts for review:
 
