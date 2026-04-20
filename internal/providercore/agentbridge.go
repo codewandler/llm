@@ -146,20 +146,12 @@ func (b *llmBridge) onMessagesEvent(ev agentunified.StreamEvent) ([]llm.Event, e
 		}
 	}
 	if ev.Started != nil && ev.Usage != nil {
-		startedTokens := ev.Usage.Tokens
-		totalInput := startedTokens.Count(agentunified.TokenKindInput)
-		cacheWrite := startedTokens.Count(agentunified.TokenKindCacheWrite)
-		cacheRead := startedTokens.Count(agentunified.TokenKindCacheRead)
-		nonCacheInput := totalInput - cacheWrite - cacheRead
-		if nonCacheInput < 0 {
-			nonCacheInput = 0
-		}
-		b.inputTokens = usage.TokenItems{{Kind: usage.KindInput, Count: nonCacheInput}, {Kind: usage.KindCacheWrite, Count: cacheWrite}, {Kind: usage.KindCacheRead, Count: cacheRead}}.NonZero()
+		b.inputTokens = agentInputTokensToUsage(ev.Usage.Input)
 		ev.Usage = nil
 	}
 	if ev.Completed != nil {
 		if ev.Usage != nil {
-			b.outputTokens = agentTokensToUsage(ev.Usage.Tokens)
+			b.outputTokens = agentOutputTokensToUsage(ev.Usage.Output)
 			ev.Usage = nil
 		}
 		b.stopReason = llm.StopReason(ev.Completed.StopReason)
@@ -190,7 +182,8 @@ func (b *llmBridge) onCompletionsEvent(ev agentunified.StreamEvent) ([]llm.Event
 		ev.Started = nil
 	}
 	if ev.Usage != nil {
-		b.allTokens = append(b.allTokens, agentTokensToUsage(ev.Usage.Tokens)...)
+		b.allTokens = append(b.allTokens, agentInputTokensToUsage(ev.Usage.Input)...)
+		b.allTokens = append(b.allTokens, agentOutputTokensToUsage(ev.Usage.Output)...)
 		ev.Usage = nil
 	}
 	if ev.Completed != nil {
@@ -222,7 +215,8 @@ func (b *llmBridge) onResponsesEvent(ev agentunified.StreamEvent) ([]llm.Event, 
 		b.sawToolUseLike = true
 	}
 	if ev.Usage != nil {
-		b.allTokens = append(b.allTokens, agentTokensToUsage(ev.Usage.Tokens)...)
+		b.allTokens = append(b.allTokens, agentInputTokensToUsage(ev.Usage.Input)...)
+		b.allTokens = append(b.allTokens, agentOutputTokensToUsage(ev.Usage.Output)...)
 		ev.Usage = nil
 	}
 	if ev.Completed != nil {
@@ -362,7 +356,8 @@ func publishAgentUnifiedToLLM(pub llm.Publisher, ev agentunified.StreamEvent) er
 	}
 	if ev.Usage != nil {
 		handled = true
-		pub.UsageRecord(usage.Record{Dims: usage.Dims{Provider: ev.Usage.Provider, Model: ev.Usage.Model, RequestID: ev.Usage.RequestID}, Tokens: agentTokensToUsage(ev.Usage.Tokens), Cost: agentCostsToUsageCost(ev.Usage.Costs), RecordedAt: ev.Usage.RecordedAt, Extras: cloneAnyMap(ev.Usage.Extras)})
+		tokens := append(agentInputTokensToUsage(ev.Usage.Input), agentOutputTokensToUsage(ev.Usage.Output)...).NonZero()
+		pub.UsageRecord(usage.Record{Dims: usage.Dims{Provider: ev.Usage.Provider, Model: ev.Usage.Model, RequestID: ev.Usage.RequestID}, Tokens: tokens, Cost: agentCostsToUsageCost(ev.Usage.Costs), RecordedAt: ev.Usage.RecordedAt, Extras: cloneAnyMap(ev.Usage.Extras)})
 	}
 	if ev.Completed != nil {
 		handled = true
@@ -510,12 +505,23 @@ func agentPartToMsgPart(part agentunified.Part) msg.Part {
 	return out
 }
 
-func agentTokensToUsage(in agentunified.TokenItems) usage.TokenItems {
-	out := make(usage.TokenItems, 0, len(in))
-	for _, item := range in {
-		out = append(out, usage.TokenItem{Kind: usage.TokenKind(item.Kind), Count: item.Count})
+func agentInputTokensToUsage(in agentunified.InputTokens) usage.TokenItems {
+	return usage.TokenItems{
+		{Kind: usage.KindInput, Count: in.New},
+		{Kind: usage.KindCacheRead, Count: in.CacheRead},
+		{Kind: usage.KindCacheWrite, Count: in.CacheWrite},
+	}.NonZero()
+}
+
+func agentOutputTokensToUsage(in agentunified.OutputTokens) usage.TokenItems {
+	output := in.Total - in.Reasoning
+	if output < 0 {
+		output = 0
 	}
-	return out
+	return usage.TokenItems{
+		{Kind: usage.KindOutput, Count: output},
+		{Kind: usage.KindReasoning, Count: in.Reasoning},
+	}.NonZero()
 }
 
 func agentCostsToUsageCost(in agentunified.CostItems) usage.Cost {
@@ -523,7 +529,7 @@ func agentCostsToUsageCost(in agentunified.CostItems) usage.Cost {
 	for _, item := range in {
 		total += item.Amount
 	}
-	return usage.Cost{Total: total, Input: in.ByKind(agentunified.CostKindInput), Output: in.ByKind(agentunified.CostKindOutput), Reasoning: in.ByKind(agentunified.CostKindReasoning), CacheRead: in.ByKind(agentunified.CostKindCacheRead), CacheWrite: in.ByKind(agentunified.CostKindCacheWrite), Source: "calculated"}
+	return usage.Cost{Total: total, Input: in.ByKind(agentunified.CostKindInput), Output: in.ByKind(agentunified.CostKindOutput), Reasoning: in.ByKind(agentunified.CostKindReasoning), CacheRead: in.ByKind(agentunified.CostKindInputCacheRead), CacheWrite: in.ByKind(agentunified.CostKindInputCacheWrite), Source: "calculated"}
 }
 
 func cloneAnyMap(in map[string]any) map[string]any {
