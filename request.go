@@ -162,6 +162,15 @@ func ensureRequestMeta(r *Request) *RequestMeta {
 	return r.RequestMeta
 }
 
+func SynthesizeRequestCacheHint(messages Messages) *CacheHint {
+	for _, m := range messages {
+		if m.CacheHint != nil && m.CacheHint.Enabled {
+			return &CacheHint{Enabled: true, TTL: m.CacheHint.TTL}
+		}
+	}
+	return nil
+}
+
 // Request configures a provider CreateStream call.
 type Request struct {
 	// Model is the model identifier or alias to use, e.g. "fast", "anthropic/claude-sonnet-4-5".

@@ -1,5 +1,12 @@
 # LLM Provider Abstraction Library
 
+> **⚠️ DEPRECATED**: This repository is superseded by
+> [`llmproviders`](https://github.com/codewandler/llmproviders), a ground-up
+> rewrite built on [`agentapis`](https://github.com/codewandler/agentapis) for
+> wire protocols and [`agentcore`](https://github.com/codewandler/agentcore)
+> for the tool framework. New development should use `llmproviders`. This
+> repository is archived and will not receive further updates.
+
 A unified Go library for interacting with multiple LLM providers through a consistent interface. Supports streaming responses, tool calling, reasoning, prompt caching, and zero-config multi-provider setup.
 
 ## Features

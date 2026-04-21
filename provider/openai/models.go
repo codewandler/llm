@@ -338,6 +338,14 @@ func useResponsesAPI(model string) bool {
 // through the OpenAI wire format (e.g. OpenRouter).
 func UseResponsesAPI(model string) bool { return useResponsesAPI(model) }
 
+func SupportsPromptCaching(model string) bool {
+	info, ok := modelRegistry[model]
+	if !ok {
+		return false
+	}
+	return info.SupportsExtendedCache
+}
+
 // getModelInfo returns the model info for the given model ID.
 // Returns ErrUnknownModel if the model is not in the registry.
 func getModelInfo(model string) (modelInfo, error) {

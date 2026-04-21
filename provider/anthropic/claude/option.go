@@ -4,6 +4,8 @@ import (
 	"fmt"
 
 	"github.com/codewandler/llm"
+	providercore2 "github.com/codewandler/llm/internal/providercore"
+	"github.com/codewandler/llm/provider/anthropic"
 )
 
 // Option configures the Claude provider.
@@ -24,6 +26,7 @@ func WithLLMOptions(opts ...llm.Option) Option {
 		if cfg.Logger != nil {
 			p.log = cfg.Logger
 		}
+		p.autoSystemCacheControl = anthropic.AutoSystemCacheControlFromOptions(opts)
 	}
 }
 
@@ -72,5 +75,16 @@ func WithClaudeDir(dir string) Option {
 func WithBaseURL(url string) Option {
 	return func(p *Provider) {
 		p.baseURL = url
+	}
+}
+
+// WithAutoSystemCacheControl enables provider-level automatic cache_control on
+// the injected Claude SDK system block. Empty ttl defaults to 1h.
+func WithAutoSystemCacheControl(ttl string) Option {
+	return func(p *Provider) {
+		if ttl == "" {
+			ttl = "1h"
+		}
+		p.autoSystemCacheControl = &providercore2.MessagesCacheControl{Type: "ephemeral", TTL: ttl}
 	}
 }

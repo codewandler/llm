@@ -80,6 +80,9 @@ func New(opts ...llm.Option) *Provider {
 
 			backend, resolved := selectAPI(normalized, req.ApiTypeHint)
 			req.ApiTypeHint = resolved
+			if backend == orResponses && req.CacheHint == nil {
+				req.CacheHint = llm.SynthesizeRequestCacheHint(req.Messages)
+			}
 			if backend == orMessages {
 				req.Model = strings.TrimPrefix(normalized, "anthropic/")
 			}

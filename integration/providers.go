@@ -10,6 +10,8 @@ import (
 	"github.com/codewandler/llm"
 	modelcatalog "github.com/codewandler/llm/internal/modelcatalog"
 	"github.com/codewandler/llm/provider/anthropic/claude"
+	openaiprovider "github.com/codewandler/llm/provider/openai"
+	openrouterprovider "github.com/codewandler/llm/provider/openrouter"
 	modeldb "github.com/codewandler/modeldb"
 )
 
@@ -20,10 +22,73 @@ type targetExpectation struct {
 	APIType      llm.ApiType
 }
 
+type cacheWireKind string
+
+const (
+	cacheWireNone            cacheWireKind = ""
+	cacheWirePromptRetention cacheWireKind = "prompt_cache_retention"
+	cacheWireTopLevelControl cacheWireKind = "top_level_cache_control"
+	cacheWireBlockControl    cacheWireKind = "block_cache_control"
+)
+
+type cachingContract struct {
+	Available                    bool
+	Configurable                 bool
+	Mode                         string
+	ImplicitOnly                 bool
+	RequestLevelCaching          bool
+	MessageLevelCaching          bool
+	RequestLevelWireKind         cacheWireKind
+	MessageLevelWireKind         cacheWireKind
+	MessageOverridesRequest      bool
+	SuppressesRequestLevelMarker bool
+	Source                       string
+	Note                         string
+}
+
+func (c cachingContract) Summary() string {
+	if !c.Available {
+		return "none"
+	}
+	parts := []string{}
+	if c.Mode != "" {
+		parts = append(parts, "mode="+c.Mode)
+	}
+	if c.Configurable {
+		parts = append(parts, "configurable=yes")
+	}
+	if c.RequestLevelCaching && c.RequestLevelWireKind != "" {
+		parts = append(parts, "request="+string(c.RequestLevelWireKind))
+	}
+	if c.MessageLevelCaching && c.MessageLevelWireKind != "" {
+		parts = append(parts, "message="+string(c.MessageLevelWireKind))
+	}
+	if c.MessageOverridesRequest {
+		parts = append(parts, "precedence=yes")
+	}
+	if c.SuppressesRequestLevelMarker {
+		parts = append(parts, "suppress_request=yes")
+	}
+	if c.ImplicitOnly {
+		parts = append(parts, "mode=implicit")
+	}
+	if c.Source != "" {
+		parts = append(parts, "source="+c.Source)
+	}
+	if c.Note != "" {
+		parts = append(parts, "note="+c.Note)
+	}
+	if len(parts) == 0 {
+		return "available"
+	}
+	return strings.Join(parts, ",")
+}
+
 type targetCapabilities struct {
 	Reasoning      bool
 	Effort         bool
 	ThinkingToggle bool
+	Caching        cachingContract
 }
 
 type integrationTarget struct {
@@ -36,9 +101,10 @@ type integrationTarget struct {
 }
 
 func providerCapabilities(serviceID, model string, apiType llm.ApiType) targetCapabilities {
+	caps := targetCapabilities{Caching: providerCachingContract(serviceID, model, apiType)}
 	cat, err := modelcatalog.LoadMergedBuiltIn()
 	if err != nil {
-		return targetCapabilities{}
+		return caps
 	}
 	wireModelID := stripProviderPrefix(model)
 	if serviceID == "openrouter" {
@@ -46,17 +112,159 @@ func providerCapabilities(serviceID, model string, apiType llm.ApiType) targetCa
 	}
 	offering, ok := cat.OfferingByRef(modeldb.OfferingRef{ServiceID: serviceID, WireModelID: wireModelID})
 	if !ok {
-		return targetCapabilities{}
+		return caps
 	}
 	exposure := offering.Exposure(modelDBAPIType(apiType))
 	if exposure == nil || exposure.ExposedCapabilities == nil || exposure.ExposedCapabilities.Reasoning == nil {
-		return targetCapabilities{}
+		return caps
 	}
 	r := exposure.ExposedCapabilities.Reasoning
-	caps := targetCapabilities{Reasoning: r.Available}
+	caps.Reasoning = r.Available
 	caps.Effort = exposure.SupportsParameter(modeldb.ParamReasoningEffort)
 	caps.ThinkingToggle = containsMode(r.Modes, modeldb.ReasoningModeOff) || exposure.SupportsParameterValue(string(modeldb.ParamReasoningEffort), string(modeldb.ReasoningEffortNone))
 	return caps
+}
+
+func supportsPromptCaching(serviceID, model string) bool {
+	wireModelID := stripProviderPrefix(model)
+	switch serviceID {
+	case "openai", "codex":
+		return openaiprovider.SupportsPromptCaching(wireModelID)
+	case "openrouter":
+		return openrouterprovider.SupportsPromptCaching(strings.TrimPrefix(model, "openrouter/"))
+	default:
+		return false
+	}
+}
+
+func providerCachingContract(serviceID, model string, apiType llm.ApiType) cachingContract {
+	if c, ok := cachingContractFromCatalog(serviceID, model, apiType); ok {
+		return c
+	}
+	return fallbackCachingContract(serviceID, model, apiType)
+}
+
+func cachingContractFromCatalog(serviceID, model string, apiType llm.ApiType) (cachingContract, bool) {
+	cat, err := modelcatalog.LoadMergedBuiltIn()
+	if err != nil {
+		return cachingContract{}, false
+	}
+	wireModelID := stripProviderPrefix(model)
+	if serviceID == "openrouter" {
+		wireModelID = strings.TrimPrefix(model, "openrouter/")
+	}
+	offering, ok := cat.OfferingByRef(modeldb.OfferingRef{ServiceID: serviceID, WireModelID: wireModelID})
+	if !ok {
+		return cachingContract{}, false
+	}
+	exposure := offering.Exposure(modelDBAPIType(apiType))
+	if exposure == nil {
+		return cachingContract{}, false
+	}
+	c, ok := cachingContractFromExposure(exposure)
+	if !ok {
+		return cachingContract{}, false
+	}
+	c.Source = "modeldb"
+	return c, true
+}
+
+func cachingContractFromExposure(exposure *modeldb.OfferingExposure) (cachingContract, bool) {
+	if exposure == nil {
+		return cachingContract{}, false
+	}
+	var c cachingContract
+	if exposure.ExposedCapabilities != nil && exposure.ExposedCapabilities.Caching != nil {
+		cache := exposure.ExposedCapabilities.Caching
+		if cache.Available || cache.PromptCacheRetention || cache.TopLevelRequestCaching || cache.PerMessageCaching {
+			c.Available = true
+		}
+		if cache.Configurable {
+			c.Configurable = true
+		}
+		if cache.Mode != "" {
+			c.Mode = string(cache.Mode)
+		}
+		if cache.Mode == modeldb.CachingModeImplicit {
+			c.ImplicitOnly = true
+		}
+		if cache.PromptCacheRetention {
+			c.RequestLevelCaching = true
+			c.RequestLevelWireKind = cacheWirePromptRetention
+		}
+		if cache.TopLevelRequestCaching {
+			c.RequestLevelCaching = true
+			if c.RequestLevelWireKind == cacheWireNone {
+				c.RequestLevelWireKind = cacheWireTopLevelControl
+			}
+		}
+		if cache.PerMessageCaching {
+			c.MessageLevelCaching = true
+			c.MessageLevelWireKind = cacheWireBlockControl
+		}
+		if cache.TopLevelRequestCaching && cache.PerMessageCaching {
+			c.MessageOverridesRequest = true
+			c.SuppressesRequestLevelMarker = true
+		}
+	}
+	if exposure.SupportsParameter(modeldb.ParamPromptCacheRetention) {
+		c.ImplicitOnly = false
+		c.Available = true
+		c.RequestLevelCaching = true
+		c.RequestLevelWireKind = cacheWirePromptRetention
+	}
+	if exposure.SupportsParameter(modeldb.ParamTopLevelCacheControl) || exposure.SupportsParameter(modeldb.ParamCacheControl) {
+		c.ImplicitOnly = false
+		c.Available = true
+		c.RequestLevelCaching = true
+		if c.RequestLevelWireKind == cacheWireNone {
+			c.RequestLevelWireKind = cacheWireTopLevelControl
+		}
+	}
+	if exposure.SupportsParameter(modeldb.ParamBlockCacheControl) {
+		c.ImplicitOnly = false
+		c.Available = true
+		c.MessageLevelCaching = true
+		c.MessageLevelWireKind = cacheWireBlockControl
+	}
+	if c.RequestLevelCaching && c.MessageLevelCaching {
+		c.MessageOverridesRequest = true
+		c.SuppressesRequestLevelMarker = true
+	}
+	if c.RequestLevelWireKind == cacheWirePromptRetention && !exposure.SupportsParameter(modeldb.ParamBlockCacheControl) {
+		c.MessageLevelCaching = false
+		c.MessageLevelWireKind = cacheWireNone
+		c.MessageOverridesRequest = false
+		c.SuppressesRequestLevelMarker = false
+	}
+	if !c.Available {
+		return cachingContract{}, false
+	}
+	return c, true
+}
+
+func fallbackCachingContract(serviceID, model string, apiType llm.ApiType) cachingContract {
+	wireModelID := stripProviderPrefix(model)
+	switch serviceID {
+	case "openai":
+		if openaiprovider.SupportsPromptCaching(wireModelID) {
+			return cachingContract{Available: true, Configurable: true, Mode: string(modeldb.CachingModeExplicit), RequestLevelCaching: true, RequestLevelWireKind: cacheWirePromptRetention, Source: "fallback"}
+		}
+	case "codex":
+		if openaiprovider.SupportsPromptCaching(wireModelID) {
+			return cachingContract{Available: true, ImplicitOnly: true, Source: "fallback", Note: "implicit caching"}
+		}
+	case "openrouter":
+		if openrouterprovider.SupportsPromptCaching(strings.TrimPrefix(model, "openrouter/")) {
+			return cachingContract{Available: true, Configurable: true, Mode: string(modeldb.CachingModeExplicit), RequestLevelCaching: true, RequestLevelWireKind: cacheWirePromptRetention, Source: "fallback", Note: "openrouter heuristic"}
+		}
+	case "claude", "anthropic":
+		return cachingContract{Available: true, Configurable: true, Mode: string(modeldb.CachingModeExplicit), RequestLevelCaching: true, MessageLevelCaching: true, RequestLevelWireKind: cacheWireTopLevelControl, MessageLevelWireKind: cacheWireBlockControl, MessageOverridesRequest: true, SuppressesRequestLevelMarker: true, Source: "fallback"}
+	case "minimax":
+		return cachingContract{Available: true, Configurable: true, Mode: string(modeldb.CachingModeExplicit), RequestLevelCaching: true, RequestLevelWireKind: cacheWireTopLevelControl, Source: "fallback"}
+	}
+	_ = apiType
+	return cachingContract{}
 }
 
 func containsMode(modes []modeldb.ReasoningMode, want modeldb.ReasoningMode) bool {
@@ -97,6 +305,11 @@ func integrationTargets() []integrationTarget {
 	openaiCaps := providerCapabilities("openai", openaiModel, llm.ApiTypeOpenAIChatCompletion)
 	codexModel := envOr("CODEX_MODEL", "codex/gpt-5.4")
 	codexCaps := providerCapabilities("codex", codexModel, llm.ApiTypeOpenAIResponses)
+	claudeModel := envOr("CLAUDE_MODEL", "claude/claude-sonnet-4-6")
+	claudeCaps := providerCapabilities("claude", claudeModel, llm.ApiTypeAnthropicMessages)
+	anthropicModel := envOr("ANTHROPIC_MODEL", "anthropic/claude-sonnet-4-6")
+	minimaxModel := envOr("MINIMAX_MODEL", "minimax/MiniMax-M2.7")
+	minimaxCaps := providerCapabilities("minimax", minimaxModel, llm.ApiTypeAnthropicMessages)
 	return []integrationTarget{
 		{
 			name:      "openrouter_openai_gpt4o_mini",
@@ -121,10 +334,10 @@ func integrationTargets() []integrationTarget {
 		},
 		{
 			name:      "claude_sonnet",
-			model:     envOr("CLAUDE_MODEL", "claude/claude-sonnet-4-6"),
+			model:     claudeModel,
 			available: requireClaudeTokenProvider,
 			expect:    targetExpectation{ServiceID: "claude", APIType: llm.ApiTypeAnthropicMessages},
-			supports:  targetCapabilities{Reasoning: true, Effort: true, ThinkingToggle: true},
+			supports:  providerCapabilities("anthropic", anthropicModel, llm.ApiTypeAnthropicMessages),
 		},
 		{
 			name:      "openai_gpt4o",
@@ -155,17 +368,17 @@ func integrationTargets() []integrationTarget {
 		},
 		{
 			name:      "anthropic_api_sonnet",
-			model:     envOr("ANTHROPIC_MODEL", "anthropic/claude-sonnet-4-6"),
+			model:     anthropicModel,
 			available: requireEnv("ANTHROPIC_API_KEY"),
 			expect:    targetExpectation{ServiceID: "anthropic", APIType: llm.ApiTypeAnthropicMessages},
-			supports:  targetCapabilities{Reasoning: true, Effort: true, ThinkingToggle: true},
+			supports:  claudeCaps,
 		},
 		{
 			name:      "minimax_m27",
-			model:     envOr("MINIMAX_MODEL", "minimax/MiniMax-M2.7"),
+			model:     minimaxModel,
 			available: requireEnv("MINIMAX_API_KEY"),
 			expect:    targetExpectation{ServiceID: "minimax", APIType: llm.ApiTypeAnthropicMessages},
-			supports:  targetCapabilities{Reasoning: true, Effort: false, ThinkingToggle: false},
+			supports:  minimaxCaps,
 			prepareRequest: func(req llm.Request) llm.Request {
 				if req.MaxTokens < 4096 {
 					req.MaxTokens = 4096

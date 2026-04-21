@@ -3,6 +3,7 @@ package llm
 import (
 	"testing"
 
+	"github.com/codewandler/llm/msg"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -66,6 +67,19 @@ func TestRequestBuilder_System_NoCache(t *testing.T) {
 	require.NoError(t, err)
 	assert.Nil(t, req.Messages[0].CacheHint)
 	assert.Nil(t, req.Messages[1].CacheHint)
+}
+
+func TestRequestBuilder_RequestCache(t *testing.T) {
+	req, err := NewRequestBuilder().
+		Model("test-model").
+		Cache(CacheTTL1h).
+		User("Hello").
+		Build()
+
+	require.NoError(t, err)
+	require.NotNil(t, req.CacheHint)
+	assert.True(t, req.CacheHint.Enabled)
+	assert.Equal(t, "1h", req.CacheHint.TTL)
 }
 
 func TestRequestBuilder_Append(t *testing.T) {
@@ -191,6 +205,19 @@ func TestWithSystem_NoCache(t *testing.T) {
 	assert.Nil(t, req.Messages[0].CacheHint)
 }
 
+func TestWithCache(t *testing.T) {
+	req, err := BuildRequest(
+		WithModel("test-model"),
+		WithCache(CacheTTL1h),
+		WithUser("hi"),
+	)
+
+	require.NoError(t, err)
+	require.NotNil(t, req.CacheHint)
+	assert.True(t, req.CacheHint.Enabled)
+	assert.Equal(t, "1h", req.CacheHint.TTL)
+}
+
 func TestWithMessages_Append(t *testing.T) {
 	assistant := Assistant("Here you go.")
 
@@ -296,4 +323,19 @@ func TestWithEndUserAndMetadata(t *testing.T) {
 	require.NotNil(t, req.RequestMeta)
 	assert.Equal(t, "user-123", req.RequestMeta.User)
 	assert.Equal(t, "trace-1", req.RequestMeta.Metadata["trace_id"])
+}
+
+func TestSynthesizeRequestCacheHint(t *testing.T) {
+	hint := SynthesizeRequestCacheHint(Messages{
+		System("sys"),
+		msg.User("cached").Cache(msg.CacheTTL1h).Build(),
+		User("later"),
+	})
+	require.NotNil(t, hint)
+	assert.True(t, hint.Enabled)
+	assert.Equal(t, "1h", hint.TTL)
+}
+
+func TestSynthesizeRequestCacheHint_None(t *testing.T) {
+	assert.Nil(t, SynthesizeRequestCacheHint(Messages{System("sys"), User("hi")}))
 }

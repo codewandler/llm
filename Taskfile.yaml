@@ -5,3 +5,8 @@ tasks:
     desc: Install llmcli binary
     cmds:
       - go install ./cmd/llmcli
+
+  integration-matrix:
+    desc: Run integration matrix and regenerate docs artifacts
+    cmds:
+      - RUN_INTEGRATION=1 MATRIX_RESULTS_JSON=docs/integration-matrix.json MATRIX_RESULTS_MD=docs/integration-matrix.md go test -tags integration ./integration -run TestIntegrationMatrix -v

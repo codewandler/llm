@@ -13,6 +13,7 @@ import (
 	"github.com/codewandler/llm"
 	"github.com/codewandler/llm/auto"
 	"github.com/codewandler/llm/msg"
+	"github.com/codewandler/llm/usage"
 )
 
 const matrixScenarioTimeout = 90 * time.Second
@@ -36,6 +37,7 @@ type integrationRun struct {
 	toolCallCount             int
 	debugSummaries            []string
 	result                    llm.Result
+	followup                  *integrationRun
 }
 
 func executeIntegrationScenario(t *testing.T, target integrationTarget, scenario integrationScenario) integrationRun {
@@ -46,10 +48,32 @@ func executeIntegrationScenario(t *testing.T, target integrationTarget, scenario
 	if err != nil {
 		t.Fatalf("auto.New() error = %v", err)
 	}
-	run := integrationRun{target: target, scenario: scenario, request: scenario.request(target.model)}
-	if target.prepareRequest != nil {
-		run.request = target.prepareRequest(run.request)
+	req := scenario.request(target.model)
+	switch scenario.name {
+	case "cache_explicit_wire_marked":
+		req = cacheExplicitRequestForTarget(target)
+	case "cache_usage_effective":
+		req = cacheUsageRequestForTarget(target)
 	}
+	if target.prepareRequest != nil {
+		req = target.prepareRequest(req)
+	}
+	run := executeIntegrationRequest(t, ctx, svc, target, scenario, req)
+	if scenario.name == "cache_usage_effective" {
+		followupReq := cacheUsageRequestForTarget(target)
+		if target.prepareRequest != nil {
+			followupReq = target.prepareRequest(followupReq)
+		}
+		followup := executeIntegrationRequest(t, ctx, svc, target, scenario, followupReq)
+		run.followup = &followup
+	}
+	return run
+}
+
+func executeIntegrationRequest(t *testing.T, ctx context.Context, svc *llm.Service, target integrationTarget, scenario integrationScenario, req llm.Request) integrationRun {
+	t.Helper()
+	run := integrationRun{target: target, scenario: scenario, request: req}
+	var err error
 	run.resolved, run.candidates, err = svc.ExplainModel(run.request.Model)
 	if err != nil {
 		t.Fatalf("ExplainModel() error = %v", err)
@@ -212,6 +236,14 @@ func (r integrationRun) streamSummary() string {
 	}
 	return fmt.Sprintf("event types %s, stop_reason=%q, text_deltas=%d, text_parts=%d, reasoning_deltas=%d, reasoning_parts=%d, debug=%s", r.eventTypesString(), r.completedStopReason(), r.textDeltaCount, r.textContentPartCount, r.reasoningDeltaCount, r.reasoningContentPartCount, strings.Join(r.debugSummaries, " | "))
 }
+func (r integrationRun) latestUsageRecord() *usage.Record {
+	recs := r.result.UsageRecords()
+	if len(recs) == 0 {
+		return nil
+	}
+	return &recs[len(recs)-1]
+}
+
 func (r integrationRun) completedStopReason() llm.StopReason {
 	if r.completedEvent == nil {
 		return ""

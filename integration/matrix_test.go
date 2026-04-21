@@ -17,15 +17,16 @@ import (
 )
 
 type matrixResultEntry struct {
-	Target      string    `json:"target"`
-	Scenario    string    `json:"scenario"`
-	Status      string    `json:"status"`
-	Reason      string    `json:"reason,omitempty"`
-	Model       string    `json:"model,omitempty"`
-	ServiceID   string    `json:"service_id,omitempty"`
-	Provider    string    `json:"provider,omitempty"`
-	APIType     string    `json:"api_type,omitempty"`
-	CompletedAt time.Time `json:"completed_at"`
+	Target         string    `json:"target"`
+	Scenario       string    `json:"scenario"`
+	Status         string    `json:"status"`
+	Reason         string    `json:"reason,omitempty"`
+	Model          string    `json:"model,omitempty"`
+	ServiceID      string    `json:"service_id,omitempty"`
+	Provider       string    `json:"provider,omitempty"`
+	APIType        string    `json:"api_type,omitempty"`
+	CachingSummary string    `json:"caching_summary,omitempty"`
+	CompletedAt    time.Time `json:"completed_at"`
 }
 
 type matrixResultReport struct {
@@ -80,16 +81,17 @@ func writeMatrixReports(t *testing.T) {
 		var b strings.Builder
 		fmt.Fprintf(&b, "# Integration Matrix Results\n\n")
 		fmt.Fprintf(&b, "Generated: %s\n\n", report.GeneratedAt.Format(time.RFC3339))
-		fmt.Fprintf(&b, "| Target | Scenario | Status | Service | Provider | API | Reason |\n")
-		fmt.Fprintf(&b, "|---|---|---|---|---|---|---|\n")
+		fmt.Fprintf(&b, "| Target | Scenario | Status | Service | Provider | API | Caching | Reason |\n")
+		fmt.Fprintf(&b, "|---|---|---|---|---|---|---|---|\n")
 		for _, e := range entries {
-			fmt.Fprintf(&b, "| %s | %s | %s | %s | %s | %s | %s |\n",
+			fmt.Fprintf(&b, "| %s | %s | %s | %s | %s | %s | %s | %s |\n",
 				e.Target,
 				e.Scenario,
 				statusEmoji(e.Status),
 				emptyDash(e.ServiceID),
 				emptyDash(e.Provider),
 				emptyDash(e.APIType),
+				emptyDash(e.CachingSummary),
 				sanitizeCell(e.Reason),
 			)
 		}
@@ -147,7 +149,7 @@ func TestIntegrationMatrix(t *testing.T) {
 			for _, scenario := range scenarios {
 				scenario := scenario
 				t.Run(scenario.name, func(t *testing.T) {
-					entry := matrixResultEntry{Target: target.name, Scenario: scenario.name, Model: target.model, CompletedAt: time.Now()}
+					entry := matrixResultEntry{Target: target.name, Scenario: scenario.name, Model: target.model, CachingSummary: target.supports.Caching.Summary(), CompletedAt: time.Now()}
 					defer func() {
 						entry.CompletedAt = time.Now()
 						if entry.Status == "" {

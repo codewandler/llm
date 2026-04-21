@@ -64,8 +64,9 @@ type Provider struct {
 	sessionID     string
 	initErr       error
 
-	inner        *providercore2.Provider
-	claudeModels *claudeModels
+	inner                  *providercore2.Provider
+	claudeModels           *claudeModels
+	autoSystemCacheControl *providercore2.MessagesCacheControl
 }
 
 func New(opts ...Option) *Provider {
@@ -262,8 +263,11 @@ func (p *Provider) augmentMessagesRequest(msgReq *providercore2.MessagesRequest)
 	}
 	msgReq.System = append(providercore2.MessagesSystemBlocks{
 		&agentmessages.TextBlock{Type: agentmessages.BlockTypeText, Text: billingHeader},
-		&agentmessages.TextBlock{Type: agentmessages.BlockTypeText, Text: systemCore, CacheControl: &agentmessages.CacheControl{Type: "ephemeral", TTL: "1h"}},
+		&agentmessages.TextBlock{Type: agentmessages.BlockTypeText, Text: systemCore},
 	}, msgReq.System...)
+	if p.autoSystemCacheControl != nil && len(msgReq.System) > 1 && msgReq.System[1] != nil && msgReq.System[1].CacheControl == nil {
+		msgReq.System[1].CacheControl = &agentmessages.CacheControl{Type: p.autoSystemCacheControl.Type, TTL: p.autoSystemCacheControl.TTL}
+	}
 	if p.userID != "" {
 		msgReq.Metadata = &agentmessages.Metadata{UserID: p.userID}
 	}

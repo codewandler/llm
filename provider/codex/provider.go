@@ -80,7 +80,7 @@ func New(auth *Auth, opts ...llm.Option) *Provider {
 			payload["store"] = false
 			// The Codex API does not accept these parameters; strip them
 			// from the wire body so the request is not rejected.
-			// NOTE: prompt_cache_retention IS supported and must be kept.
+			delete(payload, "prompt_cache_retention")
 			delete(payload, "max_tokens")
 			delete(payload, "max_output_tokens")
 			delete(payload, "temperature")
@@ -96,6 +96,9 @@ func New(auth *Auth, opts ...llm.Option) *Provider {
 		}),
 		providercore2.WithPreprocessRequest(func(req llm.Request) (llm.Request, string, error) {
 			original := req.Model
+			// Do not auto-synthesize Request.CacheHint for Codex. The backend
+			// currently rejects prompt_cache_retention on tested routes even
+			// though cached-input billing may still occur implicitly.
 			// Map effort for the Codex API. All Codex models support the
 			// same reasoning effort levels (low, medium, high, xhigh).
 			// Unlike the blunt "clear effort when thinking is off" approach,

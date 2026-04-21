@@ -9,6 +9,7 @@ import (
 
 	"github.com/codewandler/llm"
 	"github.com/codewandler/llm/msg"
+	"github.com/codewandler/llm/usage"
 )
 
 type integrationScenario struct {
@@ -37,6 +38,41 @@ func integrationScenarios() []integrationScenario {
 			assert:  assertTextContains("kiwi"),
 		},
 		{
+			name: "cache_not_sent_by_default",
+			request: func(model string) llm.Request {
+				return llm.Request{Model: model, MaxTokens: 64, Thinking: llm.ThinkingOff, Messages: msg.BuildTranscript(msg.System("Reply with exactly the word kiwi."), msg.User("What should you reply with?"))}
+			},
+			enabled: requiresAnyCaching,
+			assert:  assertNoCacheFieldsOnWire("kiwi"),
+		},
+		{
+			name: "cache_explicit_wire_marked",
+			request: func(model string) llm.Request {
+				_ = model
+				return llm.Request{}
+			},
+			enabled: requiresExplicitCaching,
+			assert:  assertExplicitCacheWireMarked("kiwi"),
+		},
+
+		{
+			name: "cache_usage_effective",
+			request: func(model string) llm.Request {
+				_ = model
+				return llm.Request{}
+			},
+			enabled: requiresObservableCacheUsage,
+			assert:  assertCacheUsageEffective("kiwi"),
+		},
+		{
+			name: "cache_message_overrides_request_level",
+			request: func(model string) llm.Request {
+				return llm.Request{Model: model, MaxTokens: 64, Thinking: llm.ThinkingOff, CacheHint: &llm.CacheHint{Enabled: true, TTL: "1h"}, Messages: msg.BuildTranscript(msg.System("Reply with exactly the word kiwi.").Cache(msg.CacheTTL1h), msg.User("What should you reply with?"))}
+			},
+			enabled: requiresCachePrecedence,
+			assert:  assertCacheMessageOverridesRequestLevel("kiwi"),
+		},
+		{
 			name: "effort_high_preserved",
 			request: func(model string) llm.Request {
 				return llm.Request{Model: model, MaxTokens: 128, Effort: llm.EffortHigh, Messages: msg.BuildTranscript(msg.User("Reply with exactly the word aurora."))}
@@ -63,6 +99,36 @@ func integrationScenarios() []integrationScenario {
 	}
 }
 
+func cacheUsageRequestForTarget(target integrationTarget) llm.Request {
+	base := llm.Request{Model: target.model, MaxTokens: 64, Thinking: llm.ThinkingOff}
+	messages := msg.BuildTranscript(msg.System(cacheProbeBody()), msg.User("Reply with exactly the word kiwi."))
+	c := target.supports.Caching
+	if c.Configurable {
+		base.CacheHint = &llm.CacheHint{Enabled: true, TTL: "1h"}
+		messages[0].CacheHint = &msg.CacheHint{Enabled: true, TTL: "1h"}
+	}
+	base.Messages = messages
+	return base
+}
+
+func cacheExplicitRequestForTarget(target integrationTarget) llm.Request {
+	base := llm.Request{Model: target.model, MaxTokens: 64, Thinking: llm.ThinkingOff}
+	if target.supports.Caching.Configurable {
+		base.CacheHint = &llm.CacheHint{Enabled: true, TTL: "1h"}
+	}
+	messages := msg.BuildTranscript(msg.System("Reply with exactly the word kiwi."), msg.User("What should you reply with?"))
+	if target.supports.Caching.Configurable {
+		messages[0].CacheHint = &msg.CacheHint{Enabled: true, TTL: "1h"}
+	}
+	base.Messages = messages
+	return base
+}
+
+func cacheProbeBody() string {
+	line := "Caching probe paragraph: repeat this exact sentence to ensure a sufficiently large prompt prefix for provider-side prompt caching to engage reliably across multiple requests."
+	return line + "\n\n" + strings.Repeat(line+"\n", 160)
+}
+
 func alwaysEnabled(target integrationTarget) (bool, string) { return true, "" }
 func requiresReasoningSupport(target integrationTarget) (bool, string) {
 	if !target.supports.Reasoning {
@@ -79,6 +145,46 @@ func requiresThinkingToggleSupport(target integrationTarget) (bool, string) {
 func requiresEffortSupport(target integrationTarget) (bool, string) {
 	if !target.supports.Effort {
 		return false, "target does not advertise effort support"
+	}
+	return true, ""
+}
+func requiresAnyCaching(target integrationTarget) (bool, string) {
+	if !target.supports.Caching.Available {
+		return false, "target does not advertise caching support"
+	}
+	return true, ""
+}
+func requiresExplicitCaching(target integrationTarget) (bool, string) {
+	c := target.supports.Caching
+	if !c.Available {
+		return false, "target does not advertise caching support"
+	}
+	if !c.Configurable {
+		return false, "target does not advertise explicit caching controls"
+	}
+	if !c.RequestLevelCaching && !c.MessageLevelCaching {
+		return false, "target does not advertise explicit caching controls"
+	}
+	return true, ""
+}
+func requiresCachePrecedence(target integrationTarget) (bool, string) {
+	c := target.supports.Caching
+	if !(c.RequestLevelCaching && c.MessageLevelCaching && c.MessageOverridesRequest) {
+		return false, "message/request cache precedence is not meaningful for this exposure"
+	}
+	return true, ""
+}
+
+func requiresObservableCacheUsage(target integrationTarget) (bool, string) {
+	c := target.supports.Caching
+	if !c.Available {
+		return false, "target does not advertise caching support"
+	}
+	if target.expect.ServiceID == "claude" {
+		return false, "local Claude runtime does not reliably report cache-read usage"
+	}
+	if target.name == "openrouter_openai_gpt4o_mini" {
+		return false, "target does not reliably report cache-read usage for this scenario"
 	}
 	return true, ""
 }
@@ -196,6 +302,179 @@ func assertThinkingOffRespected(want string) func(t *testing.T, run integrationR
 		textAssert(t, run)
 		if run.reasoningStreamCount() > 0 || strings.TrimSpace(run.result.Thought()) != "" {
 			t.Fatalf("expected no reasoning output when thinking is disabled, got %s", run.streamSummary())
+		}
+	}
+}
+
+type cacheWireSummary struct {
+	HasTopLevelCacheControl bool
+	SystemCachedCount       int
+	MessageCachedCount      int
+	PartCachedCount         int
+	PromptCacheRetention    string
+}
+
+func (s cacheWireSummary) HasAnyRequestLevelCache() bool {
+	return s.HasTopLevelCacheControl || s.PromptCacheRetention != ""
+}
+
+func (s cacheWireSummary) HasAnyMessageLevelCache() bool {
+	return s.SystemCachedCount+s.MessageCachedCount+s.PartCachedCount > 0
+}
+
+func cacheMarkersOnWire(reqEv *llm.RequestEvent) cacheWireSummary {
+	if reqEv == nil || len(reqEv.ProviderRequest.Body) == 0 {
+		return cacheWireSummary{}
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(reqEv.ProviderRequest.Body, &payload); err != nil {
+		return cacheWireSummary{}
+	}
+	summary := cacheWireSummary{}
+	if _, ok := payload["cache_control"]; ok {
+		summary.HasTopLevelCacheControl = true
+	}
+	if system, ok := payload["system"].([]any); ok {
+		for _, item := range system {
+			if block, ok := item.(map[string]any); ok {
+				if _, ok := block["cache_control"]; ok {
+					summary.SystemCachedCount++
+				}
+			}
+		}
+	}
+	if retention, ok := payload["prompt_cache_retention"].(string); ok {
+		summary.PromptCacheRetention = retention
+	}
+	if messages, ok := payload["messages"].([]any); ok {
+		for _, item := range messages {
+			msgMap, ok := item.(map[string]any)
+			if !ok {
+				continue
+			}
+			if _, ok := msgMap["cache_control"]; ok {
+				summary.MessageCachedCount++
+			}
+			if content, ok := msgMap["content"].([]any); ok {
+				for _, part := range content {
+					if partMap, ok := part.(map[string]any); ok {
+						if _, ok := partMap["cache_control"]; ok {
+							summary.PartCachedCount++
+						}
+					}
+				}
+			}
+		}
+	}
+	return summary
+}
+
+func cacheRequestedOnWire(reqEv *llm.RequestEvent) bool {
+	s := cacheMarkersOnWire(reqEv)
+	return s.HasAnyRequestLevelCache() || s.HasAnyMessageLevelCache()
+}
+
+func assertNoCacheFieldsOnWire(want string) func(t *testing.T, run integrationRun) {
+	textAssert := assertTextContains(want)
+	return func(t *testing.T, run integrationRun) {
+		textAssert(t, run)
+		if !run.target.supports.Caching.Available {
+			return
+		}
+		s := cacheMarkersOnWire(run.requestEvent)
+		if s.HasAnyRequestLevelCache() || s.HasAnyMessageLevelCache() {
+			t.Fatalf("expected no cache markers on wire for %s, contract=%s summary=%+v body=%s", run.target.name, run.target.supports.Caching.Summary(), s, string(run.requestEvent.ProviderRequest.Body))
+		}
+	}
+}
+
+func assertCacheUsageEffective(want string) func(t *testing.T, run integrationRun) {
+	textAssert := assertTextContains(want)
+	return func(t *testing.T, run integrationRun) {
+		textAssert(t, run)
+		if run.followup == nil {
+			t.Fatalf("expected followup run for cache usage scenario")
+		}
+		textAssert(t, *run.followup)
+		first := run.latestUsageRecord()
+		second := run.followup.latestUsageRecord()
+		if first == nil || second == nil {
+			t.Fatalf("expected usage records for both cache usage requests, first=%v second=%v", first, second)
+		}
+		if first.Tokens.TotalOutput() <= 0 || second.Tokens.TotalOutput() <= 0 {
+			t.Fatalf("expected output tokens on both requests, first=%+v second=%+v", first.Tokens, second.Tokens)
+		}
+		firstRead := first.Tokens.Count(usage.KindCacheRead)
+		secondRead := second.Tokens.Count(usage.KindCacheRead)
+		firstWrite := first.Tokens.Count(usage.KindCacheWrite)
+		secondWrite := second.Tokens.Count(usage.KindCacheWrite)
+		if firstRead > 0 || secondRead > 0 {
+			return
+		}
+		if run.target.supports.Caching.ImplicitOnly {
+			t.Skipf("target does not reliably expose implicit cache-read usage counters: first=%+v second=%+v", first.Tokens, second.Tokens)
+		}
+		if firstWrite > 0 || secondWrite > 0 {
+			t.Skipf("target reported cache writes but no cache reads across the probe pair: first=%+v second=%+v", first.Tokens, second.Tokens)
+		}
+		t.Fatalf("expected cache-related usage effect across repeated requests, first=%+v second=%+v", first.Tokens, second.Tokens)
+	}
+}
+
+func assertImplicitCachingAvailableOnWire(want string) func(t *testing.T, run integrationRun) {
+	textAssert := assertTextContains(want)
+	return func(t *testing.T, run integrationRun) {
+		textAssert(t, run)
+		c := run.target.supports.Caching
+		if !c.ImplicitOnly {
+			t.Fatalf("implicit-caching assertion called for non-implicit target: %s contract=%s", run.target.name, c.Summary())
+		}
+		s := cacheMarkersOnWire(run.requestEvent)
+		if s.HasAnyRequestLevelCache() || s.HasAnyMessageLevelCache() {
+			t.Fatalf("expected no explicit cache markers on wire for implicit-caching target %s, contract=%s summary=%+v body=%s", run.target.name, c.Summary(), s, string(run.requestEvent.ProviderRequest.Body))
+		}
+	}
+}
+
+func assertExplicitCacheWireMarked(want string) func(t *testing.T, run integrationRun) {
+	textAssert := assertTextContains(want)
+	return func(t *testing.T, run integrationRun) {
+		textAssert(t, run)
+		c := run.target.supports.Caching
+		s := cacheMarkersOnWire(run.requestEvent)
+		switch {
+		case c.MessageLevelCaching && c.MessageOverridesRequest:
+			if !s.HasAnyMessageLevelCache() {
+				t.Fatalf("expected message-level cache markers for %s, contract=%s summary=%+v body=%s", run.target.name, c.Summary(), s, string(run.requestEvent.ProviderRequest.Body))
+			}
+		case c.MessageLevelCaching && !c.RequestLevelCaching:
+			if !s.HasAnyMessageLevelCache() {
+				t.Fatalf("expected message-level cache markers for %s, contract=%s summary=%+v body=%s", run.target.name, c.Summary(), s, string(run.requestEvent.ProviderRequest.Body))
+			}
+		case c.RequestLevelCaching:
+			if !s.HasAnyRequestLevelCache() && !s.HasAnyMessageLevelCache() {
+				t.Fatalf("expected cache markers for %s, contract=%s summary=%+v body=%s", run.target.name, c.Summary(), s, string(run.requestEvent.ProviderRequest.Body))
+			}
+		default:
+			t.Fatalf("target %s enabled explicit cache scenario without explicit caching contract: %s", run.target.name, c.Summary())
+		}
+	}
+}
+
+func assertCacheMessageOverridesRequestLevel(want string) func(t *testing.T, run integrationRun) {
+	textAssert := assertTextContains(want)
+	return func(t *testing.T, run integrationRun) {
+		textAssert(t, run)
+		c := run.target.supports.Caching
+		s := cacheMarkersOnWire(run.requestEvent)
+		if !c.MessageOverridesRequest {
+			t.Fatalf("precedence assertion called for target without precedence support: %s contract=%s", run.target.name, c.Summary())
+		}
+		if !s.HasAnyMessageLevelCache() {
+			t.Fatalf("expected message-level cache markers for %s, contract=%s summary=%+v body=%s", run.target.name, c.Summary(), s, string(run.requestEvent.ProviderRequest.Body))
+		}
+		if c.SuppressesRequestLevelMarker && s.HasAnyRequestLevelCache() {
+			t.Fatalf("expected request-level cache markers to be suppressed for %s, contract=%s summary=%+v body=%s", run.target.name, c.Summary(), s, string(run.requestEvent.ProviderRequest.Body))
 		}
 	}
 }

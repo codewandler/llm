@@ -53,6 +53,9 @@ func New(opts ...llm.Option) *Provider {
 		}),
 		providercore2.WithPreprocessRequest(func(req llm.Request) (llm.Request, string, error) {
 			original := req.Model
+			if req.CacheHint == nil {
+				req.CacheHint = llm.SynthesizeRequestCacheHint(req.Messages)
+			}
 			mapped, err := mapEffortAndThinking(req.Model, req.Effort, req.Thinking)
 			if err != nil {
 				return req, original, err

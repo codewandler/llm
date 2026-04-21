@@ -19,9 +19,10 @@ const (
 )
 
 type Provider struct {
-	inner  *providercore2.Provider
-	opts   *llm.Options
-	client *http.Client
+	inner                  *providercore2.Provider
+	opts                   *llm.Options
+	client                 *http.Client
+	autoSystemCacheControl *providercore2.MessagesCacheControl
 }
 
 func DefaultOptions() []llm.Option {
@@ -39,7 +40,7 @@ func New(opts ...llm.Option) *Provider {
 		client = llm.DefaultHttpClient()
 	}
 
-	p := &Provider{opts: cfg, client: client}
+	p := &Provider{opts: cfg, client: client, autoSystemCacheControl: AutoSystemCacheControlFromOptions(allOpts)}
 
 	p.inner = providercore2.NewProvider(providercore2.NewOptions(
 		providercore2.WithProviderName(providerName),
@@ -75,6 +76,7 @@ func New(opts ...llm.Option) *Provider {
 
 		providercore2.WithMessagesRequestTransform(func(msgReq *providercore2.MessagesRequest) error {
 			CoerceAnthropicThinkingTemperature(msgReq)
+			p.applyAutoSystemCacheControl(msgReq)
 			return nil
 		}),
 		providercore2.WithMessagesAPITokenCounter(func(ctx context.Context, _ llm.Request, msgReq *providercore2.MessagesRequest) (*tokencount.TokenCount, error) {
@@ -111,4 +113,23 @@ func (p *Provider) Name() string       { return p.inner.Name() }
 func (p *Provider) Models() llm.Models { return p.inner.Models() }
 func (p *Provider) CreateStream(ctx context.Context, src llm.Buildable) (llm.Stream, error) {
 	return p.inner.CreateStream(ctx, src)
+}
+
+func (p *Provider) applyAutoSystemCacheControl(msgReq *providercore2.MessagesRequest) {
+	if p == nil || msgReq == nil || p.autoSystemCacheControl == nil || len(msgReq.System) == 0 {
+		return
+	}
+	for _, block := range msgReq.System {
+		if block == nil {
+			continue
+		}
+		if block.CacheControl != nil {
+			return
+		}
+		block.CacheControl = &providercore2.MessagesCacheControl{
+			Type: p.autoSystemCacheControl.Type,
+			TTL:  p.autoSystemCacheControl.TTL,
+		}
+		return
+	}
 }

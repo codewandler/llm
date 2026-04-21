@@ -81,6 +81,11 @@ func (b *RequestBuilder) RequestMeta(meta *RequestMeta) *RequestBuilder {
 	return b
 }
 
+func (b *RequestBuilder) Cache(opts ...CacheOpt) *RequestBuilder {
+	b.req.CacheHint = msg.NewCacheHint(opts...)
+	return b
+}
+
 func (b *RequestBuilder) EndUser(user string) *RequestBuilder {
 	ensureRequestMeta(b.req).User = user
 	return b
@@ -200,6 +205,10 @@ func WithEffort(level Effort) RequestOption {
 
 func WithRequestMeta(meta *RequestMeta) RequestOption {
 	return func(r *Request) { r.RequestMeta = meta.Clone() }
+}
+
+func WithCache(opts ...CacheOpt) RequestOption {
+	return func(r *Request) { r.CacheHint = msg.NewCacheHint(opts...) }
 }
 
 func WithEndUser(user string) RequestOption {

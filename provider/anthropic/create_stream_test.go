@@ -149,3 +149,48 @@ func buildMessagesSSE(parts ...any) io.ReadCloser {
 	}
 	return io.NopCloser(strings.NewReader(b.String()))
 }
+
+func TestCreateStream_AutoSystemCacheControl_Optional(t *testing.T) {
+	t.Run("disabled by default", func(t *testing.T) {
+		var gotBody map[string]any
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			defer r.Body.Close()
+			require.NoError(t, json.NewDecoder(r.Body).Decode(&gotBody))
+			w.Header().Set("Content-Type", "text/event-stream")
+			w.WriteHeader(http.StatusOK)
+			_, _ = io.WriteString(w, "event: message_stop\ndata: {}\n\n")
+		}))
+		defer srv.Close()
+		p := New(llm.WithAPIKey("test-key"), llm.WithBaseURL(srv.URL))
+		stream, err := p.CreateStream(context.Background(), llm.Request{Model: "claude-sonnet-4-5", Messages: llm.Messages{llm.System("sys"), llm.User("hi")}})
+		require.NoError(t, err)
+		for range stream {
+		}
+		blocks := gotBody["system"].([]any)
+		for _, b := range blocks {
+			m := b.(map[string]any)
+			assert.Nil(t, m["cache_control"])
+		}
+	})
+
+	t.Run("enabled via option", func(t *testing.T) {
+		var gotBody map[string]any
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			defer r.Body.Close()
+			require.NoError(t, json.NewDecoder(r.Body).Decode(&gotBody))
+			w.Header().Set("Content-Type", "text/event-stream")
+			w.WriteHeader(http.StatusOK)
+			_, _ = io.WriteString(w, "event: message_stop\ndata: {}\n\n")
+		}))
+		defer srv.Close()
+		p := New(llm.WithAPIKey("test-key"), llm.WithBaseURL(srv.URL), WithAnthropicAutoSystemCacheControl("1h"))
+		stream, err := p.CreateStream(context.Background(), llm.Request{Model: "claude-sonnet-4-5", Messages: llm.Messages{llm.System("sys"), llm.User("hi")}})
+		require.NoError(t, err)
+		for range stream {
+		}
+		blocks := gotBody["system"].([]any)
+		cc := blocks[0].(map[string]any)["cache_control"].(map[string]any)
+		assert.Equal(t, "ephemeral", cc["type"])
+		assert.Equal(t, "1h", cc["ttl"])
+	})
+}

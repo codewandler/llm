@@ -86,6 +86,7 @@ func TestBuildRequest_PrependsBillingAndSystemBlocks(t *testing.T) {
 
 	secondBlock := blocks[1].(map[string]any)
 	assert.Equal(t, systemCore, secondBlock["text"])
+	assert.Nil(t, secondBlock["cache_control"])
 }
 
 func TestBuildRequest_UserSystemBlockAppended(t *testing.T) {
@@ -126,4 +127,32 @@ func buildRequestForTest(p *Provider, llmRequest llm.Request) (*providercore2.Me
 		return nil, err
 	}
 	return msgReq, nil
+}
+
+func TestBuildRequest_AutoSystemCacheControl_Optional(t *testing.T) {
+	t.Run("disabled by default", func(t *testing.T) {
+		p := &Provider{baseURL: defaultBaseURL, sessionID: "s"}
+		body, err := buildRequestForTest(p, llm.Request{Model: "claude-sonnet-4-6", Messages: llm.Messages{llm.User("hello")}})
+		require.NoError(t, err)
+		bodyJSON, err := json.Marshal(body)
+		require.NoError(t, err)
+		var req map[string]any
+		require.NoError(t, json.Unmarshal(bodyJSON, &req))
+		blocks := req["system"].([]any)
+		assert.Nil(t, blocks[1].(map[string]any)["cache_control"])
+	})
+
+	t.Run("enabled by option", func(t *testing.T) {
+		p := &Provider{baseURL: defaultBaseURL, sessionID: "s", autoSystemCacheControl: &providercore2.MessagesCacheControl{Type: "ephemeral", TTL: "1h"}}
+		body, err := buildRequestForTest(p, llm.Request{Model: "claude-sonnet-4-6", Messages: llm.Messages{llm.User("hello")}})
+		require.NoError(t, err)
+		bodyJSON, err := json.Marshal(body)
+		require.NoError(t, err)
+		var req map[string]any
+		require.NoError(t, json.Unmarshal(bodyJSON, &req))
+		blocks := req["system"].([]any)
+		cc := blocks[1].(map[string]any)["cache_control"].(map[string]any)
+		assert.Equal(t, "ephemeral", cc["type"])
+		assert.Equal(t, "1h", cc["ttl"])
+	})
 }

@@ -76,3 +76,16 @@ func GetModelData() ([]ModelData, error) {
 	}
 	return models, nil
 }
+
+func SupportsPromptCaching(model string) bool {
+	models, err := GetModelData()
+	if err != nil {
+		return false
+	}
+	for _, m := range models {
+		if m.ID == model {
+			return m.Pricing.InputCacheRead != "" && m.Pricing.InputCacheRead != "0" && m.Pricing.InputCacheRead != "0.0"
+		}
+	}
+	return false
+}

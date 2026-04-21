@@ -6,6 +6,8 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"reflect"
+	"runtime"
 )
 
 // Option configures provider options.
@@ -108,4 +110,12 @@ func (o *Options) ResolveAPIKey(ctx context.Context) (string, error) {
 		return "", nil
 	}
 	return o.APIKeyFunc(ctx)
+}
+
+// FuncKey returns a stable identity string for an Option function value.
+func FuncKey(opt Option) string {
+	if opt == nil {
+		return ""
+	}
+	return runtime.FuncForPC(reflect.ValueOf(opt).Pointer()).Name()
 }
